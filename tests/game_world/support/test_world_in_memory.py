@@ -220,7 +220,7 @@ class TestFactsSeeWhatAggregatesChanged:
 
         assert isinstance(world.facts().whereabouts().location_of(PersonBody(_ALICE)), TravelInProgress)
 
-    def test_damage_is_seen_as_the_new_life_state(self) -> None:
+    def test_damage_is_seen_as_down(self) -> None:
         """HP 5 の alice に 5 の痛手を与えると、facts の vitals は倒れていると答える。"""
         world = _world()
         assert not world.facts().vitals(_ALICE).is_down()
