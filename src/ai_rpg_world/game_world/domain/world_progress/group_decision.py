@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     BallotAlreadyCastException,
     ChoiceNotInDecisionException,
     GroupDecisionAlreadyOpenException,
+    GroupDecisionLeftOpenAfterEveryoneCastException,
     GroupDecisionNotOpenException,
     NoChoicesGivenException,
     NoVotersGivenException,
