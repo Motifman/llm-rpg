@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
     StateKeyDuplicatedException,
     StateKeyOwnerMismatchException,
 )

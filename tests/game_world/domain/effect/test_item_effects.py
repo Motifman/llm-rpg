@@ -26,7 +26,9 @@ from ai_rpg_world.game_world.domain.effect.item_effects import (
     TakeItemEffect,
 )
 from ai_rpg_world.game_world.domain.exception.effect_exception import ArgumentIsNotAnItemException
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
+    StateValueMismatchesKindException,
+)
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     InventoryFullException,
     NotEnoughItemsOfSpecException,

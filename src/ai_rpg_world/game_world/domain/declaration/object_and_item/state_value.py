@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import TextBodyBlankException
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import TextBodyBlankException
 from ai_rpg_world.game_world.domain.value_object import Count, PersonId, WorldTick
 from ai_rpg_world.game_world.domain.value_object._checks import require_declared_name
 

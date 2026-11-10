@@ -24,7 +24,9 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
     RepeatedMementoKeyException,
 )
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
+    StateValueMismatchesKindException,
+)
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     NeverHiddenObjectUnrevealedException,
     NotEnoughStockException,

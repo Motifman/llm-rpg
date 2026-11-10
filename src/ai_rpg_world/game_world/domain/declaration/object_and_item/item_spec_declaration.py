@@ -11,7 +11,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item.state_kind impor
     ItemStateKind,
 )
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import StateValue
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
     ItemStateKindNotAllowedException,
     LastingTicksBelowOneException,
     LightKeyNotDeclaredException,

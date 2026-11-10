@@ -17,7 +17,9 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     LastsIndefinitely,
     NotALightSource,
 )
-from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
+from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
+    StateValueMismatchesKindException,
+)
 from ai_rpg_world.game_world.domain.exception.trigger_exception import ArgumentNotInTriggerException
 from ai_rpg_world.game_world.domain.objects_and_items import Item
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
