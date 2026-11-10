@@ -128,7 +128,7 @@ class TestStart:
         vitals = PersonVitals.start(_ALICE, HitPoints(current=7, maximum=10))
 
         assert vitals.hp() == HitPoints(current=7, maximum=10)
-        assert vitals.life_state() == Alive()
+        assert vitals.memento().life_state == Alive()
         assert vitals.can_act()
 
     def test_starts_without_events(self) -> None:
@@ -157,7 +157,7 @@ class TestTakeDamage:
         vitals.take_damage(Damage(3), WorldTick(5), _STRUCK)
 
         assert vitals.hp() == HitPoints(current=7, maximum=10)
-        assert vitals.life_state() == Alive()
+        assert vitals.memento().life_state == Alive()
         [event] = vitals.get_events()
         assert isinstance(event, PersonDamagedEvent)
         assert (event.person, event.amount, event.hp_before, event.hp_after, event.cause) == (
@@ -175,7 +175,7 @@ class TestTakeDamage:
         vitals.take_damage(Damage(12), WorldTick(5), WorldHappening())
 
         assert vitals.hp() == HitPoints(current=0, maximum=10)
-        assert vitals.life_state() == Down(fell_at=WorldTick(5), cause=WorldHappening())
+        assert vitals.memento().life_state == Down(fell_at=WorldTick(5), cause=WorldHappening())
         assert not vitals.can_act()
         damaged, fell = vitals.get_events()
         assert isinstance(damaged, PersonDamagedEvent)
@@ -249,7 +249,7 @@ class TestRevive:
         vitals.revive(Rate(0.6), WorldTick(6))
 
         assert vitals.hp() == HitPoints(current=4, maximum=7)
-        assert vitals.life_state() == Alive()
+        assert vitals.memento().life_state == Alive()
         [event] = vitals.get_events()
         assert isinstance(event, PersonRevivedEvent)
         assert (event.person, event.revived_at, event.hp_after) == (_ALICE, WorldTick(6), HitPoints(4, 7))
@@ -295,7 +295,7 @@ class TestPassTimeDeath:
 
         vitals.pass_time(WorldTick(6), _death(grace=2), _hunger())
 
-        assert vitals.life_state() == Down(fell_at=WorldTick(5), cause=_STRUCK)
+        assert vitals.memento().life_state == Down(fell_at=WorldTick(5), cause=_STRUCK)
         assert vitals.get_events() == []
 
     def test_fallen_person_dies_when_grace_has_passed(self) -> None:
@@ -304,7 +304,7 @@ class TestPassTimeDeath:
 
         vitals.pass_time(WorldTick(7), _death(grace=2), _hunger())
 
-        assert vitals.life_state() == Dead(died_at=WorldTick(7))
+        assert vitals.memento().life_state == Dead(died_at=WorldTick(7))
         assert vitals.is_dead()
         [event] = vitals.get_events()
         assert isinstance(event, PersonDiedEvent)
@@ -316,13 +316,29 @@ class TestPassTimeDeath:
 
         vitals.pass_time(WorldTick(20), _death(), _hunger())
 
-        assert vitals.life_state() == Dead(died_at=WorldTick(7))
+        assert vitals.memento().life_state == Dead(died_at=WorldTick(7))
         assert vitals.get_events() == []
 
     def test_alive_person_is_not_dead(self) -> None:
         """起きている人と倒れた人は is_dead が偽。"""
         assert not _vitals().is_dead()
         assert not _fallen().is_dead()
+
+
+class TestIsDown:
+    """is_down が、倒れていて死んではいない人だけを真と答えることを保証する。"""
+
+    def test_fallen_person_is_down(self) -> None:
+        """HP が 0 になって倒れた人は is_down が真。"""
+        assert _fallen().is_down()
+
+    def test_alive_person_is_not_down(self) -> None:
+        """起きている人は is_down が偽。"""
+        assert not _vitals().is_down()
+
+    def test_dead_person_is_not_down(self) -> None:
+        """倒れたまま猶予が過ぎて死んだ人は is_down が偽。"""
+        assert not _dead().is_down()
 
 
 class TestPassTimeHunger:
@@ -402,7 +418,7 @@ class TestPassTimeHunger:
 
         vitals.pass_time(WorldTick(1), _death(grace=5), _hunger(per_tick=3, limit=3, starvation=2))
 
-        assert vitals.life_state() == Down(fell_at=WorldTick(1), cause=Starvation())
+        assert vitals.memento().life_state == Down(fell_at=WorldTick(1), cause=Starvation())
 
     def test_zero_grace_kills_a_person_who_starves_in_the_same_pass(self) -> None:
         """猶予 0 の世界で飢えて倒れた人は、同じ pass_time で Dead になる (倒れたらすぐ死ぬ)。"""
@@ -410,7 +426,7 @@ class TestPassTimeHunger:
 
         vitals.pass_time(WorldTick(1), _death(grace=0), _hunger(per_tick=3, limit=3, starvation=2))
 
-        assert vitals.life_state() == Dead(died_at=WorldTick(1))
+        assert vitals.memento().life_state == Dead(died_at=WorldTick(1))
         assert [type(e) for e in vitals.get_events()] == [
             HungerLevelChangedEvent,
             PersonDamagedEvent,
@@ -694,7 +710,7 @@ class TestRefusalsLeaveStateUnchanged:
         with pytest.raises(PersonNotAliveException):
             vitals.take_damage(Damage(1), WorldTick(6), WorldHappening())
 
-        assert vitals.life_state() == Down(fell_at=WorldTick(5), cause=_STRUCK)
+        assert vitals.memento().life_state == Down(fell_at=WorldTick(5), cause=_STRUCK)
 
 
 class TestHungerAndFatigueReadings:
@@ -775,14 +791,14 @@ class TestPersonVitalsMemento:
         """tick 5 に bob に殴られて倒れた alice を作り直すと、tick 5 に bob に殴られて倒れたままで、動けない。"""
         rebuilt = rebuilt_from_memento(_fallen(at=5), _DESIGN)
 
-        assert rebuilt.life_state() == Down(fell_at=WorldTick(5), cause=_STRUCK)
+        assert rebuilt.memento().life_state == Down(fell_at=WorldTick(5), cause=_STRUCK)
         assert not rebuilt.can_act()
 
     def test_rebuilt_dead_person_stays_dead(self) -> None:
         """死んだ alice を作り直すと、死んだときの tick を持ったまま死んでいる。"""
         rebuilt = rebuilt_from_memento(_dead(), _DESIGN)
 
-        assert rebuilt.life_state() == Dead(died_at=WorldTick(7))
+        assert rebuilt.memento().life_state == Dead(died_at=WorldTick(7))
 
     def test_rebuilt_vitals_answer_like_the_original(self) -> None:
         """傷を負い、空腹と疲れがたまり、毒にかかり、tick 9 まで手が塞がった alice を作り直すと、memento も問い合わせの答えも元と同じ。"""

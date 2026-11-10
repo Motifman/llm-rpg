@@ -11,7 +11,7 @@ from ai_rpg_world.game_world.domain.condition.subject import Subject
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, SpotSectionDeclaration
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.person import Died, Down, Outcome
+from ai_rpg_world.game_world.domain.person import Died, Outcome
 from ai_rpg_world.game_world.domain.value_object import Count, FatigueAmount, Gold, HungerAmount, PersonId
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, DepartedPerson, Occupant, PersonBody
 
@@ -123,7 +123,7 @@ class IsDownCondition(LeafCondition):
     failure_text: TextWithUnassignedPeople | NoText
 
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool:
-        return isinstance(facts.vitals(self.who.person_in(trigger)).life_state(), Down)
+        return facts.vitals(self.who.person_in(trigger)).is_down()
 
     def _requirements_besides_text(self) -> Requirements:
         return self.who.requirements()

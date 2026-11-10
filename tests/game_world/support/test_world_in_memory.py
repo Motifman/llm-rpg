@@ -44,9 +44,7 @@ from ai_rpg_world.game_world.domain.people import PersonHandle
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.person import (
-    Alive,
     Died,
-    Down,
     GroupMembership,
     PersonVitals,
     StruckByPerson,
@@ -222,14 +220,14 @@ class TestFactsSeeWhatAggregatesChanged:
 
         assert isinstance(world.facts().whereabouts().location_of(PersonBody(_ALICE)), TravelInProgress)
 
-    def test_damage_is_seen_as_the_new_life_state(self) -> None:
-        """HP 5 の alice に 5 の痛手を与えると、facts の vitals は倒れた状態を答える。"""
+    def test_damage_is_seen_as_down(self) -> None:
+        """HP 5 の alice に 5 の痛手を与えると、facts の vitals は倒れていると答える。"""
         world = _world()
-        assert world.facts().vitals(_ALICE).life_state() == Alive()
+        assert not world.facts().vitals(_ALICE).is_down()
 
         world.aggregates().vitals(_ALICE).take_damage(Damage(5), WorldTick(0), StruckByPerson(_BOB))
 
-        assert world.facts().vitals(_ALICE).life_state() == Down(fell_at=WorldTick(0), cause=StruckByPerson(_BOB))
+        assert world.facts().vitals(_ALICE).is_down()
 
     def test_hunger_and_fatigue_are_seen(self) -> None:
         """alice の空腹を 2 tick 進め、1 回 3 疲れる体の使い方をすると、facts の vitals は空腹 2、疲れ 3 を答える。"""

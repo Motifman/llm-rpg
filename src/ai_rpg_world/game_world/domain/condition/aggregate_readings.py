@@ -24,7 +24,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people.person_handle import PersonHandle
-from ai_rpg_world.game_world.domain.person import LifeState, NotInAnyGroup, Outcome, Undecided
+from ai_rpg_world.game_world.domain.person import NotInAnyGroup, Outcome, Undecided
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
@@ -136,7 +136,7 @@ class PersonVitalsReading(Protocol):
 
     def is_dead(self) -> bool: ...
 
-    def life_state(self) -> LifeState: ...
+    def is_down(self) -> bool: ...
 
     def occupant_in_world(self, departed_persons_act: bool) -> Occupant: ...
 
