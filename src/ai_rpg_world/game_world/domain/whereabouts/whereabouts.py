@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -65,16 +66,18 @@ class WhereaboutsMemento:
 
 
 class Whereabouts(AggregateRoot[WhereaboutsEvent]):
-    def __init__(self, world_id: WorldId) -> None:
+    def __init__(self, world_id: WorldId, locations: Mapping[Occupant, Location]) -> None:
         super().__init__()
         self._world_id = world_id
-        self._locations: dict[Occupant, Location] = {}
+        self._locations = dict(locations)
+
+    @classmethod
+    def start(cls, world_id: WorldId) -> Whereabouts:
+        return cls(world_id, {})
 
     @classmethod
     def from_memento(cls, memento: WhereaboutsMemento, design: WorldDesign) -> Whereabouts:
-        whereabouts = cls(memento.world_id)
-        whereabouts._locations = {entry.occupant: _resumed(entry.location, design) for entry in memento.locations}
-        return whereabouts
+        return cls(memento.world_id, {entry.occupant: _resumed(entry.location, design) for entry in memento.locations})
 
     @property
     def world_id(self) -> WorldId:
@@ -277,7 +280,11 @@ def _resumed(location: AtSpot | TravelPosition, design: WorldDesign) -> Location
     if isinstance(location, AtSpot):
         design.nouns.spot_of(location.spot)
         if not isinstance(location.section, OpenArea):
-            design.nouns.section_of(location.section)
+            section = design.nouns.section_of(location.section)
+            if section.spot_id != location.spot:
+                raise OccupantNotAtSectionSpotException(
+                    f"{location.section.value} is in {section.spot_id.value!r}, not {location.spot.value!r}"
+                )
         return location
     design.nouns.spot_of(location.departed_from)
     return location.resumed_on(tuple(design.nouns.passage_of(passage) for passage in location.route_passages))

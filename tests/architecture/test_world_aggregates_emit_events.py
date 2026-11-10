@@ -226,7 +226,7 @@ def _cleared(aggregate: AggregateRoot[Any]) -> None:
 
 
 def _whereabouts(at: str = "plaza") -> Whereabouts:
-    whereabouts = Whereabouts(_WORLD)
+    whereabouts = Whereabouts.start(_WORLD)
     whereabouts.place(_ALICE_BODY, spot(at))
     _cleared(whereabouts)
     return whereabouts
@@ -466,7 +466,7 @@ def _with(aggregate: AggregateRoot[Any], call: Callable[[Any], None]) -> _Prepar
 
 
 _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
-    "Whereabouts.place": lambda: _with(Whereabouts(_WORLD), lambda w: w.place(_ALICE_BODY, _PLAZA)),
+    "Whereabouts.place": lambda: _with(Whereabouts.start(_WORLD), lambda w: w.place(_ALICE_BODY, _PLAZA)),
     "Whereabouts.remove": lambda: _with(_whereabouts(), lambda w: w.remove(_ALICE_BODY)),
     "Whereabouts.start_travel": lambda: _with(
         _whereabouts(), lambda w: w.start_travel(_ALICE_BODY, Route(start=_PLAZA.spot_id, passages=(_STREET,)))

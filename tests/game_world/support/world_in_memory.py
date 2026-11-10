@@ -104,7 +104,7 @@ class WorldInMemory:
             outcomes=(),
         )
         self.clock_aggregate = WorldClock(world)
-        self.whereabouts = Whereabouts(world)
+        self.whereabouts = Whereabouts.start(world)
         self.passages = PassageStates(world, passages)
         self.atmospheres = SpotAtmospheres(world, spots)
         self.outcomes = PersonOutcomes.start(world, people)

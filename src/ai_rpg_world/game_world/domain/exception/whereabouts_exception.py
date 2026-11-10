@@ -55,3 +55,11 @@ class SectionFullException(GameWorldDomainException):
 
 class TravelPositionOutsideRouteException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.TRAVEL_POSITION_OUTSIDE_ROUTE"
+
+
+class TravelNotDepartedFromPassageStartException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.TRAVEL_NOT_DEPARTED_FROM_PASSAGE_START"
+
+
+class TicksLeftOutsidePassageException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.TICKS_LEFT_OUTSIDE_PASSAGE"
