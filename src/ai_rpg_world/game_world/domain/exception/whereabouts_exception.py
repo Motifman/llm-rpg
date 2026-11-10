@@ -63,3 +63,7 @@ class TravelNotDepartedFromPassageStartException(GameWorldDomainException):
 
 class TicksLeftOutsidePassageException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.TICKS_LEFT_OUTSIDE_PASSAGE"
+
+
+class PassageNotDeclaredHiddenException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.PASSAGE_NOT_DECLARED_HIDDEN"

@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import (
 from ai_rpg_world.game_world.domain.exception.spot_declaration_exception import UndeclaredPassageStateException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     PassageAlreadyRemovedException,
+    PassageNotDeclaredHiddenException,
     UnknownPassageException,
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PassageStateName
@@ -34,7 +35,7 @@ SLIDE = path("slide", "hall", "beach", two_way=False)
 
 
 def _states() -> PassageStates:
-    return PassageStates(WORLD, (CELLAR_DOOR, STREET, SECRET, SLIDE))
+    return PassageStates.start(WORLD, (CELLAR_DOOR, STREET, SECRET, SLIDE))
 
 
 _DESIGN = compose_world(
@@ -274,6 +275,23 @@ class TestPassageStatesMemento:
 
         with pytest.raises(UndeclaredPassageStateException):
             PassageStates.from_memento(memento, _DESIGN)
+
+    def test_memento_hiding_a_passage_declared_visible_is_rejected(self) -> None:
+        """隠れていると宣言していない通りが隠れている memento から作り直すと PassageNotDeclaredHiddenException を投げる。"""
+        others = {c for c in _conditions_of(_states()) if c.passage != PassageId("street")}
+        memento = PassageStatesMemento(
+            world_id=WORLD,
+            passages=frozenset({*others, PassageCondition(PassageId("street"), OPEN, PassagePresence.HIDDEN)}),
+        )
+
+        with pytest.raises(PassageNotDeclaredHiddenException):
+            PassageStates.from_memento(memento, _DESIGN)
+
+    def test_memento_keeping_a_passage_declared_hidden_hidden_is_rebuilt(self) -> None:
+        """まだ現していない隠し通路は、隠れたまま作り直せ、通れない。"""
+        rebuilt = rebuilt_from_memento(_states(), _DESIGN)
+
+        assert rebuilt.is_traversable(SECRET) is False
 
     def test_memento_with_one_passage_twice_is_rejected(self) -> None:
         """扉が開いていると閉じているの 2 つで書かれた memento は、作るときに RepeatedMementoKeyException を投げる。"""

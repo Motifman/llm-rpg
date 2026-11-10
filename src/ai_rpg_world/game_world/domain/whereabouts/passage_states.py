@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import (
 )
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     PassageAlreadyRemovedException,
+    PassageNotDeclaredHiddenException,
     UnknownPassageException,
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PassageStateName, WorldId
@@ -54,32 +55,45 @@ class PassageStatesMemento:
 
 
 class PassageStates(AggregateRoot[PassageStatesEvent]):
-    def __init__(self, world_id: WorldId, passages: tuple[PassageDeclaration, ...]) -> None:
+    def __init__(
+        self, world_id: WorldId, passages: tuple[PassageDeclaration, ...], conditions: frozenset[PassageCondition]
+    ) -> None:
         super().__init__()
         self._world_id = world_id
         self._declared = {passage.passage_id: passage for passage in passages}
-        self._states = {passage.passage_id: passage.initial_state for passage in passages}
-        self._presence = {
-            passage.passage_id: PassagePresence.HIDDEN if passage.hidden_until_revealed else PassagePresence.PRESENT
-            for passage in passages
-        }
+        remembered = {condition.passage: condition for condition in conditions}
+        if remembered.keys() != self._declared.keys():
+            raise MementoDoesNotMatchDesignException(
+                f"PassageStates of {world_id.value} does not have exactly the declared passages"
+            )
+        for passage_id, condition in remembered.items():
+            passage = self._declared[passage_id]
+            passage.state(condition.state)
+            if condition.presence is PassagePresence.HIDDEN and not passage.hidden_until_revealed:
+                raise PassageNotDeclaredHiddenException(f"{passage_id.value} is hidden but declared visible")
+        self._states = {passage_id: condition.state for passage_id, condition in remembered.items()}
+        self._presence = {passage_id: condition.presence for passage_id, condition in remembered.items()}
+
+    @classmethod
+    def start(cls, world_id: WorldId, passages: tuple[PassageDeclaration, ...]) -> PassageStates:
+        return cls(
+            world_id,
+            passages,
+            frozenset(
+                PassageCondition(
+                    passage.passage_id,
+                    passage.initial_state,
+                    PassagePresence.HIDDEN if passage.hidden_until_revealed else PassagePresence.PRESENT,
+                )
+                for passage in passages
+            ),
+        )
 
     @classmethod
     def from_memento(cls, memento: PassageStatesMemento, design: WorldDesign) -> PassageStates:
-        remembered: dict[PassageId, PassageCondition] = {}
         for condition in memento.passages:
-            passage = design.nouns.passage_of(condition.passage)
-            passage.state(condition.state)
-            remembered[passage.passage_id] = condition
-        declared = design.nouns.all_passages()
-        if remembered.keys() != {passage.passage_id for passage in declared}:
-            raise MementoDoesNotMatchDesignException(
-                f"PassageStates of {memento.world_id.value} does not have every declared passage"
-            )
-        states = cls(memento.world_id, declared)
-        states._states = {passage: condition.state for passage, condition in remembered.items()}
-        states._presence = {passage: condition.presence for passage, condition in remembered.items()}
-        return states
+            design.nouns.passage_of(condition.passage)
+        return cls(memento.world_id, design.nouns.all_passages(), memento.passages)
 
     @property
     def world_id(self) -> WorldId:

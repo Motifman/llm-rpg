@@ -262,7 +262,7 @@ def _people_register() -> PeopleRegister:
 
 
 def _passages() -> PassageStates:
-    return PassageStates(_WORLD, (_GATE, _HIDDEN_PATH, _LANE))
+    return PassageStates.start(_WORLD, (_GATE, _HIDDEN_PATH, _LANE))
 
 
 def _vitals(current: int = 10) -> PersonVitals:
