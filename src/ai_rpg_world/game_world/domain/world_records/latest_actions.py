@@ -42,7 +42,7 @@ LatestActionsEvent = PersonActedEvent | ActionAttemptFailedEvent
 
 @final
 @dataclass(frozen=True)
-class ActionLastDone:
+class ActionLastDoneAt:
     who: PersonId | Anyone
     action: ActionKind | InteractionId
     at: WorldTick
@@ -52,7 +52,7 @@ class ActionLastDone:
 @dataclass(frozen=True)
 class LatestActionsMemento:
     world_id: WorldId
-    last_done: tuple[ActionLastDone, ...]
+    last_done: frozenset[ActionLastDoneAt]
 
 
 class LatestActions(AggregateRoot[LatestActionsEvent]):
@@ -74,7 +74,7 @@ class LatestActions(AggregateRoot[LatestActionsEvent]):
     def memento(self) -> LatestActionsMemento:
         return LatestActionsMemento(
             world_id=self._world_id,
-            last_done=tuple(ActionLastDone(who, action, at) for (who, action), at in self._last_done.items()),
+            last_done=frozenset(ActionLastDoneAt(who, action, at) for (who, action), at in self._last_done.items()),
         )
 
     def note(self, attempt: ActionAttempt, now: WorldTick) -> None:

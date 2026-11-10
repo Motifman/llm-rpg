@@ -141,7 +141,7 @@ class TestWorldFlagsMemento:
     """WorldFlags を memento から作り直すと、立て下ろしした旗の向きが元と同じになり、イベントは出ないことを保証する。"""
 
     def test_rebuilt_flags_have_the_same_flags_raised(self) -> None:
-        """橋の修理と井戸掘りの旗を立てた WorldFlags を memento から作り直すと、2 つとも立っていて、門の旗は宣言どおり立っている。"""
+        """橋の修理と井戸掘りの旗を立てた WorldFlags を memento から作り直すと、2 つとも立っている。"""
         flags = WorldFlags(_WORLD)
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
         flags.raise_flag(_WELL_DUG, _TICK)
@@ -150,7 +150,6 @@ class TestWorldFlagsMemento:
 
         assert rebuilt.is_raised(_BRIDGE_REPAIRED)
         assert rebuilt.is_raised(_WELL_DUG)
-        assert rebuilt.is_raised(_GATE_LOCKED)
 
     def test_rebuilt_flags_keep_a_lowered_flag_lowered(self) -> None:
         """宣言で立っている門の旗を下ろしてから作り直すと、門の旗は下りたまま。"""

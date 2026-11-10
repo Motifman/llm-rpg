@@ -140,6 +140,17 @@ class TestLatestActionsMemento:
         assert rebuilt.last_done_at(_BOB, _PULL_LEVER) == NeverDone()
         assert rebuilt.world_id == _WORLD
 
+    def test_memento_does_not_depend_on_the_order_of_noting(self) -> None:
+        """tick 4 に alice と bob が探したとき、alice から記録しても bob から記録しても、memento は等しい。"""
+        alice_first = LatestActions(_WORLD)
+        alice_first.note(_ALICE_SEARCHES, WorldTick(4))
+        alice_first.note(_BOB_SEARCHES, WorldTick(4))
+        bob_first = LatestActions(_WORLD)
+        bob_first.note(_BOB_SEARCHES, WorldTick(4))
+        bob_first.note(_ALICE_SEARCHES, WorldTick(4))
+
+        assert alice_first.memento() == bob_first.memento()
+
     def test_rebuilding_records_no_event(self) -> None:
         """行為を記録したあとの memento から作り直しても、作り直したものはイベントをためていない。"""
         latest = LatestActions(_WORLD)

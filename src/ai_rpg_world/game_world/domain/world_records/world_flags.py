@@ -33,10 +33,16 @@ WorldFlagsEvent = WorldFlagRaisedEvent | WorldFlagLoweredEvent
 
 @final
 @dataclass(frozen=True)
+class FlagPosition:
+    flag: FlagId
+    raised: bool
+
+
+@final
+@dataclass(frozen=True)
 class WorldFlagsMemento:
     world_id: WorldId
-    raised: tuple[FlagId, ...]
-    lowered: tuple[FlagId, ...]
+    positions: frozenset[FlagPosition]
 
 
 class WorldFlags(AggregateRoot[WorldFlagsEvent]):
@@ -48,7 +54,7 @@ class WorldFlags(AggregateRoot[WorldFlagsEvent]):
     @classmethod
     def from_memento(cls, memento: WorldFlagsMemento, design: WorldDesign) -> WorldFlags:
         flags = cls(memento.world_id)
-        flags._changed = {flag_id: True for flag_id in memento.raised} | {flag_id: False for flag_id in memento.lowered}
+        flags._changed = {position.flag: position.raised for position in memento.positions}
         return flags
 
     @property
@@ -58,8 +64,7 @@ class WorldFlags(AggregateRoot[WorldFlagsEvent]):
     def memento(self) -> WorldFlagsMemento:
         return WorldFlagsMemento(
             world_id=self._world_id,
-            raised=tuple(flag_id for flag_id, raised in self._changed.items() if raised),
-            lowered=tuple(flag_id for flag_id, raised in self._changed.items() if not raised),
+            positions=frozenset(FlagPosition(flag, raised) for flag, raised in self._changed.items()),
         )
 
     def raise_flag(self, flag: FlagDeclaration, trigger: Trigger) -> None:

@@ -22,14 +22,14 @@ class NeverFired:
 
 @final
 @dataclass(frozen=True)
-class HappeningLastFired:
+class HappeningLastFiredAt:
     happening: HappeningId
     at: WorldTick
 
 
 @final
 @dataclass(frozen=True)
-class ReactionTruthNoted:
+class ReactionLastTruth:
     reaction: ReactionId
     truth: bool
 
@@ -38,8 +38,8 @@ class ReactionTruthNoted:
 @dataclass(frozen=True)
 class ScenarioProgressMemento:
     world_id: WorldId
-    last_fired: tuple[HappeningLastFired, ...]
-    reaction_truths: tuple[ReactionTruthNoted, ...]
+    last_fired: frozenset[HappeningLastFiredAt]
+    reaction_truths: frozenset[ReactionLastTruth]
 
 
 class ScenarioProgress:
@@ -62,9 +62,9 @@ class ScenarioProgress:
     def memento(self) -> ScenarioProgressMemento:
         return ScenarioProgressMemento(
             world_id=self._world_id,
-            last_fired=tuple(HappeningLastFired(happening, at) for happening, at in self._last_fired.items()),
-            reaction_truths=tuple(
-                ReactionTruthNoted(reaction, truth) for reaction, truth in self._reaction_truths.items()
+            last_fired=frozenset(HappeningLastFiredAt(happening, at) for happening, at in self._last_fired.items()),
+            reaction_truths=frozenset(
+                ReactionLastTruth(reaction, truth) for reaction, truth in self._reaction_truths.items()
             ),
         )
 
