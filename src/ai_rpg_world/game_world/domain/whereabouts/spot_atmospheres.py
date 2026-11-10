@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -37,10 +38,14 @@ class SpotAtmospheresMemento:
 
 
 class SpotAtmospheres(AggregateRoot[SpotAtmosphereChangedEvent]):
-    def __init__(self, world_id: WorldId, spots: tuple[SpotDeclaration, ...]) -> None:
+    def __init__(self, world_id: WorldId, atmospheres: Mapping[SpotId, SpotAtmosphere]) -> None:
         super().__init__()
         self._world_id = world_id
-        self._atmospheres = {declared.spot_id: declared.atmosphere for declared in spots}
+        self._atmospheres = dict(atmospheres)
+
+    @classmethod
+    def start(cls, world_id: WorldId, spots: tuple[SpotDeclaration, ...]) -> SpotAtmospheres:
+        return cls(world_id, {declared.spot_id: declared.atmosphere for declared in spots})
 
     @classmethod
     def from_memento(cls, memento: SpotAtmospheresMemento, design: WorldDesign) -> SpotAtmospheres:
@@ -50,9 +55,7 @@ class SpotAtmospheres(AggregateRoot[SpotAtmosphereChangedEvent]):
             raise MementoDoesNotMatchDesignException(
                 f"SpotAtmospheres of {memento.world_id.value} does not have every declared spot"
             )
-        atmospheres = cls(memento.world_id, declared)
-        atmospheres._atmospheres = remembered
-        return atmospheres
+        return cls(memento.world_id, remembered)
 
     @property
     def world_id(self) -> WorldId:

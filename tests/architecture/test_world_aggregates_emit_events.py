@@ -483,7 +483,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "PassageStates.reveal": lambda: _with(_passages(), lambda p: p.reveal(_HIDDEN_PATH)),
     "PassageStates.remove": lambda: _with(_passages(), lambda p: p.remove(_LANE)),
     "SpotAtmospheres.change": lambda: _with(
-        SpotAtmospheres(_WORLD, (_PLAZA,)), lambda s: s.change(_PLAZA, atmosphere(Lighting.DARK))
+        SpotAtmospheres.start(_WORLD, (_PLAZA,)), lambda s: s.change(_PLAZA, atmosphere(Lighting.DARK))
     ),
     "PersonVitals.take_damage": lambda: _with(
         _vitals(), lambda v: v.take_damage(Damage(3), _NOW, StruckByPerson(_BOB))

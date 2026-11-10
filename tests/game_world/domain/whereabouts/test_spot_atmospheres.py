@@ -25,7 +25,7 @@ CELLAR = spot("cellar", Lighting.DARK)
 
 
 def _atmospheres() -> SpotAtmospheres:
-    return SpotAtmospheres(WORLD, (HALL, CELLAR))
+    return SpotAtmospheres.start(WORLD, (HALL, CELLAR))
 
 
 _DESIGN = compose_world(nouns(spots=(HALL, CELLAR)))
