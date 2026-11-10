@@ -433,6 +433,8 @@ class WorldDesign:
         return self._item_uses.get(item_spec, NotUsable())
 
     def section_access(self, section: SpotSectionId) -> SectionAccessDeclaration:
+        if section not in self._section_accesses:
+            raise UndeclaredVerbException(f"section {section.value!r} has no access declared")
         return self._section_accesses[section]
 
     def passage_traversal(self, passage: PassageId) -> Condition:
@@ -449,6 +451,8 @@ class WorldDesign:
         return self._object_looks.get(obj, ObjectLooksDeclaration(object_id=obj, looks=()))
 
     def group_decision_rules(self, decision: GroupDecisionId) -> GroupDecisionRulesDeclaration:
+        if decision not in self._group_decision_rules:
+            raise UndeclaredVerbException(f"group decision {decision.value!r} has no rules declared")
         return self._group_decision_rules[decision]
 
     def person_interaction(self, interaction: InteractionId) -> InteractionDeclaration:
