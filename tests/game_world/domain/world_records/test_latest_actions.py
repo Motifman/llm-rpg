@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.world_records import (
     ActionAttemptFailedEvent,
+    ActionLastDoneAt,
     LatestActions,
+    LatestActionsMemento,
     NeverDone,
     PersonActedEvent,
 )
@@ -157,3 +162,20 @@ class TestLatestActionsMemento:
         latest.note(_ALICE_SEARCHES, WorldTick(4))
 
         assert rebuilt_from_memento(latest).get_events() == []
+
+
+class TestLatestActionsMementoRefusesRepeatedKey:
+    """LatestActionsMemento が、同じ人の同じ行為に 2 つの tick を持つ memento を作ることを断ることを保証する。"""
+
+    def test_same_actor_and_action_at_two_ticks_is_refused(self) -> None:
+        """alice の SEARCH が tick 4 と tick 6 の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            LatestActionsMemento(
+                world_id=_WORLD,
+                last_done=frozenset(
+                    {
+                        ActionLastDoneAt(_ALICE, ActionKind.SEARCH, WorldTick(4)),
+                        ActionLastDoneAt(_ALICE, ActionKind.SEARCH, WorldTick(6)),
+                    }
+                ),
+            )

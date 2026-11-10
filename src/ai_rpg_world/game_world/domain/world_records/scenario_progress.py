@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
@@ -40,6 +41,14 @@ class ScenarioProgressMemento:
     world_id: WorldId
     last_fired: frozenset[HappeningLastFiredAt]
     reaction_truths: frozenset[ReactionLastTruth]
+
+    def __post_init__(self) -> None:
+        happenings = [fired.happening for fired in self.last_fired]
+        if len(set(happenings)) != len(happenings):
+            raise RepeatedMementoKeyException(f"world {self.world_id} has a happening last fired at two ticks")
+        reactions = [noted.reaction for noted in self.reaction_truths]
+        if len(set(reactions)) != len(reactions):
+            raise RepeatedMementoKeyException(f"world {self.world_id} has a reaction with two truths")
 
 
 class ScenarioProgress:

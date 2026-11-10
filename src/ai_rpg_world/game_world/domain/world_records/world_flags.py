@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.value_object import FlagId, WorldId
 
 if TYPE_CHECKING:
@@ -43,6 +44,11 @@ class FlagPosition:
 class WorldFlagsMemento:
     world_id: WorldId
     positions: frozenset[FlagPosition]
+
+    def __post_init__(self) -> None:
+        flags = [position.flag for position in self.positions]
+        if len(set(flags)) != len(flags):
+            raise RepeatedMementoKeyException(f"world {self.world_id} has a flag both raised and lowered")
 
 
 class WorldFlags(AggregateRoot[WorldFlagsEvent]):

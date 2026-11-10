@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired, WorldTimePassing
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
@@ -7,9 +9,16 @@ from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import NoNotice
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, FlagId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
-from ai_rpg_world.game_world.domain.world_records import WorldFlagLoweredEvent, WorldFlagRaisedEvent, WorldFlags
+from ai_rpg_world.game_world.domain.world_records import (
+    FlagPosition,
+    WorldFlagLoweredEvent,
+    WorldFlagRaisedEvent,
+    WorldFlags,
+    WorldFlagsMemento,
+)
 
 _WORLD = WorldId("island")
 
@@ -179,3 +188,16 @@ class TestWorldFlagsMemento:
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
 
         assert rebuilt_from_memento(flags).get_events() == []
+
+
+class TestWorldFlagsMementoRefusesRepeatedFlag:
+    """WorldFlagsMemento が、同じ旗の向きを 2 つ持つ memento を作ることを断ることを保証する。"""
+
+    def test_same_flag_raised_and_lowered_is_refused(self) -> None:
+        """gate_a_open が「立っている」と「下りている」の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        gate = FlagId("gate_a_open")
+
+        with pytest.raises(RepeatedMementoKeyException):
+            WorldFlagsMemento(
+                world_id=_WORLD, positions=frozenset({FlagPosition(gate, True), FlagPosition(gate, False)})
+            )

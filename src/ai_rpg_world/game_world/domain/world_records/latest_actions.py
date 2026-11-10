@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, WorldId, WorldTick
 
@@ -53,6 +54,11 @@ class ActionLastDoneAt:
 class LatestActionsMemento:
     world_id: WorldId
     last_done: frozenset[ActionLastDoneAt]
+
+    def __post_init__(self) -> None:
+        keys = [(done.who, done.action) for done in self.last_done]
+        if len(set(keys)) != len(keys):
+            raise RepeatedMementoKeyException(f"world {self.world_id} has an action last done at two ticks")
 
 
 class LatestActions(AggregateRoot[LatestActionsEvent]):

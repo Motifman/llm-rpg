@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import NoNotice
 from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
-from ai_rpg_world.game_world.domain.world_records import NeverFired, ScenarioProgress
+from ai_rpg_world.game_world.domain.world_records import (
+    HappeningLastFiredAt,
+    NeverFired,
+    ReactionLastTruth,
+    ScenarioProgress,
+    ScenarioProgressMemento,
+)
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _WORLD = WorldId("harbor")
@@ -153,3 +162,31 @@ class TestScenarioProgressMemento:
         assert rebuilt.reaction_changed(_DOOR_CLOSED, False)
         assert not rebuilt.reaction_changed(_LAMP_LIT, True)
         assert rebuilt.world_id == _WORLD
+
+
+class TestScenarioProgressMementoRefusesRepeatedKey:
+    """ScenarioProgressMemento が、同じ出来事や同じ反応を 2 つ持つ memento を作ることを断ることを保証する。"""
+
+    def test_same_happening_fired_at_two_ticks_is_refused(self) -> None:
+        """船の到着が tick 3 と tick 5 の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        ship = HappeningId("ship_arrives")
+
+        with pytest.raises(RepeatedMementoKeyException):
+            ScenarioProgressMemento(
+                world_id=_WORLD,
+                last_fired=frozenset(
+                    {HappeningLastFiredAt(ship, WorldTick(3)), HappeningLastFiredAt(ship, WorldTick(5))}
+                ),
+                reaction_truths=frozenset(),
+            )
+
+    def test_same_reaction_with_both_truths_is_refused(self) -> None:
+        """扉が閉じている、の反応が真と偽の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        door = ReactionId("door_closed")
+
+        with pytest.raises(RepeatedMementoKeyException):
+            ScenarioProgressMemento(
+                world_id=_WORLD,
+                last_fired=frozenset(),
+                reaction_truths=frozenset({ReactionLastTruth(door, True), ReactionLastTruth(door, False)}),
+            )
