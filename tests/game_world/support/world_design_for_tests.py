@@ -24,6 +24,7 @@ from ai_rpg_world.game_world.domain.declaration.progress import (
     AllActionsAllowed,
     FlagDeclaration,
     GroupDecisionDeclaration,
+    OutcomeDeclaration,
     WorldStageDeclaration,
 )
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
@@ -220,6 +221,7 @@ def nouns(
     world_stages: Iterable[WorldStageDeclaration] = (),
     group_decisions: Iterable[GroupDecisionDeclaration] = (),
     sections: Iterable[SpotSectionDeclaration] = (),
+    outcomes: Iterable[OutcomeDeclaration] = (),
 ) -> DeclaredNouns:
     return DeclaredNouns(
         flags=flags,
@@ -233,7 +235,7 @@ def nouns(
         world_stages=world_stages,
         group_decisions=group_decisions,
         sections=sections,
-        outcomes=(),
+        outcomes=outcomes,
     )
 
 

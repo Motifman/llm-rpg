@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.people_register_exception import (
     CharacterListedTwiceException,
     PersonAlreadyNamedException,
@@ -16,6 +17,7 @@ from ai_rpg_world.game_world.domain.value_object import DescriptionText, Display
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -24,6 +26,25 @@ class PersonNamedEvent(DomainEvent):
     world: WorldId
     person: PersonId
     name: DisplayName
+
+
+@final
+@dataclass(frozen=True)
+class PersonName:
+    person: PersonId
+    name: DisplayName
+
+
+@final
+@dataclass(frozen=True)
+class PeopleRegisterMemento:
+    world_id: WorldId
+    names: frozenset[PersonName]
+
+    def __post_init__(self) -> None:
+        people = [entry.person for entry in self.names]
+        if len(set(people)) != len(people):
+            raise RepeatedMementoKeyException(f"world {self.world_id.value} has a person with two names")
 
 
 @final
@@ -48,9 +69,24 @@ class PeopleRegister(AggregateRoot[PersonNamedEvent]):
     def from_characters(cls, world: WorldId, characters: Sequence[CharacterDeclaration]) -> PeopleRegister:
         return cls(world, characters)
 
+    @classmethod
+    def from_memento(cls, memento: PeopleRegisterMemento, design: WorldDesign) -> PeopleRegister:
+        nouns = design.nouns
+        register = cls(memento.world_id, nouns.all_characters())
+        for entry in memento.names:
+            nouns.character_of(entry.person)
+            register._names[entry.person] = entry.name
+        return register
+
     @property
     def world(self) -> WorldId:
         return self._world
+
+    def memento(self) -> PeopleRegisterMemento:
+        return PeopleRegisterMemento(
+            world_id=self._world,
+            names=frozenset(PersonName(person, name) for person, name in self._names.items()),
+        )
 
     def name(self, person: PersonId, name: DisplayName) -> None:
         self._registered(person)

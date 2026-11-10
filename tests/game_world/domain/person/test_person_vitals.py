@@ -4,7 +4,11 @@ from collections.abc import Callable
 
 import pytest
 
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    GameWorldDomainException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     PersonNotAliveException,
     PersonNotDownException,
@@ -18,6 +22,7 @@ from ai_rpg_world.game_world.domain.person import (
     HungerLevelChangedEvent,
     NoPreviousAction,
     NoPreviousStatusEffect,
+    NotBusy,
     PersonBecameBusyEvent,
     PersonDamagedEvent,
     PersonDiedEvent,
@@ -25,6 +30,7 @@ from ai_rpg_world.game_world.domain.person import (
     PersonHealedEvent,
     PersonRevivedEvent,
     PersonVitals,
+    PersonVitalsMemento,
     Starvation,
     StatusEffect,
     StatusEffectAddedEvent,
@@ -53,6 +59,8 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, PersonBody
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
@@ -733,3 +741,106 @@ class TestOccupantInWorld:
     def test_dead_person_is_body_when_departed_persons_do_not_act(self) -> None:
         """体が死んだ人は、去った人が動かない世界では PersonBody。"""
         assert _dead().occupant_in_world(False) == PersonBody(_ALICE)
+
+
+_DESIGN = compose_world(
+    nouns(spots=(spot("beach"),), characters=(character("alice", "beach"), character("bob", "beach")))
+)
+_POISONED = StatusEffectType("毒")
+
+
+def _memento(
+    person: PersonId = _ALICE,
+    life_state: Alive | Down | Dead = Alive(),
+    status_effects: frozenset[StatusEffect] = frozenset(),
+) -> PersonVitalsMemento:
+    return PersonVitalsMemento(
+        person=person,
+        hp=HitPoints(current=10, maximum=10),
+        life_state=life_state,
+        hunger=HungerAmount(0),
+        fatigue=FatigueAmount(0),
+        status_effects=status_effects,
+        busy_until=NotBusy(),
+    )
+
+
+class TestPersonVitalsMemento:
+    """PersonVitals を memento から作り直すと、HP・生死・空腹・疲れ・状態異常・手の塞がりが元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_fallen_person_is_down_by_the_same_cause(self) -> None:
+        """tick 5 に bob に殴られて倒れた alice を作り直すと、tick 5 に bob に殴られて倒れたままで、動けない。"""
+        rebuilt = rebuilt_from_memento(_fallen(at=5), _DESIGN)
+
+        assert rebuilt.life_state() == Down(fell_at=WorldTick(5), cause=_STRUCK)
+        assert not rebuilt.can_act()
+
+    def test_rebuilt_dead_person_stays_dead(self) -> None:
+        """死んだ alice を作り直すと、死んだときの tick を持ったまま死んでいる。"""
+        rebuilt = rebuilt_from_memento(_dead(), _DESIGN)
+
+        assert rebuilt.life_state() == Dead(died_at=WorldTick(7))
+
+    def test_rebuilt_vitals_answer_like_the_original(self) -> None:
+        """傷を負い、空腹と疲れがたまり、毒にかかり、tick 9 まで手が塞がった alice を作り直すと、memento も問い合わせの答えも元と同じ。"""
+        vitals = _vitals()
+        vitals.take_damage(Damage(3), WorldTick(1), _STRUCK)
+        vitals.pass_time(WorldTick(2), _death(), _hunger())
+        vitals.exert(_fatigue())
+        vitals.add_status_effect(StatusEffect(_POISONED, expires_at=WorldTick(4)))
+        vitals.start_action(until=WorldTick(9))
+
+        rebuilt = rebuilt_from_memento(vitals, _DESIGN)
+
+        assert rebuilt.memento() == vitals.memento()
+        assert rebuilt.memento() != _vitals().memento()
+        assert rebuilt.person == _ALICE
+        assert rebuilt.hp() == HitPoints(current=7, maximum=10)
+        assert rebuilt.hunger() == HungerAmount(1)
+        assert rebuilt.fatigue() == FatigueAmount(2)
+        assert rebuilt.is_busy(WorldTick(8))
+        assert not rebuilt.is_busy(WorldTick(9))
+
+    def test_rebuilt_status_effect_expires_at_the_same_tick(self) -> None:
+        """tick 4 に切れる毒にかかった alice を作り直してから tick 4 で切れたものを外すと、同じ毒の切れたイベントが出る。"""
+        vitals = _vitals()
+        poison = StatusEffect(_POISONED, expires_at=WorldTick(4))
+        vitals.add_status_effect(poison)
+        rebuilt = rebuilt_from_memento(vitals, _DESIGN)
+
+        rebuilt.remove_expired_status_effects(WorldTick(4))
+
+        assert [type(e) for e in rebuilt.get_events()] == [StatusEffectExpiredEvent]
+        assert rebuilt.get_events()[0].effect == poison
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """傷を負って倒れたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        vitals = _vitals()
+        vitals.take_damage(Damage(10), WorldTick(1), _STRUCK)
+
+        assert rebuilt_from_memento(vitals, _DESIGN).get_events() == []
+
+
+class TestPersonVitalsMementoRefusals:
+    """PersonVitals の memento が、宣言に無い人や同じ状態異常の重なりを持つとき、作り直しを断ることを保証する。"""
+
+    def test_person_not_declared_is_refused(self) -> None:
+        """宣言に無い carol の memento から作り直すと、UndeclaredNounException を投げる。"""
+        with pytest.raises(UndeclaredNounException):
+            PersonVitals.from_memento(_memento(person=PersonId("carol")), _DESIGN)
+
+    def test_fall_cause_by_undeclared_person_is_refused(self) -> None:
+        """宣言に無い carol に殴られて倒れている memento から作り直すと、UndeclaredNounException を投げる。"""
+        fallen = Down(fell_at=WorldTick(1), cause=StruckByPerson(PersonId("carol")))
+
+        with pytest.raises(UndeclaredNounException):
+            PersonVitals.from_memento(_memento(life_state=fallen), _DESIGN)
+
+    def test_same_status_effect_kind_twice_is_refused(self) -> None:
+        """切れる tick だけが違う毒を 2 つ持つ memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            _memento(
+                status_effects=frozenset(
+                    {StatusEffect(_POISONED, expires_at=WorldTick(4)), StatusEffect(_POISONED, expires_at=WorldTick(6))}
+                )
+            )

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.declaration.character import GroupDeclaration, GroupingDeclaration
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     AlreadyInAnotherGroupOfGroupingException,
     AlreadyInGroupException,
@@ -18,11 +20,34 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
 )
 from ai_rpg_world.game_world.domain.value_object import GroupId, GroupingId, PersonId, WorldId
 
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+
 
 @final
 @dataclass(frozen=True)
 class NotInAnyGroup:
     pass
+
+
+@final
+@dataclass(frozen=True)
+class PersonGroupInGrouping:
+    person: PersonId
+    grouping: GroupingId
+    group: GroupId
+
+
+@final
+@dataclass(frozen=True)
+class GroupMembershipMemento:
+    world_id: WorldId
+    groups: frozenset[PersonGroupInGrouping]
+
+    def __post_init__(self) -> None:
+        keys = [(entry.person, entry.grouping) for entry in self.groups]
+        if len(set(keys)) != len(keys):
+            raise RepeatedMementoKeyException(f"world {self.world_id.value} has a person in two groups of one grouping")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -57,9 +82,33 @@ class GroupMembership(AggregateRoot[GroupMembershipEvent]):
                 membership._enter(person, group)
         return membership
 
+    @classmethod
+    def from_memento(cls, memento: GroupMembershipMemento, design: WorldDesign) -> GroupMembership:
+        nouns = design.nouns
+        membership = cls(memento.world_id)
+        for entry in memento.groups:
+            nouns.character_of(entry.person)
+            declared_grouping = nouns.group_of(entry.group).grouping.grouping_id
+            if declared_grouping != entry.grouping:
+                raise MementoDoesNotMatchDesignException(
+                    f"{entry.group.value} belongs to {declared_grouping.value}, not {entry.grouping.value}"
+                )
+            membership._groups.setdefault(entry.person, {})[entry.grouping] = entry.group
+        return membership
+
     @property
     def world(self) -> WorldId:
         return self._world
+
+    def memento(self) -> GroupMembershipMemento:
+        return GroupMembershipMemento(
+            world_id=self._world,
+            groups=frozenset(
+                PersonGroupInGrouping(person, grouping, group)
+                for person, groups in self._groups.items()
+                for grouping, group in groups.items()
+            ),
+        )
 
     def join(self, person: PersonId, group: GroupDeclaration) -> None:
         self._require_changes(group)

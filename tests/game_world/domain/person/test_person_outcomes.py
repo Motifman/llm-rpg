@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     OutcomeAlreadyDecidedException,
     PersonListedTwiceException,
@@ -12,11 +14,15 @@ from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person import (
     DeclaredOutcome,
     Died,
+    OutcomeOfPerson,
     PersonOutcomeDecidedEvent,
     PersonOutcomes,
+    PersonOutcomesMemento,
     Undecided,
 )
 from ai_rpg_world.game_world.domain.value_object import DisplayName, OutcomeId, PersonId, WorldId
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
 _WORLD = WorldId("island")
 _ALICE = PersonId("alice")
@@ -111,3 +117,78 @@ class TestDecide:
         """世界にいない人の結末を聞くと PersonNotInWorldException を投げる。"""
         with pytest.raises(PersonNotInWorldException):
             _outcomes().outcome_of(PersonId("dave"))
+
+
+_DESIGN = compose_world(
+    nouns(
+        spots=(spot("beach"),),
+        characters=(character("alice", "beach"), character("bob", "beach"), character("carol", "beach")),
+        outcomes=(_ESCAPED.outcome,),
+    )
+)
+
+
+class TestPersonOutcomesMemento:
+    """PersonOutcomes を memento から作り直すと、決まった結末と未決の人とその順が元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_outcomes_answer_like_the_original(self) -> None:
+        """alice が死に、bob が脱出したあと作り直すと、memento も各人の結末も元と同じで、未決は carol だけ。"""
+        outcomes = _outcomes()
+        outcomes.decide(_ALICE, Died())
+        outcomes.decide(_BOB, _ESCAPED)
+
+        rebuilt = rebuilt_from_memento(outcomes, _DESIGN)
+
+        assert rebuilt.memento() == outcomes.memento()
+        assert rebuilt.memento() != _outcomes().memento()
+        assert rebuilt.world == _WORLD
+        assert rebuilt.outcome_of(_ALICE) == Died()
+        assert rebuilt.outcome_of(_BOB) == _ESCAPED
+        assert rebuilt.undecided_people() == (_CAROL,)
+
+    def test_rebuilt_outcomes_keep_the_order_of_people(self) -> None:
+        """carol・alice・bob の順で始めた結末を作り直すと、undecided_people もその順で返る。"""
+        outcomes = PersonOutcomes.start(_WORLD, (_CAROL, _ALICE, _BOB))
+
+        assert rebuilt_from_memento(outcomes, _DESIGN).undecided_people() == (_CAROL, _ALICE, _BOB)
+
+    def test_rebuilt_outcomes_still_refuse_deciding_twice(self) -> None:
+        """alice が死んだあと作り直してから alice の結末を決めると、OutcomeAlreadyDecidedException を投げる。"""
+        outcomes = _outcomes()
+        outcomes.decide(_ALICE, Died())
+        rebuilt = rebuilt_from_memento(outcomes, _DESIGN)
+
+        with pytest.raises(OutcomeAlreadyDecidedException):
+            rebuilt.decide(_ALICE, _ESCAPED)
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """結末を決めたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        outcomes = _outcomes()
+        outcomes.decide(_ALICE, Died())
+
+        assert rebuilt_from_memento(outcomes, _DESIGN).get_events() == []
+
+
+class TestPersonOutcomesMementoRefusals:
+    """PersonOutcomes の memento が、宣言に無い結末や人、同じ人の重なりを持つとき、作り直しを断ることを保証する。"""
+
+    def test_outcome_not_declared_is_refused(self) -> None:
+        """alice の結末が宣言に無い drowned の memento から作り直すと、UndeclaredNounException を投げる。"""
+        memento = PersonOutcomesMemento(world_id=_WORLD, outcomes=(OutcomeOfPerson(_ALICE, OutcomeId("drowned")),))
+
+        with pytest.raises(UndeclaredNounException):
+            PersonOutcomes.from_memento(memento, _DESIGN)
+
+    def test_person_not_declared_is_refused(self) -> None:
+        """宣言に無い dave を未決で持つ memento から作り直すと、UndeclaredNounException を投げる。"""
+        memento = PersonOutcomesMemento(world_id=_WORLD, outcomes=(OutcomeOfPerson(PersonId("dave"), Undecided()),))
+
+        with pytest.raises(UndeclaredNounException):
+            PersonOutcomes.from_memento(memento, _DESIGN)
+
+    def test_same_person_twice_is_refused(self) -> None:
+        """alice が死んだと未決の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            PersonOutcomesMemento(
+                world_id=_WORLD, outcomes=(OutcomeOfPerson(_ALICE, Died()), OutcomeOfPerson(_ALICE, Undecided()))
+            )
