@@ -589,6 +589,20 @@ class TestLookingUpVerbs:
         assert design.group_decision_rules(GroupDecisionId("exile")) == declared["exile_rules"]
         assert design.person_interaction(InteractionId("strike")) == declared["strike"]
 
+    def test_undeclared_section_access_raises(self) -> None:
+        """出入りの宣言の無い区画 boat を引くと、KeyError ではなく UndeclaredVerbException を投げる。"""
+        design, _ = _composed_village()
+
+        with pytest.raises(UndeclaredVerbException):
+            design.section_access(SpotSectionId("boat"))
+
+    def test_undeclared_group_decision_rules_raises(self) -> None:
+        """決まりの宣言の無い集団の決定 crown を引くと、KeyError ではなく UndeclaredVerbException を投げる。"""
+        design, _ = _composed_village()
+
+        with pytest.raises(UndeclaredVerbException):
+            design.group_decision_rules(GroupDecisionId("crown"))
+
     def test_passage_without_traversal_declaration_is_always_traversable(self) -> None:
         """通り方の宣言が無い通路の条件は、誰がいつ試しても真で、主語も引数も要らない。"""
         design = compose_world()
