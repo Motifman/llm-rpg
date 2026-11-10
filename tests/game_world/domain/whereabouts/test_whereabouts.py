@@ -704,6 +704,18 @@ class TestWhereaboutsMemento:
         location = whereabouts.location_of(ALICE)
         assert isinstance(location, TravelInProgress) and location.ticks_left_on_passage == Ticks(0)
 
+    def test_travel_with_no_ticks_left_on_a_later_passage_that_takes_no_ticks_is_rejected(self) -> None:
+        """所要 0 tick の通路が 2 本目にあると、歩き通して先へ進むので、そこで残り 0 tick の移動は作るときに TicksLeftOutsidePassageException を投げる。"""
+        plank = path("plank", "well", "mine_entrance", ticks=0)
+
+        with pytest.raises(TicksLeftOutsidePassageException):
+            TravelInProgress(
+                route=Route(start=SpotId("plaza"), passages=(STREET, plank)),
+                passage_index=1,
+                ticks_left_on_passage=Ticks(0),
+                departed_from=SpotId("well"),
+            )
+
     def test_memento_with_one_occupant_at_two_places_is_rejected(self) -> None:
         """同じ人が広場と井戸の 2 か所にいる memento は、作るときに RepeatedMementoKeyException を投げる。"""
         with pytest.raises(RepeatedMementoKeyException):
