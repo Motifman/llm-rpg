@@ -5,6 +5,7 @@ import pytest
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
 from ai_rpg_world.game_world.domain.world_progress import WorldEndedEvent, WorldEnding
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _WORLD = WorldId("station")
 
@@ -36,3 +37,34 @@ class TestWorldEnding:
             ending.end(WorldTick(41))
 
         assert len(ending.get_events()) == 1
+
+
+class TestWorldEndingMemento:
+    """WorldEnding を memento から作り直すと、終わったかどうかが元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_ending_has_ended(self) -> None:
+        """tick 9 に終わった世界の終わりを作り直すと、終わっている。"""
+        ending = WorldEnding(_WORLD)
+        ending.end(WorldTick(9))
+
+        rebuilt = rebuilt_from_memento(ending)
+
+        assert rebuilt.memento() == ending.memento()
+        assert rebuilt.has_ended()
+        assert rebuilt.world_id == _WORLD
+
+    def test_rebuilt_ending_refuses_to_end_again(self) -> None:
+        """終わった世界の終わりを作り直してから end すると、WorldAlreadyEndedException を投げる。"""
+        ending = WorldEnding(_WORLD)
+        ending.end(WorldTick(9))
+        rebuilt = rebuilt_from_memento(ending)
+
+        with pytest.raises(WorldAlreadyEndedException):
+            rebuilt.end(WorldTick(10))
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """終わったあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        ending = WorldEnding(_WORLD)
+        ending.end(WorldTick(9))
+
+        assert rebuilt_from_memento(ending).get_events() == []

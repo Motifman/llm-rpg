@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.value_object import WorldId
 from ai_rpg_world.game_world.domain.world_progress import Weather, WeatherChangedEvent
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _WORLD = WorldId("island")
 
@@ -64,3 +65,25 @@ class TestWeatherChange:
 
         assert weather.current() == WeatherState(WeatherType.CLEAR)
         assert weather.get_events() == []
+
+
+class TestWeatherMemento:
+    """Weather を memento から作り直すと、今の天候が元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_weather_is_the_same(self) -> None:
+        """霧から雨に変わった天候を作り直すと、雨のまま。"""
+        weather = Weather.from_declaration(_WORLD, _declaration(WeatherType.FOG))
+        weather.change(WeatherState(WeatherType.RAIN))
+
+        rebuilt = rebuilt_from_memento(weather)
+
+        assert rebuilt.memento() == weather.memento()
+        assert rebuilt.current() == WeatherState(WeatherType.RAIN)
+        assert rebuilt.world_id == _WORLD
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """変わったあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        weather = Weather.from_declaration(_WORLD, _declaration(WeatherType.FOG))
+        weather.change(WeatherState(WeatherType.RAIN))
+
+        assert rebuilt_from_memento(weather).get_events() == []

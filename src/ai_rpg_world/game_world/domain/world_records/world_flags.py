@@ -5,10 +5,12 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.value_object import FlagId, WorldId
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -30,15 +32,46 @@ class WorldFlagLoweredEvent(DomainEvent):
 WorldFlagsEvent = WorldFlagRaisedEvent | WorldFlagLoweredEvent
 
 
+@final
+@dataclass(frozen=True)
+class FlagPosition:
+    flag: FlagId
+    raised: bool
+
+
+@final
+@dataclass(frozen=True)
+class WorldFlagsMemento:
+    world_id: WorldId
+    positions: frozenset[FlagPosition]
+
+    def __post_init__(self) -> None:
+        flags = [position.flag for position in self.positions]
+        if len(set(flags)) != len(flags):
+            raise RepeatedMementoKeyException(f"world {self.world_id} has a flag both raised and lowered")
+
+
 class WorldFlags(AggregateRoot[WorldFlagsEvent]):
     def __init__(self, world_id: WorldId) -> None:
         super().__init__()
         self._world_id = world_id
         self._changed: dict[FlagId, bool] = {}
 
+    @classmethod
+    def from_memento(cls, memento: WorldFlagsMemento, design: WorldDesign) -> WorldFlags:
+        flags = cls(memento.world_id)
+        flags._changed = {position.flag: position.raised for position in memento.positions}
+        return flags
+
     @property
     def world_id(self) -> WorldId:
         return self._world_id
+
+    def memento(self) -> WorldFlagsMemento:
+        return WorldFlagsMemento(
+            world_id=self._world_id,
+            positions=frozenset(FlagPosition(flag, raised) for flag, raised in self._changed.items()),
+        )
 
     def raise_flag(self, flag: FlagDeclaration, trigger: Trigger) -> None:
         if self.is_raised(flag):

@@ -20,3 +20,7 @@ class InsufficientGoldException(GameWorldDomainException):
 
 class InvalidSpotIdException(GameWorldDomainException):
     error_code = "GAME_WORLD.INVALID_SPOT_ID"
+
+
+class RepeatedMementoKeyException(GameWorldDomainException):
+    error_code = "GAME_WORLD.REPEATED_MEMENTO_KEY"

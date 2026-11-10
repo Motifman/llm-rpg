@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.value_object import WorldId, WorldStageId, W
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -18,6 +19,14 @@ class WorldStageChangedEvent(DomainEvent):
     before: WorldStageId
     after: WorldStageId
     at: WorldTick
+
+
+@final
+@dataclass(frozen=True)
+class WorldStageMemento:
+    world_id: WorldId
+    current: WorldStageId
+    entered_at: WorldTick
 
 
 class WorldStage(AggregateRoot[WorldStageChangedEvent]):
@@ -31,9 +40,16 @@ class WorldStage(AggregateRoot[WorldStageChangedEvent]):
     def from_initial_stage(cls, world_id: WorldId, initial: WorldStageDeclaration, now: WorldTick) -> WorldStage:
         return cls(world_id, initial.stage_id, now)
 
+    @classmethod
+    def from_memento(cls, memento: WorldStageMemento, design: WorldDesign) -> WorldStage:
+        return cls(memento.world_id, memento.current, memento.entered_at)
+
     @property
     def world_id(self) -> WorldId:
         return self._world_id
+
+    def memento(self) -> WorldStageMemento:
+        return WorldStageMemento(world_id=self._world_id, current=self._current, entered_at=self._entered_at)
 
     def enter(self, stage: WorldStageDeclaration, now: WorldTick) -> None:
         if stage.stage_id == self._current:

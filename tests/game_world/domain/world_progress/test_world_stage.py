@@ -4,6 +4,7 @@ from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNo
 from ai_rpg_world.game_world.domain.declaration.progress import AllActionsAllowed, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, WorldId, WorldStageId, WorldTick
 from ai_rpg_world.game_world.domain.world_progress import WorldStage, WorldStageChangedEvent
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _WORLD = WorldId("village")
 
@@ -97,3 +98,26 @@ class TestWorldStageDeclarationIn:
         stage.enter(night, WorldTick(12))
 
         assert stage.declaration_in(_nouns(day, night)) == night
+
+
+class TestWorldStageMemento:
+    """WorldStage を memento から作り直すと、今の段階と入った tick が元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_stage_is_the_same(self) -> None:
+        """昼の議論から tick 12 に夜へ移った段階を作り直すと、夜にいて、入ったのは tick 12。"""
+        stage = WorldStage.from_initial_stage(_WORLD, _stage("day_discussion"), WorldTick(0))
+        stage.enter(_stage("night"), WorldTick(12))
+
+        rebuilt = rebuilt_from_memento(stage)
+
+        assert rebuilt.memento() == stage.memento()
+        assert rebuilt.current() == WorldStageId("night")
+        assert rebuilt.entered_at() == WorldTick(12)
+        assert rebuilt.world_id == _WORLD
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """移ったあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        stage = WorldStage.from_initial_stage(_WORLD, _stage("day_discussion"), WorldTick(0))
+        stage.enter(_stage("night"), WorldTick(12))
+
+        assert rebuilt_from_memento(stage).get_events() == []

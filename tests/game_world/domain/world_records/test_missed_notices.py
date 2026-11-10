@@ -4,6 +4,7 @@ from ai_rpg_world.game_world.domain.people.text_with_assigned_people import Text
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 from ai_rpg_world.game_world.domain.world_records import MissedNotices
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _BOB = PersonId("bob")
 
@@ -41,3 +42,21 @@ class TestMissedNotices:
         notices.clear()
 
         assert notices.notices() == ()
+
+
+class TestMissedNoticesMemento:
+    """MissedNotices を memento から作り直すと、ためていた知らせが届いた順のまま元と同じになることを保証する。"""
+
+    def test_rebuilt_notices_keep_the_order(self) -> None:
+        """tick 3 と tick 5 の知らせをためたあと作り直すと、同じ人の、同じ知らせを同じ順で返す。"""
+        notices = MissedNotices(_BOB)
+        lighter = _notice("荷が軽くなっている。", 3)
+        bell = _notice("遠くで鐘が鳴った。", 5)
+        notices.keep(lighter)
+        notices.keep(bell)
+
+        rebuilt = rebuilt_from_memento(notices)
+
+        assert rebuilt.memento() == notices.memento()
+        assert rebuilt.notices() == (lighter, bell)
+        assert rebuilt.person == _BOB

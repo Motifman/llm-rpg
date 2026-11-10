@@ -1,7 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, final
+
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.value_object import PersonId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+
+
+@final
+@dataclass(frozen=True)
+class MissedNoticesMemento:
+    person: PersonId
+    notices: tuple[MissedNotice, ...]
 
 
 class MissedNotices:
@@ -9,9 +22,18 @@ class MissedNotices:
         self._person = person
         self._notices: list[MissedNotice] = []
 
+    @classmethod
+    def from_memento(cls, memento: MissedNoticesMemento, design: WorldDesign) -> MissedNotices:
+        missed = cls(memento.person)
+        missed._notices = list(memento.notices)
+        return missed
+
     @property
     def person(self) -> PersonId:
         return self._person
+
+    def memento(self) -> MissedNoticesMemento:
+        return MissedNoticesMemento(person=self._person, notices=tuple(self._notices))
 
     def keep(self, notice: MissedNotice) -> None:
         self._notices.append(notice)

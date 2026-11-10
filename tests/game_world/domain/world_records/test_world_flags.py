@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired, WorldTimePassing
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
@@ -7,9 +9,16 @@ from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import NoNotice
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, FlagId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
-from ai_rpg_world.game_world.domain.world_records import WorldFlagLoweredEvent, WorldFlagRaisedEvent, WorldFlags
+from ai_rpg_world.game_world.domain.world_records import (
+    FlagPosition,
+    WorldFlagLoweredEvent,
+    WorldFlagRaisedEvent,
+    WorldFlags,
+    WorldFlagsMemento,
+)
 
 _WORLD = WorldId("island")
 
@@ -31,6 +40,8 @@ _STORM = HappeningFired(
         notice=NoNotice(),
     )
 )
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+
 _TICK = WorldTimePassing(WorldTick(3))
 
 
@@ -130,3 +141,63 @@ class TestWorldFlagsLower:
             WorldFlagLoweredEvent,
             WorldFlagRaisedEvent,
         ]
+
+
+_WELL_DUG = _flag("well_dug")
+
+
+class TestWorldFlagsMemento:
+    """WorldFlags を memento から作り直すと、立て下ろしした旗の向きが元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_flags_have_the_same_flags_raised(self) -> None:
+        """橋の修理と井戸掘りの旗を立てた WorldFlags を memento から作り直すと、2 つとも立っている。"""
+        flags = WorldFlags(_WORLD)
+        flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
+        flags.raise_flag(_WELL_DUG, _TICK)
+
+        rebuilt = rebuilt_from_memento(flags)
+
+        assert rebuilt.is_raised(_BRIDGE_REPAIRED)
+        assert rebuilt.is_raised(_WELL_DUG)
+
+    def test_rebuilt_flags_keep_a_lowered_flag_lowered(self) -> None:
+        """宣言で立っている門の旗を下ろしてから作り直すと、門の旗は下りたまま。"""
+        flags = WorldFlags(_WORLD)
+        flags.lower_flag(_GATE_LOCKED, _TICK)
+
+        rebuilt = rebuilt_from_memento(flags)
+
+        assert not rebuilt.is_raised(_GATE_LOCKED)
+
+    def test_memento_of_rebuilt_flags_equals_the_original(self) -> None:
+        """旗を 2 つ立てて 1 つ下ろしたあとの memento は、作り直したものの memento と等しく、作り直したてとは違う。"""
+        flags = WorldFlags(_WORLD)
+        flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
+        flags.raise_flag(_WELL_DUG, _TICK)
+        flags.lower_flag(_GATE_LOCKED, _TICK)
+
+        rebuilt = rebuilt_from_memento(flags)
+
+        assert rebuilt.memento() == flags.memento()
+        assert rebuilt.memento() != WorldFlags(_WORLD).memento()
+        assert rebuilt.world_id == _WORLD
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """旗を立てたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        flags = WorldFlags(_WORLD)
+        flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
+
+        assert rebuilt_from_memento(flags).get_events() == []
+
+
+class TestWorldFlagsMementoRefusesRepeatedFlag:
+    """WorldFlagsMemento が、同じ旗の向きを 2 つ持つ memento を作ることを断ることを保証する。"""
+
+    def test_same_flag_raised_and_lowered_is_refused(self) -> None:
+        """gate_a_open が「立っている」と「下りている」の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        gate = FlagId("gate_a_open")
+
+        with pytest.raises(RepeatedMementoKeyException):
+            WorldFlagsMemento(
+                world_id=_WORLD, positions=frozenset({FlagPosition(gate, True), FlagPosition(gate, False)})
+            )

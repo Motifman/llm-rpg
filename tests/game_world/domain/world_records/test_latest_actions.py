@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.world_records import (
     ActionAttemptFailedEvent,
+    ActionLastDoneAt,
     LatestActions,
+    LatestActionsMemento,
     NeverDone,
     PersonActedEvent,
 )
@@ -27,6 +32,7 @@ _BOB_SEARCHES = ActionAttemptForTests(actor_id=_BOB, action_kind=ActionKind.SEAR
 _ALICE_PULLS_LEVER = ObjectInteractionAttempt(
     _ALICE, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), {}, Openly()
 )
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 
 class TestLatestActionsNote:
@@ -118,3 +124,58 @@ class TestNeverDone:
     def test_later_of_answers_the_baseline(self) -> None:
         """NeverDone の later_of は、渡した tick 7 をそのまま返す。"""
         assert NeverDone().later_of(WorldTick(7)) == WorldTick(7)
+
+
+class TestLatestActionsMemento:
+    """LatestActions を memento から作り直すと、人ごとと誰でもの最後に行った tick が元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_latest_actions_answer_the_same_ticks(self) -> None:
+        """alice が tick 4 に探し tick 5 にレバーを引き、bob が tick 6 に探したあと作り直すと、どの last_done_at も元と同じ。"""
+        latest = LatestActions(_WORLD)
+        latest.note(_ALICE_SEARCHES, WorldTick(4))
+        latest.note(_ALICE_PULLS_LEVER, WorldTick(5))
+        latest.note(_BOB_SEARCHES, WorldTick(6))
+
+        rebuilt = rebuilt_from_memento(latest)
+
+        assert rebuilt.memento() == latest.memento()
+        assert rebuilt.last_done_at(_ALICE, ActionKind.SEARCH) == WorldTick(4)
+        assert rebuilt.last_done_at(_ALICE, _PULL_LEVER) == WorldTick(5)
+        assert rebuilt.last_done_at(Anyone(), ActionKind.SEARCH) == WorldTick(6)
+        assert rebuilt.last_done_at(_BOB, _PULL_LEVER) == NeverDone()
+        assert rebuilt.world_id == _WORLD
+
+    def test_memento_does_not_depend_on_the_order_of_noting(self) -> None:
+        """tick 4 に alice と bob が探したとき、alice から記録しても bob から記録しても、memento は等しい。"""
+        alice_first = LatestActions(_WORLD)
+        alice_first.note(_ALICE_SEARCHES, WorldTick(4))
+        alice_first.note(_BOB_SEARCHES, WorldTick(4))
+        bob_first = LatestActions(_WORLD)
+        bob_first.note(_BOB_SEARCHES, WorldTick(4))
+        bob_first.note(_ALICE_SEARCHES, WorldTick(4))
+
+        assert alice_first.memento() == bob_first.memento()
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """行為を記録したあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        latest = LatestActions(_WORLD)
+        latest.note(_ALICE_SEARCHES, WorldTick(4))
+
+        assert rebuilt_from_memento(latest).get_events() == []
+
+
+class TestLatestActionsMementoRefusesRepeatedKey:
+    """LatestActionsMemento が、同じ人の同じ行為に 2 つの tick を持つ memento を作ることを断ることを保証する。"""
+
+    def test_same_actor_and_action_at_two_ticks_is_refused(self) -> None:
+        """alice の SEARCH が tick 4 と tick 6 の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            LatestActionsMemento(
+                world_id=_WORLD,
+                last_done=frozenset(
+                    {
+                        ActionLastDoneAt(_ALICE, ActionKind.SEARCH, WorldTick(4)),
+                        ActionLastDoneAt(_ALICE, ActionKind.SEARCH, WorldTick(6)),
+                    }
+                ),
+            )
