@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import ClassVar, final
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
-from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActorRequirement,
     CopresenceRequirement,
@@ -31,7 +30,6 @@ from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import It
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
-from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
 
