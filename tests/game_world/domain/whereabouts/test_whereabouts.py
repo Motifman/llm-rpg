@@ -635,17 +635,17 @@ class TestWhereaboutsMemento:
             AtSpot(spot=SpotId("attic"), section=OpenArea()),
             AtSpot(spot=SpotId("plaza"), section=SpotSectionId("trapdoor")),
             TravelPosition(
-                route_start=SpotId("attic"),
+                route_start=SpotId("plaza"),
                 route_passages=(PassageId("street"),),
                 passage_index=0,
                 ticks_left_on_passage=Ticks(1),
                 departed_from=SpotId("attic"),
             ),
         ],
-        ids=["undeclared_spot", "undeclared_section", "undeclared_route_start"],
+        ids=["undeclared_spot", "undeclared_section", "departed_from_undeclared_spot"],
     )
     def test_memento_at_an_undeclared_place_is_rejected(self, location: AtSpot | TravelPosition) -> None:
-        """宣言に無い場所 attic・宣言に無い区画 trapdoor・attic から出た移動のどれかを持つ memento から作り直すと UndeclaredNounException を投げる。"""
+        """宣言に無い場所 attic・宣言に無い区画 trapdoor・attic を出たことになっている移動のどれかを持つ memento から作り直すと UndeclaredNounException を投げる。"""
         memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, location)}))
 
         with pytest.raises(UndeclaredNounException):

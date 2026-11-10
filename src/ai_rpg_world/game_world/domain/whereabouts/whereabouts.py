@@ -279,6 +279,5 @@ def _resumed(location: AtSpot | TravelPosition, design: WorldDesign) -> Location
         if not isinstance(location.section, OpenArea):
             design.nouns.section_of(location.section)
         return location
-    design.nouns.spot_of(location.route_start)
     design.nouns.spot_of(location.departed_from)
     return location.resumed_on(tuple(design.nouns.passage_of(passage) for passage in location.route_passages))
