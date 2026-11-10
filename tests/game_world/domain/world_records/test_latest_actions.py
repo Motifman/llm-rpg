@@ -27,6 +27,7 @@ _BOB_SEARCHES = ActionAttemptForTests(actor_id=_BOB, action_kind=ActionKind.SEAR
 _ALICE_PULLS_LEVER = ObjectInteractionAttempt(
     _ALICE, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), {}, Openly()
 )
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 
 class TestLatestActionsNote:
@@ -118,3 +119,30 @@ class TestNeverDone:
     def test_later_of_answers_the_baseline(self) -> None:
         """NeverDone の later_of は、渡した tick 7 をそのまま返す。"""
         assert NeverDone().later_of(WorldTick(7)) == WorldTick(7)
+
+
+class TestLatestActionsMemento:
+    """LatestActions を memento から作り直すと、人ごとと誰でもの最後に行った tick が元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_latest_actions_answer_the_same_ticks(self) -> None:
+        """alice が tick 4 に探し tick 5 にレバーを引き、bob が tick 6 に探したあと作り直すと、どの last_done_at も元と同じ。"""
+        latest = LatestActions(_WORLD)
+        latest.note(_ALICE_SEARCHES, WorldTick(4))
+        latest.note(_ALICE_PULLS_LEVER, WorldTick(5))
+        latest.note(_BOB_SEARCHES, WorldTick(6))
+
+        rebuilt = rebuilt_from_memento(latest)
+
+        assert rebuilt.memento() == latest.memento()
+        assert rebuilt.last_done_at(_ALICE, ActionKind.SEARCH) == WorldTick(4)
+        assert rebuilt.last_done_at(_ALICE, _PULL_LEVER) == WorldTick(5)
+        assert rebuilt.last_done_at(Anyone(), ActionKind.SEARCH) == WorldTick(6)
+        assert rebuilt.last_done_at(_BOB, _PULL_LEVER) == NeverDone()
+        assert rebuilt.world_id == _WORLD
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """行為を記録したあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        latest = LatestActions(_WORLD)
+        latest.note(_ALICE_SEARCHES, WorldTick(4))
+
+        assert rebuilt_from_memento(latest).get_events() == []

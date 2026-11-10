@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTic
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 from ai_rpg_world.game_world.domain.world_records import NeverFired, ScenarioProgress
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _WORLD = WorldId("harbor")
 
@@ -132,3 +133,23 @@ class TestNeverFired:
     def test_has_never_passed_any_ticks(self) -> None:
         """NeverFired は、0 tick 経ったかを問われても偽を返す。"""
         assert not NeverFired().has_passed(Ticks(0), WorldTick(10))
+
+
+class TestScenarioProgressMemento:
+    """ScenarioProgress を memento から作り直すと、出来事の最後に起きた tick と反応の前に見た真偽が元と同じになることを保証する。"""
+
+    def test_rebuilt_progress_answers_the_same(self) -> None:
+        """船の到着が tick 3、潮の変わりが tick 4 に起き、扉は閉じている (真) と記録したあと作り直すと、同じ答えを返す。"""
+        progress = ScenarioProgress(_WORLD)
+        progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(3))
+        progress.note_happening_fired(_TIDE_TURNS, WorldTick(4))
+        progress.note_reaction_truth(_DOOR_CLOSED, True)
+
+        rebuilt = rebuilt_from_memento(progress)
+
+        assert rebuilt.memento() == progress.memento()
+        assert rebuilt.last_fired_at(HappeningId("ship_arrives")) == WorldTick(3)
+        assert not rebuilt.may_fire(_TIDE_TURNS, WorldTick(4))
+        assert rebuilt.reaction_changed(_DOOR_CLOSED, False)
+        assert not rebuilt.reaction_changed(_LAMP_LIT, True)
+        assert rebuilt.world_id == _WORLD

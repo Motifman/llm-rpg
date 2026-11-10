@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
@@ -11,6 +11,9 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     TimeOfDay,
 )
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -33,15 +36,31 @@ class TimeOfDayChangedEvent(DomainEvent):
 WorldClockEvent = WorldTickAdvancedEvent | TimeOfDayChangedEvent
 
 
+@final
+@dataclass(frozen=True)
+class WorldClockMemento:
+    world_id: WorldId
+    now: WorldTick
+
+
 class WorldClock(AggregateRoot[WorldClockEvent]):
     def __init__(self, world_id: WorldId) -> None:
         super().__init__()
         self._world_id = world_id
         self._now = WorldTick(0)
 
+    @classmethod
+    def from_memento(cls, memento: WorldClockMemento, design: WorldDesign) -> WorldClock:
+        clock = cls(memento.world_id)
+        clock._now = memento.now
+        return clock
+
     @property
     def world_id(self) -> WorldId:
         return self._world_id
+
+    def memento(self) -> WorldClockMemento:
+        return WorldClockMemento(world_id=self._world_id, now=self._now)
 
     def advance(self, day_night: DayNightDeclaration | NoDayNight) -> None:
         before = self._now

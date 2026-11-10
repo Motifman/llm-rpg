@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.world_progress import TimeOfDayChangedEvent, WorldClock, WorldTickAdvancedEvent
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _WORLD = WorldId("island")
 
@@ -117,3 +118,26 @@ class TestWorldClockIdentity:
     def test_keeps_world_id(self) -> None:
         """作るときに渡した WorldId を world_id として持つ。"""
         assert WorldClock(_WORLD).world_id == _WORLD
+
+
+class TestWorldClockMemento:
+    """WorldClock を memento から作り直すと、今の tick が元と同じになり、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_clock_is_at_the_same_tick(self) -> None:
+        """3 回進めた時計を作り直すと、tick 3 にいる。"""
+        clock = WorldClock(_WORLD)
+        for _ in range(3):
+            clock.advance(NoDayNight())
+
+        rebuilt = rebuilt_from_memento(clock)
+
+        assert rebuilt.memento() == clock.memento()
+        assert rebuilt.now() == WorldTick(3)
+        assert rebuilt.world_id == _WORLD
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """進めたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        clock = WorldClock(_WORLD)
+        clock.advance(NoDayNight())
+
+        assert rebuilt_from_memento(clock).get_events() == []

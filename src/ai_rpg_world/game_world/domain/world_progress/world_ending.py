@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -15,15 +18,31 @@ class WorldEndedEvent(DomainEvent):
     at: WorldTick
 
 
+@final
+@dataclass(frozen=True)
+class WorldEndingMemento:
+    world_id: WorldId
+    ended: bool
+
+
 class WorldEnding(AggregateRoot[WorldEndedEvent]):
     def __init__(self, world_id: WorldId) -> None:
         super().__init__()
         self._world_id = world_id
         self._ended = False
 
+    @classmethod
+    def from_memento(cls, memento: WorldEndingMemento, design: WorldDesign) -> WorldEnding:
+        ending = cls(memento.world_id)
+        ending._ended = memento.ended
+        return ending
+
     @property
     def world_id(self) -> WorldId:
         return self._world_id
+
+    def memento(self) -> WorldEndingMemento:
+        return WorldEndingMemento(world_id=self._world_id, ended=self._ended)
 
     def end(self, now: WorldTick) -> None:
         if self._ended:

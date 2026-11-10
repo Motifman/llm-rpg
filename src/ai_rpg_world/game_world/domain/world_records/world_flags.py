@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.value_object import FlagId, WorldId
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -30,15 +31,36 @@ class WorldFlagLoweredEvent(DomainEvent):
 WorldFlagsEvent = WorldFlagRaisedEvent | WorldFlagLoweredEvent
 
 
+@final
+@dataclass(frozen=True)
+class WorldFlagsMemento:
+    world_id: WorldId
+    raised: tuple[FlagId, ...]
+    lowered: tuple[FlagId, ...]
+
+
 class WorldFlags(AggregateRoot[WorldFlagsEvent]):
     def __init__(self, world_id: WorldId) -> None:
         super().__init__()
         self._world_id = world_id
         self._changed: dict[FlagId, bool] = {}
 
+    @classmethod
+    def from_memento(cls, memento: WorldFlagsMemento, design: WorldDesign) -> WorldFlags:
+        flags = cls(memento.world_id)
+        flags._changed = {flag_id: True for flag_id in memento.raised} | {flag_id: False for flag_id in memento.lowered}
+        return flags
+
     @property
     def world_id(self) -> WorldId:
         return self._world_id
+
+    def memento(self) -> WorldFlagsMemento:
+        return WorldFlagsMemento(
+            world_id=self._world_id,
+            raised=tuple(flag_id for flag_id, raised in self._changed.items() if raised),
+            lowered=tuple(flag_id for flag_id, raised in self._changed.items() if not raised),
+        )
 
     def raise_flag(self, flag: FlagDeclaration, trigger: Trigger) -> None:
         if self.is_raised(flag):
