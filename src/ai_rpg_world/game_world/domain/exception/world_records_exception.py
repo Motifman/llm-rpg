@@ -11,3 +11,7 @@ class SearchCountIsZeroException(GameWorldDomainException):
 
 class OnceInWorldFoundByManyException(GameWorldDomainException):
     error_code = "GAME_WORLD.ONCE_IN_WORLD_FOUND_BY_MANY"
+
+
+class LatestActionsDisagreeWithAnyoneException(GameWorldDomainException):
+    error_code = "GAME_WORLD.LATEST_ACTIONS_DISAGREE_WITH_ANYONE"

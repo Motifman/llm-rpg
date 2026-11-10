@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.world_records_exception import LatestActionsDisagreeWithAnyoneException
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, WorldId, WorldTick
 
@@ -40,6 +42,8 @@ class ActionAttemptFailedEvent(DomainEvent):
 
 LatestActionsEvent = PersonActedEvent | ActionAttemptFailedEvent
 
+_ActionKey = tuple[PersonId | Anyone, ActionKind | InteractionId]
+
 
 @final
 @dataclass(frozen=True)
@@ -62,16 +66,19 @@ class LatestActionsMemento:
 
 
 class LatestActions(AggregateRoot[LatestActionsEvent]):
-    def __init__(self, world_id: WorldId) -> None:
+    def __init__(self, world_id: WorldId, last_done: Mapping[_ActionKey, WorldTick]) -> None:
         super().__init__()
+        _refuse_disagreement_with_anyone(world_id, last_done)
         self._world_id = world_id
-        self._last_done: dict[tuple[PersonId | Anyone, ActionKind | InteractionId], WorldTick] = {}
+        self._last_done = dict(last_done)
+
+    @classmethod
+    def start(cls, world_id: WorldId) -> LatestActions:
+        return cls(world_id, {})
 
     @classmethod
     def from_memento(cls, memento: LatestActionsMemento, design: WorldDesign) -> LatestActions:
-        latest = cls(memento.world_id)
-        latest._last_done = {(done.who, done.action): done.at for done in memento.last_done}
-        return latest
+        return cls(memento.world_id, {(done.who, done.action): done.at for done in memento.last_done})
 
     @property
     def world_id(self) -> WorldId:
@@ -94,3 +101,18 @@ class LatestActions(AggregateRoot[LatestActionsEvent]):
 
     def last_done_at(self, who: PersonId | Anyone, action: ActionKind | InteractionId) -> WorldTick | NeverDone:
         return self._last_done.get((who, action), NeverDone())
+
+
+def _refuse_disagreement_with_anyone(world_id: WorldId, last_done: Mapping[_ActionKey, WorldTick]) -> None:
+    by_people: dict[ActionKind | InteractionId, set[WorldTick]] = {}
+    by_anyone: dict[ActionKind | InteractionId, WorldTick] = {}
+    for (who, action), at in last_done.items():
+        if isinstance(who, Anyone):
+            by_anyone[action] = at
+        else:
+            by_people.setdefault(action, set()).add(at)
+    for action in by_people.keys() | by_anyone.keys():
+        if by_anyone.get(action) not in by_people.get(action, set()):
+            raise LatestActionsDisagreeWithAnyoneException(
+                f"world {world_id} has {action} last done by anyone at a tick no person did it"
+            )

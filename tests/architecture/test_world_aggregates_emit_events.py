@@ -560,18 +560,18 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
         ),
         lambda w: w.change(WeatherState(WeatherType.RAIN)),
     ),
-    "WorldClock.advance": lambda: _with(WorldClock(_WORLD), lambda c: c.advance(NoDayNight())),
+    "WorldClock.advance": lambda: _with(WorldClock.start(_WORLD), lambda c: c.advance(NoDayNight())),
     "WorldStage.enter": lambda: _with(
         WorldStage.from_initial_stage(_WORLD, _stage("before_dawn"), _NOW),
         lambda s: s.enter(_stage("dawn"), WorldTick(1)),
     ),
-    "WorldFlags.raise_flag": lambda: _with(WorldFlags(_WORLD), lambda f: f.raise_flag(_BELL_RUNG, _TICK_PASSING)),
-    "WorldFlags.lower_flag": lambda: _with(WorldFlags(_WORLD), lambda f: f.lower_flag(_GATE_SHUT, _TICK_PASSING)),
+    "WorldFlags.raise_flag": lambda: _with(WorldFlags.start(_WORLD), lambda f: f.raise_flag(_BELL_RUNG, _TICK_PASSING)),
+    "WorldFlags.lower_flag": lambda: _with(WorldFlags.start(_WORLD), lambda f: f.lower_flag(_GATE_SHUT, _TICK_PASSING)),
     "LatestActions.note": lambda: _with(
-        LatestActions(_WORLD), lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), _NOW)
+        LatestActions.start(_WORLD), lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), _NOW)
     ),
     "LatestActions.note_failed_attempt": lambda: _with(
-        LatestActions(_WORLD),
+        LatestActions.start(_WORLD),
         lambda a: a.note_failed_attempt(
             ActionRefusal(
                 attempt=ActionAttemptForTests(actor_id=_ALICE),
@@ -581,7 +581,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
             _NOW,
         ),
     ),
-    "WorldEnding.end": lambda: _with(WorldEnding(_WORLD), lambda e: e.end(WorldTick(1))),
+    "WorldEnding.end": lambda: _with(WorldEnding.start(_WORLD), lambda e: e.end(WorldTick(1))),
 }
 
 

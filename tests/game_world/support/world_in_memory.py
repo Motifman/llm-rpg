@@ -103,7 +103,7 @@ class WorldInMemory:
             sections=sections,
             outcomes=(),
         )
-        self.clock_aggregate = WorldClock(world)
+        self.clock_aggregate = WorldClock.start(world)
         self.whereabouts = Whereabouts.start(world)
         self.passages = PassageStates.start(world, passages)
         self.atmospheres = SpotAtmospheres.start(world, spots)
@@ -119,9 +119,9 @@ class WorldInMemory:
         self.missed_notices: dict[PersonId, MissedNotices] = {}
         self.group_decisions: dict[GroupDecisionId, GroupDecision] = {}
         self.world_stage = world_stage
-        self.flags = WorldFlags(world)
-        self.scenario_progress = ScenarioProgress(world)
-        self.latest_actions = LatestActions(world)
+        self.flags = WorldFlags.start(world)
+        self.scenario_progress = ScenarioProgress.start(world)
+        self.latest_actions = LatestActions.start(world)
         self.day_night = day_night
         self.weather = weather
         self.random = FractionsInOrder(fractions)
@@ -142,7 +142,7 @@ class WorldInMemory:
         return self.search_progresses.setdefault(spot, SpotSearchProgress.start(spot))
 
     def missed_notices_of(self, person: PersonId) -> MissedNotices:
-        return self.missed_notices.setdefault(person, MissedNotices(person))
+        return self.missed_notices.setdefault(person, MissedNotices.start(person))
 
     def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
         return self.group_decisions.setdefault(decision.decision_id, GroupDecision.not_started(decision))

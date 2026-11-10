@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -52,16 +53,18 @@ class WorldFlagsMemento:
 
 
 class WorldFlags(AggregateRoot[WorldFlagsEvent]):
-    def __init__(self, world_id: WorldId) -> None:
+    def __init__(self, world_id: WorldId, changed: Mapping[FlagId, bool]) -> None:
         super().__init__()
         self._world_id = world_id
-        self._changed: dict[FlagId, bool] = {}
+        self._changed = dict(changed)
+
+    @classmethod
+    def start(cls, world_id: WorldId) -> WorldFlags:
+        return cls(world_id, {})
 
     @classmethod
     def from_memento(cls, memento: WorldFlagsMemento, design: WorldDesign) -> WorldFlags:
-        flags = cls(memento.world_id)
-        flags._changed = {position.flag: position.raised for position in memento.positions}
-        return flags
+        return cls(memento.world_id, {position.flag: position.raised for position in memento.positions})
 
     @property
     def world_id(self) -> WorldId:

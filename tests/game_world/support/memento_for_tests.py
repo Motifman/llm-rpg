@@ -17,9 +17,9 @@ class RebuildsFromMemento(Protocol):
 
 
 @cache
-def _empty_design() -> WorldDesign:
+def empty_design() -> WorldDesign:
     return compose_world()
 
 
 def rebuilt_from_memento(original: _Rebuilt, design: WorldDesign | None = None) -> _Rebuilt:
-    return type(original).from_memento(original.memento(), design if design is not None else _empty_design())
+    return type(original).from_memento(original.memento(), design if design is not None else empty_design())

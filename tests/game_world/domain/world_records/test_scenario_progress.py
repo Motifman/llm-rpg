@@ -43,7 +43,7 @@ class TestScenarioProgressHappenings:
 
     def test_happening_has_never_fired_at_first(self) -> None:
         """作った直後は、どの出来事も last_fired_at が NeverFired で、once の出来事も起きてよい。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         assert progress.world_id == _WORLD
         assert progress.last_fired_at(_SHIP_ARRIVES.happening_id) == NeverFired()
@@ -51,7 +51,7 @@ class TestScenarioProgressHappenings:
 
     def test_once_happening_may_not_fire_after_it_fired(self) -> None:
         """once の出来事 (船の入港) は、tick 3 で一度起きたら、tick 4 以降の may_fire が偽を返す。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(3))
 
@@ -60,7 +60,7 @@ class TestScenarioProgressHappenings:
 
     def test_last_fired_at_answers_the_latest_tick(self) -> None:
         """潮の変わり目が tick 2 と tick 7 に起きたら、last_fired_at は tick 7 を返す。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(2))
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(7))
@@ -69,7 +69,7 @@ class TestScenarioProgressHappenings:
 
     def test_firing_one_happening_leaves_others_unfired(self) -> None:
         """潮の変わり目が起きても、船の入港は NeverFired のままで、起きてよい。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(2))
 
@@ -78,7 +78,7 @@ class TestScenarioProgressHappenings:
 
     def test_happening_may_not_fire_twice_in_the_same_tick(self) -> None:
         """once でない潮の変わり目も、tick 5 に起きたら同じ tick 5 の may_fire は偽、tick 6 では真。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(5))
 
@@ -104,14 +104,14 @@ class TestScenarioProgressReactions:
 
     def test_first_truth_seen_is_not_a_change(self) -> None:
         """一度も記録していない反応は、真でも偽でも reaction_changed が偽。世界の始まりには何も変わっていない。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         assert not progress.reaction_changed(_DOOR_CLOSED, True)
         assert not progress.reaction_changed(_DOOR_CLOSED, False)
 
     def test_truth_different_from_the_noted_one_is_a_change(self) -> None:
         """最初から閉じている扉 (真を記録) は、真のままなら変わっておらず、偽 (開いた) を見たら変わったと答える。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         progress.note_reaction_truth(_DOOR_CLOSED, True)
 
@@ -120,7 +120,7 @@ class TestScenarioProgressReactions:
 
     def test_closing_again_after_opening_is_a_change(self) -> None:
         """閉じている → 開いた、と記録したあと、また閉じた (真) を見ると変わったと答える。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         progress.note_reaction_truth(_DOOR_CLOSED, True)
         progress.note_reaction_truth(_DOOR_CLOSED, False)
@@ -129,7 +129,7 @@ class TestScenarioProgressReactions:
 
     def test_noting_one_reaction_leaves_others_unrecorded(self) -> None:
         """扉の反応を記録しても、灯りの反応は一度も記録していないままで、真を見ても変わっていない。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
 
         progress.note_reaction_truth(_DOOR_CLOSED, False)
 
@@ -149,7 +149,7 @@ class TestScenarioProgressMemento:
 
     def test_rebuilt_progress_answers_the_same(self) -> None:
         """船の到着が tick 3、潮の変わりが tick 4 に起き、扉は閉じている (真) と記録したあと作り直すと、同じ答えを返す。"""
-        progress = ScenarioProgress(_WORLD)
+        progress = ScenarioProgress.start(_WORLD)
         progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(3))
         progress.note_happening_fired(_TIDE_TURNS, WorldTick(4))
         progress.note_reaction_truth(_DOOR_CLOSED, True)

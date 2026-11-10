@@ -35,11 +35,11 @@ class TestWorldClockAdvance:
 
     def test_starts_at_tick_zero(self) -> None:
         """作ったばかりの時計の now は tick 0。"""
-        assert WorldClock(_WORLD).now() == WorldTick(0)
+        assert WorldClock.start(_WORLD).now() == WorldTick(0)
 
     def test_advance_moves_now_by_one_tick(self) -> None:
         """advance を 2 回呼ぶと now は tick 2 になる。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
 
         clock.advance(NoDayNight())
         clock.advance(NoDayNight())
@@ -48,7 +48,7 @@ class TestWorldClockAdvance:
 
     def test_advance_records_tick_advanced_event_with_before_and_after(self) -> None:
         """tick 0 からの advance は、世界と、変わる前の tick 0 と後の tick 1 を持つ WorldTickAdvancedEvent をためる。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
 
         clock.advance(NoDayNight())
 
@@ -58,7 +58,7 @@ class TestWorldClockAdvance:
 
     def test_crossing_phase_boundary_records_time_of_day_changed_event(self) -> None:
         """昼が 6 から始まる昼夜で 5 から 6 へ進むと、変わる前の夜と後の昼を持つ TimeOfDayChangedEvent をためる。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
         day_night = _day_night(starts_at=5)
 
         clock.advance(day_night)
@@ -75,7 +75,7 @@ class TestWorldClockAdvance:
 
     def test_advance_within_same_phase_records_no_time_of_day_event(self) -> None:
         """昼のうちに 7 から 8 へ進んでも、TimeOfDayChangedEvent はためない。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
 
         clock.advance(_day_night(starts_at=7))
 
@@ -83,7 +83,7 @@ class TestWorldClockAdvance:
 
     def test_crossing_midnight_within_night_records_no_time_of_day_event(self) -> None:
         """夜が 18 から日をまたいで続く昼夜で 23 から 0 へ進んでも、同じ夜なので TimeOfDayChangedEvent はためない。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
 
         clock.advance(_day_night(starts_at=23))
 
@@ -91,7 +91,7 @@ class TestWorldClockAdvance:
 
     def test_no_day_night_records_no_time_of_day_event(self) -> None:
         """昼夜を宣言しない世界では、何 tick 進めても TimeOfDayChangedEvent をためない。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
 
         for _ in range(30):
             clock.advance(NoDayNight())
@@ -104,7 +104,7 @@ class TestWorldClockTimeOfDay:
 
     def test_returns_position_in_day_from_starts_at(self) -> None:
         """starts_at が 22 の世界で 3 tick 進めると、1 日の中の 1 になる。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
         day_night = _day_night(starts_at=22)
         for _ in range(3):
             clock.advance(day_night)
@@ -117,7 +117,7 @@ class TestWorldClockIdentity:
 
     def test_keeps_world_id(self) -> None:
         """作るときに渡した WorldId を world_id として持つ。"""
-        assert WorldClock(_WORLD).world_id == _WORLD
+        assert WorldClock.start(_WORLD).world_id == _WORLD
 
 
 class TestWorldClockMemento:
@@ -125,7 +125,7 @@ class TestWorldClockMemento:
 
     def test_rebuilt_clock_is_at_the_same_tick(self) -> None:
         """3 回進めた時計を作り直すと、tick 3 にいる。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
         for _ in range(3):
             clock.advance(NoDayNight())
 
@@ -137,7 +137,7 @@ class TestWorldClockMemento:
 
     def test_rebuilding_records_no_event(self) -> None:
         """進めたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
-        clock = WorldClock(_WORLD)
+        clock = WorldClock.start(_WORLD)
         clock.advance(NoDayNight())
 
         assert rebuilt_from_memento(clock).get_events() == []

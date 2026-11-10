@@ -50,15 +50,15 @@ class TestWorldFlagsAtStart:
 
     def test_flag_declared_lowered_is_not_raised_at_first(self) -> None:
         """initially_raised が偽の旗は、作った直後は立っていない。"""
-        assert not WorldFlags(_WORLD).is_raised(_BRIDGE_REPAIRED)
+        assert not WorldFlags.start(_WORLD).is_raised(_BRIDGE_REPAIRED)
 
     def test_flag_declared_raised_is_raised_at_first(self) -> None:
         """initially_raised が真の旗は、作った直後から立っている。"""
-        assert WorldFlags(_WORLD).is_raised(_GATE_LOCKED)
+        assert WorldFlags.start(_WORLD).is_raised(_GATE_LOCKED)
 
     def test_keeps_its_world_id_and_records_no_event_at_first(self) -> None:
         """作った直後は自分の世界の ID を持ち、イベントをためていない。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         assert flags.world_id == _WORLD
         assert flags.get_events() == []
@@ -69,7 +69,7 @@ class TestWorldFlagsRaise:
 
     def test_raise_flag_raises_the_flag(self) -> None:
         """立っていない旗を raise_flag すると、立っている。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
 
@@ -77,7 +77,7 @@ class TestWorldFlagsRaise:
 
     def test_raise_flag_records_event_with_its_trigger(self) -> None:
         """嵐の出来事がきっかけで旗を立てると、世界・旗・きっかけ (嵐の HappeningFired) を持つ WorldFlagRaisedEvent をためる。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
 
@@ -87,7 +87,7 @@ class TestWorldFlagsRaise:
 
     def test_raising_raised_flag_changes_nothing(self) -> None:
         """初めから立っている旗を raise_flag しても、断らず、イベントもためない。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         flags.raise_flag(_GATE_LOCKED, _STORM)
 
@@ -96,7 +96,7 @@ class TestWorldFlagsRaise:
 
     def test_raising_one_flag_leaves_others(self) -> None:
         """ある旗を立てても、別の旗の立ち下がりは変わらない。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
 
@@ -109,7 +109,7 @@ class TestWorldFlagsLower:
 
     def test_lower_flag_lowers_raised_flag_and_records_event_with_its_trigger(self) -> None:
         """初めから立っている旗を時間の経過がきっかけで下ろすと、立っていなくなり、世界・旗・きっかけを持つ WorldFlagLoweredEvent をためる。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         flags.lower_flag(_GATE_LOCKED, _TICK)
 
@@ -120,7 +120,7 @@ class TestWorldFlagsLower:
 
     def test_lowering_lowered_flag_changes_nothing(self) -> None:
         """立っていない旗を lower_flag しても、断らず、イベントもためない。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         flags.lower_flag(_BRIDGE_REPAIRED, _TICK)
 
@@ -129,7 +129,7 @@ class TestWorldFlagsLower:
 
     def test_flag_raised_after_lowering_is_raised_again(self) -> None:
         """立てて、下ろして、また立てた旗は立っていて、3 つのイベントを順にためる。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
 
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
         flags.lower_flag(_BRIDGE_REPAIRED, _TICK)
@@ -151,7 +151,7 @@ class TestWorldFlagsMemento:
 
     def test_rebuilt_flags_have_the_same_flags_raised(self) -> None:
         """橋の修理と井戸掘りの旗を立てた WorldFlags を memento から作り直すと、2 つとも立っている。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
         flags.raise_flag(_WELL_DUG, _TICK)
 
@@ -162,7 +162,7 @@ class TestWorldFlagsMemento:
 
     def test_rebuilt_flags_keep_a_lowered_flag_lowered(self) -> None:
         """宣言で立っている門の旗を下ろしてから作り直すと、門の旗は下りたまま。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
         flags.lower_flag(_GATE_LOCKED, _TICK)
 
         rebuilt = rebuilt_from_memento(flags)
@@ -171,7 +171,7 @@ class TestWorldFlagsMemento:
 
     def test_memento_of_rebuilt_flags_equals_the_original(self) -> None:
         """旗を 2 つ立てて 1 つ下ろしたあとの memento は、作り直したものの memento と等しく、作り直したてとは違う。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
         flags.raise_flag(_WELL_DUG, _TICK)
         flags.lower_flag(_GATE_LOCKED, _TICK)
@@ -179,12 +179,12 @@ class TestWorldFlagsMemento:
         rebuilt = rebuilt_from_memento(flags)
 
         assert rebuilt.memento() == flags.memento()
-        assert rebuilt.memento() != WorldFlags(_WORLD).memento()
+        assert rebuilt.memento() != WorldFlags.start(_WORLD).memento()
         assert rebuilt.world_id == _WORLD
 
     def test_rebuilding_records_no_event(self) -> None:
         """旗を立てたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
-        flags = WorldFlags(_WORLD)
+        flags = WorldFlags.start(_WORLD)
         flags.raise_flag(_BRIDGE_REPAIRED, _STORM)
 
         assert rebuilt_from_memento(flags).get_events() == []

@@ -44,16 +44,18 @@ class WorldClockMemento:
 
 
 class WorldClock(AggregateRoot[WorldClockEvent]):
-    def __init__(self, world_id: WorldId) -> None:
+    def __init__(self, world_id: WorldId, now: WorldTick) -> None:
         super().__init__()
         self._world_id = world_id
-        self._now = WorldTick(0)
+        self._now = now
+
+    @classmethod
+    def start(cls, world_id: WorldId) -> WorldClock:
+        return cls(world_id, WorldTick(0))
 
     @classmethod
     def from_memento(cls, memento: WorldClockMemento, design: WorldDesign) -> WorldClock:
-        clock = cls(memento.world_id)
-        clock._now = memento.now
-        return clock
+        return cls(memento.world_id, memento.now)
 
     @property
     def world_id(self) -> WorldId:
