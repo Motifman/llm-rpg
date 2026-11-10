@@ -12,7 +12,7 @@ from ai_rpg_world.game_world.domain.value_object import PersonId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 
 
-class AnswersNothingByDefault:
+class TriggerAnswersNothingByDefault:
     def person_as(self, kind: SubjectKind) -> PersonId:
         raise SubjectNotInTriggerException(f"{self!r} does not answer {kind.name}")
 

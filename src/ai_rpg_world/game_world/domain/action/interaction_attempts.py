@@ -14,9 +14,9 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     WithObject,
     WithPerson,
 )
-from ai_rpg_world.game_world.domain.action.answers_nothing_by_default import AnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredInteraction
 from ai_rpg_world.game_world.domain.action.manner import Manner
+from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
@@ -38,7 +38,7 @@ class SomeoneInTheDark:
     pass
 
 
-class _InteractionAttempt(AnswersNothingByDefault, ABC):
+class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     actor: PersonId
     interaction: DeclaredInteraction
     arguments: ActionArguments

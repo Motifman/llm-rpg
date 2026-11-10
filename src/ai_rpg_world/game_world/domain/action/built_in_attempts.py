@@ -15,11 +15,11 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     WithGroundItem,
     WithPerson,
 )
-from ai_rpg_world.game_world.domain.action.answers_nothing_by_default import AnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.declared_section_access import DeclaredSectionAccess
 from ai_rpg_world.game_world.domain.action.delivery import Delivery
 from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechReach
+from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
@@ -33,7 +33,7 @@ from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
 
-class _BuiltInAttempt(AnswersNothingByDefault):
+class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     actor: PersonId
     _KIND: ClassVar[ActionKind]
 

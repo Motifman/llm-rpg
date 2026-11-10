@@ -6,7 +6,7 @@ from typing import Protocol, final
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
 from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
-from ai_rpg_world.game_world.domain.action.answers_nothing_by_default import AnswersNothingByDefault
+from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
@@ -33,7 +33,7 @@ class CompletedJointAction(Protocol):
     def joint_id(self) -> JointActionId: ...
 
 
-class _NotAnAction(AnswersNothingByDefault):
+class _NotAnAction(TriggerAnswersNothingByDefault):
     def acting_person(self) -> PersonId | NoActingPerson:
         return NoActingPerson()
 
