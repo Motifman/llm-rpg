@@ -568,6 +568,22 @@ class TestWhereaboutsMemento:
         rebuilt.advance_travels(frozenset())
         assert rebuilt.is_at(ALICE, MINE)
 
+    def test_traveller_rebuilt_on_the_second_passage_stays_on_it(self) -> None:
+        """通りを歩き終えて小道に入った人を作り直すと、小道の上の残り 1 tick にいて、次の tick に鉱山の入口に着く。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        route = Route(start=SpotId("plaza"), passages=(STREET, LANE))
+        whereabouts.start_travel(ALICE, route)
+        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset())
+
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+
+        assert rebuilt.location_of(ALICE) == TravelInProgress(
+            route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
+        )
+        rebuilt.advance_travels(frozenset())
+        assert rebuilt.is_at(ALICE, MINE)
+
     def test_rebuilt_whereabouts_answer_the_same(self) -> None:
         """籠の中の人・移動中の人・去った人のいる居場所を作り直すと、memento も居場所の答えも元と同じになる。"""
         departed = DepartedPerson(PersonId("carol"))
