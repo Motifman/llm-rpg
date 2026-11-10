@@ -26,6 +26,7 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import (
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
+    NeverHiddenObjectUnrevealedException,
     NotEnoughStockException,
     OperationNotForStateKindException,
     StateKeyNotOwnedException,
@@ -124,7 +125,11 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
         super().__init__()
         self._values = {key_value.key: key_value.value for key_value in values}
         self._stocks = {level.key: _StockLevel(level.amount, level.counted_from) for level in stock_levels}
+        if len(self._values) != len(values) or len(self._stocks) != len(stock_levels):
+            raise RepeatedMementoKeyException(f"{declaration.object_id.value} has a state key more than once")
         _require_matches(declaration, self._values, self._stocks)
+        if not revealed and not declaration.appearance.hidden_until_revealed:
+            raise NeverHiddenObjectUnrevealedException(f"{declaration.object_id.value} is never hidden")
         self._declaration = declaration
         self._revealed = revealed
 

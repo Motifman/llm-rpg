@@ -98,6 +98,8 @@ class Item(AggregateRoot[ItemEvent]):
     ) -> None:
         super().__init__()
         self._values = {key_value.key: key_value.value for key_value in values}
+        if len(self._values) != len(values):
+            raise RepeatedMementoKeyException(f"{item_id.value} has a state key with two values")
         _require_matches(spec, self._values, item_id)
         self._item_id = item_id
         self._spec = spec

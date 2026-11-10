@@ -262,3 +262,25 @@ class TestSpotSearchProgressStartsOnlyInReachableState:
 
         assert rebuilt.is_found(_PERSONAL_HINT, _ALICE)
         assert rebuilt.is_found(_PERSONAL_HINT, _BOB)
+
+    def test_same_person_with_two_counts_is_refused_by_constructor(self) -> None:
+        """alice の探した回数が 2 と 3 の 2 つある回数で SpotSearchProgress を直に作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            SpotSearchProgress(
+                _CAVE,
+                search_counts=frozenset({PersonSearchCount(_ALICE, Count(2)), PersonSearchCount(_ALICE, Count(3))}),
+                finders=frozenset(),
+                discoverables_here=(),
+            )
+
+    def test_declaration_of_another_spot_passed_as_here_is_refused(self) -> None:
+        """浜の見つかる物の宣言を洞窟の宣言として渡し、それを alice が見つけたことにして直に作ると、DiscoverableElsewhereException を投げる。"""
+        coin = _discoverable("buried_coin", Finding.ONCE_IN_WORLD, spot=SpotId("beach"))
+
+        with pytest.raises(DiscoverableElsewhereException):
+            SpotSearchProgress(
+                _CAVE,
+                search_counts=frozenset(),
+                finders=frozenset({DiscoverableFinder(coin.discoverable_id, _ALICE)}),
+                discoverables_here=(coin,),
+            )

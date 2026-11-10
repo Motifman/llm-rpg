@@ -430,3 +430,21 @@ class TestItemMementoRefusesRepeatedKey:
                 ItemStateKeyValue(_WICK.key, ChoiceValue(_UNLIT)),
                 ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)),
             )
+
+
+    def test_same_key_with_two_values_is_refused_by_constructor(self) -> None:
+        """wick が unlit と lit の 2 つある値で Item を直に作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            Item(
+                _ITEM_ID,
+                _lantern(),
+                _CAME_AT,
+                values=frozenset(
+                    {
+                        ItemStateKeyValue(_WICK.key, ChoiceValue(_UNLIT)),
+                        ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)),
+                        ItemStateKeyValue(_OIL.key, CountValue(Count(3))),
+                    }
+                ),
+                in_world=True,
+            )

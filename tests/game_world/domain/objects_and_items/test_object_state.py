@@ -30,6 +30,7 @@ from ai_rpg_world.game_world.domain.exception.game_world_exception import (
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
+    NeverHiddenObjectUnrevealedException,
     NotEnoughStockException,
     OperationNotForStateKindException,
     StateKeyNotOwnedException,
@@ -414,10 +415,13 @@ def _design_with(declaration: ObjectDeclaration) -> WorldDesign:
 
 
 def _well_memento(
-    values: tuple[ObjectStateKeyValue, ...], stock_levels: tuple[ObjectStockLevel, ...] = ()
+    values: tuple[ObjectStateKeyValue, ...],
+    stock_levels: tuple[ObjectStockLevel, ...] = (),
+    *,
+    revealed: bool = True,
 ) -> ObjectStateMemento:
     return ObjectStateMemento(
-        object_id=_WELL, values=frozenset(values), stock_levels=frozenset(stock_levels), revealed=True
+        object_id=_WELL, values=frozenset(values), stock_levels=frozenset(stock_levels), revealed=revealed
     )
 
 
@@ -549,3 +553,38 @@ class TestObjectStateMementoRefusesRepeatedKey:
                 (ObjectStateKeyValue(water, StockValue(Count(1))),),
                 (ObjectStockLevel(water, Count(1), WorldTick(0)),),
             )
+
+
+    def test_same_key_with_two_values_is_refused_by_constructor(self) -> None:
+        """covered が立っていると下りているの 2 つある値で ObjectState を直に作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            ObjectState(
+                _well(_COVERED),
+                values=frozenset(
+                    {
+                        ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),
+                        ObjectStateKeyValue(_COVERED.key, FlagValue(raised=False)),
+                    }
+                ),
+                stock_levels=frozenset(),
+                revealed=True,
+            )
+
+
+class TestObjectStateMementoReveal:
+    """ObjectState を memento から作り直すとき、隠れない物が見つかっていない状態からは始まらないことを保証する。"""
+
+    def test_never_hidden_object_not_revealed_is_refused(self) -> None:
+        """隠れない井戸が見つかっていない memento から作り直すと、NeverHiddenObjectUnrevealedException を投げる。"""
+        memento = _well_memento((ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),), revealed=False)
+
+        with pytest.raises(NeverHiddenObjectUnrevealedException):
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED, hidden=False)))
+
+    def test_hidden_object_not_revealed_is_accepted(self) -> None:
+        """隠れた井戸が見つかっていない memento からは作り直せ、見つかっていないまま。"""
+        memento = _well_memento((ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),), revealed=False)
+
+        rebuilt = ObjectState.from_memento(memento, _design_with(_well(_COVERED, hidden=True)))
+
+        assert not rebuilt.is_revealed()

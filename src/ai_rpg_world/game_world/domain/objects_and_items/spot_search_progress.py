@@ -82,14 +82,20 @@ class SpotSearchProgress(AggregateRoot[SpotSearchProgressEvent]):
                 raise SearchCountIsZeroException(f"{search_count.person.value} has searched {spot_id.value} 0 times")
         self._spot_id = spot_id
         self._search_counts = {search_count.person: search_count.count for search_count in search_counts}
+        if len(self._search_counts) != len(search_counts):
+            raise RepeatedMementoKeyException(f"someone has two search counts at {spot_id.value}")
         self._finders: dict[DiscoverableId, frozenset[PersonId]] = {}
         for found in finders:
             self._finders[found.discoverable] = self._finders.get(found.discoverable, frozenset()) | {found.finder}
-        declared = {discoverable.discoverable_id: discoverable for discoverable in discoverables_here}
+        declared = {
+            discoverable.discoverable_id: discoverable
+            for discoverable in discoverables_here
+            if discoverable.spot_id == spot_id
+        }
         for discoverable_id, people in self._finders.items():
             if discoverable_id not in declared:
                 raise DiscoverableElsewhereException(f"{discoverable_id.value} is not declared at {spot_id.value}")
-            if not declared[discoverable_id].finding.can_be_found_by_all_of(people):
+            if not declared[discoverable_id].finding.allows_finders(people):
                 raise OnceInWorldFoundByManyException(f"{discoverable_id.value} is found by {len(people)} people")
 
     @classmethod
