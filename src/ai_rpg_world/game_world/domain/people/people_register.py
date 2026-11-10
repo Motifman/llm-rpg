@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.people_register_exception import (
     CharacterListedTwiceException,
     PersonAlreadyNamedException,
@@ -16,6 +17,7 @@ from ai_rpg_world.game_world.domain.value_object import DescriptionText, Display
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -28,29 +30,68 @@ class PersonNamedEvent(DomainEvent):
 
 @final
 @dataclass(frozen=True)
+class PersonName:
+    person: PersonId
+    name: DisplayName
+
+
+@final
+@dataclass(frozen=True)
+class PeopleRegisterMemento:
+    world_id: WorldId
+    names: frozenset[PersonName]
+
+    def __post_init__(self) -> None:
+        people = [entry.person for entry in self.names]
+        if len(set(people)) != len(people):
+            raise RepeatedMementoKeyException(f"world {self.world_id.value} has a person with two names")
+
+
+@final
+@dataclass(frozen=True)
 class _RegisteredPerson:
     handle: PersonHandle
     appearance: DescriptionText
 
 
 class PeopleRegister(AggregateRoot[PersonNamedEvent]):
-    def __init__(self, world: WorldId, characters: Sequence[CharacterDeclaration]) -> None:
+    def __init__(
+        self,
+        world: WorldId,
+        characters: Sequence[CharacterDeclaration],
+        names: Mapping[PersonId, DisplayName],
+    ) -> None:
         super().__init__()
         self._world = world
         self._people: dict[PersonId, _RegisteredPerson] = {}
-        self._names: dict[PersonId, DisplayName] = {}
         for number, character in enumerate(characters):
             if character.person_id in self._people:
                 raise CharacterListedTwiceException(f"{character.person_id.value} is declared more than once")
             self._people[character.person_id] = _RegisteredPerson(PersonHandle(number), character.appearance)
+        for person in names:
+            self._registered(person)
+        self._names = dict(names)
 
     @classmethod
     def from_characters(cls, world: WorldId, characters: Sequence[CharacterDeclaration]) -> PeopleRegister:
-        return cls(world, characters)
+        return cls(world, characters, {})
+
+    @classmethod
+    def from_memento(cls, memento: PeopleRegisterMemento, design: WorldDesign) -> PeopleRegister:
+        nouns = design.nouns
+        for entry in memento.names:
+            nouns.character_of(entry.person)
+        return cls(memento.world_id, nouns.all_characters(), {entry.person: entry.name for entry in memento.names})
 
     @property
     def world(self) -> WorldId:
         return self._world
+
+    def memento(self) -> PeopleRegisterMemento:
+        return PeopleRegisterMemento(
+            world_id=self._world,
+            names=frozenset(PersonName(person, name) for person, name in self._names.items()),
+        )
 
     def name(self, person: PersonId, name: DisplayName) -> None:
         self._registered(person)

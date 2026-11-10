@@ -29,7 +29,17 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
-from ai_rpg_world.game_world.domain.value_object import Capacity, GroupingId, HitPoints, ObjectId, SpotId, WorldStageId
+from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
+    GroupId,
+    GroupingId,
+    HitPoints,
+    ObjectId,
+    OutcomeId,
+    PersonId,
+    SpotId,
+    WorldStageId,
+)
 
 _Declaration = TypeVar("_Declaration")
 
@@ -157,8 +167,17 @@ class DeclaredNouns:
     def groups_in(self, grouping: GroupingDeclaration) -> tuple[GroupDeclaration, ...]:
         return tuple(group for group in self._groups if group.grouping.grouping_id == grouping.grouping_id)
 
+    def group_of(self, group_id: GroupId) -> GroupDeclaration:
+        return self._groups.with_id(group_id)
+
     def character(self, name: str, at: DesignLocation) -> CharacterDeclaration:
         return self._characters.get(name, at)
+
+    def character_of(self, person: PersonId) -> CharacterDeclaration:
+        return self._characters.with_id(person)
+
+    def all_characters(self) -> tuple[CharacterDeclaration, ...]:
+        return tuple(self._characters)
 
     def world_stage(self, name: str, at: DesignLocation) -> WorldStageDeclaration:
         return self._world_stages.get(name, at)
@@ -207,6 +226,9 @@ class DeclaredNouns:
 
     def outcome(self, name: str, at: DesignLocation) -> OutcomeDeclaration:
         return self._outcomes.get(name, at)
+
+    def outcome_of(self, outcome_id: OutcomeId) -> OutcomeDeclaration:
+        return self._outcomes.with_id(outcome_id)
 
     def _duplicated_name_flaws(self) -> list[DesignFlaw]:
         kinds: tuple[_DeclaredOfKind[Any], ...] = (
