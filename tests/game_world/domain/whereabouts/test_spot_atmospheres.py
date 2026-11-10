@@ -2,18 +2,33 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+)
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import UnknownSpotException
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.value_object import SpotId
-from ai_rpg_world.game_world.domain.whereabouts import SpotAtmosphereChangedEvent, SpotAtmospheres
+from ai_rpg_world.game_world.domain.whereabouts import (
+    AtmosphereAtSpot,
+    SpotAtmosphereChangedEvent,
+    SpotAtmospheres,
+    SpotAtmospheresMemento,
+)
 from tests.game_world.domain.whereabouts._builders import WORLD, atmosphere, spot
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import compose_world, nouns
 
 HALL = spot("hall", Lighting.BRIGHT)
 CELLAR = spot("cellar", Lighting.DARK)
 
 
 def _atmospheres() -> SpotAtmospheres:
-    return SpotAtmospheres(WORLD, (HALL, CELLAR))
+    return SpotAtmospheres.start(WORLD, (HALL, CELLAR))
+
+
+_DESIGN = compose_world(nouns(spots=(HALL, CELLAR)))
 
 
 class TestSpotAtmospheresInitially:
@@ -77,3 +92,59 @@ class TestSpotAtmospheresChange:
             atmospheres.change(spot("elsewhere"), atmosphere())
 
         assert atmospheres.get_events() == []
+
+
+class TestSpotAtmospheresMemento:
+    """SpotAtmospheres を memento から作り直すと、場所ごとの今の雰囲気が元と同じになることを保証する。"""
+
+    def test_rebuilt_atmospheres_answer_the_same(self) -> None:
+        """暗い地下室を明るくしたあと作り直すと、memento も地下室の雰囲気も元と同じになる。"""
+        atmospheres = _atmospheres()
+        atmospheres.change(CELLAR, atmosphere(Lighting.BRIGHT))
+
+        rebuilt = rebuilt_from_memento(atmospheres, _DESIGN)
+
+        assert rebuilt.memento() == atmospheres.memento()
+        assert rebuilt.atmosphere_of(CELLAR) == atmosphere(Lighting.BRIGHT)
+        assert rebuilt.atmosphere_of(HALL) == HALL.atmosphere
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """雰囲気を変えたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        atmospheres = _atmospheres()
+        atmospheres.change(CELLAR, atmosphere(Lighting.BRIGHT))
+
+        assert rebuilt_from_memento(atmospheres, _DESIGN).get_events() == []
+
+    def test_memento_with_an_undeclared_spot_is_rejected(self) -> None:
+        """宣言に無い場所 attic の雰囲気を持つ memento から作り直すと UndeclaredNounException を投げる。"""
+        memento = SpotAtmospheresMemento(
+            world_id=WORLD,
+            atmospheres=frozenset(
+                {*_atmospheres().memento().atmospheres, AtmosphereAtSpot(SpotId("attic"), atmosphere())}
+            ),
+        )
+
+        with pytest.raises(UndeclaredNounException):
+            SpotAtmospheres.from_memento(memento, _DESIGN)
+
+    def test_memento_missing_a_declared_spot_is_rejected(self) -> None:
+        """宣言にある地下室が memento に無いと、宣言の雰囲気で埋めずに MementoDoesNotMatchDesignException を投げる。"""
+        memento = SpotAtmospheresMemento(
+            world_id=WORLD, atmospheres=frozenset({AtmosphereAtSpot(SpotId("hall"), HALL.atmosphere)})
+        )
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            SpotAtmospheres.from_memento(memento, _DESIGN)
+
+    def test_memento_with_one_spot_twice_is_rejected(self) -> None:
+        """地下室が暗いと明るいの 2 つで書かれた memento は、作るときに RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            SpotAtmospheresMemento(
+                world_id=WORLD,
+                atmospheres=frozenset(
+                    {
+                        AtmosphereAtSpot(SpotId("cellar"), atmosphere(Lighting.DARK)),
+                        AtmosphereAtSpot(SpotId("cellar"), atmosphere(Lighting.BRIGHT)),
+                    }
+                ),
+            )

@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 import pytest
 
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantAlreadyInSectionException,
     OccupantAlreadyPlacedException,
@@ -13,6 +15,9 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantNotPlacedException,
     OccupantNotTravellingException,
     SectionFullException,
+    TicksLeftOutsidePassageException,
+    TravelNotDepartedFromPassageStartException,
+    TravelPositionOutsideRouteException,
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, SpotSectionId, Ticks
 from ai_rpg_world.game_world.domain.whereabouts import (
@@ -22,6 +27,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     OccupantEnteredSpotEvent,
     OccupantLeftSectionEvent,
     OccupantLeftSpotEvent,
+    OccupantLocation,
     OccupantPlacedEvent,
     OccupantRemovedEvent,
     OccupantTeleportedEvent,
@@ -31,10 +37,14 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     TravelBlockedEvent,
     TravelCancelledEvent,
     TravelInProgress,
+    TravelPosition,
     TravelStartedEvent,
     Whereabouts,
+    WhereaboutsMemento,
 )
 from tests.game_world.domain.whereabouts._builders import WORLD, path, section, spot, thing
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import access_to, compose_world, nouns
 
 ALICE = PersonBody(PersonId("alice"))
 BOB = PersonBody(PersonId("bob"))
@@ -48,10 +58,19 @@ BENCH = section("bench", "plaza")
 STREET = path("street", "plaza", "well", ticks=2)
 LANE = path("lane", "well", "mine_entrance", ticks=1)
 NOBODY_DOWN: frozenset[PersonId] = frozenset()
+DESIGN = compose_world(
+    nouns(
+        spots=(PLAZA, WELL, MINE),
+        passages=(STREET, LANE),
+        objects=(thing("lift_lever", "plaza"),),
+        sections=(LIFT, BENCH),
+    ),
+    section_accesses=(access_to(LIFT), access_to(BENCH)),
+)
 
 
 def _whereabouts(*placed: tuple[PersonBody | DepartedPerson, str]) -> Whereabouts:
-    whereabouts = Whereabouts(WORLD)
+    whereabouts = Whereabouts.start(WORLD)
     for occupant, at in placed:
         whereabouts.place(occupant, spot(at))
     whereabouts.clear_events()
@@ -67,11 +86,11 @@ class TestWhereaboutsPlaceAndRemove:
 
     def test_world_id_is_the_given_world(self) -> None:
         """作るときに渡した WorldId を自分の ID として持つ。"""
-        assert Whereabouts(WORLD).world_id == WORLD
+        assert Whereabouts.start(WORLD).world_id == WORLD
 
     def test_place_puts_the_occupant_outside_any_section_of_the_spot(self) -> None:
         """place すると、その場所の区画の外 (OpenArea) にいることになり、OccupantPlacedEvent を 1 件ためる。"""
-        whereabouts = Whereabouts(WORLD)
+        whereabouts = Whereabouts.start(WORLD)
 
         whereabouts.place(ALICE, PLAZA)
 
@@ -114,7 +133,7 @@ class TestWhereaboutsPlaceAndRemove:
     def test_remove_of_an_occupant_not_placed_is_rejected(self) -> None:
         """置いていない人を remove すると OccupantNotPlacedException を投げる。"""
         with pytest.raises(OccupantNotPlacedException):
-            Whereabouts(WORLD).remove(ALICE)
+            Whereabouts.start(WORLD).remove(ALICE)
 
 
 class TestWhereaboutsEnterSection:
@@ -421,7 +440,7 @@ class TestWhereaboutsTeleport:
     def test_teleport_of_an_occupant_not_placed_is_rejected(self) -> None:
         """置いていない人を teleport すると OccupantNotPlacedException を投げる。"""
         with pytest.raises(OccupantNotPlacedException):
-            Whereabouts(WORLD).teleport(ALICE, MINE)
+            Whereabouts.start(WORLD).teleport(ALICE, MINE)
 
 
 class TestWhereaboutsTogetherness:
@@ -462,7 +481,7 @@ class TestWhereaboutsTogetherness:
     def test_location_of_an_occupant_not_placed_is_rejected(self) -> None:
         """置いていない人の location_of は OccupantNotPlacedException を投げる。"""
         with pytest.raises(OccupantNotPlacedException):
-            Whereabouts(WORLD).location_of(ALICE)
+            Whereabouts.start(WORLD).location_of(ALICE)
 
 
 class TestWhereaboutsCanReach:
@@ -536,3 +555,176 @@ class TestWhereaboutsRefusalLeavesNothingBehind:
 
         assert (whereabouts.location_of(ALICE), whereabouts.location_of(BOB)) == before
         assert whereabouts.get_events() == []
+
+
+class TestWhereaboutsMemento:
+    """Whereabouts を memento から作り直すと、区画の中にいる人も、移動の途中の人も元の居場所から続くことを保証する。"""
+
+    def test_traveller_rebuilt_halfway_continues_on_the_same_passage(self) -> None:
+        """2 tick の通りを 1 tick 歩いた人を作り直すと、通りの残り 1 tick から続き、次の小道を歩いて鉱山の入口に着く。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        route = Route(start=SpotId("plaza"), passages=(STREET, LANE))
+        whereabouts.start_travel(ALICE, route)
+        whereabouts.advance_travels(frozenset())
+
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+
+        assert rebuilt.location_of(ALICE) == TravelInProgress(
+            route=route, passage_index=0, ticks_left_on_passage=Ticks(1), departed_from=SpotId("plaza")
+        )
+        rebuilt.advance_travels(frozenset())
+        assert rebuilt.location_of(ALICE) == TravelInProgress(
+            route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
+        )
+        rebuilt.advance_travels(frozenset())
+        assert rebuilt.is_at(ALICE, MINE)
+
+    def test_traveller_rebuilt_on_the_second_passage_stays_on_it(self) -> None:
+        """通りを歩き終えて小道に入った人を作り直すと、小道の上の残り 1 tick にいて、次の tick に鉱山の入口に着く。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        route = Route(start=SpotId("plaza"), passages=(STREET, LANE))
+        whereabouts.start_travel(ALICE, route)
+        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset())
+
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+
+        assert rebuilt.location_of(ALICE) == TravelInProgress(
+            route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
+        )
+        rebuilt.advance_travels(frozenset())
+        assert rebuilt.is_at(ALICE, MINE)
+
+    def test_rebuilt_whereabouts_answer_the_same(self) -> None:
+        """籠の中の人・移動中の人・去った人のいる居場所を作り直すと、memento も居場所の答えも元と同じになる。"""
+        departed = DepartedPerson(PersonId("carol"))
+        whereabouts = _whereabouts((ALICE, "plaza"), (BOB, "plaza"), (departed, "well"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+        whereabouts.start_travel(BOB, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+
+        assert rebuilt.memento() == whereabouts.memento()
+        assert rebuilt.is_in_section(ALICE, LIFT)
+        assert rebuilt.location_of(BOB) == whereabouts.location_of(BOB)
+        assert rebuilt.is_at(departed, WELL)
+        assert rebuilt.world_id == WORLD
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """移動を始めたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        assert rebuilt_from_memento(whereabouts, DESIGN).get_events() == []
+
+    def test_memento_travelling_an_undeclared_passage_is_rejected(self) -> None:
+        """宣言に無い通路 tunnel を歩いている途中の memento から作り直すと UndeclaredNounException を投げる。"""
+        position = TravelPosition(
+            route_start=SpotId("plaza"),
+            route_passages=(PassageId("tunnel"),),
+            passage_index=0,
+            ticks_left_on_passage=Ticks(1),
+            departed_from=SpotId("plaza"),
+        )
+        memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, position)}))
+
+        with pytest.raises(UndeclaredNounException):
+            Whereabouts.from_memento(memento, DESIGN)
+
+    @pytest.mark.parametrize(
+        "location",
+        [
+            AtSpot(spot=SpotId("attic"), section=OpenArea()),
+            AtSpot(spot=SpotId("plaza"), section=SpotSectionId("trapdoor")),
+            TravelPosition(
+                route_start=SpotId("plaza"),
+                route_passages=(PassageId("street"),),
+                passage_index=0,
+                ticks_left_on_passage=Ticks(1),
+                departed_from=SpotId("attic"),
+            ),
+        ],
+        ids=["undeclared_spot", "undeclared_section", "departed_from_undeclared_spot"],
+    )
+    def test_memento_at_an_undeclared_place_is_rejected(self, location: AtSpot | TravelPosition) -> None:
+        """宣言に無い場所 attic・宣言に無い区画 trapdoor・attic を出たことになっている移動のどれかを持つ memento から作り直すと UndeclaredNounException を投げる。"""
+        memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, location)}))
+
+        with pytest.raises(UndeclaredNounException):
+            Whereabouts.from_memento(memento, DESIGN)
+
+    def test_memento_in_a_section_of_another_spot_is_rejected(self) -> None:
+        """広場の区画 bench に井戸でいることになっている memento から作り直すと OccupantNotAtSectionSpotException を投げる。"""
+        location = AtSpot(spot=SpotId("well"), section=SpotSectionId("bench"))
+        memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, location)}))
+
+        with pytest.raises(OccupantNotAtSectionSpotException):
+            Whereabouts.from_memento(memento, DESIGN)
+
+    @pytest.mark.parametrize(
+        ("passage_index", "ticks_left", "departed_from", "expected"),
+        [
+            (2, 1, "mine_entrance", TravelPositionOutsideRouteException),
+            (0, 1, "well", TravelNotDepartedFromPassageStartException),
+            (1, 1, "plaza", TravelNotDepartedFromPassageStartException),
+            (0, 3, "plaza", TicksLeftOutsidePassageException),
+            (0, 0, "plaza", TicksLeftOutsidePassageException),
+        ],
+        ids=[
+            "beyond_the_last_passage",
+            "departed_from_the_far_end_of_the_first_passage",
+            "departed_from_the_route_start_on_the_second_passage",
+            "more_ticks_left_than_the_passage_takes",
+            "no_ticks_left_on_a_passage_that_takes_ticks",
+        ],
+    )
+    def test_memento_of_a_travel_that_operations_never_leave_is_rejected(
+        self, passage_index: int, ticks_left: int, departed_from: str, expected: type[Exception]
+    ) -> None:
+        """広場から通り (2 tick)・小道 (1 tick) と歩く途中で、3 本目にいる・出た場所が今の通路の手前ではない・残り tick が通路の所要を超えるか 0 のどれかの memento から作り直すと、それぞれの例外を投げる。"""
+        position = TravelPosition(
+            route_start=SpotId("plaza"),
+            route_passages=(PassageId("street"), PassageId("lane")),
+            passage_index=passage_index,
+            ticks_left_on_passage=Ticks(ticks_left),
+            departed_from=SpotId(departed_from),
+        )
+        memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, position)}))
+
+        with pytest.raises(expected):
+            Whereabouts.from_memento(memento, DESIGN)
+
+    def test_travel_started_on_a_passage_that_takes_no_ticks_has_none_left(self) -> None:
+        """所要 0 tick の通路を 1 本目に歩き始めた人は、残り 0 tick の移動の途中にいる。"""
+        instant = path("plank", "plaza", "well", ticks=0)
+        whereabouts = _whereabouts((ALICE, "plaza"))
+
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(instant,)))
+
+        location = whereabouts.location_of(ALICE)
+        assert isinstance(location, TravelInProgress) and location.ticks_left_on_passage == Ticks(0)
+
+    def test_travel_with_no_ticks_left_on_a_later_passage_that_takes_no_ticks_is_rejected(self) -> None:
+        """所要 0 tick の通路が 2 本目にあると、歩き通して先へ進むので、そこで残り 0 tick の移動は作るときに TicksLeftOutsidePassageException を投げる。"""
+        plank = path("plank", "well", "mine_entrance", ticks=0)
+
+        with pytest.raises(TicksLeftOutsidePassageException):
+            TravelInProgress(
+                route=Route(start=SpotId("plaza"), passages=(STREET, plank)),
+                passage_index=1,
+                ticks_left_on_passage=Ticks(0),
+                departed_from=SpotId("well"),
+            )
+
+    def test_memento_with_one_occupant_at_two_places_is_rejected(self) -> None:
+        """同じ人が広場と井戸の 2 か所にいる memento は、作るときに RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            WhereaboutsMemento(
+                world_id=WORLD,
+                locations=frozenset(
+                    {
+                        OccupantLocation(ALICE, AtSpot(spot=SpotId("plaza"), section=OpenArea())),
+                        OccupantLocation(ALICE, AtSpot(spot=SpotId("well"), section=OpenArea())),
+                    }
+                ),
+            )

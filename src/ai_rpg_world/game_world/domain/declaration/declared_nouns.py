@@ -31,13 +31,16 @@ from ai_rpg_world.game_world.domain.exception.action_exception import Undeclared
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.value_object import (
     Capacity,
+    GroupDecisionId,
     GroupId,
     GroupingId,
     HitPoints,
     ObjectId,
     OutcomeId,
+    PassageId,
     PersonId,
     SpotId,
+    SpotSectionId,
     WorldStageId,
 )
 
@@ -139,8 +142,14 @@ class DeclaredNouns:
     def spot(self, name: str, at: DesignLocation) -> SpotDeclaration:
         return self._spots.get(name, at)
 
+    def spot_of(self, spot_id: SpotId) -> SpotDeclaration:
+        return self._spots.with_id(spot_id)
+
     def passage(self, name: str, at: DesignLocation) -> PassageDeclaration:
         return self._passages.get(name, at)
+
+    def passage_of(self, passage_id: PassageId) -> PassageDeclaration:
+        return self._passages.with_id(passage_id)
 
     def object(self, name: str, at: DesignLocation) -> ObjectDeclaration:
         return self._objects.get(name, at)
@@ -188,14 +197,23 @@ class DeclaredNouns:
     def group_decision(self, name: str, at: DesignLocation) -> GroupDecisionDeclaration:
         return self._group_decisions.get(name, at)
 
+    def group_decision_of(self, decision_id: GroupDecisionId) -> GroupDecisionDeclaration:
+        return self._group_decisions.with_id(decision_id)
+
     def section(self, name: str, at: DesignLocation) -> SpotSectionDeclaration:
         return self._sections.get(name, at)
+
+    def section_of(self, section_id: SpotSectionId) -> SpotSectionDeclaration:
+        return self._sections.with_id(section_id)
 
     def sections_at(self, spot: SpotId) -> tuple[SpotSectionDeclaration, ...]:
         return tuple(section for section in self._sections if section.spot_id == spot)
 
     def all_flags(self) -> tuple[FlagDeclaration, ...]:
         return tuple(self._flags)
+
+    def all_spots(self) -> tuple[SpotDeclaration, ...]:
+        return tuple(self._spots)
 
     def all_passages(self) -> tuple[PassageDeclaration, ...]:
         return tuple(self._passages)

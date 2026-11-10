@@ -35,3 +35,7 @@ class BallotAlreadyCastException(GameWorldDomainException):
 
 class AbstainNotAllowedException(GameWorldDomainException):
     error_code = "GAME_WORLD.ABSTAIN_NOT_ALLOWED"
+
+
+class GroupDecisionLeftOpenAfterEveryoneCastException(GameWorldDomainException):
+    error_code = "GAME_WORLD.GROUP_DECISION_LEFT_OPEN_AFTER_EVERYONE_CAST"

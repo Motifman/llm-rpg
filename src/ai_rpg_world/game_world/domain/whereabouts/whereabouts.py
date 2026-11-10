@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, final
+
 from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import NoCapacity, SpotDeclaration, SpotSectionDeclaration
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantAlreadyInSectionException,
     OccupantAlreadyPlacedException,
@@ -14,7 +19,13 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     SectionFullException,
 )
 from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, Ticks, WorldId
-from ai_rpg_world.game_world.domain.whereabouts.location import AtSpot, Location, OpenArea, TravelInProgress
+from ai_rpg_world.game_world.domain.whereabouts.location import (
+    AtSpot,
+    Location,
+    OpenArea,
+    TravelInProgress,
+    TravelPosition,
+)
 from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant
 from ai_rpg_world.game_world.domain.whereabouts.route import Route
 from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
@@ -31,16 +42,55 @@ from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
     WhereaboutsEvent,
 )
 
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+
+
+@final
+@dataclass(frozen=True)
+class OccupantLocation:
+    occupant: Occupant
+    location: AtSpot | TravelPosition
+
+
+@final
+@dataclass(frozen=True)
+class WhereaboutsMemento:
+    world_id: WorldId
+    locations: frozenset[OccupantLocation]
+
+    def __post_init__(self) -> None:
+        occupants = [entry.occupant for entry in self.locations]
+        if len(set(occupants)) != len(occupants):
+            raise RepeatedMementoKeyException(f"world {self.world_id} has an occupant at two locations")
+
 
 class Whereabouts(AggregateRoot[WhereaboutsEvent]):
-    def __init__(self, world_id: WorldId) -> None:
+    def __init__(self, world_id: WorldId, locations: Mapping[Occupant, Location]) -> None:
         super().__init__()
         self._world_id = world_id
-        self._locations: dict[Occupant, Location] = {}
+        self._locations = dict(locations)
+
+    @classmethod
+    def start(cls, world_id: WorldId) -> Whereabouts:
+        return cls(world_id, {})
+
+    @classmethod
+    def from_memento(cls, memento: WhereaboutsMemento, design: WorldDesign) -> Whereabouts:
+        return cls(memento.world_id, {entry.occupant: _resumed(entry.location, design) for entry in memento.locations})
 
     @property
     def world_id(self) -> WorldId:
         return self._world_id
+
+    def memento(self) -> WhereaboutsMemento:
+        return WhereaboutsMemento(
+            world_id=self._world_id,
+            locations=frozenset(
+                OccupantLocation(occupant, location.position() if isinstance(location, TravelInProgress) else location)
+                for occupant, location in self._locations.items()
+            ),
+        )
 
     def place(self, occupant: Occupant, spot: SpotDeclaration) -> None:
         if occupant in self._locations:
@@ -224,3 +274,17 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
     def _spot_of(self, occupant: Occupant) -> SpotId | None:
         location = self._locations.get(occupant)
         return location.spot if isinstance(location, AtSpot) else None
+
+
+def _resumed(location: AtSpot | TravelPosition, design: WorldDesign) -> Location:
+    if isinstance(location, AtSpot):
+        design.nouns.spot_of(location.spot)
+        if not isinstance(location.section, OpenArea):
+            section = design.nouns.section_of(location.section)
+            if section.spot_id != location.spot:
+                raise OccupantNotAtSectionSpotException(
+                    f"{location.section.value} is in {section.spot_id.value!r}, not {location.spot.value!r}"
+                )
+        return location
+    design.nouns.spot_of(location.departed_from)
+    return location.resumed_on(tuple(design.nouns.passage_of(passage) for passage in location.route_passages))

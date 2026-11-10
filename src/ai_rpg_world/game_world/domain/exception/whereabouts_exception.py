@@ -51,3 +51,19 @@ class OccupantNotInSectionException(GameWorldDomainException):
 
 class SectionFullException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.SECTION_FULL"
+
+
+class TravelPositionOutsideRouteException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.TRAVEL_POSITION_OUTSIDE_ROUTE"
+
+
+class TravelNotDepartedFromPassageStartException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.TRAVEL_NOT_DEPARTED_FROM_PASSAGE_START"
+
+
+class TicksLeftOutsidePassageException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.TICKS_LEFT_OUTSIDE_PASSAGE"
+
+
+class PassageNotDeclaredHiddenException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.PASSAGE_NOT_DECLARED_HIDDEN"

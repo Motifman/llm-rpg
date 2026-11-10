@@ -226,7 +226,7 @@ def _cleared(aggregate: AggregateRoot[Any]) -> None:
 
 
 def _whereabouts(at: str = "plaza") -> Whereabouts:
-    whereabouts = Whereabouts(_WORLD)
+    whereabouts = Whereabouts.start(_WORLD)
     whereabouts.place(_ALICE_BODY, spot(at))
     _cleared(whereabouts)
     return whereabouts
@@ -262,7 +262,7 @@ def _people_register() -> PeopleRegister:
 
 
 def _passages() -> PassageStates:
-    return PassageStates(_WORLD, (_GATE, _HIDDEN_PATH, _LANE))
+    return PassageStates.start(_WORLD, (_GATE, _HIDDEN_PATH, _LANE))
 
 
 def _vitals(current: int = 10) -> PersonVitals:
@@ -420,7 +420,7 @@ def _object_state(*, hidden: bool = False) -> ObjectState:
 
 
 def _decision() -> GroupDecision:
-    return GroupDecision(
+    return GroupDecision.not_started(
         GroupDecisionDeclaration(
             decision_id=GroupDecisionId("exile_vote"),
             name=DisplayName("追放の投票"),
@@ -466,7 +466,7 @@ def _with(aggregate: AggregateRoot[Any], call: Callable[[Any], None]) -> _Prepar
 
 
 _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
-    "Whereabouts.place": lambda: _with(Whereabouts(_WORLD), lambda w: w.place(_ALICE_BODY, _PLAZA)),
+    "Whereabouts.place": lambda: _with(Whereabouts.start(_WORLD), lambda w: w.place(_ALICE_BODY, _PLAZA)),
     "Whereabouts.remove": lambda: _with(_whereabouts(), lambda w: w.remove(_ALICE_BODY)),
     "Whereabouts.start_travel": lambda: _with(
         _whereabouts(), lambda w: w.start_travel(_ALICE_BODY, Route(start=_PLAZA.spot_id, passages=(_STREET,)))
@@ -483,7 +483,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "PassageStates.reveal": lambda: _with(_passages(), lambda p: p.reveal(_HIDDEN_PATH)),
     "PassageStates.remove": lambda: _with(_passages(), lambda p: p.remove(_LANE)),
     "SpotAtmospheres.change": lambda: _with(
-        SpotAtmospheres(_WORLD, (_PLAZA,)), lambda s: s.change(_PLAZA, atmosphere(Lighting.DARK))
+        SpotAtmospheres.start(_WORLD, (_PLAZA,)), lambda s: s.change(_PLAZA, atmosphere(Lighting.DARK))
     ),
     "PersonVitals.take_damage": lambda: _with(
         _vitals(), lambda v: v.take_damage(Damage(3), _NOW, StruckByPerson(_BOB))
