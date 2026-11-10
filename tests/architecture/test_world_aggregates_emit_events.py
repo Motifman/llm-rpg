@@ -420,7 +420,7 @@ def _object_state(*, hidden: bool = False) -> ObjectState:
 
 
 def _decision() -> GroupDecision:
-    return GroupDecision(
+    return GroupDecision.not_started(
         GroupDecisionDeclaration(
             decision_id=GroupDecisionId("exile_vote"),
             name=DisplayName("追放の投票"),

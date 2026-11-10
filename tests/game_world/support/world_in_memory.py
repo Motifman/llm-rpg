@@ -145,7 +145,7 @@ class WorldInMemory:
         return self.missed_notices.setdefault(person, MissedNotices(person))
 
     def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
-        return self.group_decisions.setdefault(decision.decision_id, GroupDecision(decision))
+        return self.group_decisions.setdefault(decision.decision_id, GroupDecision.not_started(decision))
 
 
 class _FactsInMemory(WorldFacts):
