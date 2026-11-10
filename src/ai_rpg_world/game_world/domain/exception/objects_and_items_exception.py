@@ -47,3 +47,7 @@ class NotEnoughStockException(GameWorldDomainException):
 
 class NotEnoughItemsOfSpecException(GameWorldDomainException):
     error_code = "GAME_WORLD.NOT_ENOUGH_ITEMS_OF_SPEC"
+
+
+class NeverHiddenObjectUnrevealedException(GameWorldDomainException):
+    error_code = "GAME_WORLD.NEVER_HIDDEN_OBJECT_UNREVEALED"

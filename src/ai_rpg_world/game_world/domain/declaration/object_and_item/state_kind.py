@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value impo
     NothingWritten,
     StateValue,
     StockValue,
+    WrittenText,
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     ChoiceDuplicatedException,
@@ -27,6 +28,9 @@ class FlagStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, FlagValue)
 
+    def can_hold(self, value: StateValue) -> bool:
+        return self.accepts(value)
+
     def holds_written_text(self) -> bool:
         return False
 
@@ -42,6 +46,9 @@ class FlagStateKind:
 class CountStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, CountValue)
+
+    def can_hold(self, value: StateValue) -> bool:
+        return self.accepts(value)
 
     def holds_written_text(self) -> bool:
         return False
@@ -66,6 +73,9 @@ class ChoiceStateKind:
 
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, ChoiceValue) and value.choice in self.choices
+
+    def can_hold(self, value: StateValue) -> bool:
+        return self.accepts(value)
 
     def holds_written_text(self) -> bool:
         return False
@@ -100,6 +110,9 @@ class StockStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, StockValue) and value.amount <= self.capacity
 
+    def can_hold(self, value: StateValue) -> bool:
+        return self.accepts(value)
+
     def holds_written_text(self) -> bool:
         return False
 
@@ -115,6 +128,9 @@ class StockStateKind:
 class WrittenTextStateKind:
     def accepts(self, value: StateValue) -> bool:
         return isinstance(value, NothingWritten)
+
+    def can_hold(self, value: StateValue) -> bool:
+        return isinstance(value, (WrittenText, NothingWritten))
 
     def holds_written_text(self) -> bool:
         return True

@@ -35,6 +35,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     GroupId,
     GroupingId,
     HitPoints,
+    ItemSpecId,
     ObjectId,
     OutcomeId,
     PassageId,
@@ -169,6 +170,9 @@ class DeclaredNouns:
 
     def item_spec(self, name: str, at: DesignLocation) -> ItemSpecDeclaration:
         return self._item_specs.get(name, at)
+
+    def item_spec_of(self, item_spec_id: ItemSpecId) -> ItemSpecDeclaration:
+        return self._item_specs.with_id(item_spec_id)
 
     def group(self, name: str, at: DesignLocation) -> GroupDeclaration:
         return self._groups.get(name, at)

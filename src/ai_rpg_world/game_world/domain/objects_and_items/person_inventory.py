@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     InventoryFullException,
     ItemAlreadyCarriedException,
@@ -14,12 +15,16 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     NotEnoughItemsOfSpecException,
 )
 from ai_rpg_world.game_world.domain.exception.person_inventory_exception import (
+    HeldItemsExceedHandsException,
     ItemNotHeldException,
     ItemNotPackedException,
     PackIsEmptyException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 _HANDS = 2
 
@@ -78,24 +83,88 @@ PersonInventoryEvent = (
 
 @final
 @dataclass(frozen=True)
-class _HeldItem:
+class _ItemInHand:
     item: ItemInstanceId
     hands_needed: HandsNeeded
 
 
+@final
+@dataclass(frozen=True)
+class HeldItem:
+    item: ItemInstanceId
+    spec: ItemSpecId
+    hands_needed: HandsNeeded
+
+
+@final
+@dataclass(frozen=True)
+class PackedItem:
+    item: ItemInstanceId
+    spec: ItemSpecId
+
+
+@final
+@dataclass(frozen=True)
+class PersonInventoryMemento:
+    person_id: PersonId
+    capacity: Capacity
+    gold: Gold
+    held: tuple[HeldItem, ...]
+    packed: tuple[PackedItem, ...]
+
+    def __post_init__(self) -> None:
+        items = [held.item for held in self.held] + [packed.item for packed in self.packed]
+        if len(set(items)) != len(items):
+            raise RepeatedMementoKeyException(f"{self.person_id.value} carries an item twice")
+
+
 class PersonInventory(AggregateRoot[PersonInventoryEvent]):
-    def __init__(self, person_id: PersonId, capacity: Capacity) -> None:
+    def __init__(
+        self,
+        person_id: PersonId,
+        capacity: Capacity,
+        *,
+        gold: Gold,
+        held: tuple[HeldItem, ...],
+        packed: tuple[PackedItem, ...],
+    ) -> None:
         super().__init__()
+        carried = [held_item.item for held_item in held] + [packed_item.item for packed_item in packed]
+        if len(set(carried)) != len(carried):
+            raise ItemAlreadyCarriedException(f"{person_id.value} carries an item twice")
+        if len(carried) > capacity.value:
+            raise InventoryFullException(f"{person_id.value} carries {len(carried)} items over {capacity.value}")
+        if sum(held_item.hands_needed.value for held_item in held) > _HANDS:
+            raise HeldItemsExceedHandsException(f"{person_id.value} holds more than {_HANDS} hands can")
         self._person_id = person_id
         self._capacity = capacity
-        self._packed: list[ItemInstanceId] = []
-        self._held: list[_HeldItem] = []
-        self._specs: dict[ItemInstanceId, ItemSpecId] = {}
-        self._gold = Gold(0)
+        self._packed = [packed_item.item for packed_item in packed]
+        self._held = [_ItemInHand(held_item.item, held_item.hands_needed) for held_item in held]
+        self._specs: dict[ItemInstanceId, ItemSpecId] = {held_item.item: held_item.spec for held_item in held} | {
+            packed_item.item: packed_item.spec for packed_item in packed
+        }
+        self._gold = gold
+
+    @classmethod
+    def start(cls, person_id: PersonId, capacity: Capacity) -> PersonInventory:
+        return cls(person_id, capacity, gold=Gold(0), held=(), packed=())
+
+    @classmethod
+    def from_memento(cls, memento: PersonInventoryMemento, design: WorldDesign) -> PersonInventory:
+        return cls(memento.person_id, memento.capacity, gold=memento.gold, held=memento.held, packed=memento.packed)
 
     @property
     def person_id(self) -> PersonId:
         return self._person_id
+
+    def memento(self) -> PersonInventoryMemento:
+        return PersonInventoryMemento(
+            person_id=self._person_id,
+            capacity=self._capacity,
+            gold=self._gold,
+            held=tuple(HeldItem(held.item, self._specs[held.item], held.hands_needed) for held in self._held),
+            packed=tuple(PackedItem(item, self._specs[item]) for item in self._packed),
+        )
 
     def receive(self, item: ItemInstanceId, spec: ItemSpecId) -> None:
         if self._carries(item):
@@ -135,7 +204,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         while _HANDS - self._hands_in_use() < hands_needed.value:
             self.put_away(self._held[0].item)
         self._packed.remove(item)
-        self._held.append(_HeldItem(item, hands_needed))
+        self._held.append(_ItemInHand(item, hands_needed))
         self.add_event(ItemHeldEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def put_away(self, item: ItemInstanceId) -> None:

@@ -17,7 +17,13 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     LitWhen,
     NotALightSource,
 )
-from ai_rpg_world.game_world.domain.exception.game_world_exception import TickOrderException
+from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import (
+    MementoDoesNotMatchDesignException,
+    RepeatedMementoKeyException,
+    TickOrderException,
+)
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import StateValueMismatchesKindException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     ItemAlreadyLeftWorldException,
@@ -31,8 +37,10 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     ItemCameIntoWorldEvent,
     ItemInstanceId,
     ItemLeftWorldEvent,
+    ItemMemento,
     ItemRanOutEvent,
     ItemStateChangedEvent,
+    ItemStateKeyValue,
     LyingAt,
 )
 from ai_rpg_world.game_world.domain.value_object import (
@@ -47,6 +55,8 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.hands_needed import HandsNeeded
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import compose_world, nouns
 
 _LANTERN_SPEC = ItemSpecId("lantern")
 _UNLIT = ChoiceName("unlit")
@@ -318,3 +328,122 @@ class TestItemRunOut:
         item.run_out(WorldTick(26), CarriedBy(_HARU))
 
         assert item.get_events() == []
+
+
+def _design_with(spec: ItemSpecDeclaration) -> WorldDesign:
+    return compose_world(nouns(item_specs=(spec,)))
+
+
+def _lantern_memento(*values: ItemStateKeyValue) -> ItemMemento:
+    return ItemMemento(
+        item_id=_ITEM_ID, spec_id=_LANTERN_SPEC, came_at=_CAME_AT, values=frozenset(values), in_world=True
+    )
+
+
+class TestItemMemento:
+    """Item を memento から作り直すと、同じ種類・値・世界に出た時刻・世界にいるかを持ち、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_lit_lantern_keeps_its_spec_values_and_age(self) -> None:
+        """灯を点けて油を 1 に減らしたカンテラを作り直すと、同じ種類で同じ値を持ち、光り、世界に出た時刻も同じ。"""
+        spec = _lantern()
+        item = _came_into_world(spec)
+        item.set(_WICK, ChoiceValue(_LIT))
+        item.set(_OIL, CountValue(Count(1)))
+
+        rebuilt = rebuilt_from_memento(item, _design_with(spec))
+
+        assert rebuilt.memento() == item.memento()
+        assert rebuilt.memento() != _came_into_world(spec).memento()
+        assert (rebuilt.item_id, rebuilt.spec_id) == (_ITEM_ID, _LANTERN_SPEC)
+        assert rebuilt.value_of(_WICK) == ChoiceValue(_LIT)
+        assert rebuilt.value_of(_OIL) == CountValue(Count(1))
+        assert rebuilt.gives_light()
+        assert rebuilt.age(WorldTick(15)) == Ticks(5)
+
+    def test_rebuilt_item_that_left_the_world_stays_out(self) -> None:
+        """世界から出たカンテラを作り直すと、set を ItemAlreadyLeftWorldException で断る。"""
+        spec = _lantern()
+        item = _came_into_world(spec)
+        item.leave_world()
+
+        rebuilt = rebuilt_from_memento(item, _design_with(spec))
+
+        assert rebuilt.memento() == item.memento()
+        with pytest.raises(ItemAlreadyLeftWorldException):
+            rebuilt.set(_WICK, ChoiceValue(_LIT))
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """灯を点けたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        spec = _lantern()
+        item = _came_into_world(spec)
+        item.set(_WICK, ChoiceValue(_LIT))
+
+        assert rebuilt_from_memento(item, _design_with(spec)).get_events() == []
+
+
+class TestItemMementoAgainstDesign:
+    """Item.from_memento が、宣言と食い違う memento を作り直さずに止めることを保証する。"""
+
+    def test_undeclared_item_spec_is_refused(self) -> None:
+        """品物の種類 lantern を宣言していない世界で lantern の memento を作り直すと、UndeclaredNounException を投げる。"""
+        memento = _came_into_world().memento()
+
+        with pytest.raises(UndeclaredNounException):
+            Item.from_memento(memento, compose_world())
+
+    def test_missing_state_key_is_refused(self) -> None:
+        """宣言にある oil の値が無い memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = _lantern_memento(ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)))
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            Item.from_memento(memento, _design_with(_lantern()))
+
+    def test_undeclared_state_key_is_refused(self) -> None:
+        """宣言に無い鍵 fuel の値を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
+        memento = _lantern_memento(
+            ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)),
+            ItemStateKeyValue(_OIL.key, CountValue(Count(1))),
+            ItemStateKeyValue(StateKeyId("fuel"), CountValue(Count(1))),
+        )
+
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            Item.from_memento(memento, _design_with(_lantern()))
+
+    def test_value_not_fitting_the_key_kind_is_refused(self) -> None:
+        """選択の鍵 wick に数の値を持つ memento を作り直すと、StateValueMismatchesKindException を投げる。"""
+        memento = _lantern_memento(
+            ItemStateKeyValue(_WICK.key, CountValue(Count(1))),
+            ItemStateKeyValue(_OIL.key, CountValue(Count(1))),
+        )
+
+        with pytest.raises(StateValueMismatchesKindException):
+            Item.from_memento(memento, _design_with(_lantern()))
+
+
+class TestItemMementoRefusesRepeatedKey:
+    """ItemMemento が、同じ鍵の値を 2 つ持つ memento を作ることを断ることを保証する。"""
+
+    def test_same_key_with_two_values_is_refused(self) -> None:
+        """wick が unlit と lit の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            _lantern_memento(
+                ItemStateKeyValue(_WICK.key, ChoiceValue(_UNLIT)),
+                ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)),
+            )
+
+    def test_same_key_with_two_values_is_refused_by_constructor(self) -> None:
+        """wick が unlit と lit の 2 つある値で Item を直に作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            Item(
+                _ITEM_ID,
+                _lantern(),
+                _CAME_AT,
+                values=frozenset(
+                    {
+                        ItemStateKeyValue(_WICK.key, ChoiceValue(_UNLIT)),
+                        ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)),
+                        ItemStateKeyValue(_OIL.key, CountValue(Count(3))),
+                    }
+                ),
+                in_world=True,
+            )

@@ -105,7 +105,7 @@ def _world(*, departed_persons_act: bool = False) -> WorldInMemory:
         spots=(_SQUARE, _WELL_SIDE),
         passages=(_LANE,),
         vitals=tuple(vitals(person) for person in people),
-        inventories=tuple(PersonInventory(person, Capacity(5)) for person in people),
+        inventories=tuple(PersonInventory.start(person, Capacity(5)) for person in people),
     )
 
 

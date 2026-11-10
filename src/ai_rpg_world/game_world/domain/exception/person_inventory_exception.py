@@ -11,3 +11,7 @@ class ItemNotHeldException(GameWorldDomainException):
 
 class ItemNotPackedException(GameWorldDomainException):
     error_code = "GAME_WORLD.ITEM_NOT_PACKED"
+
+
+class HeldItemsExceedHandsException(GameWorldDomainException):
+    error_code = "GAME_WORLD.HELD_ITEMS_EXCEED_HANDS"

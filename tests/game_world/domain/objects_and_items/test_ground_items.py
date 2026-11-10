@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     GroundItemAlreadyPlacedException,
     GroundItemNotFoundException,
@@ -9,10 +10,12 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItemPlacedEvent,
     GroundItems,
+    GroundItemsMemento,
     GroundItemTakenEvent,
     ItemInstanceId,
 )
 from ai_rpg_world.game_world.domain.value_object import SpotId
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 _SQUARE = SpotId("square")
 _LANTERN = ItemInstanceId("lantern#1")
@@ -24,7 +27,7 @@ class TestGroundItems:
 
     def test_starts_empty_for_its_spot(self) -> None:
         """作った直後は、自分の場所の ID を持ち、地面に品物が無い。"""
-        ground = GroundItems(_SQUARE)
+        ground = GroundItems.start(_SQUARE)
 
         assert ground.spot_id == _SQUARE
         assert ground.items() == ()
@@ -32,7 +35,7 @@ class TestGroundItems:
 
     def test_place_puts_items_in_placed_order_and_records_event(self) -> None:
         """place した品物は置いた順に items に並び、1 つごとに GroundItemPlacedEvent がたまる。"""
-        ground = GroundItems(_SQUARE)
+        ground = GroundItems.start(_SQUARE)
 
         ground.place(_LANTERN)
         ground.place(_PICKAXE)
@@ -45,7 +48,7 @@ class TestGroundItems:
 
     def test_take_removes_item_and_records_event(self) -> None:
         """take した品物は地面から無くなり、GroundItemTakenEvent がたまる。"""
-        ground = GroundItems(_SQUARE)
+        ground = GroundItems.start(_SQUARE)
         ground.place(_LANTERN)
         ground.place(_PICKAXE)
         ground.clear_events()
@@ -60,7 +63,7 @@ class TestGroundItems:
 
     def test_placing_an_item_already_on_the_ground_is_refused(self) -> None:
         """地面にある品物をもう一度 place すると GroundItemAlreadyPlacedException を投げ、品物もイベントも増えない。"""
-        ground = GroundItems(_SQUARE)
+        ground = GroundItems.start(_SQUARE)
         ground.place(_LANTERN)
         ground.clear_events()
 
@@ -72,9 +75,51 @@ class TestGroundItems:
 
     def test_taking_an_item_not_on_the_ground_is_refused(self) -> None:
         """地面に無い品物を take すると GroundItemNotFoundException を投げ、イベントはたまらない。"""
-        ground = GroundItems(_SQUARE)
+        ground = GroundItems.start(_SQUARE)
 
         with pytest.raises(GroundItemNotFoundException):
             ground.take(_LANTERN)
 
         assert ground.get_events() == []
+
+
+class TestGroundItemsMemento:
+    """GroundItems を memento から作り直すと、地面の品物が置いた順のまま同じで、イベントは出ないことを保証する。"""
+
+    def test_rebuilt_ground_keeps_items_in_placed_order(self) -> None:
+        """つるはし・カンテラの順に置き、もう 1 つ置いて拾ったあと作り直すと、つるはし・カンテラの順で地面にある。"""
+        rope = ItemInstanceId("rope#1")
+        ground = GroundItems.start(_SQUARE)
+        ground.place(_PICKAXE)
+        ground.place(rope)
+        ground.place(_LANTERN)
+        ground.take(rope)
+
+        rebuilt = rebuilt_from_memento(ground)
+
+        assert rebuilt.memento() == ground.memento()
+        assert rebuilt.memento() != GroundItems.start(_SQUARE).memento()
+        assert rebuilt.spot_id == _SQUARE
+        assert rebuilt.items() == (_PICKAXE, _LANTERN)
+        assert not rebuilt.contains(rope)
+
+    def test_rebuilding_records_no_event(self) -> None:
+        """品物を置いたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
+        ground = GroundItems.start(_SQUARE)
+        ground.place(_LANTERN)
+
+        assert rebuilt_from_memento(ground).get_events() == []
+
+    def test_same_item_twice_is_refused(self) -> None:
+        """カンテラが 2 度ある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        with pytest.raises(RepeatedMementoKeyException):
+            GroundItemsMemento(spot_id=_SQUARE, items=(_LANTERN, _LANTERN))
+
+
+class TestGroundItemsStartsOnlyInReachableState:
+    """GroundItems は、置く操作では作れない地面から始まらないことを保証する。"""
+
+    def test_same_item_twice_is_refused_by_constructor(self) -> None:
+        """カンテラを 2 度置いた地面を直に作ると、GroundItemAlreadyPlacedException を投げる。"""
+        with pytest.raises(GroundItemAlreadyPlacedException):
+            GroundItems(_SQUARE, items=(_LANTERN, _LANTERN))

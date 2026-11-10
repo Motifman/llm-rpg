@@ -186,7 +186,7 @@ def _world(
             PersonVitals.start(_ALICE, HitPoints(current=5, maximum=5)),
             PersonVitals.start(_BOB, HitPoints(current=5, maximum=5)),
         ),
-        inventories=(PersonInventory(_ALICE, Capacity(5)),),
+        inventories=(PersonInventory.start(_ALICE, Capacity(5)),),
         items=items,
         object_states=object_states,
         world_stage=world_stage,

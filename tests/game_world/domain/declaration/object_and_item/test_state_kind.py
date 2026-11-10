@@ -7,10 +7,13 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ChoiceStateKind,
     CountStateKind,
     FlagStateKind,
+    FlagValue,
     NoRefill,
+    NothingWritten,
     StateKind,
     StockStateKind,
     TextBody,
+    WrittenText,
     WrittenTextStateKind,
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
@@ -21,7 +24,7 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_exception import (
     TextBodyBlankException,
 )
 from ai_rpg_world.game_world.domain.exception.world_design_exception import BlankDeclaredNameException
-from ai_rpg_world.game_world.domain.value_object import Count, Ticks
+from ai_rpg_world.game_world.domain.value_object import Count, PersonId, Ticks, WorldTick
 
 
 class TestChoiceName:
@@ -139,3 +142,17 @@ class TestStateKindHoldsCountOrStock:
     def test_other_kinds_hold_neither_count_nor_stock(self, kind: StateKind) -> None:
         """旗・選択・書いた文の種類は holds_count にも holds_stock にも偽を答える。"""
         assert (kind.holds_count(), kind.holds_stock()) == (False, False)
+
+
+class TestWrittenTextStateKindCanHold:
+    """WrittenTextStateKind.can_hold が、set で受けない書いた文も、持っている値としては受けることを保証する。"""
+
+    def test_holds_written_text_and_nothing_written_but_not_a_flag(self) -> None:
+        """書いた文と「何も書いていない」は持てると答え、旗の値は持てないと答える。set で受けるのは「何も書いていない」だけ。"""
+        kind = WrittenTextStateKind()
+        written = WrittenText(body=TextBody("水は濁っている"), author=PersonId("alice"), written_at=WorldTick(2))
+
+        assert kind.can_hold(written)
+        assert kind.can_hold(NothingWritten())
+        assert not kind.can_hold(FlagValue(raised=True))
+        assert not kind.accepts(written)
