@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     HitPointsDoNotMatchLifeStateException,
     PersonNotAliveException,
@@ -78,11 +77,6 @@ class PersonVitalsMemento:
     fatigue: FatigueAmount
     status_effects: frozenset[StatusEffect]
     busy_until: WorldTick | NotBusy
-
-    def __post_init__(self) -> None:
-        kinds = [effect.kind for effect in self.status_effects]
-        if len(set(kinds)) != len(kinds):
-            raise RepeatedMementoKeyException(f"{self.person.value} has one kind of status effect more than once")
 
 
 class PersonVitals(AggregateRoot[PersonVitalsEvent]):

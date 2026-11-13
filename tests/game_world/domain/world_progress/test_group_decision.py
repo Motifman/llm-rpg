@@ -5,7 +5,6 @@ import pytest
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     AbstainNotAllowedException,
     BallotAlreadyCastException,
@@ -530,15 +529,17 @@ class TestGroupDecisionMemento:
             GroupDecision.from_memento(_started().memento(), compose_world())
 
     def test_memento_with_two_ballots_of_one_voter_is_rejected(self) -> None:
-        """alice の票が bob への票と棄権の 2 つある memento は、作るときに RepeatedMementoKeyException を投げる。"""
-        with pytest.raises(RepeatedMementoKeyException):
-            GroupDecisionMemento(
-                decision_id=_DECISION,
-                open=True,
-                voters=frozenset({_ALICE, _BOB}),
-                choices=frozenset({_BOB}),
-                ballots=frozenset({Ballot(_ALICE, VoteFor(_BOB)), Ballot(_ALICE, Abstain())}),
-            )
+        """alice の票が bob への票と棄権の 2 つある memento から作り直すと、二度目の票と同じ BallotAlreadyCastException を投げる。"""
+        memento = GroupDecisionMemento(
+            decision_id=_DECISION,
+            open=True,
+            voters=frozenset({_ALICE, _BOB}),
+            choices=frozenset({_BOB}),
+            ballots=frozenset({Ballot(_ALICE, VoteFor(_BOB)), Ballot(_ALICE, Abstain())}),
+        )
+
+        with pytest.raises(BallotAlreadyCastException):
+            GroupDecision.from_memento(memento, _design_with(_declaration()))
 
 
 def _memento(

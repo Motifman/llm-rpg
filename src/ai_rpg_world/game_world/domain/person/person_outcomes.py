@@ -7,10 +7,7 @@ from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
-from ai_rpg_world.game_world.domain.exception.game_world_exception import (
-    MementoDoesNotMatchDesignException,
-    RepeatedMementoKeyException,
-)
+from ai_rpg_world.game_world.domain.exception.game_world_exception import MementoDoesNotMatchDesignException
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     OutcomeAlreadyDecidedException,
     PersonListedTwiceException,
@@ -55,11 +52,6 @@ class OutcomeOfPerson:
 class PersonOutcomesMemento:
     world_id: WorldId
     outcomes: tuple[OutcomeOfPerson, ...]
-
-    def __post_init__(self) -> None:
-        people = [entry.person for entry in self.outcomes]
-        if len(set(people)) != len(people):
-            raise RepeatedMementoKeyException(f"world {self.world_id.value} has a person's outcome more than once")
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -6,7 +6,6 @@ from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclarati
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
-    RepeatedMementoKeyException,
 )
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     OutcomeAlreadyDecidedException,
@@ -206,8 +205,16 @@ class TestPersonOutcomesMementoRefusals:
             PersonOutcomes.from_memento(memento, _DESIGN)
 
     def test_same_person_twice_is_refused(self) -> None:
-        """alice が死んだと未決の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
-        with pytest.raises(RepeatedMementoKeyException):
-            PersonOutcomesMemento(
-                world_id=_WORLD, outcomes=(OutcomeOfPerson(_ALICE, Died()), OutcomeOfPerson(_ALICE, Undecided()))
-            )
+        """alice が死んだと未決の 2 つある memento から作り直すと、PersonListedTwiceException を投げる。"""
+        memento = PersonOutcomesMemento(
+            world_id=_WORLD,
+            outcomes=(
+                OutcomeOfPerson(_ALICE, Died()),
+                OutcomeOfPerson(_ALICE, Undecided()),
+                OutcomeOfPerson(_BOB, Undecided()),
+                OutcomeOfPerson(_CAROL, Undecided()),
+            ),
+        )
+
+        with pytest.raises(PersonListedTwiceException):
+            PersonOutcomes.from_memento(memento, _DESIGN)
