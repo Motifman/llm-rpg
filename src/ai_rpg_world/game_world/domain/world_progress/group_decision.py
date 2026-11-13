@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     AbstainNotAllowedException,
     BallotAlreadyCastException,
@@ -107,11 +106,6 @@ class GroupDecisionMemento:
     voters: frozenset[PersonId]
     choices: frozenset[PersonId]
     ballots: frozenset[Ballot]
-
-    def __post_init__(self) -> None:
-        voters = [ballot.voter for ballot in self.ballots]
-        if len(set(voters)) != len(voters):
-            raise RepeatedMementoKeyException(f"{self.decision_id} has two ballots of one voter")
 
 
 class GroupDecision(AggregateRoot[GroupDecisionEvent]):

@@ -533,28 +533,31 @@ class TestObjectStateMementoAgainstDesign:
             ObjectState.from_memento(memento, _design_with(_well(water)))
 
 
-class TestObjectStateMementoRefusesRepeatedKey:
-    """ObjectStateMemento が、同じ鍵を値と在庫で合わせて 2 つ以上持つ memento を作ることを断ることを保証する。"""
+class TestObjectStateRefusesRepeatedKey:
+    """ObjectState が、同じ鍵を値と在庫で合わせて 2 つ以上持つ値から作られることを断ることを保証する。"""
 
     def test_same_key_with_two_values_is_refused(self) -> None:
-        """covered が立っていると下りているの 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
-        with pytest.raises(RepeatedMementoKeyException):
-            _well_memento(
-                (
-                    ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),
-                    ObjectStateKeyValue(_COVERED.key, FlagValue(raised=False)),
-                )
+        """covered が立っていると下りているの 2 つある memento から作り直すと、RepeatedMementoKeyException を投げる。"""
+        memento = _well_memento(
+            (
+                ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),
+                ObjectStateKeyValue(_COVERED.key, FlagValue(raised=False)),
             )
+        )
+
+        with pytest.raises(RepeatedMementoKeyException):
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED)))
 
     def test_same_key_as_value_and_stock_is_refused(self) -> None:
-        """water を値の欄と在庫の欄の両方に持つ memento を作ると、RepeatedMementoKeyException を投げる。"""
-        water = StateKeyId("water")
+        """在庫の鍵 water を値の欄と在庫の欄の両方に持つ memento から作り直すと、宣言と合わないので MementoDoesNotMatchDesignException を投げる。"""
+        water = _water()
+        memento = _well_memento(
+            (ObjectStateKeyValue(water.key, StockValue(Count(1))),),
+            (ObjectStockLevel(water.key, Count(1), WorldTick(0)),),
+        )
 
-        with pytest.raises(RepeatedMementoKeyException):
-            _well_memento(
-                (ObjectStateKeyValue(water, StockValue(Count(1))),),
-                (ObjectStockLevel(water, Count(1), WorldTick(0)),),
-            )
+        with pytest.raises(MementoDoesNotMatchDesignException):
+            ObjectState.from_memento(memento, _design_with(_well(water)))
 
     def test_same_key_with_two_values_is_refused_by_constructor(self) -> None:
         """covered が立っていると下りているの 2 つある値で ObjectState を直に作ると、RepeatedMementoKeyException を投げる。"""

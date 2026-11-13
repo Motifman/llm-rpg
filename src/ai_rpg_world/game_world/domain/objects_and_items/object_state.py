@@ -109,11 +109,6 @@ class ObjectStateMemento:
     stock_levels: frozenset[ObjectStockLevel]
     revealed: bool
 
-    def __post_init__(self) -> None:
-        keys = [key_value.key for key_value in self.values] + [level.key for level in self.stock_levels]
-        if len(set(keys)) != len(keys):
-            raise RepeatedMementoKeyException(f"{self.object_id.value} has a state key more than once")
-
 
 class ObjectState(AggregateRoot[ObjectStateEvent]):
     def __init__(

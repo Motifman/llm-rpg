@@ -82,11 +82,6 @@ class ItemMemento:
     values: frozenset[ItemStateKeyValue]
     in_world: bool
 
-    def __post_init__(self) -> None:
-        keys = [key_value.key for key_value in self.values]
-        if len(set(keys)) != len(keys):
-            raise RepeatedMementoKeyException(f"{self.item_id.value} has a state key with two values")
-
 
 class Item(AggregateRoot[ItemEvent]):
     def __init__(

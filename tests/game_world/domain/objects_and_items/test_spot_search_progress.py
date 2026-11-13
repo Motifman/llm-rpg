@@ -193,13 +193,15 @@ class TestSpotSearchProgressMemento:
         assert rebuilt_from_memento(progress).get_events() == []
 
     def test_same_person_with_two_counts_is_refused(self) -> None:
-        """alice の探した回数が 1 と 2 の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        """alice の探した回数が 1 と 2 の 2 つある memento から作り直すと、RepeatedMementoKeyException を投げる。"""
+        memento = SpotSearchProgressMemento(
+            spot_id=_CAVE,
+            search_counts=frozenset({PersonSearchCount(_ALICE, Count(1)), PersonSearchCount(_ALICE, Count(2))}),
+            finders=frozenset(),
+        )
+
         with pytest.raises(RepeatedMementoKeyException):
-            SpotSearchProgressMemento(
-                spot_id=_CAVE,
-                search_counts=frozenset({PersonSearchCount(_ALICE, Count(1)), PersonSearchCount(_ALICE, Count(2))}),
-                finders=frozenset(),
-            )
+            SpotSearchProgress.from_memento(memento, _design_with())
 
 
 def _design_with(*discoverables: DiscoverableDeclaration) -> WorldDesign:

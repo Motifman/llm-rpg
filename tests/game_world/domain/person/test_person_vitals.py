@@ -7,7 +7,6 @@ import pytest
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     GameWorldDomainException,
-    RepeatedMementoKeyException,
 )
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     HitPointsDoNotMatchLifeStateException,
@@ -890,10 +889,12 @@ class TestPersonVitalsMementoRefusals:
             )
 
     def test_same_status_effect_kind_twice_is_refused(self) -> None:
-        """切れる tick だけが違う毒を 2 つ持つ memento を作ると、RepeatedMementoKeyException を投げる。"""
-        with pytest.raises(RepeatedMementoKeyException):
-            _memento(
-                status_effects=frozenset(
-                    {StatusEffect(_POISONED, expires_at=WorldTick(4)), StatusEffect(_POISONED, expires_at=WorldTick(6))}
-                )
+        """切れる tick だけが違う毒を 2 つ持つ memento から作り直すと、操作が断るのと同じ StatusEffectKindRepeatedException を投げる。"""
+        memento = _memento(
+            status_effects=frozenset(
+                {StatusEffect(_POISONED, expires_at=WorldTick(4)), StatusEffect(_POISONED, expires_at=WorldTick(6))}
             )
+        )
+
+        with pytest.raises(StatusEffectKindRepeatedException):
+            PersonVitals.from_memento(memento, _DESIGN)

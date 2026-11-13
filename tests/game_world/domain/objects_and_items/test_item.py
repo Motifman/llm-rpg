@@ -422,16 +422,18 @@ class TestItemMementoAgainstDesign:
             Item.from_memento(memento, _design_with(_lantern()))
 
 
-class TestItemMementoRefusesRepeatedKey:
-    """ItemMemento が、同じ鍵の値を 2 つ持つ memento を作ることを断ることを保証する。"""
+class TestItemRefusesRepeatedKey:
+    """Item が、同じ鍵の値を 2 つ持つ値から作られることを断ることを保証する。"""
 
     def test_same_key_with_two_values_is_refused(self) -> None:
-        """wick が unlit と lit の 2 つある memento を作ると、RepeatedMementoKeyException を投げる。"""
+        """wick が unlit と lit の 2 つある memento から作り直すと、RepeatedMementoKeyException を投げる。"""
+        memento = _lantern_memento(
+            ItemStateKeyValue(_WICK.key, ChoiceValue(_UNLIT)),
+            ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)),
+        )
+
         with pytest.raises(RepeatedMementoKeyException):
-            _lantern_memento(
-                ItemStateKeyValue(_WICK.key, ChoiceValue(_UNLIT)),
-                ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)),
-            )
+            Item.from_memento(memento, _design_with(_lantern()))
 
     def test_same_key_with_two_values_is_refused_by_constructor(self) -> None:
         """wick が unlit と lit の 2 つある値で Item を直に作ると、RepeatedMementoKeyException を投げる。"""

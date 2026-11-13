@@ -61,11 +61,6 @@ class SpotSearchProgressMemento:
     search_counts: frozenset[PersonSearchCount]
     finders: frozenset[DiscoverableFinder]
 
-    def __post_init__(self) -> None:
-        people = [search_count.person for search_count in self.search_counts]
-        if len(set(people)) != len(people):
-            raise RepeatedMementoKeyException(f"someone has two search counts at {self.spot_id.value}")
-
 
 class SpotSearchProgress(AggregateRoot[SpotSearchProgressEvent]):
     def __init__(
