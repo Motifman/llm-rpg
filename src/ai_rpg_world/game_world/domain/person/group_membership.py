@@ -10,7 +10,7 @@ from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.declaration.character import GroupDeclaration, GroupingDeclaration
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
-    RepeatedMementoKeyException,
+    require_distinct_memento_keys,
 )
 from ai_rpg_world.game_world.domain.exception.person_exception import (
     AlreadyInAnotherGroupOfGroupingException,
@@ -45,9 +45,10 @@ class GroupMembershipMemento:
     groups: frozenset[PersonGroupInGrouping]
 
     def __post_init__(self) -> None:
-        keys = [(entry.person, entry.grouping) for entry in self.groups]
-        if len(set(keys)) != len(keys):
-            raise RepeatedMementoKeyException(f"world {self.world_id.value} has a person in two groups of one grouping")
+        require_distinct_memento_keys(
+            [(entry.person, entry.grouping) for entry in self.groups],
+            f"world {self.world_id.value} has a person in two groups of one grouping",
+        )
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,3 +1,6 @@
+from collections.abc import Hashable, Sequence
+
+
 class GameWorldDomainException(Exception):
     error_code: str = "GAME_WORLD.DOMAIN_ERROR"
 
@@ -24,6 +27,11 @@ class InvalidSpotIdException(GameWorldDomainException):
 
 class RepeatedMementoKeyException(GameWorldDomainException):
     error_code = "GAME_WORLD.REPEATED_MEMENTO_KEY"
+
+
+def require_distinct_memento_keys(keys: Sequence[Hashable], message: str) -> None:
+    if len(set(keys)) != len(keys):
+        raise RepeatedMementoKeyException(message)
 
 
 class MementoDoesNotMatchDesignException(GameWorldDomainException):

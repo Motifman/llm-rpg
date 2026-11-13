@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.people_register_exception import (
     CharacterListedTwiceException,
     PersonAlreadyNamedException,
@@ -42,9 +42,10 @@ class PeopleRegisterMemento:
     names: frozenset[PersonName]
 
     def __post_init__(self) -> None:
-        people = [entry.person for entry in self.names]
-        if len(set(people)) != len(people):
-            raise RepeatedMementoKeyException(f"world {self.world_id.value} has a person with two names")
+        require_distinct_memento_keys(
+            [entry.person for entry in self.names],
+            f"world {self.world_id.value} has a person with two names",
+        )
 
 
 @final

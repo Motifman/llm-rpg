@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.world_records_exception import (
     DiscoverableElsewhereException,
     OnceInWorldFoundByManyException,
@@ -77,8 +77,10 @@ class SpotSearchProgress(AggregateRoot[SpotSearchProgressEvent]):
                 raise SearchCountIsZeroException(f"{search_count.person.value} has searched {spot_id.value} 0 times")
         self._spot_id = spot_id
         self._search_counts = {search_count.person: search_count.count for search_count in search_counts}
-        if len(self._search_counts) != len(search_counts):
-            raise RepeatedMementoKeyException(f"someone has two search counts at {spot_id.value}")
+        require_distinct_memento_keys(
+            [search_count.person for search_count in search_counts],
+            f"someone has two search counts at {spot_id.value}",
+        )
         self._finders: dict[DiscoverableId, frozenset[PersonId]] = {}
         for found in finders:
             self._finders[found.discoverable] = self._finders.get(found.discoverable, frozenset()) | {found.finder}

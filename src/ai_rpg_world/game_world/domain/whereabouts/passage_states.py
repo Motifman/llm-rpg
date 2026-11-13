@@ -8,7 +8,7 @@ from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, SpotDeclaration
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
-    RepeatedMementoKeyException,
+    require_distinct_memento_keys,
 )
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     PassageAlreadyRemovedException,
@@ -49,9 +49,10 @@ class PassageStatesMemento:
     passages: frozenset[PassageCondition]
 
     def __post_init__(self) -> None:
-        passages = [condition.passage for condition in self.passages]
-        if len(set(passages)) != len(passages):
-            raise RepeatedMementoKeyException(f"world {self.world_id} has a passage in two conditions")
+        require_distinct_memento_keys(
+            [condition.passage for condition in self.passages],
+            f"world {self.world_id.value} has a passage in two conditions",
+        )
 
 
 class PassageStates(AggregateRoot[PassageStatesEvent]):

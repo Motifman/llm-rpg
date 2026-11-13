@@ -14,7 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
 )
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
-    RepeatedMementoKeyException,
+    require_distinct_memento_keys,
 )
 from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_exception import (
     StateValueMismatchesKindException,
@@ -95,8 +95,9 @@ class Item(AggregateRoot[ItemEvent]):
     ) -> None:
         super().__init__()
         self._values = {key_value.key: key_value.value for key_value in values}
-        if len(self._values) != len(values):
-            raise RepeatedMementoKeyException(f"{item_id.value} has a state key with two values")
+        require_distinct_memento_keys(
+            [key_value.key for key_value in values], f"{item_id.value} has a state key with two values"
+        )
         _require_matches(spec, self._values, item_id)
         self._item_id = item_id
         self._spec = spec
