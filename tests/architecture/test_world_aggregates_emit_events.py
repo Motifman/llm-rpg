@@ -30,6 +30,7 @@ from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTe
 from tests.game_world.support.world_in_memory import FractionsInOrder
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
+from ai_rpg_world.game_world.domain.action.action_attempt import UsesBody
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
@@ -516,6 +517,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "PersonVitals.exert": lambda: _with(_vitals(), lambda v: v.exert(_fatigue_rule())),
     "PersonVitals.rest": lambda: _with(_tired(), lambda v: v.rest(FatigueAmount(2), _fatigue_rule())),
     "PersonVitals.start_action": lambda: _with(_vitals(), lambda v: v.start_action(WorldTick(3))),
+    "PersonVitals.start_acting": lambda: _with(
+        _vitals(), lambda v: v.start_acting(UsesBody(), WorldTick(3), _fatigue_rule())
+    ),
     "PeopleRegister.name": lambda: _with(_people_register(), lambda r: r.name(_ALICE, DisplayName("ミナ"))),
     "PersonOutcomes.decide": lambda: _with(PersonOutcomes.start(_WORLD, (_ALICE,)), lambda o: o.decide(_ALICE, Died())),
     "GroupMembership.join": lambda: _with(GroupMembership.start(_WORLD, {}), lambda g: g.join(_ALICE, _RED)),
