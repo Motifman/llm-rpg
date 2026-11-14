@@ -4,9 +4,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TypeVar, final
 
-from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.perception import NotNoticedLater, NotSeenInDim, NotSeenWithoutActor, SightTexts
-from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId
+from ai_rpg_world.game_world.domain.people import NameInText, TextAboutPeople, TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.perception import (
+    NotNoticedLater,
+    NotSeenInDim,
+    NotSeenWithoutActor,
+    SightTarget,
+    SightTexts,
+)
+from ai_rpg_world.game_world.domain.value_object import PersonId
 
 _NotWritten = TypeVar("_NotWritten", NotSeenInDim, NotSeenWithoutActor, NotNoticedLater)
 
@@ -23,7 +29,7 @@ class SightTextsDeclaration:
         texts = (self.clear, self.dim, self.unseen_actor, self.noticed_later)
         return frozenset().union(*(text.placeholders() for text in texts if isinstance(text, TextWithUnassignedPeople)))
 
-    def about_named(self, people: Mapping[str, PersonId], names: Mapping[str, DisplayName]) -> SightTexts:
+    def about_named(self, people: Mapping[str, PersonId], names: Mapping[str, NameInText]) -> SightTexts:
         return SightTexts(
             clear=self.clear.about_named(people, names),
             dim=_about_named(self.dim, people, names),
@@ -31,9 +37,14 @@ class SightTextsDeclaration:
             noticed_later=_about_named(self.noticed_later, people, names),
         )
 
+    def target_of(
+        self, person: PersonId, people: Mapping[str, PersonId], names: Mapping[str, NameInText]
+    ) -> SightTarget:
+        return SightTarget(person=person, texts=self.about_named(people, names))
+
 
 def _about_named(
-    text: TextWithUnassignedPeople | _NotWritten, people: Mapping[str, PersonId], names: Mapping[str, DisplayName]
+    text: TextWithUnassignedPeople | _NotWritten, people: Mapping[str, PersonId], names: Mapping[str, NameInText]
 ) -> TextAboutPeople | _NotWritten:
     if isinstance(text, TextWithUnassignedPeople):
         return text.about_named(people, names)

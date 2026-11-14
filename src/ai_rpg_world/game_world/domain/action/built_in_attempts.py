@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, final
 
@@ -16,10 +17,11 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     WithPerson,
 )
 from ai_rpg_world.game_world.domain.action.declared_section_access import DeclaredSectionAccess
-from ai_rpg_world.game_world.domain.action.manner import Manner
+from ai_rpg_world.game_world.domain.action.manner import Manner, Openly
 from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechReach
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
+from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct, item_names
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
@@ -31,16 +33,19 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantNotAtRouteStartException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.perception import Noise, NoTarget
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, PassageId, PersonId, SpotId, Ticks
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PassageId, PersonId, SpotId, Ticks
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, NoRoute, Occupant, Route
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+    from ai_rpg_world.game_world.domain.people import NameInText
 
 
 class _BuiltInAttempt(TriggerAnswersNothingByDefault):
@@ -79,12 +84,36 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     def fall_cause_for(self, victim: PersonId) -> FallCause:
         return fall_cause_from(self.acting_person(), victim)
 
+    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+        return WitnessedAct(
+            perception=self._perception(design),
+            names=self._names(design, item_specs),
+            target=self._witnessed_target(),
+            manner=self._witnessed_manner(),
+            source=Noise(),
+        )
+
+    def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
+        return design.built_in_action_perceptions.of_kind(self._KIND)
+
+    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+        return {}
+
+    def _witnessed_target(self) -> PersonId | NoTarget:
+        return NoTarget()
+
+    def _witnessed_manner(self) -> Manner:
+        return Openly()
+
 
 class _OnOneItem(_BuiltInAttempt):
     item: ItemInstanceId
 
     def this_item(self) -> ItemInstanceId:
         return self.item
+
+    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+        return {"item": item_names((self.item,), item_specs, design)}
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
         return (self.item,)
@@ -99,6 +128,9 @@ class TravelAttempt(_BuiltInAttempt):
 
     def exertion(self) -> Exertion:
         return UsesBody()
+
+    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+        return {"destination": self.destination.name}
 
     def actor_requirement(self) -> ActorRequirement:
         return LivingOrDeparted()
@@ -157,6 +189,15 @@ class SpeechAttempt(_BuiltInAttempt):
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return self.reach.copresence_requirements()
 
+    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+        return WitnessedAct(
+            perception=design.built_in_action_perceptions.speech(self.reach),
+            names={"speech": self.content},
+            target=self.reach.listener(),
+            manner=Openly(),
+            source=self.reach.voice(),
+        )
+
     def can_start_while_busy(self) -> bool:
         return True
 
@@ -201,6 +242,9 @@ class TendAttempt(_BuiltInAttempt):
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return (WithPerson(self.target),)
 
+    def _witnessed_target(self) -> PersonId | NoTarget:
+        return self.target
+
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.TARGET:
             return self.target
@@ -229,6 +273,15 @@ class ItemHandOverAttempt(_BuiltInAttempt):
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return (WithPerson(self.to),)
 
+    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+        return {"item": item_names(self.items, item_specs, design)}
+
+    def _witnessed_target(self) -> PersonId | NoTarget:
+        return self.to
+
+    def _witnessed_manner(self) -> Manner:
+        return self.manner
+
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.TARGET:
             return self.to
@@ -249,6 +302,9 @@ class GroundItemPickupAttempt(_OnOneItem):
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return (WithGroundItem(self.item),)
 
+    def _witnessed_manner(self) -> Manner:
+        return self.manner
+
 
 @final
 @dataclass(frozen=True)
@@ -260,6 +316,9 @@ class ItemDropAttempt(_OnOneItem):
 
     def exertion(self) -> Exertion:
         return UsesBody()
+
+    def _witnessed_manner(self) -> Manner:
+        return self.manner
 
 
 @final
@@ -293,6 +352,9 @@ class EnterSectionAttempt(_BuiltInAttempt):
     def exertion(self) -> Exertion:
         return self.access.exertion
 
+    def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
+        return design.section_access(self.access.section.section_id).perceived_as
+
 
 @final
 @dataclass(frozen=True)
@@ -303,6 +365,9 @@ class LeaveSectionAttempt(_BuiltInAttempt):
 
     def exertion(self) -> Exertion:
         return self.access.exertion
+
+    def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
+        return design.section_access(self.access.section.section_id).perceived_as
 
 
 @final

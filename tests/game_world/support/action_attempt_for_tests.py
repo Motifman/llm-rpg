@@ -16,9 +16,11 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     UsesBody,
 )
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
+from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
+from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.exception.trigger_exception import (
     ArgumentNotInTriggerException,
     ItemNotInTriggerException,
@@ -27,7 +29,7 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, SpotId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, SpotId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
@@ -99,6 +101,9 @@ class ActionAttemptForTests(ActionAttempt):
 
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self.action_kind})
+
+    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+        raise NotImplementedError(f"{self!r} is not witnessed in tests that use it")
 
 
 def situation_for_tests() -> ActorSituation:

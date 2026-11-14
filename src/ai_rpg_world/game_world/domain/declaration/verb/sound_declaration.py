@@ -4,10 +4,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import final
 
-from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.perception import Noise, NotNoticedLater, Salience, SoundStimulus
+from ai_rpg_world.game_world.domain.people import NameInText, TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.perception import NotNoticedLater, Salience, SoundSource, SoundStimulus
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
-from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, SpotId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
 
 
 @final
@@ -20,11 +20,12 @@ class SoundDeclaration:
     def placeholders(self) -> frozenset[str]:
         return self.clear.placeholders() | self.muffled.placeholders()
 
-    def noise_at(
+    def heard_at(
         self,
         origin: SpotId,
         people: Mapping[str, PersonId],
-        names: Mapping[str, DisplayName],
+        names: Mapping[str, NameInText],
+        source: SoundSource,
         salience: Salience,
         at: WorldTick,
     ) -> SoundStimulus:
@@ -34,7 +35,7 @@ class SoundDeclaration:
             clear=self.clear.about_named(people, names),
             muffled=self.muffled.about_named(people, names),
             noticed_later=NotNoticedLater(),
-            source=Noise(),
+            source=source,
             involved=tuple(dict.fromkeys(people.values())),
             salience=salience,
             at=at,

@@ -5,6 +5,7 @@ from typing import final
 
 from ai_rpg_world.game_world.domain.action.action_attempt import CopresenceRequirement, WithPerson
 from ai_rpg_world.game_world.domain.exception.action_exception import BlankSpeechContentException
+from ai_rpg_world.game_world.domain.perception import NoTarget, NotWhispered, Voice
 from ai_rpg_world.game_world.domain.value_object import PersonId
 
 
@@ -16,6 +17,12 @@ class Whisper:
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return (WithPerson(self.to),)
 
+    def listener(self) -> PersonId | NoTarget:
+        return self.to
+
+    def voice(self) -> Voice:
+        return Voice(whispered_to=self.to)
+
 
 @final
 @dataclass(frozen=True)
@@ -23,12 +30,24 @@ class OrdinaryVoice:
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return ()
 
+    def listener(self) -> PersonId | NoTarget:
+        return NoTarget()
+
+    def voice(self) -> Voice:
+        return Voice(whispered_to=NotWhispered())
+
 
 @final
 @dataclass(frozen=True)
 class Shout:
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return ()
+
+    def listener(self) -> PersonId | NoTarget:
+        return NoTarget()
+
+    def voice(self) -> Voice:
+        return Voice(whispered_to=NotWhispered())
 
 
 SpeechReach = Whisper | OrdinaryVoice | Shout

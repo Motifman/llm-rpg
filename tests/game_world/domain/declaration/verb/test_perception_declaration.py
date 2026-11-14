@@ -55,7 +55,9 @@ class TestPerceptionDeclarationSeenAt:
 
     def test_witness_texts_become_a_sight_stimulus_at_the_spot(self) -> None:
         """ハルが広場から井戸に来たとき、井戸の見える刺激が 1 つでき、文の {origin} は広場で埋まり、{actor} はハルを指す。"""
-        [stimulus] = _arrival().seen_at(_WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW)
+        [stimulus] = _arrival().seen_at(
+            _WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+        )
 
         assert stimulus == SightStimulus(
             where=_WELL,
@@ -86,7 +88,9 @@ class TestPerceptionDeclarationSeenAt:
             ),
         )
 
-        _, sound = footsteps.seen_at(_WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW)
+        _, sound = footsteps.seen_at(
+            _WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+        )
 
         assert sound == SoundStimulus(
             origin=_WELL,
@@ -102,7 +106,9 @@ class TestPerceptionDeclarationSeenAt:
 
     def test_departed_actor_is_marked_on_the_sight_stimulus(self) -> None:
         """去った人として動くハルが来たとき、見える刺激は行った人が去った人だと持つ。"""
-        [stimulus] = _arrival().seen_at(_WELL, DepartedPerson(_HAL), _FROM_PLAZA, _NOW)
+        [stimulus] = _arrival().seen_at(
+            _WELL, DepartedPerson(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+        )
 
         assert isinstance(stimulus, SightStimulus) and stimulus.actor_departed is True
 
@@ -111,10 +117,14 @@ class TestPerceptionDeclarationSeenAt:
         aimed = replace(_arrival(), target=seen_clearly_only("{actor}があなたに近づいた。"))
 
         with pytest.raises(PerceptionTargetNotGivenException):
-            aimed.seen_at(_WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW)
+            aimed.seen_at(
+                _WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+            )
 
     def test_dim_text_not_declared_stays_not_seen_in_dim(self) -> None:
         """暗いときの文を書いていない宣言では、刺激の dim も NotSeenInDim のままになる。"""
-        [stimulus] = lever_pulled_quietly().seen_at(_WELL, PersonBody(_HAL), {}, _NOW)
+        [stimulus] = lever_pulled_quietly().seen_at(
+            _WELL, PersonBody(_HAL), {}, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+        )
 
         assert isinstance(stimulus, SightStimulus) and stimulus.witness.dim == NotSeenInDim()

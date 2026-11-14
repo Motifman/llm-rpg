@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, final
 
 from typing_extensions import assert_never
 
+from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechReach, Whisper
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
@@ -17,11 +18,12 @@ from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocatio
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
     AnnouncementInBuiltInActionPerceptionException,
     NotBuiltInActionPerceptionException,
+    PerceptionOfKindNotDeclaredException,
     TargetTextNotFittingTargetException,
     TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
-from ai_rpg_world.game_world.domain.perception import NoTarget, Stimulus
+from ai_rpg_world.game_world.domain.perception import Noise, NoTarget, Stimulus
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import SpotId, WorldTick
@@ -94,7 +96,20 @@ class BuiltInActionPerceptions:
     ) -> tuple[Stimulus, ...]:
         if isinstance(origin, Teleported):
             return ()
-        return self.arrival.seen_at(where, arriving, {"origin": nouns.spot_of(origin).name}, at)
+        return self.arrival.seen_at(
+            where,
+            arriving,
+            {"origin": nouns.spot_of(origin).name},
+            at,
+            target=NoTarget(),
+            manner=Openly(),
+            source=Noise(),
+        )
+
+    def of_kind(self, kind: ActionKind) -> PerceptionDeclaration:
+        if kind not in self.by_kind:
+            raise PerceptionOfKindNotDeclaredException(f"no perception of {kind.name} is declared")
+        return self.by_kind[kind]
 
     def flaws_for(self, rules: WorldRules, at: DesignLocation) -> list[DesignFlaw]:
         performable = BuiltInPerceptionRow.kinds()
