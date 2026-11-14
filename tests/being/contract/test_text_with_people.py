@@ -80,12 +80,13 @@ class TestTextWithPeople:
             ("{0}が来た", "0"),
             ("{actor!r}が来た", "actor"),
             ("{actor:>3}が来た", "actor"),
+            ("{actor:}が来た", "actor"),
             ("{actor.name}が来た", "actor.name"),
             ("{actor が来た", "actor"),
         ],
     )
     def test_placeholder_other_than_a_named_person_is_refused(self, template: str, key: str) -> None:
-        """位置・変換・書式指定・属性のプレースホルダーと閉じていない括弧は、同じ鍵で人を当てても ContractViolation を投げる。"""
+        """位置・変換・書式指定 (空の書式指定を含む)・属性のプレースホルダーと閉じていない括弧は、同じ鍵で人を当てても ContractViolation を投げる。"""
         with pytest.raises(ContractViolation):
             TextWithPeople(template=template, people={key: _stranger()})
 
