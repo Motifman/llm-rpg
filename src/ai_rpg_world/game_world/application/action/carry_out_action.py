@@ -13,7 +13,7 @@ from ai_rpg_world.game_world.domain.condition.condition import FailureReason, Hi
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.value_object import Ticks
 
 _Attempt = TypeVar("_Attempt", bound=ActionAttempt)
@@ -44,7 +44,7 @@ class CarryOutAction:
             self._scope.run(lambda session: self._carry_out(attempt, steps, session))
         except _Refused as refused:
             return self._note_refusal(refused.refusal)
-        except GameWorldDomainException as exception:
+        except WorldRefusal as exception:
             code = RefusalCode.of(exception)
             text = self._texts.world_state_text(code, attempt.actor)
             return self._note_refusal(ActionRefusal(attempt=attempt, reason=WorldStateRefusal(code), text=text))

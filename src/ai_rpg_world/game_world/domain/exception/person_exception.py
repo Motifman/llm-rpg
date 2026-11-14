@@ -1,15 +1,15 @@
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException, WorldRefusal
 
 
 class PersonStartsFallenException(GameWorldDomainException):
     error_code = "GAME_WORLD.PERSON_STARTS_FALLEN"
 
 
-class PersonNotAliveException(GameWorldDomainException):
+class PersonNotAliveException(WorldRefusal):
     error_code = "GAME_WORLD.PERSON_NOT_ALIVE"
 
 
-class PersonNotDownException(GameWorldDomainException):
+class PersonNotDownException(WorldRefusal):
     error_code = "GAME_WORLD.PERSON_NOT_DOWN"
 
 
@@ -25,7 +25,7 @@ class PersonListedTwiceException(GameWorldDomainException):
     error_code = "GAME_WORLD.PERSON_LISTED_TWICE"
 
 
-class OutcomeAlreadyDecidedException(GameWorldDomainException):
+class OutcomeAlreadyDecidedException(WorldRefusal):
     error_code = "GAME_WORLD.OUTCOME_ALREADY_DECIDED"
 
 
@@ -33,15 +33,15 @@ class GroupingDoesNotChangeException(GameWorldDomainException):
     error_code = "GAME_WORLD.GROUPING_DOES_NOT_CHANGE"
 
 
-class AlreadyInGroupException(GameWorldDomainException):
+class AlreadyInGroupException(WorldRefusal):
     error_code = "GAME_WORLD.ALREADY_IN_GROUP"
 
 
-class AlreadyInAnotherGroupOfGroupingException(GameWorldDomainException):
+class AlreadyInAnotherGroupOfGroupingException(WorldRefusal):
     error_code = "GAME_WORLD.ALREADY_IN_ANOTHER_GROUP_OF_GROUPING"
 
 
-class NotInGroupException(GameWorldDomainException):
+class NotInGroupException(WorldRefusal):
     error_code = "GAME_WORLD.NOT_IN_GROUP"
 
 

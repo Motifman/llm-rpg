@@ -6,6 +6,7 @@ from ai_rpg_world.eventing import EventHandler
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.exception.game_world_exception import CountBelowZeroException
 from ai_rpg_world.game_world.domain.value_object import FlagId
 from ai_rpg_world.game_world.domain.world_progress import WorldEnding
 from ai_rpg_world.game_world.domain.world_records import WorldFlagRaisedEvent, WorldFlags
@@ -32,6 +33,10 @@ def _wired(store: SqliteWorldStore) -> tuple[CommandScope, CommittedEventsDistri
 
 def _fail(session: WorldSession) -> None:
     raise RuntimeError("bug in a handler")
+
+
+def _break_counting(session: WorldSession) -> None:
+    raise CountBelowZeroException("a bug in counting")
 
 
 class TestHandlerRefusal:
@@ -66,6 +71,17 @@ class TestHandlerRefusal:
         distributor.register_handler(WorldFlagRaisedEvent, OnFlagRaised(scope, BELL, _fail))
 
         with pytest.raises(RuntimeError):
+            scope.run(raise_flag(BELL))
+
+        assert distributor.refused_handlers == {}
+
+    def test_handler_failing_with_unmarked_domain_exception_reaches_the_caller(self) -> None:
+        """世界の断りの印の無いドメイン例外 (CountBelowZeroException) を投げたハンドラは、断られたハンドラに数えず、例外を最初の run の呼び出し元に届ける。"""
+        store = store_holding(WorldFlags.start(WORLD))
+        scope, distributor = _wired(store)
+        distributor.register_handler(WorldFlagRaisedEvent, OnFlagRaised(scope, BELL, _break_counting))
+
+        with pytest.raises(CountBelowZeroException):
             scope.run(raise_flag(BELL))
 
         assert distributor.refused_handlers == {}

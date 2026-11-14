@@ -53,6 +53,7 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_except
     StateValueMismatchesKindException,
 )
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
+    NotEnoughCountException,
     NotEnoughItemsOfSpecException,
     NotEnoughStockException,
 )
@@ -165,10 +166,10 @@ class TestObjectValueEffects:
         assert _value(world, _OFFERINGS) == CountValue(Count(5))
 
     def test_subtract_from_object_count_below_zero_is_refused(self) -> None:
-        """供え物の数 2 から 3 を引こうとすると、ObjectState が CountBelowZeroException で断り、数は 2 のまま。"""
+        """供え物の数 2 から 3 を引こうとすると、ObjectState が NotEnoughCountException で断り、数は 2 のまま。"""
         world = _world()
 
-        with pytest.raises(CountBelowZeroException):
+        with pytest.raises(NotEnoughCountException):
             SubtractFromObjectCountEffect(_OFFERINGS, Count(3)).apply(world.facts(), world.aggregates(), _alice_acts())
 
         assert _value(world, _OFFERINGS) == CountValue(Count(2))

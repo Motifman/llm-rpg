@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
 from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
+from ai_rpg_world.game_world.domain.action.built_in_attempts import EnterSectionAttempt
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import Busy
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+from ai_rpg_world.game_world.domain.exception.game_world_exception import CountBelowZeroException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import OccupantNotInSectionException
 from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person.person_vitals_events import PersonBecameBusyEvent
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import FatigueAmount, WorldTick
+from ai_rpg_world.game_world.domain.value_object import FatigueAmount, Ticks, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, PersonBody
 from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent, PersonActedEvent
 from tests.game_world.application.action.world_for_action_tests import ALICE, BOB, CAGE, SHAFT, WorldForActions
@@ -99,3 +106,29 @@ class TestCarryOutActionRefused:
         assert reply.refusal.reason == WorldStateRefusal(RefusalCode(OccupantNotInSectionException.error_code))
         assert reply.refusal.text == TextAboutPeople(TextWithUnassignedPeople("うまくいかなかった。"), {})
         assert "alice" not in reply.refusal.text.template.template
+
+
+class _EntersCageThenBreaks:
+    def unmet_precondition(
+        self, attempt: EnterSectionAttempt, facts: WorldFacts
+    ) -> FailureReason | HiddenFailure | None:
+        return None
+
+    def change_world(self, attempt: EnterSectionAttempt, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        world.whereabouts().enter_section(PersonBody(attempt.actor), CAGE, frozenset())
+        raise CountBelowZeroException("a bug in counting people")
+
+
+class TestCarryOutActionBug:
+    """CarryOutAction が、世界の断りの印 (WorldRefusal) の無いドメイン例外を断りにせず、投げ直すことを保証する。"""
+
+    def test_unmarked_domain_exception_is_raised_and_leaves_nothing(self) -> None:
+        """区画に入れてから印の無い CountBelowZeroException を投げる行為は、断りの返事にならずに例外が届き、居場所は元のままで、失敗の記録も確定しない。"""
+        world = WorldForActions()
+        attempt = EnterSectionAttempt(ALICE, world.design.section_access(CAGE.section_id))
+
+        with pytest.raises(CountBelowZeroException):
+            world.carry_out(attempt, _EntersCageThenBreaks())
+
+        assert world.read().facts().whereabouts().is_in_section(PersonBody(ALICE), CAGE) is False
+        assert world.received.batches == []
