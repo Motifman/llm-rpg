@@ -183,7 +183,7 @@ class CharacterDeclaration:
     appearance: DescriptionText
     spawn_spot: SpotId
     initial_items: tuple[ItemSpecId, ...]    # 同じ品物を 2 回書けば 2 つ持つ
-    initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物。品物ごとに initial_items の数を超えられない
+    initial_held: tuple[ItemSpecId, ...]     # initial_items のうち、最初から手に持っている物。品物ごとに initial_items の数を超えられない。hands_needed の合計は人の手の数 (2) を超えられない
     initial_groups: tuple[GroupId, ...]      # 重ならない
     knows_at_start: tuple[PersonId, ...]     # 重ならない。自分を含んでもよい
     max_hp: HitPoints | UsesWorldDefault     # UsesWorldDefault なら WorldRules.person_max_hp で始まる (#2055)
