@@ -91,6 +91,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
 )
 from ai_rpg_world.game_world.domain.people import PeopleRegister, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person import (
+    Dead,
     Died,
     GroupMembership,
     PersonOutcomes,
@@ -467,6 +468,9 @@ def _with(aggregate: AggregateRoot[Any], call: Callable[[Any], None]) -> _Prepar
 
 _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "Whereabouts.place": lambda: _with(Whereabouts.start(_WORLD), lambda w: w.place(_ALICE_BODY, _PLAZA)),
+    "Whereabouts.place_departed": lambda: _with(
+        _whereabouts(), lambda w: w.place_departed(_ALICE, departed_persons_act=True)
+    ),
     "Whereabouts.remove": lambda: _with(_whereabouts(), lambda w: w.remove(_ALICE_BODY)),
     "Whereabouts.start_travel": lambda: _with(
         _whereabouts(), lambda w: w.start_travel(_ALICE_BODY, Route(start=_PLAZA.spot_id, passages=(_STREET,)))
@@ -553,6 +557,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "GroupDecision.cast": lambda: _with(_open_decision(), lambda d: d.cast(_ALICE, VoteFor(_BOB))),
     "GroupDecision.withdraw_voter": lambda: _with(_open_decision(), lambda d: d.withdraw_voter(_BOB)),
     "GroupDecision.withdraw_choice": lambda: _with(_open_decision(), lambda d: d.withdraw_choice(_BOB)),
+    "GroupDecision.withdraw_person": lambda: _with(
+        _open_decision(), lambda d: d.withdraw_person(_BOB, Dead(died_at=_NOW))
+    ),
     "GroupDecision.close": lambda: _with(_open_decision(), lambda d: d.close()),
     "Weather.change": lambda: _with(
         Weather.from_declaration(

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.application.person.decide_death_outcome import DecideDeathOutcome
 from ai_rpg_world.game_world.application.person.handlers.decide_death_outcome_handler import (
     DecideDeathOutcomeHandler,
 )
-from ai_rpg_world.game_world.application.person.decide_death_outcome import DecideDeathOutcome
 from ai_rpg_world.game_world.domain.person import Died, PersonDiedEvent, PersonOutcomes, Undecided
 from ai_rpg_world.game_world.domain.value_object import PersonId
 from tests.game_world.application.world_for_handler_tests import WORLD, WiredWorld, falls, falls_and_dies, healthy

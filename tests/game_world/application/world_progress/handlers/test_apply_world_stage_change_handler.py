@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.application.world_progress.apply_world_stage_change import ApplyWorldStageChange
 from ai_rpg_world.game_world.application.world_progress.handlers.apply_world_stage_change_handler import (
@@ -56,7 +58,7 @@ def _dawn_breaks(session: WorldSession) -> None:
     session.aggregates().world_stage().enter(DAWN, NOW)
 
 
-def _raised(flag: FlagDeclaration) -> object:
+def _raised(flag: FlagDeclaration) -> Callable[[WorldSession], bool]:
     return lambda session: session.facts().flags().is_raised(flag)
 
 

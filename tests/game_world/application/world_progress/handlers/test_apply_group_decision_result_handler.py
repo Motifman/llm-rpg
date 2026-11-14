@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.application.world_progress.apply_group_decision_result import (
     ApplyGroupDecisionReached,
@@ -85,11 +87,11 @@ def _world(*, when_decided: Effect, when_undecided: Effect) -> tuple[WiredWorld,
     return world, raised_by
 
 
-def _haru_votes_for(person: PersonId) -> object:
+def _haru_votes_for(person: PersonId) -> Callable[[WorldSession], None]:
     return lambda session: session.aggregates().group_decision(EXILE).cast(HARU, VoteFor(person))
 
 
-def _raised(flag: FlagDeclaration) -> object:
+def _raised(flag: FlagDeclaration) -> Callable[[WorldSession], bool]:
     return lambda session: session.facts().flags().is_raised(flag)
 
 

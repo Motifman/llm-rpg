@@ -16,4 +16,6 @@ class ApplyWorldStageChangeHandler(EventHandler[WorldStageChangedEvent]):
         self._apply_world_stage_change = apply_world_stage_change
 
     def handle(self, event: WorldStageChangedEvent) -> None:
-        self._apply_world_stage_change(ApplyWorldStageChangeCommand(before=event.before, after=event.after, at=event.at))
+        self._apply_world_stage_change(
+            ApplyWorldStageChangeCommand(before=event.before, after=event.after, at=event.at)
+        )
