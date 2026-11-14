@@ -2,7 +2,7 @@
 
 docs/environment_model/design/world_state.md の決まり:
 
-- 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (ScenarioProgress、MissedNotices) は出さない
+- 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (ScenarioProgress、MissedNotices) は見張らない。ScenarioProgress は発火の記録だけイベントを出す
 - 状態が変わらない操作は、断らず、イベントも出さない
 - 空腹と疲れは、段階が変わったときだけイベントにする
 

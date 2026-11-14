@@ -260,9 +260,13 @@ class Weather:                                    # 世界に 1 つ (天候を�
     def current(self) -> WeatherState: ...
 
 
-class ScenarioProgress:                           # 世界に 1 つ
-    def note_happening_fired(self, happening: HappeningDeclaration, now: WorldTick) -> None: ...
+class ScenarioProgress(AggregateRoot[HappeningFiredEvent | ReactionFiredEvent]):   # 世界に 1 つ
+    def note_happening_fired(self, happening: HappeningDeclaration, now: WorldTick, audience: frozenset[PersonId], refusal: RefusalCode | NoRefusal) -> None: ...
+        # HappeningFiredEvent を出す。断られた発火 (refusal が RefusalCode) は相手を空にして載せる
+    def note_reaction_fired(self, reaction: ReactionDeclaration, truth: bool, now: WorldTick, refusal: RefusalCode | NoRefusal) -> None: ...
+        # 新しい真偽を記録し、ReactionFiredEvent を出す
     def note_reaction_truth(self, reaction: ReactionDeclaration, truth: bool) -> None: ...
+        # 発火しなかった反応の真偽を記録する。イベントは出さない
 
     def may_fire(self, happening: HappeningDeclaration, now: WorldTick) -> bool: ...
         # once の出来事は一度起きたら偽。once でなくても、同じ tick にすでに起きていたら偽
@@ -366,7 +370,7 @@ PersonActedEvent, ActionAttemptFailedEvent
 - `ItemHeldEvent` / `ItemPutAwayEvent` / `ItemGivenUpEvent` は持ち主と品物を持つ。`PersonInventory` は持ち主の場所を知らないので、場所は受けるハンドラが `Whereabouts` で引く。`ItemGivenUpEvent` は、手に持っていたかも持つ (手放したあとでは引けないため)
 - 状態が変わらない操作 (同じ値への `set`、現れている物の `reveal`、手にある物の `hold` など) は、断らず、イベントも出さない。断ると `CommandScope` ごと巻き戻り、同じ効果を当て直す出来事や反応が全体を止めるため
 - 行為の記録 (`LatestActions` の `note` / `note_failed_attempt`) は、状態が変わらなくてもイベントを出す。行為が起きたこと、断られたことそのものを知らせるため (知覚は `PersonActedEvent` / `ActionAttemptFailedEvent` から刺激を作る)
-- 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は出さない。漏れはアーキテクチャのテストで見張る
+- 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は見張りの外に置く。`ScenarioProgress` は発火の記録だけイベントを出し (知らせと trace の出口、#2145)、発火しなかった反応の真偽の記録では出さない。漏れはアーキテクチャのテストで見張る
 - 空腹と疲れは、段階 (`HungerRule.levels` / `FatigueRule.levels`) が変わったときだけイベントにする
 - 場所に着いたこと (`OccupantEnteredSpotEvent`) は、来た場所 (`origin`) と着いた時刻 (`at`) を持つ。来た場所は最後に歩き切った区間の出発点。区間を歩き切る前に通路が閉じて引き返したときや移動をやめたときは、歩いていた区間の向こうの端になる。teleport では `Teleported`。arrival の文の `{origin}` を、確定したあとの世界から読まずに埋めるため (#2152)
 - 移動 (`Whereabouts.advance_travels`) は、着いたとき (`OccupantEnteredSpotEvent`) と止められたとき (`TravelBlockedEvent`) だけイベントにする。道の途中で残りの tick が減ること、途中の場所を通り過ぎることはイベントにしない。tick ごとに出すと、何も起きていない知らせがハンドラと観測に流れるため。見張りのテスト (`tests/architecture/test_world_aggregates_emit_events.py`) もこの例外を持つ
