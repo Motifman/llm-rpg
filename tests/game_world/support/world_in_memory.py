@@ -17,6 +17,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItems,
     Item,
+    ItemSerialCounter,
     ObjectState,
     PersonInventory,
     SpotSearchProgress,
@@ -198,6 +199,7 @@ def _aggregates_at_start(
         SpotAtmospheres.start(world, spots),
         PersonOutcomes.start(world, everyone),
         GroupMembership.start(world, {}),
+        ItemSerialCounter.start(world),
         *(() if isinstance(world_stage, NoWorldStages) else (world_stage,)),
         *(() if isinstance(weather, NoWeather) else (weather,)),
         *vitals,
