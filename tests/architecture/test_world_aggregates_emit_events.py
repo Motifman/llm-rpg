@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, atmosphere, door, path, section, spot
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.world_in_memory import FractionsInOrder
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.game_world.domain.action.action_attempt import UsesBody
@@ -72,10 +73,12 @@ from ai_rpg_world.game_world.domain.declaration.progress import (
     WorldStageDeclaration,
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    ChangesEvery,
     NoChange,
     NoDayNight,
     WeatherDeclaration,
     WeatherState,
+    WeatherTransitions,
     WeatherType,
 )
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
@@ -221,6 +224,12 @@ _BENCH = section("bench", "plaza")
 _LANTERN = ItemInstanceId("lantern#1")
 _ROPE = ItemInstanceId("rope#1")
 _NOW = WorldTick(0)
+_CHANGES_EVERY_TICK = WeatherDeclaration(
+    initial=WeatherType.CLEAR,
+    changes=ChangesEvery(Ticks(1), WeatherTransitions.default()),
+    announce_changes=True,
+    obscuring=frozenset(),
+)
 
 
 def _cleared(aggregate: AggregateRoot[Any]) -> None:
@@ -567,6 +576,10 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
             ),
         ),
         lambda w: w.change(WeatherState(WeatherType.RAIN)),
+    ),
+    "Weather.pass_time": lambda: _with(
+        Weather.from_declaration(_WORLD, _CHANGES_EVERY_TICK),
+        lambda w: w.pass_time(WorldTick(1), _CHANGES_EVERY_TICK, FractionsInOrder((0.8,))),
     ),
     "WorldClock.advance": lambda: _with(WorldClock.start(_WORLD), lambda c: c.advance(NoDayNight())),
     "WorldStage.enter": lambda: _with(

@@ -332,6 +332,35 @@ class TestItemRunOut:
         assert item.get_events() == []
 
 
+class TestItemHasRunOut:
+    """Item.has_run_out が、宣言の Lasts の時間が過ぎたかを品物自身の年齢で答えることを保証する。"""
+
+    def test_before_its_time_is_false(self) -> None:
+        """ticks: 16 の灯が世界に出て 15 tick のとき、偽を返す。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+
+        assert not item.has_run_out(WorldTick(25))
+
+    def test_at_its_time_is_true(self) -> None:
+        """ticks: 16 の灯が世界に出てちょうど 16 tick のとき、真を返す。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+
+        assert item.has_run_out(WorldTick(26))
+
+    def test_item_that_lasts_indefinitely_is_false(self) -> None:
+        """LastsIndefinitely の品物は、どれだけ時間が経っても偽を返す。"""
+        item = _came_into_world(_lantern(lasts=LastsIndefinitely()))
+
+        assert not item.has_run_out(WorldTick(1000))
+
+    def test_item_that_already_left_is_false(self) -> None:
+        """時間が過ぎていても、世界から外れた品物は偽を返す。もう一度手放させようとしないため。"""
+        item = _came_into_world(_lantern(lasts=_FLAME_LASTS))
+        item.leave_world()
+
+        assert not item.has_run_out(WorldTick(26))
+
+
 def _design_with(spec: ItemSpecDeclaration) -> WorldDesign:
     return compose_world(nouns(item_specs=(spec,)))
 
