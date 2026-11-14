@@ -108,13 +108,11 @@ def world_in_memory(
 def _with_everyone_declared(
     people: tuple[PersonId, ...], characters: tuple[CharacterDeclaration, ...], spots: tuple[SpotDeclaration, ...]
 ) -> tuple[tuple[SpotDeclaration, ...], tuple[CharacterDeclaration, ...]]:
-    declared = {character.person_id for character in characters}
-    undeclared = tuple(person for person in people if person not in declared)
-    if not undeclared:
-        return spots, characters
-    if not spots:
+    declared = {character.person_id: character for character in characters}
+    if any(person not in declared for person in people) and not spots:
         spots = (spot("somewhere"),)
-    return spots, characters + tuple(_character_at(person, spots[0]) for person in undeclared)
+    in_given_order = tuple(declared.get(person) or _character_at(person, spots[0]) for person in people)
+    return spots, in_given_order + tuple(character for character in characters if character.person_id not in people)
 
 
 def _character_at(person: PersonId, spawn: SpotDeclaration) -> CharacterDeclaration:

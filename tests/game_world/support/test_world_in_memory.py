@@ -498,6 +498,22 @@ class TestClockPeopleAndNouns:
         """alice と bob の世界の people は、渡した順の 2 人。"""
         assert _world().facts().people() == (_ALICE, _BOB)
 
+    def test_people_keep_the_given_order_when_some_are_declared_as_characters(self) -> None:
+        """people に bob、alice の順で渡し、alice だけを characters に宣言すると、people は bob、alice の順。"""
+        world = world_in_memory(
+            world=_WORLD, people=(_BOB, _ALICE), spots=(_SQUARE,), characters=(_character(_ALICE, "背の高い人"),)
+        )
+
+        assert world.facts().people() == (_BOB, _ALICE)
+
+    def test_characters_not_in_people_come_after_them(self) -> None:
+        """people に alice だけを渡し、characters に bob を宣言すると、people は alice、bob の順。"""
+        world = world_in_memory(
+            world=_WORLD, people=(_ALICE,), spots=(_SQUARE,), characters=(_character(_BOB, "赤い帽子の人"),)
+        )
+
+        assert world.facts().people() == (_ALICE, _BOB)
+
     def test_nouns_know_the_declared_spots(self) -> None:
         """広場と井戸端を宣言した世界の nouns は、広場の名前から広場の宣言を引ける。"""
         at = DesignLocation("test_world", "nouns", "spot")
