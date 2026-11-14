@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusal
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextAboutPeople
+from ai_rpg_world.game_world.domain.perception import Background, BodilyStimulus, Stimulus
+from ai_rpg_world.game_world.domain.value_object import ItemSpecId, SpotId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import NotAtSpot, Occupant
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -28,3 +36,18 @@ class ActionRefusal:
     attempt: ActionAttempt
     reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal
     text: TextAboutPeople
+
+    def stimuli_at(
+        self,
+        design: WorldDesign,
+        item_specs: Mapping[ItemInstanceId, ItemSpecId],
+        where: SpotId | NotAtSpot,
+        actor: Occupant,
+        at: WorldTick,
+    ) -> tuple[Stimulus, ...]:
+        # 本人には、コマンドへの返事とは別に、断られたことを記憶に残す。考え直す目安にはしない。
+        felt = BodilyStimulus(person=self.attempt.actor, text=self.text, salience=Background(), at=at)
+        # 共通の規則で断られたときは、周りから見て何も起きていない (use_cases.md)。
+        if not isinstance(self.reason, (PreconditionRefusal, WorldStateRefusal)):
+            return (felt,)
+        return (felt, *self.attempt.witnessed_in(design, item_specs).failure_stimuli_at(where, actor, at))

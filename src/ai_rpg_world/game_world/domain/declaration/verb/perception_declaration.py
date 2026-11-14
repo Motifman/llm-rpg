@@ -78,6 +78,35 @@ class PerceptionDeclaration:
             return (sight,)
         return (sight, self.sound.heard_at(where, people, names, source, self.salience, at))
 
+    def failure_seen_at(
+        self,
+        where: SpotId,
+        actor: Occupant,
+        names: Mapping[str, NameInText],
+        at: WorldTick,
+        *,
+        target: PersonId | NoTarget,
+        manner: Manner,
+    ) -> tuple[Stimulus, ...]:
+        if isinstance(self.on_failure, NoFailureWitness):
+            return ()
+        people = {"actor": actor.person} | ({"target": target} if isinstance(target, PersonId) else {})
+        # 失敗の文は見ていた人への文だけで、相手が見る文を持たない。相手にも見ていた人の文を届ける。
+        return (
+            SightStimulus(
+                where=where,
+                witness=self.on_failure.about_named(people, names),
+                target=NoTarget(),
+                seen_in_dark=self.seen_in_dark,
+                manner=manner,
+                actor_departed=actor.is_departed(),
+                involved=tuple(people.values()),
+                salience=self.salience,
+                always_delivered=False,
+                at=at,
+            ),
+        )
+
     def _sight_target(
         self,
         where: SpotId,

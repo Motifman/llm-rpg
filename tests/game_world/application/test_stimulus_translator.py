@@ -8,6 +8,7 @@ import pytest
 from ai_rpg_world.eventing import DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator, UntranslatedEventKindError
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
     GroundItemPickupAttempt,
@@ -18,6 +19,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     TravelAttempt,
     WaitAttempt,
 )
+from ai_rpg_world.game_world.domain.action.common_rule_refusal import Busy, CommonRuleRefusal
 from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     CarriedItemInteractionAttempt,
     ObjectInteractionAttempt,
@@ -25,11 +27,15 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     SomeoneInTheDark,
 )
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
+from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechContent, Whisper
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
+from ai_rpg_world.game_world.domain.condition.condition import HiddenFailure
+from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts
 from ai_rpg_world.game_world.domain.declaration.verb import (
     ItemInteractionDeclaration,
+    NoFailureWitness,
     NoticedOnWaking,
     ObjectInteractionDeclaration,
     PerceptionDeclaration,
@@ -46,7 +52,9 @@ from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import It
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import (
+    Background,
     BodilyStimulus,
+    NoTarget,
     NotNoticedLater,
     NotSeenInDim,
     NotSeenWithoutActor,
@@ -81,7 +89,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     Teleported,
 )
 from ai_rpg_world.game_world.domain.world_progress.world_clock import WorldTickAdvancedEvent
-from ai_rpg_world.game_world.domain.world_records import PersonActedEvent
+from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent, PersonActedEvent
 from tests.game_world.support.verb_declarations_for_tests import lever_pulled_quietly, pull_lever, seen_clearly_only
 from tests.game_world.support.world_design_for_tests import (
     access_to,
@@ -213,7 +221,7 @@ def _voice(clear: str) -> PerceptionDeclaration:
     )
 
 
-def _acts_design() -> WorldDesign:
+def _acts_design(failure_witness: bool = False) -> WorldDesign:
     perceptions = built_in_action_perceptions()
     tend = replace(
         _seen("{actor}が{target}を介抱している。"),
@@ -221,7 +229,10 @@ def _acts_design() -> WorldDesign:
     )
     by_kind = {
         **perceptions.by_kind,
-        ActionKind.PICK_UP: _seen("{actor}が{item}を拾った。"),
+        ActionKind.PICK_UP: replace(
+            _seen("{actor}が{item}を拾った。"),
+            on_failure=seen_clearly_only("{actor}が拾い損ねた。") if failure_witness else NoFailureWitness(),
+        ),
         ActionKind.TRAVEL: _seen("{actor}が{destination}へ去っていった。"),
         ActionKind.HAND_OVER: _seen("{actor}が{item}を{target}に渡した。", "{actor}があなたに{item}を渡した。"),
         ActionKind.TEND: tend,
@@ -443,3 +454,67 @@ class TestStimulusTranslatorDeclaredInteractions:
 
         with pytest.raises(PerceivedItemSpecNotGivenException):
             StimulusTranslator().stimuli_of(event, design)
+
+
+_REFUSED = TextWithUnassignedPeople("手がふさがっていて拾えない。").about({})
+
+
+def _failed(
+    reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal, at_spot: SpotId | NotAtSpot = SpotId("well")
+) -> ActionAttemptFailedEvent:
+    attempt = GroundItemPickupAttempt(_HAL, _PICKAXE, Openly())
+    return ActionAttemptFailedEvent(
+        **new_event_stamp(),
+        world_id=_WORLD,
+        refusal=ActionRefusal(attempt=attempt, reason=reason, text=_REFUSED),
+        at_spot=at_spot,
+        actor_as=PersonBody(_HAL),
+        item_specs=_SPECS,
+        at=_NOW,
+    )
+
+
+_WORLD_REFUSED = WorldStateRefusal(RefusalCode("PERSON_INVENTORY.HANDS_FULL"))
+
+
+class TestStimulusTranslatorFailedActs:
+    """StimulusTranslator が、断られた行為を、本人には断られた理由の体の刺激に、見ていた人には作者が書いたときだけ失敗の文の刺激にすることを保証する。"""
+
+    def test_refusal_by_a_common_rule_is_felt_only_by_the_actor(self) -> None:
+        """行っている最中 (Busy) で断られた拾う行為は、失敗の文を宣言していても、ハル本人の体の刺激だけになる。"""
+        [felt] = StimulusTranslator().stimuli_of(_failed(Busy()), _acts_design(failure_witness=True))
+
+        assert felt == BodilyStimulus(person=_HAL, text=_REFUSED, salience=Background(), at=_NOW)
+
+    def test_refusal_while_changing_the_world_is_seen_when_the_author_wrote_it(self) -> None:
+        """世界を変える途中で断られ、作者が失敗の文を書いていれば、本人の体の刺激に続いて「{actor}が拾い損ねた。」の見える刺激ができる。"""
+        felt, seen = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design(failure_witness=True))
+
+        assert isinstance(felt, BodilyStimulus) and isinstance(seen, SightStimulus)
+        assert (seen.where, seen.witness.clear.template.template, seen.target) == (
+            SpotId("well"),
+            "{actor}が拾い損ねた。",
+            NoTarget(),
+        )
+
+    def test_refusal_by_the_precondition_is_seen_when_the_author_wrote_it(self) -> None:
+        """行為ごとの前提で断られ、作者が失敗の文を書いていれば、見える刺激ができる。"""
+        reason = PreconditionRefusal(HiddenFailure(ConditionPath.root()))
+
+        stimuli = StimulusTranslator().stimuli_of(_failed(reason), _acts_design(failure_witness=True))
+
+        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus, SightStimulus]
+
+    def test_refusal_without_a_failure_text_is_felt_only_by_the_actor(self) -> None:
+        """作者が失敗の文を書いていなければ、世界を変える途中で断られても、本人の体の刺激だけになる。"""
+        stimuli = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design())
+
+        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus]
+
+    def test_refusal_at_no_spot_is_felt_only_by_the_actor(self) -> None:
+        """どの場所にもいない人が断られたときは、失敗の文があっても、本人の体の刺激だけになる。"""
+        event = _failed(_WORLD_REFUSED, at_spot=NotAtSpot())
+
+        stimuli = StimulusTranslator().stimuli_of(event, _acts_design(failure_witness=True))
+
+        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus]
