@@ -33,7 +33,7 @@ def _pass_one_tick(session: WorldSession) -> None:
     clock = session.clock()
     clock.advance(facts.day_night())
     now = clock.now()
-    world.whereabouts().advance_travels(facts.passages().closed_passages())
+    world.whereabouts().advance_travels(facts.passages().closed_passages(), now)
     rules = facts.rules()
     for person in facts.people():
         world.vitals(person).pass_time(now, rules.death, rules.hunger)

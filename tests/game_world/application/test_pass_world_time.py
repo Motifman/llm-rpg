@@ -43,7 +43,15 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldId,
     WorldTick,
 )
-from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Location, OpenArea, PersonBody, Route, TravelBlockedEvent
+from ai_rpg_world.game_world.domain.whereabouts import (
+    AtSpot,
+    Location,
+    OccupantEnteredSpotEvent,
+    OpenArea,
+    PersonBody,
+    Route,
+    TravelBlockedEvent,
+)
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.domain.whereabouts._builders import CLOSED, door
 from tests.game_world.support.world_design_for_tests import (
@@ -174,6 +182,19 @@ class TestPassWorldTimeTravels:
         world.pass_ticks(2)
 
         assert _haru_location(world) == AtSpot(_MINE, OpenArea())
+
+    def test_arrival_is_stamped_with_the_tick_after_the_clock_advanced(self) -> None:
+        """1 tick の通路を歩き出した人が 1 回目で着くと、OccupantEnteredSpotEvent の at は時計を進めた後の 1 になる。"""
+        road = passage("road", ("plaza", "mine"), travel_ticks=1)
+        world = _World(characters=(character("haru", "plaza"),), passages=(road,))
+        world.scope.run(
+            lambda session: session.aggregates().whereabouts().start_travel(PersonBody(_HARU), Route(_PLAZA, (road,)))
+        )
+
+        world.pass_ticks(1)
+
+        entered = world.events_of(OccupantEnteredSpotEvent)
+        assert [(event.spot, event.at) for event in entered] == [(_MINE, WorldTick(1))]
 
     def test_traveller_on_a_closed_passage_is_stopped_where_they_departed(self) -> None:
         """歩いている途中で通路が閉じると、時間を進めたときに出発した場所へ戻され、TravelBlockedEvent が出る。"""
