@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ChoiceName,
     ChoiceStateKind,
@@ -33,30 +32,15 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_except
     StateValueMismatchesKindException,
 )
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import ItemDoesNotRunOutException
-from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.perception import (
-    Background,
-    BodilyStimulus,
-    Notable,
-    NoTarget,
-    NotNoticedLater,
-    NotSeenInDim,
-    NotSeenWithoutActor,
-    SightStimulus,
-    SightTexts,
-)
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     DescriptionText,
     DisplayName,
     HandsNeeded,
     ItemSpecId,
-    PersonId,
-    SpotId,
     StateKeyId,
     Ticks,
-    WorldTick,
 )
 
 _LANTERN = ItemSpecId("lantern")
@@ -207,45 +191,22 @@ class TestLasts:
         assert (lasts.ticks, lasts.ended_text) == (Ticks(1), DescriptionText("灯が燃え尽きた。"))
 
 
-class TestLastsRanOutStimulus:
-    """Lasts と LastsIndefinitely が、品物の時間が切れたことを、品物があった場所に合った刺激にすることを保証する。"""
+class TestLastsEndedNotice:
+    """Lasts と LastsIndefinitely が、品物の時間が切れたときの文を、宣言の ended_text から答えることを保証する。"""
 
-    def test_item_carried_by_someone_becomes_a_bodily_stimulus_to_them(self) -> None:
-        """ハルが持っていたカンテラの時間が切れると、ハル本人の体の刺激になり、文は ended_text、目立つ刺激になる。"""
+    def test_ended_text_becomes_a_text_about_nobody(self) -> None:
+        """ended_text「カンテラの灯が燃え尽きた。」は、人を当てない同じ文になる。"""
         lasts = Lasts(ticks=Ticks(3), ended_text=DescriptionText("カンテラの灯が燃え尽きた。"))
 
-        stimulus = lasts.ran_out_stimulus(CarriedBy(PersonId("hal")), WorldTick(7))
+        assert lasts.ended_notice() == TextWithUnassignedPeople("カンテラの灯が燃え尽きた。").about({})
 
-        assert stimulus == BodilyStimulus(
-            person=PersonId("hal"),
-            text=TextWithUnassignedPeople("カンテラの灯が燃え尽きた。").about({}),
-            salience=Notable(),
-            at=WorldTick(7),
-        )
+    def test_braces_in_ended_text_stay_letters(self) -> None:
+        """ended_text に波括弧が入っていても、プレースホルダーとして読まずに文字のまま残す。"""
+        lasts = Lasts(ticks=Ticks(3), ended_text=DescriptionText("{灯}が消えた。"))
 
-    def test_item_lying_at_a_spot_becomes_a_sight_stimulus_there(self) -> None:
-        """広場の地面にあったたいまつの時間が切れると、広場の見える刺激になる。暗いときの文は無く、目立たない刺激になる。"""
-        lasts = Lasts(ticks=Ticks(3), ended_text=DescriptionText("たいまつの火が消えた。"))
+        assert lasts.ended_notice().template.placeholders() == frozenset()
 
-        stimulus = lasts.ran_out_stimulus(LyingAt(SpotId("plaza")), WorldTick(7))
-
-        text = TextWithUnassignedPeople("たいまつの火が消えた。").about({})
-        assert stimulus == SightStimulus(
-            where=SpotId("plaza"),
-            witness=SightTexts(
-                clear=text, dim=NotSeenInDim(), unseen_actor=NotSeenWithoutActor(), noticed_later=NotNoticedLater()
-            ),
-            target=NoTarget(),
-            seen_in_dark=False,
-            manner=Openly(),
-            actor_departed=False,
-            involved=(),
-            salience=Background(),
-            always_delivered=False,
-            at=WorldTick(7),
-        )
-
-    def test_item_lasting_indefinitely_refuses_to_run_out(self) -> None:
-        """いつまでも消えない品物の時間切れの刺激を作ろうとすると ItemDoesNotRunOutException を投げる。"""
+    def test_item_lasting_indefinitely_has_no_ended_notice(self) -> None:
+        """いつまでも消えない品物に時間切れの文を尋ねると ItemDoesNotRunOutException を投げる。"""
         with pytest.raises(ItemDoesNotRunOutException):
-            LastsIndefinitely().ran_out_stimulus(CarriedBy(PersonId("hal")), WorldTick(7))
+            LastsIndefinitely().ended_notice()
