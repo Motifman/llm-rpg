@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from typing_extensions import assert_never
 
@@ -20,9 +20,14 @@ from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import 
     TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
-from ai_rpg_world.game_world.domain.perception import NoTarget
+from ai_rpg_world.game_world.domain.perception import NoTarget, Stimulus
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
+from ai_rpg_world.game_world.domain.value_object import SpotId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import Occupant, Teleported
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -81,6 +86,13 @@ class BuiltInActionPerceptions:
         if isinstance(reach, Shout):
             return self.shout
         assert_never(reach)
+
+    def arrival_seen_at(
+        self, where: SpotId, arriving: Occupant, origin: SpotId | Teleported, nouns: DeclaredNouns, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
+        if isinstance(origin, Teleported):
+            return ()
+        return self.arrival.seen_at(where, arriving, {"origin": nouns.spot_of(origin).name}, at)
 
     def flaws_for(self, rules: WorldRules, at: DesignLocation) -> list[DesignFlaw]:
         performable = BuiltInPerceptionRow.kinds()

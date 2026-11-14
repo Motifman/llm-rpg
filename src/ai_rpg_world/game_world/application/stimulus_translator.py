@@ -55,7 +55,6 @@ from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     StatusEffectAddedEvent,
     StatusEffectExpiredEvent,
 )
-from ai_rpg_world.game_world.domain.whereabouts import Teleported
 from ai_rpg_world.game_world.domain.whereabouts.passage_state_events import (
     PassageRemovedEvent,
     PassageRevealedEvent,
@@ -112,11 +111,8 @@ class UntranslatedEventKindError(LookupError):
 
 
 def _arrival(event: OccupantEnteredSpotEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
-    if isinstance(event.origin, Teleported):
-        return ()
-    origin = design.nouns.spot_of(event.origin)
-    return design.built_in_action_perceptions.arrival.seen_at(
-        event.spot, event.occupant, {"origin": origin.name}, event.at
+    return design.built_in_action_perceptions.arrival_seen_at(
+        event.spot, event.occupant, event.origin, design.nouns, event.at
     )
 
 
@@ -130,7 +126,6 @@ _TRANSLATIONS: dict[type[DomainEvent], Callable[[Any, WorldDesign], tuple[Stimul
     ItemRanOutEvent: _ran_out,
 }
 
-# 刺激を作らない種類。変換をまだ書いていない種類もここに置き、書いたら _TRANSLATIONS へ移す。
 NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
     {
         ActionAttemptFailedEvent,

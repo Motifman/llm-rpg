@@ -22,7 +22,7 @@ class ItemRanOutNotice:
     at: WorldTick
 
     def when_carried(self, person: PersonId) -> BodilyStimulus | SightStimulus:
-        # 持っていた本人には、灯が消えるなど身の回りが変わることなので、考え直す目安にする。
+        # 持っていた本人には身の回りが変わることなので、考え直す目安にする。
         return BodilyStimulus(person=person, text=self.text, salience=Notable(), at=self.at)
 
     def when_lying(self, spot: SpotId) -> BodilyStimulus | SightStimulus:
