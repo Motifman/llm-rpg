@@ -60,7 +60,6 @@ _BOB = PersonId("bob")
 _SQUARE = spot("square")
 _HALL = spot("hall")
 _CELLAR = spot("cellar")
-_NO_WEATHER = NoWeather()
 
 _WICK = ItemStateKeyDeclaration(
     item_spec_id=ItemSpecId("lantern"),
@@ -127,7 +126,7 @@ class TestLightingAt:
         dusky_indoors = _lit_as(Lighting.DUSKY)
         world = world_in_memory(world=_WORLD, spots=(dusky_indoors,), day_night=_NIGHT_FROM_THE_START)
 
-        lighting = WorldPerceptionSenses(world.facts(), _NO_WEATHER).lighting_at(dusky_indoors.spot_id)
+        lighting = WorldPerceptionSenses(world.facts()).lighting_at(dusky_indoors.spot_id)
 
         assert lighting is Lighting.DUSKY
 
@@ -136,21 +135,21 @@ class TestLightingAt:
         bright_outdoors = _lit_as(Lighting.BRIGHT, outdoor=True)
         world = world_in_memory(world=_WORLD, spots=(bright_outdoors,), day_night=_NIGHT_FROM_THE_START)
 
-        lighting = WorldPerceptionSenses(world.facts(), _NO_WEATHER).lighting_at(bright_outdoors.spot_id)
+        lighting = WorldPerceptionSenses(world.facts()).lighting_at(bright_outdoors.spot_id)
 
         assert lighting is Lighting.DUSKY
 
     def test_outdoor_spot_is_one_step_darker_in_obscuring_weather(self) -> None:
         """屋外の明るい場所は、霧を見通しの悪い天候と宣言した世界で霧のとき、1 段暗い薄暗さになる。"""
         bright_outdoors = _lit_as(Lighting.BRIGHT, outdoor=True)
-        fog = WeatherDeclaration(
-            initial=WeatherType.FOG, changes=NoChange(), announce_changes=False, obscuring=frozenset({WeatherType.FOG})
-        )
         world = world_in_memory(
-            world=_WORLD, spots=(bright_outdoors,), weather=Weather(_WORLD, WeatherState(WeatherType.FOG))
+            world=_WORLD,
+            spots=(bright_outdoors,),
+            weather=Weather(_WORLD, WeatherState(WeatherType.FOG)),
+            obscuring=frozenset({WeatherType.FOG}),
         )
 
-        lighting = WorldPerceptionSenses(world.facts(), fog).lighting_at(bright_outdoors.spot_id)
+        lighting = WorldPerceptionSenses(world.facts()).lighting_at(bright_outdoors.spot_id)
 
         assert lighting is Lighting.DUSKY
 
@@ -158,7 +157,7 @@ class TestLightingAt:
         """真っ暗な場所でも、そこにいる人が灯ったカンテラを手に持っていれば薄暗くなる。"""
         world = _with_lantern("hand")
 
-        lighting = WorldPerceptionSenses(world.facts(), _NO_WEATHER).lighting_at(_SQUARE.spot_id)
+        lighting = WorldPerceptionSenses(world.facts()).lighting_at(_SQUARE.spot_id)
 
         assert lighting is Lighting.DUSKY
 
@@ -166,7 +165,7 @@ class TestLightingAt:
         """灯ったカンテラでも、荷の中にあれば照らさず、真っ暗なまま。"""
         world = _with_lantern("pack")
 
-        lighting = WorldPerceptionSenses(world.facts(), _NO_WEATHER).lighting_at(_SQUARE.spot_id)
+        lighting = WorldPerceptionSenses(world.facts()).lighting_at(_SQUARE.spot_id)
 
         assert lighting is Lighting.PITCH_DARK
 
@@ -177,7 +176,7 @@ class TestLightingAt:
         world.aggregates().whereabouts().place(PersonBody(_ALICE), _CELLAR)
         world.aggregates().whereabouts().place(DepartedPerson(_ALICE), _lit_as(Lighting.PITCH_DARK))
 
-        lighting = WorldPerceptionSenses(world.facts(), _NO_WEATHER).lighting_at(_SQUARE.spot_id)
+        lighting = WorldPerceptionSenses(world.facts()).lighting_at(_SQUARE.spot_id)
 
         assert lighting is Lighting.PITCH_DARK
 
@@ -189,7 +188,7 @@ class TestReachOf:
         """広場のとても大きい音 (90) は、開いた道の先の広間に、通路 1 本ぶん (15) 弱まって 75 で届く。"""
         world = world_in_memory(world=_WORLD, spots=(_SQUARE, _HALL), passages=(path("square_hall", "square", "hall"),))
 
-        reach = WorldPerceptionSenses(world.facts(), _NO_WEATHER).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
+        reach = WorldPerceptionSenses(world.facts()).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
 
         assert reach.level_at(_HALL.spot_id) == SoundLevel(75)
 
@@ -197,7 +196,7 @@ class TestReachOf:
         """閉じた扉 (減衰 20) の先の広間には、とても大きい音が 90 - 15 - 20 = 55 で届く。"""
         world = world_in_memory(world=_WORLD, spots=(_SQUARE, _HALL), passages=(door("hall_door", "square", "hall"),))
 
-        reach = WorldPerceptionSenses(world.facts(), _NO_WEATHER).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
+        reach = WorldPerceptionSenses(world.facts()).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
 
         assert reach.level_at(_HALL.spot_id) == SoundLevel(55)
 
@@ -207,7 +206,7 @@ class TestReachOf:
         world = world_in_memory(world=_WORLD, spots=(_SQUARE, _HALL), passages=(tunnel,))
         world.aggregates().passages().remove(tunnel)
 
-        reach = WorldPerceptionSenses(world.facts(), _NO_WEATHER).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
+        reach = WorldPerceptionSenses(world.facts()).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
 
         assert reach.level_at(_HALL.spot_id) == NotReached()
 
@@ -216,7 +215,7 @@ class TestReachOf:
         secret = path("square_hall", "square", "hall", hidden_until_revealed=True)
         world = world_in_memory(world=_WORLD, spots=(_SQUARE, _HALL), passages=(secret,))
 
-        reach = WorldPerceptionSenses(world.facts(), _NO_WEATHER).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
+        reach = WorldPerceptionSenses(world.facts()).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
 
         assert reach.level_at(_HALL.spot_id) == NotReached()
 
@@ -229,7 +228,7 @@ class TestViewFor:
         alice = replace(character("alice", "square"), knows_at_start=(_BOB,))
         world = world_in_memory(world=_WORLD, spots=(_SQUARE,), characters=(alice, character("bob", "square")))
         world.people_register().name(_BOB, DisplayName("ボブ"))
-        senses = WorldPerceptionSenses(world.facts(), _NO_WEATHER)
+        senses = WorldPerceptionSenses(world.facts())
 
         assert senses.view_for(_ALICE).ref_of(_BOB).visible_name == DisplayName("ボブ")
         assert senses.view_for(_BOB).ref_of(_ALICE).visible_name == NoVisibleName()

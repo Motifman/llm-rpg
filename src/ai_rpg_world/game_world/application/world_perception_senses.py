@@ -5,7 +5,6 @@ from typing import final
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoWeather, WeatherDeclaration
 from ai_rpg_world.game_world.domain.lighting import Lighting, LightingConditions
 from ai_rpg_world.game_world.domain.people import PeopleSeenBy
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
@@ -18,9 +17,8 @@ from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
 @final
 class WorldPerceptionSenses:
-    def __init__(self, facts: WorldFacts, weather: WeatherDeclaration | NoWeather) -> None:
+    def __init__(self, facts: WorldFacts) -> None:
         self._facts = facts
-        self._weather = weather
         self._lighting: dict[SpotId, Lighting] = {}
         self._reach: dict[tuple[SpotId, Loudness], SoundReach] = {}
 
@@ -62,10 +60,13 @@ class WorldPerceptionSenses:
             declared=atmosphere.lighting,
             outdoor=atmosphere.outdoor,
             dark_time_of_day=self._is_dark_time_of_day(),
-            weather_obscures=self._weather.is_declared()
-            and self._weather.obscures_sight(self._facts.weather().current()),
+            weather_obscures=self._weather_obscures_sight(),
             light_source_present=self._light_source_held_at(spot),
         )
+
+    def _weather_obscures_sight(self) -> bool:
+        weather = self._facts.weather_declaration()
+        return weather.is_declared() and weather.obscures_sight(self._facts.weather().current())
 
     def _is_dark_time_of_day(self) -> bool:
         day_night = self._facts.day_night()
