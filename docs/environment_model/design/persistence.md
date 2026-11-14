@@ -40,11 +40,13 @@ CREATE TABLE world_state (                 -- 集約と帳簿。1 つを 1 行
 class PersonVitals(AggregateRoot[PersonVitalsEvent]):
     def memento(self) -> PersonVitalsMemento: ...            # 問い合わせ。値の変わらない形 (frozen dataclass) で状態を返す
     @classmethod
-    def from_memento(cls, memento: PersonVitalsMemento, design: WorldDesign) -> "PersonVitals": ...
-        # 宣言は memento に ID で持ち、作り直すときに design から引く (Item の spec、PassageStates の通路など)
+    def from_memento(cls, memento: PersonVitalsMemento, nouns: DeclaredNouns) -> "PersonVitals": ...
+        # 宣言は memento に ID で持ち、作り直すときに nouns で確かめる (Item の spec、PassageStates の通路など)
 ```
 
 - memento の中身は、値オブジェクトと、それをまとめた値の変わらない形だけ。宣言そのものは入れず、ID で持つ
+- `from_memento` は、中で読む設計の部分だけを受け取る。設計を読まない集約 (`WorldClock`、`WorldFlags` など) は memento だけ、宣言を確かめる集約は `DeclaredNouns`、`SpotSearchProgress` はその場所で見つけられるものを受け取る (#2119)
+- memento と JSON のあいだの変換は `game_world/infrastructure/persistence/` の `AggregateCodecs` が受け持ち、集約の種類 (`kind`) ごとに変換と形の版を登録する。memento から集約を作り直すのは作業単位の役目
 - `from_memento` はイベントを出さない。作り直すことは、世界で何かが起きたことではない
 - 帳簿 (`ScenarioProgress`、`MissedNotices`、`SoundsThisTick`、`MonsterSpawnRecords`) も同じ形で持つ
 
