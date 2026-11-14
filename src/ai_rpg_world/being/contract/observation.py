@@ -23,6 +23,7 @@ from ai_rpg_world.being.contract.errors import (
     require_bool,
     require_text,
 )
+from ai_rpg_world.being.contract.text_with_people import TextWithPeople
 
 
 class Unknown(Enum):
@@ -147,7 +148,7 @@ class Observation:
     ないので、届けない側へ倒す。
     """
 
-    body: str
+    body: str | TextWithPeople
     route: Route
     time: ObservedTime
     subject_is_self: bool
@@ -163,7 +164,8 @@ class Observation:
     order: OccurrenceOrder | None = None
 
     def __post_init__(self) -> None:
-        require_text(self.body, "body")
+        if not isinstance(self.body, TextWithPeople):
+            require_text(self.body, "body")
         if not isinstance(self.route, _ROUTE_TYPES):
             raise ContractViolation("route must be one of the five routes")
         if not isinstance(self.time, ObservedTime):
@@ -189,6 +191,13 @@ class Observation:
                 raise ContractViolation("withheld_if_subject_unknown needs a subject other than self")
             if self.body_if_subject_unknown is not None:
                 raise ContractViolation("withheld_if_subject_unknown and body_if_subject_unknown are exclusive")
+
+    def body_without_people(self) -> str:
+        if isinstance(self.body, TextWithPeople):
+            raise ContractViolation(
+                "a body with people placeholders cannot be read as text before the people are filled in"
+            )
+        return self.body
 
     def unknown_fields(self) -> tuple[str, ...]:
         return tuple(name for name in KNOWN_IF_POSSIBLE_FIELDS if getattr(self, name) is UNKNOWN)

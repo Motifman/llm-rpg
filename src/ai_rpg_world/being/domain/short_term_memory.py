@@ -14,6 +14,7 @@ from typing import Any, Final, Protocol, TypeVar
 
 from ai_rpg_world.being.contract import (
     AgentMove,
+    ContractViolation,
     Observation,
     ObservedTime,
     OccurrenceOrder,
@@ -48,6 +49,13 @@ def _require_turn(value: object, field_name: str) -> int:
 def _require_text(value: object, field_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ShortTermMemoryValidationException(f"{field_name} must be non-blank str")
+
+
+def _require_body_without_people(observation: Observation) -> None:
+    try:
+        observation.body_without_people()
+    except ContractViolation as violation:
+        raise ShortTermMemoryValidationException(str(violation)) from violation
 
 
 def _require_order(value: object) -> None:
@@ -95,6 +103,7 @@ class Perception(Experience):
             raise ShortTermMemoryValidationException("observation must be Observation")
         if isinstance(self.observation.route, OwnActionResult):
             raise ShortTermMemoryValidationException("an own action result belongs to an attempt")
+        _require_body_without_people(self.observation)
 
     @property
     def order(self) -> OccurrenceOrder | None:
@@ -132,6 +141,7 @@ class ObservedOutcome(Outcome):
     def __post_init__(self) -> None:
         if not isinstance(self.observation, Observation) or not isinstance(self.observation.route, OwnActionResult):
             raise ShortTermMemoryValidationException("an observed outcome must be an own action result")
+        _require_body_without_people(self.observation)
 
     @property
     def order(self) -> OccurrenceOrder | None:
