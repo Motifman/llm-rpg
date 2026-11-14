@@ -139,7 +139,7 @@ class TestPersonOutcomesMemento:
         outcomes.decide(_ALICE, Died())
         outcomes.decide(_BOB, _ESCAPED)
 
-        rebuilt = rebuilt_from_memento(outcomes, _DESIGN)
+        rebuilt = rebuilt_from_memento(outcomes, _DESIGN.nouns)
 
         assert rebuilt.memento() == outcomes.memento()
         assert rebuilt.memento() != _outcomes().memento()
@@ -152,13 +152,13 @@ class TestPersonOutcomesMemento:
         """carol・alice・bob の順で始めた結末を作り直すと、undecided_people もその順で返る。"""
         outcomes = PersonOutcomes.start(_WORLD, (_CAROL, _ALICE, _BOB))
 
-        assert rebuilt_from_memento(outcomes, _DESIGN).undecided_people() == (_CAROL, _ALICE, _BOB)
+        assert rebuilt_from_memento(outcomes, _DESIGN.nouns).undecided_people() == (_CAROL, _ALICE, _BOB)
 
     def test_rebuilt_outcomes_still_refuse_deciding_twice(self) -> None:
         """alice が死んだあと作り直してから alice の結末を決めると、OutcomeAlreadyDecidedException を投げる。"""
         outcomes = _outcomes()
         outcomes.decide(_ALICE, Died())
-        rebuilt = rebuilt_from_memento(outcomes, _DESIGN)
+        rebuilt = rebuilt_from_memento(outcomes, _DESIGN.nouns)
 
         with pytest.raises(OutcomeAlreadyDecidedException):
             rebuilt.decide(_ALICE, _ESCAPED)
@@ -168,7 +168,7 @@ class TestPersonOutcomesMemento:
         outcomes = _outcomes()
         outcomes.decide(_ALICE, Died())
 
-        assert rebuilt_from_memento(outcomes, _DESIGN).get_events() == []
+        assert rebuilt_from_memento(outcomes, _DESIGN.nouns).get_events() == []
 
 
 class TestPersonOutcomesMementoRefusals:
@@ -186,14 +186,14 @@ class TestPersonOutcomesMementoRefusals:
         )
 
         with pytest.raises(UndeclaredNounException):
-            PersonOutcomes.from_memento(memento, _DESIGN)
+            PersonOutcomes.from_memento(memento, _DESIGN.nouns)
 
     def test_person_not_declared_is_refused(self) -> None:
         """宣言に無い dave を未決で持つ memento から作り直すと、UndeclaredNounException を投げる。"""
         memento = PersonOutcomesMemento(world_id=_WORLD, outcomes=(OutcomeOfPerson(PersonId("dave"), Undecided()),))
 
         with pytest.raises(UndeclaredNounException):
-            PersonOutcomes.from_memento(memento, _DESIGN)
+            PersonOutcomes.from_memento(memento, _DESIGN.nouns)
 
     def test_declared_person_missing_is_refused(self) -> None:
         """宣言にいる carol の行が無く、alice と bob だけが未決の memento から作り直すと、MementoDoesNotMatchDesignException を投げる。"""
@@ -202,7 +202,7 @@ class TestPersonOutcomesMementoRefusals:
         )
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            PersonOutcomes.from_memento(memento, _DESIGN)
+            PersonOutcomes.from_memento(memento, _DESIGN.nouns)
 
     def test_same_person_twice_is_refused(self) -> None:
         """alice が死んだと未決の 2 つある memento から作り直すと、PersonListedTwiceException を投げる。"""
@@ -217,4 +217,4 @@ class TestPersonOutcomesMementoRefusals:
         )
 
         with pytest.raises(PersonListedTwiceException):
-            PersonOutcomes.from_memento(memento, _DESIGN)
+            PersonOutcomes.from_memento(memento, _DESIGN.nouns)

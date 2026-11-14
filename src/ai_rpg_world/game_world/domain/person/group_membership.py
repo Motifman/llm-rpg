@@ -21,7 +21,7 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
 from ai_rpg_world.game_world.domain.value_object import GroupId, GroupingId, PersonId, WorldId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -83,8 +83,7 @@ class GroupMembership(AggregateRoot[GroupMembershipEvent]):
         return cls(world, initial)
 
     @classmethod
-    def from_memento(cls, memento: GroupMembershipMemento, design: WorldDesign) -> GroupMembership:
-        nouns = design.nouns
+    def from_memento(cls, memento: GroupMembershipMemento, nouns: DeclaredNouns) -> GroupMembership:
         groups: dict[PersonId, tuple[GroupDeclaration, ...]] = {}
         for entry in memento.groups:
             nouns.require_declared_character(entry.person)

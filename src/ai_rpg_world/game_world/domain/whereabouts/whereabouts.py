@@ -43,7 +43,7 @@ from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
 )
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -77,8 +77,8 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
         return cls(world_id, {})
 
     @classmethod
-    def from_memento(cls, memento: WhereaboutsMemento, design: WorldDesign) -> Whereabouts:
-        return cls(memento.world_id, {entry.occupant: _resumed(entry.location, design) for entry in memento.locations})
+    def from_memento(cls, memento: WhereaboutsMemento, nouns: DeclaredNouns) -> Whereabouts:
+        return cls(memento.world_id, {entry.occupant: _resumed(entry.location, nouns) for entry in memento.locations})
 
     @property
     def world_id(self) -> WorldId:
@@ -277,15 +277,15 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
         return location.spot if isinstance(location, AtSpot) else None
 
 
-def _resumed(location: AtSpot | TravelPosition, design: WorldDesign) -> Location:
+def _resumed(location: AtSpot | TravelPosition, nouns: DeclaredNouns) -> Location:
     if isinstance(location, AtSpot):
-        design.nouns.require_declared_spot(location.spot)
+        nouns.require_declared_spot(location.spot)
         if not isinstance(location.section, OpenArea):
-            section = design.nouns.section_of(location.section)
+            section = nouns.section_of(location.section)
             if section.spot_id != location.spot:
                 raise OccupantNotAtSectionSpotException(
                     f"{location.section.value} is in {section.spot_id.value!r}, not {location.spot.value!r}"
                 )
         return location
-    design.nouns.require_declared_spot(location.departed_from)
-    return location.resumed_on(tuple(design.nouns.passage_of(passage) for passage in location.route_passages))
+    nouns.require_declared_spot(location.departed_from)
+    return location.resumed_on(tuple(nouns.passage_of(passage) for passage in location.route_passages))

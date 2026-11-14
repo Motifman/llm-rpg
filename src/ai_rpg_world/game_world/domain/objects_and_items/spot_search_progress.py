@@ -17,7 +17,6 @@ from ai_rpg_world.game_world.domain.value_object.discoverable_id import Discover
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -100,12 +99,14 @@ class SpotSearchProgress(AggregateRoot[SpotSearchProgressEvent]):
         return cls(spot_id, search_counts=frozenset(), finders=frozenset(), discoverables_here=())
 
     @classmethod
-    def from_memento(cls, memento: SpotSearchProgressMemento, design: WorldDesign) -> SpotSearchProgress:
+    def from_memento(
+        cls, memento: SpotSearchProgressMemento, discoverables_here: tuple[DiscoverableDeclaration, ...]
+    ) -> SpotSearchProgress:
         return cls(
             memento.spot_id,
             search_counts=memento.search_counts,
             finders=memento.finders,
-            discoverables_here=design.discoverables_at(memento.spot_id),
+            discoverables_here=discoverables_here,
         )
 
     @property

@@ -6,12 +6,14 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
     NextWeatherOdds,
     NoChange,
+    NoWeather,
     WeatherDeclaration,
     WeatherState,
     WeatherTransitions,
     WeatherType,
     WeightedWeather,
 )
+from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
 from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import (
     NoNextWeatherDeclaredException,
@@ -179,3 +181,24 @@ class TestWeatherDeclarationDisplayName:
     def test_names_each_weather_type(self, weather: WeatherType, name: str) -> None:
         """8 種の天候それぞれに、決まった日本語の呼び名を返す。"""
         assert _declaration(NoChange()).display_name(WeatherState(weather)) == DisplayName(name)
+
+
+class TestWeatherDeclarationIsDeclared:
+    """WeatherDeclaration.is_declared が、天候を宣言した世界であることを答えることを保証する。"""
+
+    def test_is_declared(self) -> None:
+        """天候の宣言は、天候が宣言されているかを問われると、宣言されていると答える。"""
+        assert _declaration(NoChange()).is_declared()
+
+
+class TestNoWeather:
+    """天候を宣言しない世界の NoWeather が、天候の宣言・読み取りと同じ問いに「天候は無い」と答えることを保証する。"""
+
+    def test_current_raises_not_declared(self) -> None:
+        """いまの天候を問われると、「天候を宣言していない」という文面の NotDeclaredInThisWorldException を投げる。"""
+        with pytest.raises(NotDeclaredInThisWorldException, match="^this world declares no weather$"):
+            NoWeather().current()
+
+    def test_is_not_declared(self) -> None:
+        """天候が宣言されているかを問われると、宣言されていないと答える。"""
+        assert not NoWeather().is_declared()

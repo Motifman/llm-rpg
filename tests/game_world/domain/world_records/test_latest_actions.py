@@ -33,7 +33,7 @@ _BOB_SEARCHES = ActionAttemptForTests(actor_id=_BOB, action_kind=ActionKind.SEAR
 _ALICE_PULLS_LEVER = ObjectInteractionAttempt(
     _ALICE, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), {}, Openly()
 )
-from tests.game_world.support.memento_for_tests import empty_design, rebuilt_from_memento
+from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 
 
 class TestLatestActionsNote:
@@ -183,9 +183,7 @@ class TestLatestActionsMementoRefusesRepeatedKey:
 
 
 def _rebuilt_from(*last_done: ActionLastDoneAt) -> LatestActions:
-    return LatestActions.from_memento(
-        LatestActionsMemento(world_id=_WORLD, last_done=frozenset(last_done)), empty_design()
-    )
+    return LatestActions.from_memento(LatestActionsMemento(world_id=_WORLD, last_done=frozenset(last_done)))
 
 
 class TestLatestActionsRefusesDisagreementWithAnyone:

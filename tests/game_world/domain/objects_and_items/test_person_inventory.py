@@ -33,7 +33,6 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
 )
 from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
-from tests.game_world.support.world_design_for_tests import compose_world
 from tests.game_world.support.world_in_memory import FractionsInOrder
 
 _ALICE = PersonId("alice")
@@ -574,7 +573,7 @@ class TestPersonInventoryStartsOnlyInReachableState:
         )
 
         with pytest.raises(HeldItemsExceedHandsException):
-            PersonInventory.from_memento(memento, compose_world())
+            PersonInventory.from_memento(memento)
 
     def test_more_items_than_capacity_are_refused(self) -> None:
         """入る数が 2 の持ち物に 3 つ入っている memento から作り直すと、InventoryFullException を投げる。"""
@@ -587,7 +586,7 @@ class TestPersonInventoryStartsOnlyInReachableState:
         )
 
         with pytest.raises(InventoryFullException):
-            PersonInventory.from_memento(memento, compose_world())
+            PersonInventory.from_memento(memento)
 
     def test_as_many_items_as_capacity_are_accepted(self) -> None:
         """入る数が 3 の持ち物にちょうど 3 つ入っている memento からは作り直せ、満杯になる。"""
@@ -599,7 +598,7 @@ class TestPersonInventoryStartsOnlyInReachableState:
             packed=tuple(PackedItem(item, _APPLE) for item in (_KNIFE, _LANTERN, _ROPE)),
         )
 
-        assert PersonInventory.from_memento(memento, compose_world()).is_full()
+        assert PersonInventory.from_memento(memento).is_full()
 
     def test_same_item_held_and_packed_is_refused_by_constructor(self) -> None:
         """カンテラを手と荷の両方に持たせて直に作ると、ItemAlreadyCarriedException を投げる。"""

@@ -52,6 +52,10 @@ class TestAbout:
 class TestTextAboutPeople:
     """TextAboutPeople が、プレースホルダーと人の鍵の揃いを作るときに確かめ、見る人ごとの呼び方を当てた文にすることを保証する。"""
 
+    def test_explains_is_true(self) -> None:
+        """人を当てはめた文は失敗を説明する文があるので、explains は True を返す。"""
+        assert _WOKE_UP.about({"actor": _ALICE, "target": _BOB}).explains() is True
+
     def test_extra_person_is_refused_when_made(self) -> None:
         """文に無いプレースホルダーの人を含む people で作ると PlaceholdersAndPeopleMismatchException を投げる。"""
         with pytest.raises(PlaceholdersAndPeopleMismatchException):

@@ -28,7 +28,7 @@ from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import Wher
 from ai_rpg_world.game_world.domain.value_object import ItemSpecId, StateKeyId, Ticks, WorldTick
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -114,10 +114,10 @@ class Item(AggregateRoot[ItemEvent]):
         return item
 
     @classmethod
-    def from_memento(cls, memento: ItemMemento, design: WorldDesign) -> Item:
+    def from_memento(cls, memento: ItemMemento, nouns: DeclaredNouns) -> Item:
         return cls(
             memento.item_id,
-            design.nouns.item_spec_of(memento.spec_id),
+            nouns.item_spec_of(memento.spec_id),
             memento.came_at,
             values=memento.values,
             in_world=memento.in_world,

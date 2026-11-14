@@ -20,7 +20,7 @@ from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, PersonId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -140,9 +140,9 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         return cls(declaration, open=False, voters=frozenset(), choices=frozenset(), ballots=frozenset())
 
     @classmethod
-    def from_memento(cls, memento: GroupDecisionMemento, design: WorldDesign) -> GroupDecision:
+    def from_memento(cls, memento: GroupDecisionMemento, nouns: DeclaredNouns) -> GroupDecision:
         return cls(
-            design.nouns.group_decision_of(memento.decision_id),
+            nouns.group_decision_of(memento.decision_id),
             open=memento.open,
             voters=memento.voters,
             choices=memento.choices,

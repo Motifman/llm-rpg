@@ -497,7 +497,7 @@ class TestObjectStateMemento:
         state.write_text(_NOTE, TextBody("水は濁っている"), _ALICE, WorldTick(2))
         state.reveal()
 
-        rebuilt = rebuilt_from_memento(state, _design_with(declaration))
+        rebuilt = rebuilt_from_memento(state, _design_with(declaration).nouns)
 
         assert rebuilt.memento() == state.memento()
         assert rebuilt.memento() != _created(declaration).memento()
@@ -516,7 +516,7 @@ class TestObjectStateMemento:
         state = _created(declaration)
         state.take_from_stock(water, Count(1), WorldTick(4))
 
-        rebuilt = rebuilt_from_memento(state, _design_with(declaration))
+        rebuilt = rebuilt_from_memento(state, _design_with(declaration).nouns)
 
         assert rebuilt.memento() == state.memento()
         assert rebuilt.value_of(water, WorldTick(5)) == StockValue(Count(0))
@@ -528,7 +528,7 @@ class TestObjectStateMemento:
         state = _created(declaration)
         state.set(_COVERED, FlagValue(raised=False), WorldTick(1))
 
-        assert rebuilt_from_memento(state, _design_with(declaration)).get_events() == []
+        assert rebuilt_from_memento(state, _design_with(declaration).nouns).get_events() == []
 
 
 class TestObjectStateMementoAgainstDesign:
@@ -539,14 +539,14 @@ class TestObjectStateMementoAgainstDesign:
         memento = _created().memento()
 
         with pytest.raises(UndeclaredNounException):
-            ObjectState.from_memento(memento, compose_world())
+            ObjectState.from_memento(memento, compose_world().nouns)
 
     def test_missing_state_key_is_refused(self) -> None:
         """宣言にある buckets と note の値が無い memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
         memento = _well_memento((ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),))
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            ObjectState.from_memento(memento, _design_with(_well(_COVERED, _BUCKETS, _NOTE)))
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED, _BUCKETS, _NOTE)).nouns)
 
     def test_undeclared_state_key_is_refused(self) -> None:
         """宣言に無い鍵 rope の値を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
@@ -558,7 +558,7 @@ class TestObjectStateMementoAgainstDesign:
         )
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            ObjectState.from_memento(memento, _design_with(_well(_COVERED)))
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED)).nouns)
 
     def test_stock_key_among_plain_values_is_refused(self) -> None:
         """在庫の鍵 water を在庫の欄でなく値の欄に持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
@@ -566,21 +566,21 @@ class TestObjectStateMementoAgainstDesign:
         memento = _well_memento((ObjectStateKeyValue(water.key, StockValue(Count(2))),))
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            ObjectState.from_memento(memento, _design_with(_well(water)))
+            ObjectState.from_memento(memento, _design_with(_well(water)).nouns)
 
     def test_missing_stock_level_is_refused(self) -> None:
         """宣言にある在庫 water の在庫が無い memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
         memento = _well_memento(())
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            ObjectState.from_memento(memento, _design_with(_well(_water())))
+            ObjectState.from_memento(memento, _design_with(_well(_water())).nouns)
 
     def test_value_not_fitting_the_key_kind_is_refused(self) -> None:
         """旗の鍵 covered に数の値を持つ memento を作り直すと、StateValueMismatchesKindException を投げる。"""
         memento = _well_memento((ObjectStateKeyValue(_COVERED.key, CountValue(Count(1))),))
 
         with pytest.raises(StateValueMismatchesKindException):
-            ObjectState.from_memento(memento, _design_with(_well(_COVERED)))
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED)).nouns)
 
     def test_stock_over_capacity_is_refused(self) -> None:
         """入れ物が 5 の在庫 water に 6 を持つ memento を作り直すと、StateValueMismatchesKindException を投げる。"""
@@ -588,7 +588,7 @@ class TestObjectStateMementoAgainstDesign:
         memento = _well_memento((), (ObjectStockLevel(water.key, Count(6), WorldTick(0)),))
 
         with pytest.raises(StateValueMismatchesKindException):
-            ObjectState.from_memento(memento, _design_with(_well(water)))
+            ObjectState.from_memento(memento, _design_with(_well(water)).nouns)
 
 
 class TestObjectStateRefusesRepeatedKey:
@@ -604,7 +604,7 @@ class TestObjectStateRefusesRepeatedKey:
         )
 
         with pytest.raises(RepeatedMementoKeyException):
-            ObjectState.from_memento(memento, _design_with(_well(_COVERED)))
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED)).nouns)
 
     def test_same_key_as_value_and_stock_is_refused(self) -> None:
         """在庫の鍵 water を値の欄と在庫の欄の両方に持つ memento から作り直すと、宣言と合わないので MementoDoesNotMatchDesignException を投げる。"""
@@ -615,7 +615,7 @@ class TestObjectStateRefusesRepeatedKey:
         )
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            ObjectState.from_memento(memento, _design_with(_well(water)))
+            ObjectState.from_memento(memento, _design_with(_well(water)).nouns)
 
     def test_same_key_with_two_values_is_refused_by_constructor(self) -> None:
         """covered が立っていると下りているの 2 つある値で ObjectState を直に作ると、RepeatedMementoKeyException を投げる。"""
@@ -655,12 +655,12 @@ class TestObjectStateMementoReveal:
         memento = _well_memento((ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),), revealed=False)
 
         with pytest.raises(NeverHiddenObjectUnrevealedException):
-            ObjectState.from_memento(memento, _design_with(_well(_COVERED, hidden=False)))
+            ObjectState.from_memento(memento, _design_with(_well(_COVERED, hidden=False)).nouns)
 
     def test_hidden_object_not_revealed_is_accepted(self) -> None:
         """隠れた井戸が見つかっていない memento からは作り直せ、見つかっていないまま。"""
         memento = _well_memento((ObjectStateKeyValue(_COVERED.key, FlagValue(raised=True)),), revealed=False)
 
-        rebuilt = ObjectState.from_memento(memento, _design_with(_well(_COVERED, hidden=True)))
+        rebuilt = ObjectState.from_memento(memento, _design_with(_well(_COVERED, hidden=True)).nouns)
 
         assert not rebuilt.is_revealed()

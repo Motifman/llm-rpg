@@ -788,14 +788,14 @@ class TestPersonVitalsMemento:
 
     def test_rebuilt_fallen_person_is_down_by_the_same_cause(self) -> None:
         """tick 5 に bob に殴られて倒れた alice を作り直すと、tick 5 に bob に殴られて倒れたままで、動けない。"""
-        rebuilt = rebuilt_from_memento(_fallen(at=5), _DESIGN)
+        rebuilt = rebuilt_from_memento(_fallen(at=5), _DESIGN.nouns)
 
         assert rebuilt.memento().life_state == Down(fell_at=WorldTick(5), cause=_STRUCK)
         assert not rebuilt.can_act()
 
     def test_rebuilt_dead_person_stays_dead(self) -> None:
         """死んだ alice を作り直すと、死んだときの tick を持ったまま死んでいる。"""
-        rebuilt = rebuilt_from_memento(_dead(), _DESIGN)
+        rebuilt = rebuilt_from_memento(_dead(), _DESIGN.nouns)
 
         assert rebuilt.memento().life_state == Dead(died_at=WorldTick(7))
 
@@ -808,7 +808,7 @@ class TestPersonVitalsMemento:
         vitals.add_status_effect(StatusEffect(_POISONED, expires_at=WorldTick(4)))
         vitals.start_action(until=WorldTick(9))
 
-        rebuilt = rebuilt_from_memento(vitals, _DESIGN)
+        rebuilt = rebuilt_from_memento(vitals, _DESIGN.nouns)
 
         assert rebuilt.memento() == vitals.memento()
         assert rebuilt.memento() != _vitals().memento()
@@ -824,7 +824,7 @@ class TestPersonVitalsMemento:
         vitals = _vitals()
         poison = StatusEffect(_POISONED, expires_at=WorldTick(4))
         vitals.add_status_effect(poison)
-        rebuilt = rebuilt_from_memento(vitals, _DESIGN)
+        rebuilt = rebuilt_from_memento(vitals, _DESIGN.nouns)
 
         rebuilt.remove_expired_status_effects(WorldTick(4))
 
@@ -836,7 +836,7 @@ class TestPersonVitalsMemento:
         vitals = _vitals()
         vitals.take_damage(Damage(10), WorldTick(1), _STRUCK)
 
-        assert rebuilt_from_memento(vitals, _DESIGN).get_events() == []
+        assert rebuilt_from_memento(vitals, _DESIGN.nouns).get_events() == []
 
 
 class TestPersonVitalsMementoRefusals:
@@ -845,31 +845,31 @@ class TestPersonVitalsMementoRefusals:
     def test_person_not_declared_is_refused(self) -> None:
         """宣言に無い carol の memento から作り直すと、UndeclaredNounException を投げる。"""
         with pytest.raises(UndeclaredNounException):
-            PersonVitals.from_memento(_memento(person=PersonId("carol")), _DESIGN)
+            PersonVitals.from_memento(_memento(person=PersonId("carol")), _DESIGN.nouns)
 
     def test_fall_cause_by_undeclared_person_is_refused(self) -> None:
         """宣言に無い carol に殴られて倒れている memento から作り直すと、UndeclaredNounException を投げる。"""
         fallen = Down(fell_at=WorldTick(1), cause=StruckByPerson(PersonId("carol")))
 
         with pytest.raises(UndeclaredNounException):
-            PersonVitals.from_memento(_memento(hp=0, life_state=fallen), _DESIGN)
+            PersonVitals.from_memento(_memento(hp=0, life_state=fallen), _DESIGN.nouns)
 
     def test_alive_with_zero_hit_points_is_refused(self) -> None:
         """HP 0 で起きている alice の memento から作り直すと、HitPointsDoNotMatchLifeStateException を投げる。"""
         with pytest.raises(HitPointsDoNotMatchLifeStateException):
-            PersonVitals.from_memento(_memento(hp=0, life_state=Alive()), _DESIGN)
+            PersonVitals.from_memento(_memento(hp=0, life_state=Alive()), _DESIGN.nouns)
 
     def test_down_with_hit_points_left_is_refused(self) -> None:
         """HP が 3 残ったまま倒れている alice の memento から作り直すと、HitPointsDoNotMatchLifeStateException を投げる。"""
         fallen = Down(fell_at=WorldTick(1), cause=_STRUCK)
 
         with pytest.raises(HitPointsDoNotMatchLifeStateException):
-            PersonVitals.from_memento(_memento(hp=3, life_state=fallen), _DESIGN)
+            PersonVitals.from_memento(_memento(hp=3, life_state=fallen), _DESIGN.nouns)
 
     def test_dead_with_hit_points_left_is_refused(self) -> None:
         """HP が 3 残ったまま死んでいる alice の memento から作り直すと、HitPointsDoNotMatchLifeStateException を投げる。"""
         with pytest.raises(HitPointsDoNotMatchLifeStateException):
-            PersonVitals.from_memento(_memento(hp=3, life_state=Dead(died_at=WorldTick(7))), _DESIGN)
+            PersonVitals.from_memento(_memento(hp=3, life_state=Dead(died_at=WorldTick(7))), _DESIGN.nouns)
 
     def test_constructing_with_same_status_effect_kind_twice_is_refused(self) -> None:
         """切れる tick だけが違う毒を 2 つ渡して PersonVitals を作ると、StatusEffectKindRepeatedException を投げる。"""
@@ -897,4 +897,4 @@ class TestPersonVitalsMementoRefusals:
         )
 
         with pytest.raises(StatusEffectKindRepeatedException):
-            PersonVitals.from_memento(memento, _DESIGN)
+            PersonVitals.from_memento(memento, _DESIGN.nouns)

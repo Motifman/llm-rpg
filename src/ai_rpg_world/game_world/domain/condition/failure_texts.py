@@ -21,36 +21,24 @@ _SUBJECT_OF_PLACEHOLDER = {
 }
 
 
-def _subject_of(placeholder: str, failure_text: TextWithUnassignedPeople) -> SubjectKind:
+def _subject_of(placeholder: str, template: str) -> SubjectKind:
     if placeholder not in _SUBJECT_OF_PLACEHOLDER:
         raise UnknownPersonPlaceholderException(
-            f"{{{placeholder}}} in {failure_text.template!r} is none of {sorted(_SUBJECT_OF_PLACEHOLDER)}"
+            f"{{{placeholder}}} in {template!r} is none of {sorted(_SUBJECT_OF_PLACEHOLDER)}"
         )
     return _SUBJECT_OF_PLACEHOLDER[placeholder]
 
 
 def text_about_people(failure_text: TextWithUnassignedPeople | NoText, trigger: Trigger) -> TextAboutPeople | NoText:
-    if isinstance(failure_text, NoText):
-        return NoText()
-    return failure_text.about(
-        {
-            placeholder: trigger.person_as(_subject_of(placeholder, failure_text))
-            for placeholder in failure_text.placeholders()
-        }
-    )
+    return failure_text.about_each(lambda placeholder, template: trigger.person_as(_subject_of(placeholder, template)))
 
 
 def placeholder_requirements(failure_text: TextWithUnassignedPeople | NoText) -> Requirements:
-    if isinstance(failure_text, NoText):
-        return Requirements.nothing()
-    return replace(
-        Requirements.nothing(),
-        subjects=frozenset(_subject_of(placeholder, failure_text) for placeholder in failure_text.placeholders()),
-    )
+    return replace(Requirements.nothing(), subjects=failure_text.placeholders_read_as(_subject_of))
 
 
 def explains(failure_text: TextWithUnassignedPeople | NoText) -> bool:
-    return not isinstance(failure_text, NoText)
+    return failure_text.explains()
 
 
 def own_failure(failure_text: TextWithUnassignedPeople | NoText, trigger: Trigger) -> FailureReason:
@@ -66,7 +54,7 @@ def failure_of_child(
     failed_part = reason.failed_part.under(position)
     if isinstance(reason, HiddenFailure):
         return HiddenFailure(failed_part=failed_part)
-    if isinstance(reason.text, NoText):
+    if not reason.text.explains():
         return FailureReason(failed_part=failed_part, text=text_about_people(failure_text, trigger))
     return FailureReason(failed_part=failed_part, text=reason.text)
 

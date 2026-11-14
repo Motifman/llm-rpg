@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, final
+from typing import final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
-
-if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -36,7 +33,7 @@ class WorldEnding(AggregateRoot[WorldEndedEvent]):
         return cls(world_id, False)
 
     @classmethod
-    def from_memento(cls, memento: WorldEndingMemento, design: WorldDesign) -> WorldEnding:
+    def from_memento(cls, memento: WorldEndingMemento) -> WorldEnding:
         return cls(memento.world_id, memento.ended)
 
     @property

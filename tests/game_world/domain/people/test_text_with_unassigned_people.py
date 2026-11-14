@@ -14,7 +14,7 @@ from ai_rpg_world.game_world.domain.people import (
     TextWithUnassignedPeople,
     Unidentified,
 )
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId
 
 
 def _ref(handle: int) -> PersonRef:
@@ -33,6 +33,32 @@ class TestTextWithUnassignedPeople:
     def test_text_without_placeholders_has_no_placeholders(self) -> None:
         """プレースホルダーの無い文の placeholders は空。"""
         assert TextWithUnassignedPeople("扉が軋んだ。").placeholders() == frozenset()
+
+    def test_explains_is_true(self) -> None:
+        """プレースホルダーの無い文でも、文があれば失敗を説明できるので、TextWithUnassignedPeople の explains は True を返す。"""
+        assert TextWithUnassignedPeople("扉が軋んだ。").explains() is True
+
+    def test_about_each_asks_each_placeholder_with_the_template(self) -> None:
+        """about_each はプレースホルダーごとに名前と文そのものを渡して人を問い合わせ、その人を当てはめた TextAboutPeople を返す。"""
+        text = TextWithUnassignedPeople("{actor}が{target}を起こした。")
+        asked: list[tuple[str, str]] = []
+
+        def person_of(placeholder: str, template: str) -> PersonId:
+            asked.append((placeholder, template))
+            return PersonId(placeholder)
+
+        about = text.about_each(person_of)
+
+        assert sorted(asked) == [("actor", text.template), ("target", text.template)]
+        assert about == text.about({"actor": PersonId("actor"), "target": PersonId("target")})
+
+    def test_placeholders_read_as_collects_what_each_placeholder_reads_as(self) -> None:
+        """placeholders_read_as はプレースホルダーごとに名前と文を読み方に渡し、読んだ値を重なりを除いた集合で返す。"""
+        text = TextWithUnassignedPeople("{actor}が{target}を起こし、{actor}は去った。")
+
+        read = text.placeholders_read_as(lambda placeholder, template: f"{placeholder}@{template}")
+
+        assert read == frozenset({f"actor@{text.template}", f"target@{text.template}"})
 
     def test_assign_pairs_each_placeholder_with_a_person(self) -> None:
         """assign にプレースホルダーごとの人を渡すと、同じ文と人を持つ TextWithAssignedPeople になる。"""

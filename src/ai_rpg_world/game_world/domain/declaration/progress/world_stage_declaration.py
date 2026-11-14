@@ -27,3 +27,6 @@ class WorldStageDeclaration:
 
     def allows_interaction(self, interaction: InteractionId) -> bool:
         return interaction in self.allowed_actions
+
+    def is_declared(self) -> bool:
+        return True

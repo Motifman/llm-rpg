@@ -16,7 +16,7 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
 from ai_rpg_world.game_world.domain.value_object import OutcomeId, PersonId, WorldId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -75,8 +75,7 @@ class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
         return cls(world, tuple((person, Undecided()) for person in people))
 
     @classmethod
-    def from_memento(cls, memento: PersonOutcomesMemento, design: WorldDesign) -> PersonOutcomes:
-        nouns = design.nouns
+    def from_memento(cls, memento: PersonOutcomesMemento, nouns: DeclaredNouns) -> PersonOutcomes:
         for entry in memento.outcomes:
             nouns.require_declared_character(entry.person)
         declared = {character.person_id for character in nouns.all_characters()}

@@ -30,6 +30,9 @@ class TextAboutPeople:
             )
         object.__setattr__(self, "people", MappingProxyType(dict(self.people)))
 
+    def explains(self) -> bool:
+        return True
+
     def seen_by(self, view: PeopleAsSeen) -> TextWithAssignedPeople:
         return self.template.assign({key: view.ref_of(person) for key, person in self.people.items()})
 
