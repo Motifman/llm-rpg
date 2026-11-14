@@ -64,7 +64,9 @@ class TestRefusalTexts:
 
     def test_text_for_common_rule_assigns_the_actor(self) -> None:
         """{actor} を書いた文は、行った人の PersonId を当てた TextAboutPeople で返る。"""
-        texts = RefusalTexts(common_rules=_common_rules(BUSY="{actor}は手が離せない。"), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+        texts = RefusalTexts(
+            common_rules=_common_rules(BUSY="{actor}は手が離せない。"), world_state={}, hidden=HIDDEN, unlisted=UNLISTED
+        )
 
         assert texts.common_rule_text(Busy(), ALICE) == TextAboutPeople(
             TextWithUnassignedPeople("{actor}は手が離せない。"), {"actor": ALICE}
@@ -73,7 +75,10 @@ class TestRefusalTexts:
     def test_text_without_placeholder_assigns_no_one(self) -> None:
         """人を書いていない文は、誰も当てずにそのまま返る。"""
         texts = RefusalTexts(
-            common_rules=_common_rules(TOO_TIRED="疲れすぎて動けない。"), world_state={}, hidden=HIDDEN, unlisted=UNLISTED
+            common_rules=_common_rules(TOO_TIRED="疲れすぎて動けない。"),
+            world_state={},
+            hidden=HIDDEN,
+            unlisted=UNLISTED,
         )
 
         assert texts.common_rule_text(TooTired(), ALICE) == TextAboutPeople(
