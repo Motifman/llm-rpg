@@ -26,7 +26,7 @@ class TeleportEffect:
     to: SpotDeclaration
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
-        world.whereabouts().teleport(_occupant_of(self.who.person_in(trigger), facts), self.to)
+        world.whereabouts().teleport(_occupant_of(self.who.person_in(trigger), facts), self.to, facts.now())
 
     def requirements(self) -> Requirements:
         return self.who.requirements()

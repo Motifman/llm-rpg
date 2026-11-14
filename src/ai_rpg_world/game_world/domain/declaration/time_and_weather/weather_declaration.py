@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.changes_every import ChangesEvery, NoChange
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_state import WeatherState
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
-from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability
+from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability, WorldTick
 
 
 @final
@@ -25,6 +26,9 @@ class WeatherDeclaration:
 
     def next_after(self, current: WeatherState, roll: Probability) -> WeatherState:
         return WeatherState(self.changes.next_after(current.type, roll))
+
+    def weather_after(self, now: WorldTick, current: WeatherState, random: RandomSource) -> WeatherState:
+        return WeatherState(self.changes.weather_at(now, current.type, random))
 
     def obscures_sight(self, state: WeatherState) -> bool:
         return state.type in self.obscuring
