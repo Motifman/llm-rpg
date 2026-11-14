@@ -7,15 +7,21 @@ from typing import Any, Protocol, TypeVar, cast, final
 
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
 from ai_rpg_world.game_world.infrastructure.persistence.group_membership_codec import GroupMembershipCodec
+from ai_rpg_world.game_world.infrastructure.persistence.latest_actions_codec import LatestActionsCodec
+from ai_rpg_world.game_world.infrastructure.persistence.missed_notices_codec import MissedNoticesCodec
 from ai_rpg_world.game_world.infrastructure.persistence.people_register_codec import PeopleRegisterCodec
 from ai_rpg_world.game_world.infrastructure.persistence.person_outcomes_codec import PersonOutcomesCodec
 from ai_rpg_world.game_world.infrastructure.persistence.person_vitals_codec import PersonVitalsCodec
+from ai_rpg_world.game_world.infrastructure.persistence.scenario_progress_codec import ScenarioProgressCodec
 from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception import (
     MementoNotStorableException,
     StoredMementoUnreadableException,
 )
+from ai_rpg_world.game_world.infrastructure.persistence.weather_codec import WeatherCodec
 from ai_rpg_world.game_world.infrastructure.persistence.world_clock_codec import WorldClockCodec
+from ai_rpg_world.game_world.infrastructure.persistence.world_ending_codec import WorldEndingCodec
 from ai_rpg_world.game_world.infrastructure.persistence.world_flags_codec import WorldFlagsCodec
+from ai_rpg_world.game_world.infrastructure.persistence.world_stage_codec import WorldStageCodec
 
 _Memento = TypeVar("_Memento")
 
@@ -98,5 +104,11 @@ GAME_WORLD_CODECS = AggregateCodecs(
         PersonOutcomesCodec(),
         GroupMembershipCodec(),
         PeopleRegisterCodec(),
+        WeatherCodec(),
+        WorldEndingCodec(),
+        WorldStageCodec(),
+        LatestActionsCodec(),
+        MissedNoticesCodec(),
+        ScenarioProgressCodec(),
     ]
 )

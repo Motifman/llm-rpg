@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception
 )
 
 _Item = TypeVar("_Item")
+_Key = TypeVar("_Key")
 _Union = TypeVar("_Union")
 _Enum = TypeVar("_Enum", bound=Enum)
 
@@ -60,6 +61,17 @@ def distinct_items(raw: object, read_item: Callable[[object], _Item]) -> frozens
     if len(distinct) != len(items):
         raise StoredMementoUnreadableException(f"{len(items) - len(distinct)} items are listed more than once")
     return distinct
+
+
+def keyed_items(
+    raw: object, read_key: Callable[[str], _Key], read_value: Callable[[object], _Item]
+) -> dict[_Key, _Item]:
+    if not isinstance(raw, dict):
+        raise StoredMementoUnreadableException(f"expected an object, got {raw!r}")
+    items = {read_key(key): read_value(value) for key, value in raw.items()}
+    if len(items) != len(raw):
+        raise StoredMementoUnreadableException(f"{len(raw) - len(items)} keys are read as the same key")
+    return items
 
 
 def enum_to_json(value: Enum) -> str:

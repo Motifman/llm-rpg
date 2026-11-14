@@ -21,12 +21,6 @@ _ADDED_LATER = frozenset(
         "SpotAtmospheres",
         "Whereabouts",
         "GroupDecision",
-        "Weather",
-        "WorldEnding",
-        "WorldStage",
-        "LatestActions",
-        "MissedNotices",
-        "ScenarioProgress",
     }
 )
 
