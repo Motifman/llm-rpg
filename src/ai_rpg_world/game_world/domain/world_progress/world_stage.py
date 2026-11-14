@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.value_object import WorldId, WorldStageId, WorldTick
 
 if TYPE_CHECKING:
@@ -38,6 +39,14 @@ class WorldStage(AggregateRoot[WorldStageChangedEvent]):
     @classmethod
     def from_initial_stage(cls, world_id: WorldId, initial: WorldStageDeclaration, now: WorldTick) -> WorldStage:
         return cls(world_id, initial.stage_id, now)
+
+    @classmethod
+    def at_start(
+        cls, world_id: WorldId, initial: WorldStageDeclaration | NoWorldStages, now: WorldTick
+    ) -> tuple[WorldStage, ...]:
+        if isinstance(initial, NoWorldStages):
+            return ()
+        return (cls.from_initial_stage(world_id, initial, now),)
 
     @classmethod
     def from_memento(cls, memento: WorldStageMemento) -> WorldStage:

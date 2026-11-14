@@ -209,6 +209,16 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         self._held.append(_ItemInHand(item, hands_needed))
         self.add_event(ItemHeldEvent(**new_event_stamp(), person=self._person_id, item=item))
 
+    def hold_packed_at_start(self, spec: ItemSpecId, hands_needed: HandsNeeded) -> None:
+        if _HANDS - self._hands_in_use() < hands_needed.value:
+            raise HeldItemsExceedHandsException(
+                f"{self._person_id.value} has no free hands to start holding {spec.value}"
+            )
+        packed = next((item for item in self._packed if self._specs[item] == spec), None)
+        if packed is None:
+            raise ItemNotCarriedException(f"{self._person_id.value} packs no {spec.value} to start holding")
+        self.hold(packed, hands_needed)
+
     def put_away(self, item: ItemInstanceId) -> None:
         self._require_carried(item)
         if not self._is_held(item):

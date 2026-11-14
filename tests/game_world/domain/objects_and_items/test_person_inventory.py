@@ -279,6 +279,45 @@ class TestPersonInventoryHoldAndPutAway:
             inventory.put_away(_LANTERN)
 
 
+class TestPersonInventoryHoldPackedAtStart:
+    """PersonInventory.hold_packed_at_start が、始まりに手に持つと宣言された種類の品物を、荷物から 1 つ手に持たせることを保証する。"""
+
+    def test_holds_one_packed_item_of_the_spec(self) -> None:
+        """りんごを 2 つ荷物に入れた人にりんごを手に持たせると、りんごの 1 つ目を手に持ち、2 つ目は荷物に残る。"""
+        inventory = _inventory(_APPLE_1, _APPLE_2)
+
+        inventory.hold_packed_at_start(_APPLE, _ONE_HAND)
+
+        assert (inventory.held_items(), inventory.packed_items()) == ((_APPLE_1,), (_APPLE_2,))
+
+    def test_holds_the_next_packed_item_when_one_is_already_in_hand(self) -> None:
+        """りんごを 2 つ持つ人に 2 回りんごを手に持たせると、2 つとも手に持つ。"""
+        inventory = _inventory(_APPLE_1, _APPLE_2)
+
+        inventory.hold_packed_at_start(_APPLE, _ONE_HAND)
+        inventory.hold_packed_at_start(_APPLE, _ONE_HAND)
+
+        assert (inventory.held_items(), inventory.packed_items()) == ((_APPLE_1, _APPLE_2), ())
+
+    def test_refuses_instead_of_putting_away_when_hands_are_not_free(self) -> None:
+        """片手の品物を 2 つ手に持った人に、さらにりんごを手に持たせると HeldItemsExceedHandsException になり、手の中は変わらない。"""
+        inventory = _inventory(_LANTERN, _KNIFE, _APPLE_1)
+        inventory.hold(_LANTERN, _ONE_HAND)
+        inventory.hold(_KNIFE, _ONE_HAND)
+
+        with pytest.raises(HeldItemsExceedHandsException):
+            inventory.hold_packed_at_start(_APPLE, _ONE_HAND)
+
+        assert inventory.held_items() == (_LANTERN, _KNIFE)
+
+    def test_refuses_when_no_item_of_the_spec_is_packed(self) -> None:
+        """りんごを荷物に入れていない人にりんごを手に持たせると ItemNotCarriedException になる。"""
+        inventory = _inventory(_LANTERN)
+
+        with pytest.raises(ItemNotCarriedException):
+            inventory.hold_packed_at_start(_APPLE, _ONE_HAND)
+
+
 class TestPersonInventoryGold:
     """PersonInventory の earn / pay が金を増減し、足りない支払いを断ることを保証する。"""
 

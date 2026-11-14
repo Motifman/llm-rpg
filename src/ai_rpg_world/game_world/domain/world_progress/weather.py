@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import WeatherDeclaration, WeatherState
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoWeather, WeatherDeclaration, WeatherState
 from ai_rpg_world.game_world.domain.value_object import WorldId
 
 
@@ -32,6 +32,12 @@ class Weather(AggregateRoot[WeatherChangedEvent]):
     @classmethod
     def from_declaration(cls, world_id: WorldId, declaration: WeatherDeclaration) -> Weather:
         return cls(world_id, WeatherState(declaration.initial))
+
+    @classmethod
+    def at_start(cls, world_id: WorldId, declared: WeatherDeclaration | NoWeather) -> tuple[Weather, ...]:
+        if isinstance(declared, NoWeather):
+            return ()
+        return (cls.from_declaration(world_id, declared),)
 
     @classmethod
     def from_memento(cls, memento: WeatherMemento) -> Weather:
