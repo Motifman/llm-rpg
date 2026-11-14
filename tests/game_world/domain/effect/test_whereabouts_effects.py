@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import NamedPerson, SubjectKind
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight
 from ai_rpg_world.game_world.domain.effect.whereabouts_effects import (
     PutIntoSectionEffect,
     RemoveBodyEffect,
@@ -22,7 +23,13 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
 from ai_rpg_world.game_world.domain.person import PersonVitals, WorldHappening
 from ai_rpg_world.game_world.domain.value_object import Damage, PersonId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
-from ai_rpg_world.game_world.domain.whereabouts import AtSpot, DepartedPerson, OpenArea, PersonBody
+from ai_rpg_world.game_world.domain.whereabouts import (
+    AtSpot,
+    DepartedPerson,
+    OccupantEnteredSpotEvent,
+    OpenArea,
+    PersonBody,
+)
 from tests.game_world.domain.effect._builders import ALICE, BOB, WORLD, character, vitals
 from tests.game_world.domain.whereabouts._builders import section, spot
 from tests.game_world.support.declarations_for_tests import HappeningForTests
@@ -96,6 +103,17 @@ class TestTeleportEffect:
         TeleportEffect(_named(ALICE), _WELL).apply(world.facts(), world.aggregates(), _QUAKE)
 
         assert world.aggregates().whereabouts().is_at(PersonBody(ALICE), _WELL)
+
+    def test_arrival_is_stamped_with_the_world_tick_now(self) -> None:
+        """時計が 2 tick 進んだ世界で Alice を井戸へ移すと、井戸に入ったイベントの at は 2 tick になる。"""
+        world = _world(vitals(ALICE))
+        world.clock().advance(NoDayNight())
+        world.clock().advance(NoDayNight())
+
+        TeleportEffect(_named(ALICE), _WELL).apply(world.facts(), world.aggregates(), _QUAKE)
+
+        entered = world.aggregates().whereabouts().get_events()[-1]
+        assert isinstance(entered, OccupantEnteredSpotEvent) and entered.at == WorldTick(2)
 
     def test_requires_only_its_subject(self) -> None:
         """要るものは、移す人の主語だけ。"""
