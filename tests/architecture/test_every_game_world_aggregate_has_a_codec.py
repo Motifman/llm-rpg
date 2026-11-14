@@ -10,8 +10,6 @@ from typing import get_type_hints
 from ai_rpg_world.game_world import domain
 from ai_rpg_world.game_world.infrastructure.persistence.aggregate_codecs import GAME_WORLD_CODECS
 
-_ADDED_LATER: frozenset[str] = frozenset()
-
 
 def _aggregates_with_memento() -> dict[str, type]:
     found: dict[str, type] = {}
@@ -33,26 +31,12 @@ def test_registered_aggregates_are_found() -> None:
     assert {"WorldClock", "WorldFlags"} <= _aggregates_with_memento().keys()
 
 
-def test_every_aggregate_has_a_codec_or_is_listed_as_added_later() -> None:
-    """変換を登録していない集約が「あとで足す」一覧にも無いとき、その名前を挙げて落ちる。"""
+def test_every_aggregate_has_a_codec() -> None:
+    """変換を登録していない集約があるとき、その名前を挙げて落ちる。集約を足す PR は、同じ PR で変換も登録する。"""
     registered = GAME_WORLD_CODECS.memento_types()
 
     missing = sorted(
-        name
-        for name, aggregate in _aggregates_with_memento().items()
-        if _memento_type(aggregate) not in registered and name not in _ADDED_LATER
+        name for name, aggregate in _aggregates_with_memento().items() if _memento_type(aggregate) not in registered
     )
 
     assert missing == []
-
-
-def test_added_later_lists_only_aggregates_without_a_codec() -> None:
-    """「あとで足す」一覧に、変換を登録済みの集約や、もう無い集約の名前が残っていると落ちる。"""
-    registered = GAME_WORLD_CODECS.memento_types()
-    aggregates = _aggregates_with_memento()
-
-    stale = sorted(
-        name for name in _ADDED_LATER if name not in aggregates or _memento_type(aggregates[name]) in registered
-    )
-
-    assert stale == []
