@@ -24,7 +24,6 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
 )
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
-from ai_rpg_world.game_world.domain.exception.condition_exception import StateValueOfAnotherKindException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     CountBelowZeroException,
     MementoDoesNotMatchDesignException,
@@ -39,6 +38,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     NotEnoughStockException,
     OperationNotForStateKindException,
     StateKeyNotOwnedException,
+    StateValueOfAnotherKindException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items import (
     ObjectRevealedEvent,

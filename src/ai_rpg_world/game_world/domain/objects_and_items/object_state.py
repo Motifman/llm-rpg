@@ -20,7 +20,6 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     WrittenText,
     WrittenTextStateKind,
 )
-from ai_rpg_world.game_world.domain.exception.condition_exception import StateValueOfAnotherKindException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
     require_distinct_memento_keys,
@@ -33,6 +32,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     NotEnoughStockException,
     OperationNotForStateKindException,
     StateKeyNotOwnedException,
+    StateValueOfAnotherKindException,
 )
 from ai_rpg_world.game_world.domain.value_object import Count, ObjectId, PersonId, StateKeyId, Ticks, WorldTick
 

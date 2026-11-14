@@ -9,9 +9,5 @@ class NotDeclaredInThisWorldException(GameWorldDomainException):
     error_code = "GAME_WORLD.NOT_DECLARED_IN_THIS_WORLD"
 
 
-class StateValueOfAnotherKindException(GameWorldDomainException):
-    error_code = "GAME_WORLD.STATE_VALUE_OF_ANOTHER_KIND"
-
-
 class TickModuloOutOfRangeException(GameWorldDomainException):
     error_code = "GAME_WORLD.TICK_MODULO_OUT_OF_RANGE"
