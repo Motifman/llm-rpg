@@ -6,7 +6,7 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     BrokenRouteException,
     EmptyRouteException,
 )
-from ai_rpg_world.game_world.domain.value_object import SpotId
+from ai_rpg_world.game_world.domain.value_object import SpotId, Ticks
 from ai_rpg_world.game_world.domain.whereabouts import Route
 from tests.game_world.domain.whereabouts._builders import path
 
@@ -39,6 +39,19 @@ class TestRouteDirection:
         )
 
         assert (route.end_of_passage(0), route.end_of_passage(1)) == (SpotId("well"), SpotId("mine_entrance"))
+
+
+class TestRouteTicks:
+    """Route.total_ticks が、道をたどり終えるまでの時間を答えることを保証する。"""
+
+    def test_total_ticks_is_sum_of_passage_ticks(self) -> None:
+        """3 tick と 2 tick の通路をつないだ Route の total_ticks は 5。"""
+        route = Route(
+            start=SpotId("plaza"),
+            passages=(path("street", "plaza", "well", ticks=3), path("lane", "well", "mine_entrance", ticks=2)),
+        )
+
+        assert route.total_ticks() == Ticks(5)
 
 
 class TestRouteRejectsImpossibleWalks:

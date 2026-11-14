@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar, final
 
 from ai_rpg_world.eventing import DomainEvent, EventHandler
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 
 _Event = TypeVar("_Event", bound=DomainEvent)
 
@@ -68,5 +68,5 @@ class CommittedEventsDistributor:
     def _run_handler(self, handler: EventHandler[Any], event: DomainEvent) -> None:
         try:
             handler.handle(event)
-        except GameWorldDomainException as refusal:
+        except WorldRefusal as refusal:
             self._refused_handlers[(type(handler).__name__, refusal.error_code)] += 1

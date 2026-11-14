@@ -13,7 +13,9 @@ from ai_rpg_world.being.contract import (
     OccurrenceOrder,
     OwnActionResult,
     OwnBodyState,
+    PersonInText,
     SeenOrHeard,
+    TextWithPeople,
     ToldOrWritten,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -47,10 +49,16 @@ from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 ADA = BeingId("being_p1")
 
 _TIME = ObservedTime(display="1日目 朝")
+_KICKED = TextWithPeople(
+    template="{actor}が扉を蹴り破った",
+    people={"actor": PersonInText(handle=3, appearance="背の高い男", visible_name=None)},
+)
 
 
 def _observation(
-    route: object = SeenOrHeard(), body: str = "ミオが坑道から戻ってきた", order: OccurrenceOrder | None = None
+    route: object = SeenOrHeard(),
+    body: str | TextWithPeople = "ミオが坑道から戻ってきた",
+    order: OccurrenceOrder | None = None,
 ) -> Observation:
     return Observation(
         body=body,
@@ -66,7 +74,7 @@ def _observation(
 
 
 def _own_observation(
-    call_id: str = "call-1", body: str = "扉は開かなかった", order: OccurrenceOrder | None = None
+    call_id: str = "call-1", body: str | TextWithPeople = "扉は開かなかった", order: OccurrenceOrder | None = None
 ) -> Observation:
     return _observation(OwnActionResult(call_id=call_id, succeeded=False), body=body, order=order)
 
@@ -152,6 +160,19 @@ class TestPerceive:
         with pytest.raises(ShortTermMemoryValidationException):
             memory.perceive(_own_observation(), current_turn=5)
         assert memory.is_empty()
+
+    def test_observation_with_people_placeholders_cannot_be_perceived(self) -> None:
+        """本文が人のプレースホルダーを持つ観測を渡すと、ShortTermMemoryValidationException を投げ、短期記憶は変わらない。"""
+        memory = _empty()
+
+        with pytest.raises(ShortTermMemoryValidationException):
+            memory.perceive(_observation(body=_KICKED), current_turn=5)
+        assert memory.is_empty()
+
+    def test_result_with_people_placeholders_cannot_be_received(self) -> None:
+        """本文が人のプレースホルダーを持つ自分の行動の結果は、ObservedOutcome にできず ShortTermMemoryValidationException を投げる。"""
+        with pytest.raises(ShortTermMemoryValidationException):
+            ObservedOutcome(_own_observation(body=_KICKED))
 
 
 class TestActAndReceiveResult:

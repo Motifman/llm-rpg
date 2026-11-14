@@ -1,15 +1,15 @@
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException, WorldRefusal
 
 
-class PackIsEmptyException(GameWorldDomainException):
+class PackIsEmptyException(WorldRefusal):
     error_code = "GAME_WORLD.PACK_IS_EMPTY"
 
 
-class ItemNotHeldException(GameWorldDomainException):
+class ItemNotHeldException(WorldRefusal):
     error_code = "GAME_WORLD.ITEM_NOT_HELD"
 
 
-class ItemNotPackedException(GameWorldDomainException):
+class ItemNotPackedException(WorldRefusal):
     error_code = "GAME_WORLD.ITEM_NOT_PACKED"
 
 

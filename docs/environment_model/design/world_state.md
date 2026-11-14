@@ -27,6 +27,8 @@ Location = AtSpot | TravelInProgress
 class Whereabouts:                                # 世界に 1 つ
     def place(self, occupant: Occupant, spot: SpotDeclaration) -> None: ...
     def remove(self, occupant: Occupant) -> None: ...
+    def place_departed(self, person: PersonId, departed_persons_act: bool) -> None: ...
+        # 去った人の動く世界でだけ、死んだ人の体のある場所の区画の外に DepartedPerson を置く。体が移動の途中なら、今の区間の出発点 (departed_from) に置く (#2151)
     def start_travel(self, occupant: Occupant, route: Route) -> None: ...
     def advance_travels(self, closed_passages: frozenset[PassageId], now: WorldTick) -> None: ...
         # 1 tick ぶん進める。今の区間の通路が閉じていれば、その区間の出発点 (departed_from) に戻って止まる (TravelBlockedEvent)
@@ -306,6 +308,9 @@ class GroupDecision:                              # 集団の決定の宣言ご�
         # 全員が投じたら、ここで集計する
     def withdraw_voter(self, voter: PersonId) -> None: ...   # 残りが全員投じ済みなら、ここで集計する。死んだ人は withdraw_choice を先に呼ぶ
     def withdraw_choice(self, choice: PersonId) -> None: ...  # その人に入っていた票は投じた人に戻り、投じ直せる
+    def withdraw_person(self, person: PersonId, life_state: LifeState) -> None: ...
+        # 倒れた人・死んだ人を外す。Dead は withdraw_choice のあと withdraw_voter、Down は withdraw_voter だけ、Alive は何もしない
+        # 倒れた同じ確定で死ぬこともあるので、外し方はイベントの種類ではなく確定したいまの体の状態で決める (#2151)
     def close(self) -> None: ...                              # それまでの票で集計する
         # 集計: 最多が 1 人で、棄権より多ければ GroupDecisionReachedEvent(chosen)。それ以外は GroupDecisionUnresolvedEvent
         # どちらも票の内訳を持つ。reveals_ballots なら、変換役が投票する人の全員への世界の知らせにする
@@ -329,8 +334,15 @@ class WorldEnding:                                # 世界に 1 つ
 
 
 class LatestActions:                              # 世界に 1 つ
-    def note(self, attempt: ActionAttempt, now: WorldTick) -> None: ...   # PersonActedEvent(attempt, at)
-    def note_failed_attempt(self, refusal: ActionRefusal, now: WorldTick) -> None: ...   # ActionAttemptFailedEvent(refusal, at) を出すだけで、last_done_at は変えない
+    def note(self, attempt: ActionAttempt, situation: ActorSituation, now: WorldTick) -> None: ...   # PersonActedEvent(attempt, at_spot, actor_as, item_specs, at)
+    def note_failed_attempt(self, refusal: ActionRefusal, situation: ActorSituation, now: WorldTick) -> None: ...   # ActionAttemptFailedEvent(refusal, at_spot, actor_as, item_specs, at) を出すだけで、last_done_at は変えない
+
+@final
+@dataclass(frozen=True)
+class ActorSituation:                     # 世界を変える前の、行う人の状況。変換役が刺激を作るのに使う (#2146)
+    at_spot: SpotId | NotAtSpot           # 移動では出発した場所。移動中なら NotAtSpot
+    actor_as: Occupant                    # PersonBody か DepartedPerson
+    item_specs: Mapping[ItemInstanceId, ItemSpecId]   # 試みが扱う品物ごとの種類。使い切る品物も、世界に残っているうちに読む
 
     def last_done_at(self, who: PersonId | Anyone, action: ActionKind | InteractionId) -> WorldTick | NeverDone: ...
         # note は attempt.done_as() の鍵ごとに、行った人と Anyone の両方へ時刻を記録する

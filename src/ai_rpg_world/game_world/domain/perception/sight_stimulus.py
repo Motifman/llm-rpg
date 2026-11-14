@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.domain.perception.not_seen_in_dim import NotSeenInD
 from ai_rpg_world.game_world.domain.perception.not_seen_without_actor import NotSeenWithoutActor
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
+from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.value_object import PersonId, Probability, SpotId, WorldTick
@@ -78,6 +79,15 @@ class SightStimulus:
 
     def __post_init__(self) -> None:
         self.target.require_among(self.involved)
+
+    def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
+        return self.perceived_by(
+            perceiver,
+            senses.lighting_at(self.where),
+            senses.view_for(perceiver.person),
+            senses.random(),
+            senses.stealth(),
+        )
 
     def perceived_by(
         self,

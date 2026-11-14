@@ -200,6 +200,30 @@ class TestPassageStatesPassagesFrom:
         assert states.passages_from(spot("cellar"), (CELLAR_DOOR, STREET, SECRET, SLIDE)) == ()
 
 
+class TestPassageStatesSoundCarrying:
+    """sound_carrying が、音を通す今ある道を、今の状態を添えて宣言の順に返すことを保証する。"""
+
+    def test_sound_carrying_pairs_present_passages_with_their_current_state(self) -> None:
+        """扉を開けたあとは、扉を open で、ほかの今ある道を宣言の初めの状態で返す。"""
+        states = _states()
+        states.change_state(CELLAR_DOOR, OPEN)
+
+        carrying = states.sound_carrying((CELLAR_DOOR, STREET, SECRET, SLIDE))
+
+        assert carrying == (
+            PassageInState(passage=CELLAR_DOOR, state=OPEN),
+            PassageInState(passage=STREET, state=STREET.initial_state),
+            PassageInState(passage=SLIDE, state=SLIDE.initial_state),
+        )
+
+    def test_sound_carrying_skips_hidden_and_removed_passages(self) -> None:
+        """現れる前の道と無くなった道は、音を通さない。"""
+        states = _states()
+        states.remove(CELLAR_DOOR)
+
+        assert states.sound_carrying((CELLAR_DOOR, SECRET)) == ()
+
+
 class TestPassageInState:
     """in_state が今の状態名を添えた PassageInState を返し、PassageInState が宣言に無い状態名を断ることを保証する。"""
 

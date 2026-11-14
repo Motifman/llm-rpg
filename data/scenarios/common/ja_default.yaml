@@ -72,7 +72,7 @@ refusal_texts:
     GAME_WORLD.ITEM_NOT_HELD: それを手に持っていない。
     GAME_WORLD.ITEM_NOT_PACKED: それは荷にしまっていない。
     GAME_WORLD.NOT_ENOUGH_STOCK: もう残っていない。
-    GAME_WORLD.COUNT_BELOW_ZERO: もう数が足りない。
+    GAME_WORLD.NOT_ENOUGH_COUNT: もう数が足りない。
     GAME_WORLD.INSUFFICIENT_GOLD: 金が足りない。
     GAME_WORLD.PERSON_NOT_ALIVE: その人は倒れているか、もう息をしていない。
     GAME_WORLD.PERSON_NOT_DOWN: 相手は倒れていない。
@@ -95,7 +95,10 @@ refusal_texts:
     GAME_WORLD.CHOICE_NOT_IN_DECISION: その人は選べない。
     GAME_WORLD.BALLOT_ALREADY_CAST: もう票を入れた。
     GAME_WORLD.ABSTAIN_NOT_ALLOWED: 票を入れずに済ませることはできない。
+    GAME_WORLD.WHEREABOUTS.NO_ROUTE: そこへ行く道が見当たらない。
+    GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_AT_ROUTE_START: 今は道の途中だ。
   hidden: 今はできない。
+  unlisted: うまくいかなかった。
 
 built_in_action_perceptions:
   travel:

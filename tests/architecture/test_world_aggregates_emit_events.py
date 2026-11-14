@@ -26,10 +26,11 @@ from typing import Any
 
 import pytest
 from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, atmosphere, door, path, section, spot
-from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests, situation_for_tests
 from tests.game_world.support.world_in_memory import FractionsInOrder
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
+from ai_rpg_world.game_world.domain.action.action_attempt import UsesBody
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
@@ -94,6 +95,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
 )
 from ai_rpg_world.game_world.domain.people import PeopleRegister, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person import (
+    Dead,
     Died,
     GroupMembership,
     PersonOutcomes,
@@ -477,6 +479,9 @@ def _with(aggregate: AggregateRoot[Any], call: Callable[[Any], None]) -> _Prepar
 
 _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "Whereabouts.place": lambda: _with(Whereabouts.start(_WORLD), lambda w: w.place(_ALICE_BODY, _PLAZA)),
+    "Whereabouts.place_departed": lambda: _with(
+        _whereabouts(), lambda w: w.place_departed(_ALICE, departed_persons_act=True)
+    ),
     "Whereabouts.remove": lambda: _with(_whereabouts(), lambda w: w.remove(_ALICE_BODY)),
     "Whereabouts.start_travel": lambda: _with(
         _whereabouts(), lambda w: w.start_travel(_ALICE_BODY, Route(start=_PLAZA.spot_id, passages=(_STREET,)))
@@ -516,6 +521,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "PersonVitals.exert": lambda: _with(_vitals(), lambda v: v.exert(_fatigue_rule())),
     "PersonVitals.rest": lambda: _with(_tired(), lambda v: v.rest(FatigueAmount(2), _fatigue_rule())),
     "PersonVitals.start_action": lambda: _with(_vitals(), lambda v: v.start_action(WorldTick(3))),
+    "PersonVitals.start_acting": lambda: _with(
+        _vitals(), lambda v: v.start_acting(UsesBody(), WorldTick(3), _fatigue_rule())
+    ),
     "PeopleRegister.name": lambda: _with(_people_register(), lambda r: r.name(_ALICE, DisplayName("ミナ"))),
     "PersonOutcomes.decide": lambda: _with(PersonOutcomes.start(_WORLD, (_ALICE,)), lambda o: o.decide(_ALICE, Died())),
     "GroupMembership.join": lambda: _with(GroupMembership.start(_WORLD, {}), lambda g: g.join(_ALICE, _RED)),
@@ -563,6 +571,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "GroupDecision.cast": lambda: _with(_open_decision(), lambda d: d.cast(_ALICE, VoteFor(_BOB))),
     "GroupDecision.withdraw_voter": lambda: _with(_open_decision(), lambda d: d.withdraw_voter(_BOB)),
     "GroupDecision.withdraw_choice": lambda: _with(_open_decision(), lambda d: d.withdraw_choice(_BOB)),
+    "GroupDecision.withdraw_person": lambda: _with(
+        _open_decision(), lambda d: d.withdraw_person(_BOB, Dead(died_at=_NOW))
+    ),
     "GroupDecision.close": lambda: _with(_open_decision(), lambda d: d.close()),
     "Weather.change": lambda: _with(
         Weather.from_declaration(
@@ -585,7 +596,8 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "WorldFlags.raise_flag": lambda: _with(WorldFlags.start(_WORLD), lambda f: f.raise_flag(_BELL_RUNG, _TICK_PASSING)),
     "WorldFlags.lower_flag": lambda: _with(WorldFlags.start(_WORLD), lambda f: f.lower_flag(_GATE_SHUT, _TICK_PASSING)),
     "LatestActions.note": lambda: _with(
-        LatestActions.start(_WORLD), lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), _NOW)
+        LatestActions.start(_WORLD),
+        lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), situation_for_tests(), _NOW),
     ),
     "LatestActions.note_failed_attempt": lambda: _with(
         LatestActions.start(_WORLD),
@@ -595,6 +607,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
                 reason=TooTired(),
                 text=TextWithUnassignedPeople("{actor}は疲れている").about({"actor": _ALICE}),
             ),
+            situation_for_tests(),
             _NOW,
         ),
     ),

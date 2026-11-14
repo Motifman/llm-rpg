@@ -25,7 +25,6 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
-    CountBelowZeroException,
     MementoDoesNotMatchDesignException,
     RepeatedMementoKeyException,
     TickOrderException,
@@ -35,6 +34,7 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_except
 )
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     NeverHiddenObjectUnrevealedException,
+    NotEnoughCountException,
     NotEnoughStockException,
     OperationNotForStateKindException,
     StateKeyNotOwnedException,
@@ -199,10 +199,10 @@ class TestObjectStateCount:
         assert (event.before, event.after) == (CountValue(Count(2)), CountValue(Count(0)))
 
     def test_subtracting_below_zero_is_refused(self) -> None:
-        """subtract_from_count で 0 を下回ると CountBelowZeroException を投げ、値もイベントも変わらない。"""
+        """subtract_from_count で 0 を下回ると、世界の断りの NotEnoughCountException を投げ、値もイベントも変わらない。"""
         state = _created()
 
-        with pytest.raises(CountBelowZeroException):
+        with pytest.raises(NotEnoughCountException):
             state.subtract_from_count(_BUCKETS, Count(3))
 
         assert state.value_of(_BUCKETS, _START) == CountValue(Count(2))

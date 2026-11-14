@@ -58,7 +58,10 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant, PersonBody
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.action_attempt import Exertion
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+    from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+    from ai_rpg_world.game_world.domain.whereabouts.location import Location
 
 
 @final
@@ -206,6 +209,13 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         self._busy_until = until
         self._add(PersonBecameBusyEvent, until=until, previous_until=previous)
 
+    def start_acting(self, exertion: Exertion, until: WorldTick, rule: FatigueRule) -> None:
+        # 去った人は疲れず、行っているあいだも持たない
+        if self.is_dead():
+            return
+        exertion.tire(self, rule)
+        self.start_action(until)
+
     def is_busy(self, now: WorldTick) -> bool:
         return isinstance(self._busy_until, WorldTick) and now < self._busy_until
 
@@ -221,6 +231,9 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
     def can_act(self) -> bool:
         return isinstance(self._life_state, Alive)
 
+    def life_state(self) -> LifeState:
+        return self._life_state
+
     def is_dead(self) -> bool:
         return isinstance(self._life_state, Dead)
 
@@ -231,6 +244,16 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         if departed_persons_act and self.is_dead():
             return DepartedPerson(self._person)
         return PersonBody(self._person)
+
+    def perceiver_at(self, location: Location, departed_persons_act: bool, attentive: bool) -> Perceiver | None:
+        # 知覚する人の型が person.life_state を読むので、モジュールの頭で import すると循環する。
+        from ai_rpg_world.game_world.domain.perception.perceiver import DepartedPerceiver, LivingPerceiver
+
+        if isinstance(self._life_state, Dead):
+            if departed_persons_act:
+                return DepartedPerceiver(person=self._person, location=location)
+            return None
+        return LivingPerceiver(person=self._person, life=self._life_state, location=location, attentive=attentive)
 
     def fatigue_reached_limit(self, rule: FatigueRule) -> bool:
         return self._fatigue >= rule.limit

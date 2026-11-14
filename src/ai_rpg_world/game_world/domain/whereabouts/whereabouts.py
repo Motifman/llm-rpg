@@ -22,11 +22,12 @@ from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, Spo
 from ai_rpg_world.game_world.domain.whereabouts.location import (
     AtSpot,
     Location,
+    NotAtSpot,
     OpenArea,
     TravelInProgress,
     TravelPosition,
 )
-from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant
+from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant, PersonBody
 from ai_rpg_world.game_world.domain.whereabouts.route import Route
 from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
     OccupantEnteredSectionEvent,
@@ -95,12 +96,21 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
         )
 
     def place(self, occupant: Occupant, spot: SpotDeclaration) -> None:
+        self._place_at(occupant, spot.spot_id)
+
+    def place_departed(self, person: PersonId, departed_persons_act: bool) -> None:
+        if not departed_persons_act:
+            return
+        body = self.location_of(PersonBody(person))
+        # 区画の外に置くのは、去った人が定員に数えられ、体と同じ満員の区画に入れなくなるのを避けるため。
+        # 移動の途中なら、通路が閉じたときや取りやめたときと同じく、今の区間の出発点に置く。
+        self._place_at(DepartedPerson(person), body.spot if isinstance(body, AtSpot) else body.departed_from)
+
+    def _place_at(self, occupant: Occupant, spot: SpotId) -> None:
         if occupant in self._locations:
             raise OccupantAlreadyPlacedException(f"{occupant} is already in {self._world_id.value}")
-        self._locations[occupant] = AtSpot(spot=spot.spot_id, section=OpenArea())
-        self.add_event(
-            OccupantPlacedEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=spot.spot_id)
-        )
+        self._locations[occupant] = AtSpot(spot=spot, section=OpenArea())
+        self.add_event(OccupantPlacedEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=spot))
 
     def remove(self, occupant: Occupant) -> None:
         last_location = self.location_of(occupant)
@@ -189,6 +199,10 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
 
     def occupants_at(self, spot: SpotDeclaration) -> tuple[Occupant, ...]:
         return tuple(occupant for occupant in self._locations if self._spot_of(occupant) == spot.spot_id)
+
+    def spot_of(self, occupant: Occupant) -> SpotId | NotAtSpot:
+        spot = self._spot_of(occupant)
+        return NotAtSpot() if spot is None else spot
 
     def are_together(self, actor: Occupant, target: Occupant) -> bool:
         here = self._spot_of(actor)

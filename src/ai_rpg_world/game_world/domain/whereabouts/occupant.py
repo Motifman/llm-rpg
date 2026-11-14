@@ -11,11 +11,17 @@ from ai_rpg_world.game_world.domain.value_object import PersonId
 class PersonBody:
     person: PersonId
 
+    def can_hold_items(self) -> bool:
+        return True
+
 
 @final
 @dataclass(frozen=True)
 class DepartedPerson:
     person: PersonId
+
+    def can_hold_items(self) -> bool:
+        return False
 
 
 Occupant = PersonBody | DepartedPerson

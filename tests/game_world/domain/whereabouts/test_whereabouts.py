@@ -23,6 +23,7 @@ from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, Spo
 from ai_rpg_world.game_world.domain.whereabouts import (
     AtSpot,
     DepartedPerson,
+    NotAtSpot,
     OccupantEnteredSectionEvent,
     OccupantEnteredSpotEvent,
     OccupantLeftSectionEvent,
@@ -136,6 +137,48 @@ class TestWhereaboutsPlaceAndRemove:
         """置いていない人を remove すると OccupantNotPlacedException を投げる。"""
         with pytest.raises(OccupantNotPlacedException):
             Whereabouts.start(WORLD).remove(ALICE)
+
+
+class TestWhereaboutsPlaceDeparted:
+    """place_departed が、去った人の動く世界でだけ、死んだ人の体のある場所に去った人を置くことを保証する。"""
+
+    def test_departed_person_is_placed_outside_the_section_of_the_body(self) -> None:
+        """alice の体が広場の籠の中にあるとき、去った人の動く世界では、去った alice を広場の区画の外に置き、体は籠に残し、OccupantPlacedEvent を 1 件ためる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+        whereabouts.clear_events()
+
+        whereabouts.place_departed(PersonId("alice"), departed_persons_act=True)
+
+        departed = DepartedPerson(PersonId("alice"))
+        assert whereabouts.location_of(departed) == AtSpot(spot=SpotId("plaza"), section=OpenArea())
+        assert whereabouts.is_in_section(ALICE, LIFT)
+        [event] = whereabouts.get_events()
+        assert isinstance(event, OccupantPlacedEvent)
+        assert (event.occupant, event.spot) == (departed, SpotId("plaza"))
+
+    def test_departed_person_of_a_body_on_the_way_is_placed_where_the_passage_began(self) -> None:
+        """alice の体が広場から井戸を通って坑道の入口へ向かう途中、井戸からの区間で死ぬと、去った alice を井戸に置く。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET, LANE)))
+        whereabouts.advance_travels(frozenset(), _NOW)
+        whereabouts.advance_travels(frozenset(), _NOW)
+
+        whereabouts.place_departed(PersonId("alice"), departed_persons_act=True)
+
+        assert whereabouts.location_of(DepartedPerson(PersonId("alice"))) == AtSpot(
+            spot=SpotId("well"), section=OpenArea()
+        )
+
+    def test_nobody_is_placed_where_departed_people_do_not_act(self) -> None:
+        """去った人の動かない世界では、去った alice を置かず、イベントもためない。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+
+        whereabouts.place_departed(PersonId("alice"), departed_persons_act=False)
+
+        with pytest.raises(OccupantNotPlacedException):
+            whereabouts.location_of(DepartedPerson(PersonId("alice")))
+        assert whereabouts.get_events() == []
 
 
 class TestWhereaboutsEnterSection:
@@ -484,6 +527,28 @@ class TestWhereaboutsTogetherness:
         """置いていない人の location_of は OccupantNotPlacedException を投げる。"""
         with pytest.raises(OccupantNotPlacedException):
             Whereabouts.start(WORLD).location_of(ALICE)
+
+
+class TestWhereaboutsSpotOf:
+    """spot_of が、その人のいる場所を答え、どの場所にもいなければ NotAtSpot を答えることを保証する。"""
+
+    def test_occupant_in_section_is_at_the_spot_of_the_section(self) -> None:
+        """区画の中にいる人の spot_of は、区画のある場所の SpotId。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+
+        assert whereabouts.spot_of(ALICE) == SpotId("plaza")
+
+    def test_travelling_occupant_is_not_at_any_spot(self) -> None:
+        """移動中の人の spot_of は NotAtSpot。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        assert whereabouts.spot_of(ALICE) == NotAtSpot()
+
+    def test_occupant_not_placed_is_not_at_any_spot(self) -> None:
+        """世界に置かれていない人の spot_of は、例外を投げずに NotAtSpot。"""
+        assert _whereabouts((ALICE, "plaza")).spot_of(BOB) == NotAtSpot()
 
 
 class TestWhereaboutsCanReach:

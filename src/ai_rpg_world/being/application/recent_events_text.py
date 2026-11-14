@@ -29,10 +29,10 @@ class _Line:
     """出来事 1 つを行にする。行にしない出来事は None。"""
 
     def perceived(self, perception: Perception) -> str | None:
-        return _line(perception.observation.time, perception.observation.body)
+        return _line(perception.observation.time, perception.observation.body_without_people())
 
     def attempted(self, attempt: Attempt, result: Observation) -> str | None:
-        return _line(result.time, result.body, attempt.move.inner_thought)
+        return _line(result.time, result.body_without_people(), attempt.move.inner_thought)
 
     def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> str | None:
         return _line(result.time, result.body, attempt.move.inner_thought)

@@ -17,6 +17,7 @@ from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     NoVotersGivenException,
     VoterNotInDecisionException,
 )
+from ai_rpg_world.game_world.domain.person.life_state import Alive, Dead, LifeState
 from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, PersonId
 
 if TYPE_CHECKING:
@@ -191,6 +192,14 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         self._ballots.pop(voter, None)
         self.add_event(VoterWithdrawnEvent(**new_event_stamp(), decision_id=self._decision_id, voter=voter))
         self._tally_if_everyone_cast()
+
+    def withdraw_person(self, person: PersonId, life_state: LifeState) -> None:
+        if isinstance(life_state, Alive):
+            return
+        # 選ばれる人から先に外す。投票する人から先に外すと、残りの票がそろってその場で集計され、死んだ人が選ばれる。
+        if isinstance(life_state, Dead):
+            self.withdraw_choice(person)
+        self.withdraw_voter(person)
 
     def withdraw_choice(self, choice: PersonId) -> None:
         if not self._open or choice not in self._choices:

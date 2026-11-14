@@ -28,7 +28,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.world_progress import WorldStage
 from tests.game_world.domain.condition._builders import ALICE, BOB, WORLD, text, vitals, world
 from tests.game_world.domain.whereabouts._builders import thing
-from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests, situation_for_tests
 from tests.game_world.support.declarations_for_tests import InteractionForTests
 from tests.game_world.support.world_in_memory import world_in_memory
 
@@ -83,7 +83,7 @@ class TestTicksSinceLastActionSinceStart:
         """bob が tick 3 にレバーを引いたら、誰でもが 3 tick 以上引いていない条件は tick 5 で偽、tick 6 で真。"""
         condition = _since_lever(3, SinceStart())
         a_world = world()
-        a_world.latest_actions().note(_BOB_PULLS_LEVER, WorldTick(3))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), WorldTick(3))
 
         assert not condition.holds(_at_tick(a_world, 5).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 6).facts(), _BY_ALICE)
@@ -101,8 +101,8 @@ class TestTicksSinceLastActionSinceStart:
             who=Actor(), action=ActionKind.SEARCH, ticks=Ticks(3), since=SinceStart(), failure_text=NoText()
         )
         a_world = world()
-        a_world.latest_actions().note(_ALICE_SEARCHES, WorldTick(1))
-        a_world.latest_actions().note(_BOB_SEARCHES, WorldTick(4))
+        a_world.latest_actions().note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(1))
+        a_world.latest_actions().note(_BOB_SEARCHES, situation_for_tests(), WorldTick(4))
 
         assert condition.holds(_at_tick(a_world, 4).facts(), _BY_ALICE)
 
@@ -128,7 +128,7 @@ class TestTicksSinceLastActionSinceWorldStageEntered:
         """tick 2 にレバーを引き、tick 5 に夜へ入ったなら、3 tick 以上の条件は tick 7 で偽、tick 8 で真。"""
         condition = _since_lever(3, SinceWorldStageEntered())
         a_world = _staged_world()
-        a_world.latest_actions().note(_BOB_PULLS_LEVER, WorldTick(2))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), WorldTick(2))
         _at_tick(a_world, 5)
         a_world.aggregates().world_stage().enter(_NIGHT, WorldTick(5))
 
@@ -140,7 +140,7 @@ class TestTicksSinceLastActionSinceWorldStageEntered:
         condition = _since_lever(3, SinceWorldStageEntered())
         a_world = _at_tick(_staged_world(), 5)
         a_world.aggregates().world_stage().enter(_NIGHT, WorldTick(5))
-        a_world.latest_actions().note(_BOB_PULLS_LEVER, WorldTick(6))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), WorldTick(6))
 
         assert not condition.holds(_at_tick(a_world, 8).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 9).facts(), _BY_ALICE)

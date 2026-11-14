@@ -5,6 +5,10 @@ class GameWorldDomainException(Exception):
     error_code: str = "GAME_WORLD.DOMAIN_ERROR"
 
 
+class WorldRefusal(GameWorldDomainException):
+    pass
+
+
 class ValueOutOfRangeException(GameWorldDomainException):
     error_code = "GAME_WORLD.VALUE_OUT_OF_RANGE"
 
@@ -17,7 +21,7 @@ class CountBelowZeroException(GameWorldDomainException):
     error_code = "GAME_WORLD.COUNT_BELOW_ZERO"
 
 
-class InsufficientGoldException(GameWorldDomainException):
+class InsufficientGoldException(WorldRefusal):
     error_code = "GAME_WORLD.INSUFFICIENT_GOLD"
 
 

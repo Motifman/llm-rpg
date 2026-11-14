@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Occupant, PersonB
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.aggregate_readings import PersonVitalsReading
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.person import PersonVitals
     from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 
 
@@ -88,12 +89,18 @@ class UsesBody:
     def is_too_tiring_for(self, vitals: PersonVitalsReading, rule: FatigueRule) -> bool:
         return vitals.fatigue_reached_limit(rule)
 
+    def tire(self, vitals: PersonVitals, rule: FatigueRule) -> None:
+        vitals.exert(rule)
+
 
 @final
 @dataclass(frozen=True)
 class DoesNotUseBody:
     def is_too_tiring_for(self, vitals: PersonVitalsReading, rule: FatigueRule) -> bool:
         return False
+
+    def tire(self, vitals: PersonVitals, rule: FatigueRule) -> None:
+        pass
 
 
 Exertion = UsesBody | DoesNotUseBody
@@ -114,6 +121,8 @@ class ActionAttempt(Protocol):
     def person_as(self, kind: SubjectKind) -> PersonId: ...
 
     def this_item(self) -> ItemInstanceId: ...
+
+    def items_handled(self) -> tuple[ItemInstanceId, ...]: ...
 
     def acting_person(self) -> PersonId | NoActingPerson: ...
 

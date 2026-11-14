@@ -25,6 +25,12 @@ class OpenArea:
 
 @final
 @dataclass(frozen=True)
+class NotAtSpot:
+    pass
+
+
+@final
+@dataclass(frozen=True)
 class AtSpot:
     spot: SpotId
     section: SpotSectionId | OpenArea

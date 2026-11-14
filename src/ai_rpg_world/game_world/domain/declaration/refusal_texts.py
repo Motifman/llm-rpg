@@ -7,6 +7,7 @@ from typing import final
 
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusal, CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     MissingCommonRuleRefusalTextException,
     UnknownPersonInRefusalTextException,
@@ -23,12 +24,13 @@ class RefusalTexts:
     common_rules: Mapping[CommonRuleRefusalKind, TextWithUnassignedPeople]
     world_state: Mapping[RefusalCode, TextWithUnassignedPeople]
     hidden: TextWithUnassignedPeople
+    unlisted: TextWithUnassignedPeople
 
     def __post_init__(self) -> None:
         missing = sorted(kind.name for kind in set(CommonRuleRefusalKind) - self.common_rules.keys())
         if missing:
             raise MissingCommonRuleRefusalTextException(f"RefusalTexts.common_rules lacks {missing}")
-        for text in (*self.common_rules.values(), *self.world_state.values(), self.hidden):
+        for text in (*self.common_rules.values(), *self.world_state.values(), self.hidden, self.unlisted):
             unknown = sorted(text.placeholders() - {_ACTOR})
             if unknown:
                 raise UnknownPersonInRefusalTextException(
@@ -39,6 +41,14 @@ class RefusalTexts:
 
     def common_rule_text(self, refusal: CommonRuleRefusal, actor: PersonId) -> TextAboutPeople:
         return _about_actor(self.common_rules[refusal.kind()], actor)
+
+    def world_state_text(self, code: RefusalCode, actor: PersonId) -> TextAboutPeople:
+        return _about_actor(self.world_state.get(code, self.unlisted), actor)
+
+    def precondition_text(self, failure: FailureReason | HiddenFailure, actor: PersonId) -> TextAboutPeople:
+        if isinstance(failure, FailureReason) and isinstance(failure.text, TextAboutPeople):
+            return failure.text
+        return _about_actor(self.hidden, actor)
 
 
 def _about_actor(text: TextWithUnassignedPeople, actor: PersonId) -> TextAboutPeople:

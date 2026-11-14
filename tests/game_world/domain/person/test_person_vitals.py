@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.action_attempt import DoesNotUseBody, UsesBody
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     GameWorldDomainException,
@@ -15,6 +16,7 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
     PersonStartsFallenException,
     StatusEffectKindRepeatedException,
 )
+from ai_rpg_world.game_world.domain.perception import DepartedPerceiver, LivingPerceiver
 from ai_rpg_world.game_world.domain.person import (
     Alive,
     Dead,
@@ -56,10 +58,11 @@ from ai_rpg_world.game_world.domain.value_object import (
     HungerAmount,
     PersonId,
     Rate,
+    SpotId,
     Ticks,
     WorldTick,
 )
-from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, PersonBody
+from ai_rpg_world.game_world.domain.whereabouts import AtSpot, DepartedPerson, OpenArea, PersonBody
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
@@ -598,6 +601,38 @@ class TestBusy:
             make().start_action(WorldTick(20))
 
 
+class TestStartActing:
+    """start_acting が、行為を始めた人を体の使い方に応じて疲れさせ、行っているあいだを始め、去った人には何もしないことを保証する。"""
+
+    def test_action_using_body_tires_and_makes_busy(self) -> None:
+        """UsesBody の行為は疲れを per_exertion だけ増やし、渡した tick まで行っているあいだにする。"""
+        vitals = _vitals()
+
+        vitals.start_acting(UsesBody(), WorldTick(3), _fatigue(per_exertion=2))
+
+        assert vitals.fatigue() == FatigueAmount(2)
+        assert vitals.is_busy(WorldTick(2))
+
+    def test_action_not_using_body_makes_busy_without_tiring(self) -> None:
+        """DoesNotUseBody の行為は疲れを増やさず、行っているあいだだけを始める。"""
+        vitals = _vitals()
+
+        vitals.start_acting(DoesNotUseBody(), WorldTick(3), _fatigue(per_exertion=2))
+
+        assert vitals.fatigue() == FatigueAmount(0)
+        assert vitals.is_busy(WorldTick(2))
+
+    def test_dead_person_acting_changes_nothing(self) -> None:
+        """死んだ人 (去った人として行う) が行為を始めても、疲れも行っているあいだも変わらず、イベントもためない。"""
+        vitals = _dead()
+        vitals.clear_events()
+
+        vitals.start_acting(UsesBody(), WorldTick(30), _fatigue())
+
+        assert not vitals.is_busy(WorldTick(29))
+        assert vitals.get_events() == []
+
+
 class TestStatusEffects:
     """状態効果が種類ごとに 1 つで、期限が来たら外れることを保証する。"""
 
@@ -898,3 +933,44 @@ class TestPersonVitalsMementoRefusals:
 
         with pytest.raises(StatusEffectKindRepeatedException):
             PersonVitals.from_memento(memento, _DESIGN.nouns)
+
+
+_IN_THE_SQUARE = AtSpot(spot=SpotId("square"), section=OpenArea())
+
+
+class TestPerceiverAt:
+    """PersonVitals.perceiver_at が、生死と死んだ人が去った人として動く世界かで、知覚する人の形を決める挙動を保証する。"""
+
+    def test_alive_person_perceives_as_living_and_awake(self) -> None:
+        """生きている人は、渡した居場所と耳を澄ましているかを持つ、起きている LivingPerceiver になる。"""
+        vitals = _vitals()
+
+        perceiver = vitals.perceiver_at(_IN_THE_SQUARE, departed_persons_act=False, attentive=True)
+
+        assert perceiver == LivingPerceiver(person=_ALICE, life=Alive(), location=_IN_THE_SQUARE, attentive=True)
+
+    def test_fallen_person_perceives_as_living_and_down(self) -> None:
+        """倒れている人は、倒れた tick と原因を持つ Down の LivingPerceiver になる。"""
+        vitals = _fallen(at=5)
+
+        perceiver = vitals.perceiver_at(_IN_THE_SQUARE, departed_persons_act=False, attentive=False)
+
+        assert perceiver == LivingPerceiver(
+            person=_ALICE, life=Down(fell_at=WorldTick(5), cause=_STRUCK), location=_IN_THE_SQUARE, attentive=False
+        )
+
+    def test_dead_person_perceives_as_departed_when_departed_persons_act(self) -> None:
+        """死んだ人は、去った人として動く世界では DepartedPerceiver になる。"""
+        vitals = _dead()
+
+        perceiver = vitals.perceiver_at(_IN_THE_SQUARE, departed_persons_act=True, attentive=False)
+
+        assert perceiver == DepartedPerceiver(person=_ALICE, location=_IN_THE_SQUARE)
+
+    def test_dead_person_perceives_nothing_when_departed_persons_do_not_act(self) -> None:
+        """死んだ人は、去った人として動かない世界では None になり、何も知覚しない。"""
+        vitals = _dead()
+
+        perceiver = vitals.perceiver_at(_IN_THE_SQUARE, departed_persons_act=False, attentive=False)
+
+        assert perceiver is None

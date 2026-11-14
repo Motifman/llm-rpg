@@ -1,4 +1,4 @@
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException, WorldRefusal
 
 
 class EmptyRouteException(GameWorldDomainException):
@@ -13,7 +13,7 @@ class UnknownPassageException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.UNKNOWN_PASSAGE"
 
 
-class PassageAlreadyRemovedException(GameWorldDomainException):
+class PassageAlreadyRemovedException(WorldRefusal):
     error_code = "GAME_WORLD.WHEREABOUTS.PASSAGE_ALREADY_REMOVED"
 
 
@@ -29,7 +29,7 @@ class OccupantNotPlacedException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_PLACED"
 
 
-class OccupantNotAtRouteStartException(GameWorldDomainException):
+class OccupantNotAtRouteStartException(WorldRefusal):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_AT_ROUTE_START"
 
 
@@ -37,19 +37,23 @@ class OccupantNotTravellingException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_TRAVELLING"
 
 
-class OccupantNotAtSectionSpotException(GameWorldDomainException):
+class OccupantNotAtSectionSpotException(WorldRefusal):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_AT_SECTION_SPOT"
 
 
-class OccupantAlreadyInSectionException(GameWorldDomainException):
+class OccupantAlreadyInSectionException(WorldRefusal):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_ALREADY_IN_SECTION"
 
 
-class OccupantNotInSectionException(GameWorldDomainException):
+class OccupantNotInSectionException(WorldRefusal):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_IN_SECTION"
 
 
-class SectionFullException(GameWorldDomainException):
+class NoRouteToDestinationException(WorldRefusal):
+    error_code = "GAME_WORLD.WHEREABOUTS.NO_ROUTE"
+
+
+class SectionFullException(WorldRefusal):
     error_code = "GAME_WORLD.WHEREABOUTS.SECTION_FULL"
 
 
