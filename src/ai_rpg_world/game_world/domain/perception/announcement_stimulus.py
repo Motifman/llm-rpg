@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Told
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
+from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
@@ -20,6 +21,9 @@ class AnnouncementStimulus:
     text: TextAboutPeople
     salience: Salience
     at: WorldTick
+
+    def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
+        return self.perceived_by(perceiver, senses.view_for(perceiver.person))
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome:
         if perceiver.person not in self.audience:

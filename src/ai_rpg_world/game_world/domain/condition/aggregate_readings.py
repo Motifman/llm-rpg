@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
     from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
     from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+    from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
     from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
     from ai_rpg_world.game_world.domain.world_records import NeverDone, NeverFired
 
@@ -84,6 +85,8 @@ class PassageStatesReading(Protocol):
     ) -> tuple[PassageId, ...]: ...
 
     def in_state(self, passage: PassageDeclaration) -> PassageInState: ...
+
+    def sound_carrying(self, declared: tuple[PassageDeclaration, ...]) -> tuple[PassageInState, ...]: ...
 
 
 class SpotAtmospheresReading(Protocol):
@@ -140,6 +143,8 @@ class PersonVitalsReading(Protocol):
     def is_down(self) -> bool: ...
 
     def occupant_in_world(self, departed_persons_act: bool) -> Occupant: ...
+
+    def perceiver_at(self, location: Location, departed_persons_act: bool, attentive: bool) -> Perceiver | None: ...
 
     def fatigue_reached_limit(self, rule: FatigueRule) -> bool: ...
 

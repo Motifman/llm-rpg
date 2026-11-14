@@ -22,5 +22,8 @@ class NoWeather:
     def is_declared(self) -> bool:
         return False
 
+    def obscures_sight(self, state: WeatherState) -> bool:
+        return False
+
     def current(self) -> WeatherState:
         raise NotDeclaredInThisWorldException("this world declares no weather")
