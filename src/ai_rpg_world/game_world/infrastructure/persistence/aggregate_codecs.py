@@ -7,18 +7,22 @@ from typing import Any, Protocol, TypeVar, cast, final
 
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
 from ai_rpg_world.game_world.infrastructure.persistence.ground_items_codec import GroundItemsCodec
+from ai_rpg_world.game_world.infrastructure.persistence.group_decision_codec import GroupDecisionCodec
 from ai_rpg_world.game_world.infrastructure.persistence.group_membership_codec import GroupMembershipCodec
 from ai_rpg_world.game_world.infrastructure.persistence.item_codec import ItemCodec
 from ai_rpg_world.game_world.infrastructure.persistence.object_state_codec import ObjectStateCodec
+from ai_rpg_world.game_world.infrastructure.persistence.passage_states_codec import PassageStatesCodec
 from ai_rpg_world.game_world.infrastructure.persistence.people_register_codec import PeopleRegisterCodec
 from ai_rpg_world.game_world.infrastructure.persistence.person_inventory_codec import PersonInventoryCodec
 from ai_rpg_world.game_world.infrastructure.persistence.person_outcomes_codec import PersonOutcomesCodec
 from ai_rpg_world.game_world.infrastructure.persistence.person_vitals_codec import PersonVitalsCodec
+from ai_rpg_world.game_world.infrastructure.persistence.spot_atmospheres_codec import SpotAtmospheresCodec
 from ai_rpg_world.game_world.infrastructure.persistence.spot_search_progress_codec import SpotSearchProgressCodec
 from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception import (
     MementoNotStorableException,
     StoredMementoUnreadableException,
 )
+from ai_rpg_world.game_world.infrastructure.persistence.whereabouts_codec import WhereaboutsCodec
 from ai_rpg_world.game_world.infrastructure.persistence.world_clock_codec import WorldClockCodec
 from ai_rpg_world.game_world.infrastructure.persistence.world_flags_codec import WorldFlagsCodec
 
@@ -108,5 +112,9 @@ GAME_WORLD_CODECS = AggregateCodecs(
         PersonInventoryCodec(),
         GroundItemsCodec(),
         SpotSearchProgressCodec(),
+        WhereaboutsCodec(),
+        PassageStatesCodec(),
+        SpotAtmospheresCodec(),
+        GroupDecisionCodec(),
     ]
 )
