@@ -18,7 +18,7 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantNotTravellingException,
     SectionFullException,
 )
-from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, Ticks, WorldId
+from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts.location import (
     AtSpot,
     Location,
@@ -36,6 +36,7 @@ from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
     OccupantPlacedEvent,
     OccupantRemovedEvent,
     OccupantTeleportedEvent,
+    Teleported,
     TravelBlockedEvent,
     TravelCancelledEvent,
     TravelStartedEvent,
@@ -126,12 +127,12 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             OccupantLeftSpotEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=route.start)
         )
 
-    def advance_travels(self, closed_passages: frozenset[PassageId]) -> None:
+    def advance_travels(self, closed_passages: frozenset[PassageId], now: WorldTick) -> None:
         for occupant, location in list(self._locations.items()):
             if isinstance(location, TravelInProgress):
-                self._advance(occupant, location, closed_passages)
+                self._advance(occupant, location, closed_passages, now)
 
-    def cancel_travel(self, occupant: Occupant) -> None:
+    def cancel_travel(self, occupant: Occupant, now: WorldTick) -> None:
         location = self._locations.get(occupant)
         if not isinstance(location, TravelInProgress):
             raise OccupantNotTravellingException(f"{occupant} is not travelling")
@@ -141,9 +142,11 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
                 **new_event_stamp(), world_id=self._world_id, occupant=occupant, returned_to=location.departed_from
             )
         )
-        self._announce_arrival(occupant, location.departed_from)
+        self._announce_arrival(
+            occupant, location.departed_from, location.route.end_of_passage(location.passage_index), now
+        )
 
-    def teleport(self, occupant: Occupant, spot: SpotDeclaration) -> None:
+    def teleport(self, occupant: Occupant, spot: SpotDeclaration, now: WorldTick) -> None:
         before = self.location_of(occupant)
         if isinstance(before, AtSpot):
             self._leave_section_if_inside(occupant, before)
@@ -153,7 +156,7 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
                 **new_event_stamp(), world_id=self._world_id, occupant=occupant, before=before, after=spot.spot_id
             )
         )
-        self._announce_arrival(occupant, spot.spot_id)
+        self._announce_arrival(occupant, spot.spot_id, Teleported(), now)
 
     def enter_section(
         self, occupant: Occupant, section: SpotSectionDeclaration, not_counted: frozenset[PersonId]
@@ -205,11 +208,15 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             return any(self.is_in_section(occupant, section) for section in enclosing)
         return self._spot_of(occupant) == obj.spot_id
 
-    def _advance(self, occupant: Occupant, travel: TravelInProgress, closed_passages: frozenset[PassageId]) -> None:
+    def _advance(
+        self, occupant: Occupant, travel: TravelInProgress, closed_passages: frozenset[PassageId], now: WorldTick
+    ) -> None:
         route = travel.route
         passage_index = travel.passage_index
         ticks_left = travel.ticks_left_on_passage.value
         departed_from = travel.departed_from
+        # 区間を 1 つも歩き切らずに出発点へ戻る人は、歩いていた区間の向こうの端から来たように見える。
+        came_from = route.end_of_passage(passage_index)
         spare = 1
         while True:
             passage_id = route.passages[passage_index].passage_id
@@ -224,7 +231,7 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
                         stopped_at=departed_from,
                     )
                 )
-                self._announce_arrival(occupant, departed_from)
+                self._announce_arrival(occupant, departed_from, came_from, now)
                 return
             if ticks_left > spare:
                 self._locations[occupant] = TravelInProgress(
@@ -235,10 +242,11 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
                 )
                 return
             spare -= ticks_left
+            came_from = departed_from
             departed_from = route.end_of_passage(passage_index)
             if passage_index + 1 == len(route.passages):
                 self._stop_at(occupant, departed_from)
-                self._announce_arrival(occupant, departed_from)
+                self._announce_arrival(occupant, departed_from, came_from, now)
                 return
             passage_index += 1
             ticks_left = route.passages[passage_index].travel_ticks.value
@@ -267,9 +275,11 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
     def _stop_at(self, occupant: Occupant, spot: SpotId) -> None:
         self._locations[occupant] = AtSpot(spot=spot, section=OpenArea())
 
-    def _announce_arrival(self, occupant: Occupant, spot: SpotId) -> None:
+    def _announce_arrival(self, occupant: Occupant, spot: SpotId, origin: SpotId | Teleported, now: WorldTick) -> None:
         self.add_event(
-            OccupantEnteredSpotEvent(**new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=spot)
+            OccupantEnteredSpotEvent(
+                **new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=spot, origin=origin, at=now
+            )
         )
 
     def _spot_of(self, occupant: Occupant) -> SpotId | None:

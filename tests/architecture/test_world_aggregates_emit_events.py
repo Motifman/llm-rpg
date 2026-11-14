@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, atmosphere, door, path, section, spot
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.world_in_memory import FractionsInOrder
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
@@ -71,10 +72,12 @@ from ai_rpg_world.game_world.domain.declaration.progress import (
     WorldStageDeclaration,
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    ChangesEvery,
     NoChange,
     NoDayNight,
     WeatherDeclaration,
     WeatherState,
+    WeatherTransitions,
     WeatherType,
 )
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
@@ -207,6 +210,7 @@ _PreparedCall = tuple[AggregateRoot[Any], Callable[[], None]]
 _WORLD = WorldId("watched_world")
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
+_NOW = WorldTick(0)
 _ALICE_BODY = PersonBody(_ALICE)
 _PLAZA = spot("plaza")
 _WELL = spot("well")
@@ -219,6 +223,12 @@ _BENCH = section("bench", "plaza")
 _LANTERN = ItemInstanceId("lantern#1")
 _ROPE = ItemInstanceId("rope#1")
 _NOW = WorldTick(0)
+_CHANGES_EVERY_TICK = WeatherDeclaration(
+    initial=WeatherType.CLEAR,
+    changes=ChangesEvery(Ticks(1), WeatherTransitions.default()),
+    announce_changes=True,
+    obscuring=frozenset(),
+)
 
 
 def _cleared(aggregate: AggregateRoot[Any]) -> None:
@@ -472,9 +482,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
         _whereabouts(), lambda w: w.start_travel(_ALICE_BODY, Route(start=_PLAZA.spot_id, passages=(_STREET,)))
     ),
     # 道の途中の進みはイベントにせず、着いたときと止められたときだけイベントにする。
-    "Whereabouts.advance_travels": lambda: _with(_travelling(), lambda w: w.advance_travels(frozenset())),
-    "Whereabouts.cancel_travel": lambda: _with(_travelling(), lambda w: w.cancel_travel(_ALICE_BODY)),
-    "Whereabouts.teleport": lambda: _with(_whereabouts(), lambda w: w.teleport(_ALICE_BODY, _MINE)),
+    "Whereabouts.advance_travels": lambda: _with(_travelling(), lambda w: w.advance_travels(frozenset(), _NOW)),
+    "Whereabouts.cancel_travel": lambda: _with(_travelling(), lambda w: w.cancel_travel(_ALICE_BODY, _NOW)),
+    "Whereabouts.teleport": lambda: _with(_whereabouts(), lambda w: w.teleport(_ALICE_BODY, _MINE, _NOW)),
     "Whereabouts.enter_section": lambda: _with(
         _whereabouts(), lambda w: w.enter_section(_ALICE_BODY, _BENCH, frozenset())
     ),
@@ -562,6 +572,10 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
             ),
         ),
         lambda w: w.change(WeatherState(WeatherType.RAIN)),
+    ),
+    "Weather.pass_time": lambda: _with(
+        Weather.from_declaration(_WORLD, _CHANGES_EVERY_TICK),
+        lambda w: w.pass_time(WorldTick(1), _CHANGES_EVERY_TICK, FractionsInOrder((0.8,))),
     ),
     "WorldClock.advance": lambda: _with(WorldClock.start(_WORLD), lambda c: c.advance(NoDayNight())),
     "WorldStage.enter": lambda: _with(

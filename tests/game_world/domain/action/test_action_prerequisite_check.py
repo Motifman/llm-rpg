@@ -60,6 +60,7 @@ from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 ALICE = PersonId("alice")
 BOB = PersonId("bob")
+_NOW = WorldTick(0)
 LANDING = spot("lift_landing")
 SHORE = spot("shore")
 LEVER = thing("lever", "lift_landing")
@@ -159,7 +160,7 @@ class TestReach:
     def test_object_at_another_spot_is_not_together(self) -> None:
         """別の場所にある物に触ろうとすると、区画より先に NotTogether で断る。"""
         world = _world()
-        world.aggregates().whereabouts().teleport(PersonBody(ALICE), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(ALICE), SHORE, _NOW)
         attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, {}, Openly())
 
         assert _reason(attempt, world) == NotTogether()
@@ -167,7 +168,7 @@ class TestReach:
     def test_person_at_another_spot_is_not_together(self) -> None:
         """相手が別の場所にいるのに介抱しようとすると NotTogether で断る。"""
         world = _world()
-        world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
 
         assert _reason(TendAttempt(ALICE, BOB), world) == NotTogether()
 
@@ -179,7 +180,7 @@ class TestReach:
         attempt = GroundItemPickupAttempt(ALICE, lamp, Openly())
 
         assert _reason(attempt, world) == NotTogether()
-        world.aggregates().whereabouts().teleport(PersonBody(ALICE), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(ALICE), SHORE, _NOW)
         assert _reason(attempt, world) is None
 
 
