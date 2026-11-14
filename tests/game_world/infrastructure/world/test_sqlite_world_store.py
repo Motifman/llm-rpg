@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Protocol
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import AggregateWithMemento
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.value_object import WorldTick
@@ -14,7 +14,12 @@ from ai_rpg_world.game_world.domain.world_records import WorldFlags
 from ai_rpg_world.game_world.infrastructure.persistence.aggregate_codecs import GAME_WORLD_CODECS, StoredMemento
 from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception import MementoNotStorableException
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
-from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import STORAGE_VERSION, SqliteWorldStore
+from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import (
+    _ONE_PER_WORLD,
+    _OWNER_OF_MEMENTO,
+    STORAGE_VERSION,
+    SqliteWorldStore,
+)
 from ai_rpg_world.game_world.infrastructure.world.stored_world_exception import (
     StoredWorldMismatchException,
     WorldSessionEndedException,
@@ -30,35 +35,22 @@ from tests.game_world.application.world_store_contract import (
 _HASH = "hash-of-the-scenario"
 
 
-class _Remembered(Protocol):
-    def memento(self) -> object: ...
-
-
-def _created(path: Path | str, design: WorldDesign, *aggregates: _Remembered) -> SqliteWorldStore:
-    store = SqliteWorldStore.create(
+def _empty(path: Path | str, design: WorldDesign) -> SqliteWorldStore:
+    SqliteWorldStore.create(
         path,
         world_id=WORLD,
         scenario="contract.yaml",
         scenario_hash=_HASH,
         design=design,
         random=SeedableRandomSource(1),
-    )
-    store.close()
-    with sqlite3.connect(path) as connection:
-        for aggregate in aggregates:
-            stored = GAME_WORLD_CODECS.stored(aggregate.memento())
-            connection.execute(
-                "INSERT INTO world_state (kind, key, version, state) VALUES (?, ?, ?, ?)",
-                (stored.kind, _owner_key(aggregate.memento()), stored.version, stored.state),
-            )
+    ).close()
     return SqliteWorldStore.open(path, scenario_hash=_HASH, design=design, random=SeedableRandomSource(1))
 
 
-def _owner_key(memento: object) -> str:
-    for owner in ("world_id", "person", "person_id", "item_id", "object_id", "spot_id", "decision_id"):
-        if hasattr(memento, owner):
-            return str(getattr(memento, owner).value)
-    raise AssertionError(f"{type(memento).__name__} has no owner")
+def _created(path: Path | str, design: WorldDesign, *aggregates: AggregateWithMemento) -> SqliteWorldStore:
+    store = _empty(path, design)
+    store.start_world(aggregates)
+    return store
 
 
 class TestSqliteWorldStoreContract(WorldStoreContract):
@@ -68,8 +60,17 @@ class TestSqliteWorldStoreContract(WorldStoreContract):
     def _directory(self, tmp_path: Path) -> None:
         self._path = tmp_path / "world.sqlite"
 
-    def store_holding(self, design: WorldDesign, *aggregates: _Remembered) -> SqliteWorldStore:
-        return _created(self._path, design, *aggregates)
+    def empty_store(self, design: WorldDesign) -> SqliteWorldStore:
+        return _empty(self._path, design)
+
+
+class TestSqliteWorldStoreKeysAtStart:
+    """始まりの集約の行の key を、どの集約の種類についても決められることを保証する。"""
+
+    def test_every_codec_kind_is_either_one_per_world_or_has_an_owner(self) -> None:
+        """変換が登録されたすべての memento の型は、世界に 1 つの型か、持ち主の決まった型の、どちらか一方にだけ入っている。"""
+        assert _ONE_PER_WORLD.isdisjoint(_OWNER_OF_MEMENTO)
+        assert _ONE_PER_WORLD | set(_OWNER_OF_MEMENTO) == GAME_WORLD_CODECS.memento_types()
 
 
 class TestSqliteWorldStoreOpening:
@@ -200,3 +201,15 @@ class TestSqliteWorldStoreSessionsInTurn:
 
         with pytest.raises(WorldSessionStillOpenException):
             store.session()
+
+
+class TestSqliteWorldStoreStartingWhileSessionOpen:
+    """範囲が開いているあいだは、始まりの集約を書けないことを保証する。"""
+
+    def test_start_world_while_a_session_is_open_raises(self, tmp_path: Path) -> None:
+        """範囲を開いたまま start_world を呼ぶと WorldSessionStillOpenException を投げる。"""
+        store = _empty(tmp_path / "world.sqlite", design_with_bell())
+        store.session()
+
+        with pytest.raises(WorldSessionStillOpenException):
+            store.start_world([WorldFlags.start(WORLD)])

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 import pytest
 
-from ai_rpg_world.game_world.application.world_store import WorldStore
+from ai_rpg_world.game_world.application.world_store import AggregateWithMemento, WorldStore
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
@@ -13,7 +13,11 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoWeathe
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
-from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
+from ai_rpg_world.game_world.domain.exception.world_contents_exception import (
+    AggregateNotInWorldException,
+    AggregateOwnedTwiceException,
+    WorldAlreadyStartedException,
+)
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItems,
     Item,
@@ -96,7 +100,42 @@ class WorldStoreContract(ABC):
     """WorldStore の実装が、実装に依らず守る約束 (persistence.md の「書く時機を差し替えられるようにする」) を保証する。"""
 
     @abstractmethod
-    def store_holding(self, design: WorldDesign, *aggregates: object) -> WorldStore: ...
+    def empty_store(self, design: WorldDesign) -> WorldStore: ...
+
+    def store_holding(self, design: WorldDesign, *aggregates: AggregateWithMemento) -> WorldStore:
+        store = self.empty_store(design)
+        store.start_world(aggregates)
+        return store
+
+    def test_starting_a_world_already_started_is_refused_and_adds_no_row(self) -> None:
+        """始まりの集約を書いた世界にもう一度書こうとすると WorldAlreadyStartedException を投げ、2 度目の集約は世界に入らない。"""
+        store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD))
+
+        with pytest.raises(WorldAlreadyStartedException):
+            store.start_world([WorldEnding.start(WORLD)])
+
+        with pytest.raises(AggregateNotInWorldException):
+            store.session().ending()
+
+    def test_starting_with_two_aggregates_of_one_owner_is_refused_and_writes_nothing(self) -> None:
+        """同じ持ち主の同じ種類の集約を 2 つ渡すと AggregateOwnedTwiceException を投げ、ほかの集約も書かない。"""
+        store = self.empty_store(design_with_bell())
+
+        with pytest.raises(AggregateOwnedTwiceException):
+            store.start_world([WorldEnding.start(WORLD), WorldFlags.start(WORLD), WorldFlags.start(WORLD)])
+
+        with pytest.raises(AggregateNotInWorldException):
+            store.session().ending()
+
+    def test_world_left_empty_by_a_refused_start_can_still_be_started(self) -> None:
+        """断られた始まりのあとでも、正しい集約で始めれば、その集約を引ける。"""
+        store = self.empty_store(design_with_bell())
+        with pytest.raises(AggregateOwnedTwiceException):
+            store.start_world([WorldFlags.start(WORLD), WorldFlags.start(WORLD)])
+
+        store.start_world([WorldFlags.start(WORLD)])
+
+        assert store.session().facts().flags().is_raised(BELL) is False
 
     def test_flag_raised_in_scope_is_read_in_scope_and_after_commit(self) -> None:
         """範囲の中で旗を立てると、同じ範囲の facts で立っていると読め、commit のあと別の範囲でも読める。"""

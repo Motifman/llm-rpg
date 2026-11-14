@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, TypeVar, cast, final
+from typing import Any, TypeVar, cast, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
-from ai_rpg_world.game_world.application.world_store import WorldSession, WorldStore
+from ai_rpg_world.game_world.application.world_store import AggregateWithMemento, WorldSession, WorldStore
 from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     GroundItemsReading,
     GroupDecisionReading,
@@ -40,7 +40,11 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
-from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
+from ai_rpg_world.game_world.domain.exception.world_contents_exception import (
+    AggregateNotInWorldException,
+    AggregateOwnedTwiceException,
+    WorldAlreadyStartedException,
+)
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItems,
     GroundItemsMemento,
@@ -121,11 +125,7 @@ _SCHEMA = (
 )
 
 _Memento = TypeVar("_Memento")
-_Aggregate = TypeVar("_Aggregate", bound="_Remembered")
-
-
-class _Remembered(Protocol):
-    def memento(self) -> object: ...
+_Aggregate = TypeVar("_Aggregate", bound=AggregateWithMemento)
 
 
 @final
@@ -199,6 +199,32 @@ class SqliteWorldStore(WorldStore):
             raise
         return cls(connection, _OpenedWorld.of(WorldId(world_id), design, random))
 
+    def start_world(self, aggregates: Iterable[AggregateWithMemento]) -> None:
+        if self._connection.in_transaction:
+            raise WorldSessionStillOpenException("a session is open while the world is being started")
+        rows = [self._row_at_start(aggregate) for aggregate in aggregates]
+        owners = [(kind, key) for kind, key, _, _ in rows]
+        if len(set(owners)) != len(owners):
+            raise AggregateOwnedTwiceException(f"one owner has two aggregates of a kind among {sorted(owners)}")
+        self._connection.execute("BEGIN")
+        try:
+            if self._connection.execute("SELECT COUNT(*) FROM world_state").fetchone()[0] != 0:
+                raise WorldAlreadyStartedException(f"world {self._world.key} already holds aggregates")
+            self._connection.executemany(
+                "INSERT INTO world_state (kind, key, version, state) VALUES (?, ?, ?, ?)", rows
+            )
+            self._connection.execute("COMMIT")
+        except BaseException:
+            self._connection.execute("ROLLBACK")
+            raise
+
+    def _row_at_start(self, aggregate: AggregateWithMemento) -> tuple[str, str, int, str]:
+        memento = aggregate.memento()
+        stored = GAME_WORLD_CODECS.stored(memento)
+        if type(memento) in _ONE_PER_WORLD:
+            return (stored.kind, self._world.key, stored.version, stored.state)
+        return (stored.kind, _OWNER_OF_MEMENTO[type(memento)](memento), stored.version, stored.state)
+
     def session(self) -> SqliteWorldSession:
         if self._connection.in_transaction:
             raise WorldSessionStillOpenException("the previous session was neither committed nor rolled back")
@@ -206,6 +232,36 @@ class SqliteWorldStore(WorldStore):
 
     def close(self) -> None:
         self._connection.close()
+
+
+_OWNER_OF_MEMENTO: dict[type, Callable[[Any], str]] = {
+    PersonVitalsMemento: lambda memento: memento.person.value,
+    PersonInventoryMemento: lambda memento: memento.person_id.value,
+    MissedNoticesMemento: lambda memento: memento.person.value,
+    ItemMemento: lambda memento: memento.item_id.value,
+    ObjectStateMemento: lambda memento: memento.object_id.value,
+    GroundItemsMemento: lambda memento: memento.spot_id.value,
+    SpotSearchProgressMemento: lambda memento: memento.spot_id.value,
+    GroupDecisionMemento: lambda memento: memento.decision_id.value,
+}
+
+_ONE_PER_WORLD: frozenset[type] = frozenset(
+    {
+        WorldClockMemento,
+        WorldEndingMemento,
+        ScenarioProgressMemento,
+        LatestActionsMemento,
+        PeopleRegisterMemento,
+        WorldFlagsMemento,
+        WhereaboutsMemento,
+        PassageStatesMemento,
+        SpotAtmospheresMemento,
+        PersonOutcomesMemento,
+        GroupMembershipMemento,
+        WeatherMemento,
+        WorldStageMemento,
+    }
+)
 
 
 def _connected(path: Path | str) -> sqlite3.Connection:
@@ -218,7 +274,7 @@ def _connected(path: Path | str) -> sqlite3.Connection:
 @final
 @dataclass
 class _HeldAggregate:
-    aggregate: _Remembered
+    aggregate: AggregateWithMemento
     read_state: str | None
 
 
@@ -228,7 +284,7 @@ class SqliteWorldSession(WorldSession):
         self._connection = connection
         self._world = world
         self._held: dict[tuple[str, str], _HeldAggregate] = {}
-        self._taken_out: dict[tuple[str, str], _Remembered] = {}
+        self._taken_out: dict[tuple[str, str], AggregateWithMemento] = {}
         self._in_scope = True
         connection.execute("BEGIN")
 
@@ -314,7 +370,7 @@ class SqliteWorldSession(WorldSession):
         self._held[(kind, key)] = _HeldAggregate(aggregate, state)
         return aggregate
 
-    def bring_into_world(self, memento_type: type, key: str, aggregate: _Remembered) -> None:
+    def bring_into_world(self, memento_type: type, key: str, aggregate: AggregateWithMemento) -> None:
         self._require_in_scope()
         self._held[(GAME_WORLD_CODECS.kind_of(memento_type), key)] = _HeldAggregate(aggregate, None)
 

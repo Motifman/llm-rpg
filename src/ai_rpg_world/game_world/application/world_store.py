@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Protocol
 
 from ai_rpg_world.eventing import DomainEvent
@@ -30,5 +31,11 @@ class WorldSession(Protocol):
     def roll_back(self) -> None: ...
 
 
+class AggregateWithMemento(Protocol):
+    def memento(self) -> object: ...
+
+
 class WorldStore(Protocol):
+    def start_world(self, aggregates: Iterable[AggregateWithMemento]) -> None: ...
+
     def session(self) -> WorldSession: ...
