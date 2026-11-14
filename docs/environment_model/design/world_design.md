@@ -378,10 +378,12 @@ class HappeningDeclaration:
     happening_id: HappeningId
     condition: Condition
     effect: Effect
-    once: bool
-    notice: HappeningNotice | NoNotice
+    once: bool                              # 断られた回も「起きた」に数える。once の出来事は、断られたら以後は起きない
+    notice: HappeningNotice | NoNotice      # AnnouncementTo の相手は、その出来事の効果を当てる前の世界で選ぶ
 
 HappeningNotice = SightAt | SoundFrom | AnnouncementTo
+# 発火で集約が断ったら (GameWorldDomainException)、その発火だけを巻き戻し、何も変えずに「その回は起きた」と記録する。
+# 次の tick に試し直さない。周期の出来事は書いた間隔のまま動き、確実に通したい 1 回きりの出来事は、作者が条件に書く (「荷が空いていれば」)
 
 @final
 @dataclass(frozen=True)
@@ -453,7 +455,7 @@ class ReactionDeclaration:
     reaction_id: ReactionId
     condition: Condition
     when_becomes_true: Effect
-    when_becomes_false: Effect
+    when_becomes_false: Effect               # 断られても新しい真偽を記録し、同じ真偽のあいだは試し直さない
 
 @final
 @dataclass(frozen=True)

@@ -21,16 +21,29 @@ class PassWorldTime:
 
 class SettleWorldConditions:
     def __call__(self, command: SettleWorldConditionsCommand) -> None:
+        # command.occasion は AFTER_WORLD_TIME_PASSED か AFTER_COMMAND
         # 落ち着くまで繰り返す:
         #   1. まだこの tick に発火していない出来事、反応、二人で合わせる操作の条件を、すべて同じ世界の状態で確かめる
         #      (反応は真偽が変わったものだけ。二人で合わせる操作は LatestActions を見る)
-        #   2. 真になったものを宣言の順に発火する
+        #   2. 真になったものを宣言の順に発火する (出来事、反応の順)
         #   3. 1 つも発火しなければ終わる
-        # → 終わりの判定。終わっていれば WorldEnding.end (WorldEndedEvent)
-        # どれも 1 tick に 1 回までなので、回る回数は宣言の数を超えない
+        # → 終わりの判定 (きっかけは WorldConditionsSettling)。終わっていれば WorldEnding.end (WorldEndedEvent)
         # 物の状態や通路の決め直しも反応としてこの中に入る (別の段にしない)
         ...
+```
 
+`SettleWorldConditions` の決まり (#1978 の D2 / E2 / E3、#2145 で調整役と決めた):
+
+- 発火 1 回ごとを、確定の範囲の中の小さな範囲 (`WorldSession.attempt_apart`、[persistence.md](persistence.md)) にする。集約が断ったら、その発火の書き換えだけを巻き戻し、`ScenarioProgress.note_happening_fired` / `note_reaction_fired` に断った理由を渡して「その回は起きた」と記録する。次の tick に試し直さない
+- 記録のたびに `HappeningFiredEvent` / `ReactionFiredEvent` が出る。断った理由 (`refusal`) が trace の材料になる。出来事のイベントには、効果を当てる前の世界で選んだ `AnnouncementTo` の相手 (`audience`) が載る。`SightAt` / `SoundFrom` の受け手は `DeliverPerception` が選ぶ
+- 断られた発火のイベントには相手を載せない。何も変わっていないので、知らせると起きていないことを伝えてしまう
+- 偶然を使う条件 (`requirements().uses_chance`) は、出来事・反応・終わりのどれも、時間を進めたあと (`AFTER_WORLD_TIME_PASSED`) だけ確かめる。コマンドのたびに確かめると、1 tick にくじを何度も引き、書いた確率より高くなる
+- 出来事は `ScenarioProgress` が 1 tick に 1 回までにする。反応には tick ごとの帳簿が無いので、1 回の `SettleWorldConditions` の中で同じ反応は 1 回まで (断られた回も数える)。自分の条件を崩す反応 (鐘が鳴ったら止める、止んだら鳴らす) でも止まる。回る回数は出来事と反応の宣言の数を超えない
+- 反応を初めて確かめたとき (帳簿に真偽が無いとき) は、真偽を記録するだけで発火しない。世界の始まりには何も変わっていない
+- 終わりの判定のきっかけは `WorldConditionsSettling`。`WorldTimePassing` を流用すると、コマンドの後の判定が trace で「時間が進んだから終わった」と読めてしまう
+- `ForEveryoneEffect` は 1 人ずつを小さな範囲にし、断られた人の分だけを巻き戻す。1 人の荷が満杯なだけで、ほかの全員がもらえなくなるのを避ける。1 人ごとの断りは、いまはイベントに載せない
+
+```python
 class DeliverPerception:
     def __call__(self, command: DeliverPerceptionCommand) -> None:
         # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
