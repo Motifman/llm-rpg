@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
@@ -22,6 +22,9 @@ from ai_rpg_world.game_world.domain.exception.person_inventory_exception import 
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 _HANDS = 2
 
@@ -148,7 +151,8 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         return cls(person_id, capacity, gold=Gold(0), held=(), packed=())
 
     @classmethod
-    def from_memento(cls, memento: PersonInventoryMemento) -> PersonInventory:
+    def from_memento(cls, memento: PersonInventoryMemento, nouns: DeclaredNouns) -> PersonInventory:
+        nouns.require_declared_character(memento.person_id)
         return cls(memento.person_id, memento.capacity, gold=memento.gold, held=memento.held, packed=memento.packed)
 
     @property

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     InsufficientGoldException,
     RepeatedMementoKeyException,
@@ -33,6 +34,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
 )
 from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 from tests.game_world.support.world_in_memory import FractionsInOrder
 
 _ALICE = PersonId("alice")
@@ -46,6 +48,7 @@ _APPLE_2 = ItemInstanceId("apple#2")
 _APPLE_3 = ItemInstanceId("apple#3")
 _ONE_HAND = HandsNeeded(1)
 _TWO_HANDS = HandsNeeded(2)
+_DESIGN = compose_world(nouns(spots=(spot("square"),), characters=(character("alice", "square"),)))
 
 
 def _spec_of(item: ItemInstanceId) -> ItemSpecId:
@@ -504,7 +507,7 @@ class TestPersonInventoryGiveUpFromHandsOrPack:
 
 
 class TestPersonInventoryMemento:
-    """PersonInventory を memento から作り直すと、手と荷の品物とその順・品物の種類・金・入る数が元と同じで、イベントは出ないことを保証する。"""
+    """PersonInventory を memento から作り直すと、手と荷の品物とその順・品物の種類・金・入る数が元と同じで、イベントは出ず、宣言に無い人の持ち物は読まないことを保証する。"""
 
     def _carrying_knife_and_lantern_in_hands(self) -> PersonInventory:
         inventory = _inventory(_KNIFE, _LANTERN, _APPLE_1, _APPLE_2, capacity=4)
@@ -518,7 +521,7 @@ class TestPersonInventoryMemento:
         """ナイフとカンテラを手に、りんご 2 つを荷に持ち、30 稼いで 5 払ったあと作り直すと、どれも同じで、4 つで満杯。"""
         inventory = self._carrying_knife_and_lantern_in_hands()
 
-        rebuilt = rebuilt_from_memento(inventory)
+        rebuilt = rebuilt_from_memento(inventory, _DESIGN.nouns)
 
         assert rebuilt.memento() == inventory.memento()
         assert rebuilt.memento() != PersonInventory.start(_ALICE, Capacity(4)).memento()
@@ -532,7 +535,7 @@ class TestPersonInventoryMemento:
     def test_rebuilt_inventory_puts_away_the_first_held_item_first(self) -> None:
         """両手がふさがった持ち物を作り直してから片手の物を持つと、先に持ったナイフが荷に戻り、カンテラは手に残る。"""
         inventory = self._carrying_knife_and_lantern_in_hands()
-        rebuilt = rebuilt_from_memento(inventory)
+        rebuilt = rebuilt_from_memento(inventory, _DESIGN.nouns)
 
         rebuilt.hold(_APPLE_1, _ONE_HAND)
 
@@ -543,7 +546,7 @@ class TestPersonInventoryMemento:
         """品物を持って金を稼いだあとの memento から作り直しても、作り直したものはイベントをためていない。"""
         inventory = self._carrying_knife_and_lantern_in_hands()
 
-        assert rebuilt_from_memento(inventory).get_events() == []
+        assert rebuilt_from_memento(inventory, _DESIGN.nouns).get_events() == []
 
     def test_same_item_held_and_packed_is_refused(self) -> None:
         """カンテラを手と荷の両方に持つ memento を作ると、RepeatedMementoKeyException を投げる。"""
@@ -557,6 +560,19 @@ class TestPersonInventoryMemento:
                 held=(HeldItem(_LANTERN, lantern_spec, _ONE_HAND),),
                 packed=(PackedItem(_LANTERN, lantern_spec),),
             )
+
+    def test_inventory_of_undeclared_person_is_refused(self) -> None:
+        """宣言に無い carol の持ち物の memento から作り直すと、UndeclaredNounException を投げる。"""
+        memento = PersonInventoryMemento(
+            person_id=PersonId("carol"),
+            capacity=Capacity(4),
+            gold=Gold(0),
+            held=(),
+            packed=(PackedItem(_LANTERN, ItemSpecId("lantern")),),
+        )
+
+        with pytest.raises(UndeclaredNounException):
+            PersonInventory.from_memento(memento, _DESIGN.nouns)
 
 
 class TestPersonInventoryStartsOnlyInReachableState:
@@ -573,7 +589,7 @@ class TestPersonInventoryStartsOnlyInReachableState:
         )
 
         with pytest.raises(HeldItemsExceedHandsException):
-            PersonInventory.from_memento(memento)
+            PersonInventory.from_memento(memento, _DESIGN.nouns)
 
     def test_more_items_than_capacity_are_refused(self) -> None:
         """入る数が 2 の持ち物に 3 つ入っている memento から作り直すと、InventoryFullException を投げる。"""
@@ -586,7 +602,7 @@ class TestPersonInventoryStartsOnlyInReachableState:
         )
 
         with pytest.raises(InventoryFullException):
-            PersonInventory.from_memento(memento)
+            PersonInventory.from_memento(memento, _DESIGN.nouns)
 
     def test_as_many_items_as_capacity_are_accepted(self) -> None:
         """入る数が 3 の持ち物にちょうど 3 つ入っている memento からは作り直せ、満杯になる。"""
@@ -598,7 +614,7 @@ class TestPersonInventoryStartsOnlyInReachableState:
             packed=tuple(PackedItem(item, _APPLE) for item in (_KNIFE, _LANTERN, _ROPE)),
         )
 
-        assert PersonInventory.from_memento(memento).is_full()
+        assert PersonInventory.from_memento(memento, _DESIGN.nouns).is_full()
 
     def test_same_item_held_and_packed_is_refused_by_constructor(self) -> None:
         """カンテラを手と荷の両方に持たせて直に作ると、ItemAlreadyCarriedException を投げる。"""
