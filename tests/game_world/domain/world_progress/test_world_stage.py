@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.progress import AllActionsAllowed, WorldStageDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, WorldId, WorldStageId, WorldTick
 from ai_rpg_world.game_world.domain.world_progress import WorldStage, WorldStageChangedEvent
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
@@ -16,6 +17,20 @@ def _stage(stage_id: str) -> WorldStageDeclaration:
         description=DescriptionText(f"{stage_id}の段階"),
         allowed_actions=AllActionsAllowed(),
     )
+
+
+class TestWorldStageAtStart:
+    """WorldStage.at_start が、段階を宣言した世界にだけ始まりの段階を作ることを保証する。"""
+
+    def test_declared_initial_stage_starts_one_stage(self) -> None:
+        """夜明けを最初の段階とする世界では、tick 0 に夜明けへ入った段階が 1 つできる。"""
+        (stage,) = WorldStage.at_start(_WORLD, _stage("dawn"), WorldTick(0))
+
+        assert (stage.current(), stage.entered_at()) == (WorldStageId("dawn"), WorldTick(0))
+
+    def test_no_world_stages_starts_nothing(self) -> None:
+        """段階を宣言しない世界 (NoWorldStages) では、段階の集約を作らない。"""
+        assert WorldStage.at_start(_WORLD, NoWorldStages(), WorldTick(0)) == ()
 
 
 class TestWorldStageFromInitialStage:

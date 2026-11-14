@@ -234,6 +234,9 @@ class DeclaredNouns:
     def all_passages(self) -> tuple[PassageDeclaration, ...]:
         return tuple(self._passages)
 
+    def all_objects(self) -> tuple[ObjectDeclaration, ...]:
+        return tuple(self._objects)
+
     def initially_raised_flags(self) -> frozenset[FlagDeclaration]:
         return frozenset(flag for flag in self._flags if flag.initially_raised)
 

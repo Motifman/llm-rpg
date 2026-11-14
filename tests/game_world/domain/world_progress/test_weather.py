@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     NoChange,
+    NoWeather,
     WeatherDeclaration,
     WeatherState,
     WeatherType,
@@ -15,6 +16,20 @@ _WORLD = WorldId("island")
 
 def _declaration(initial: WeatherType) -> WeatherDeclaration:
     return WeatherDeclaration(initial=initial, changes=NoChange(), announce_changes=True, obscuring=frozenset())
+
+
+class TestWeatherAtStart:
+    """Weather.at_start が、天候を宣言した世界にだけ始まりの天候を作ることを保証する。"""
+
+    def test_declared_weather_starts_one_weather_at_its_initial(self) -> None:
+        """initial が雪の宣言からは、雪から始まる天候が 1 つできる。"""
+        (weather,) = Weather.at_start(_WORLD, _declaration(WeatherType.SNOW))
+
+        assert weather.current() == WeatherState(WeatherType.SNOW)
+
+    def test_no_weather_starts_nothing(self) -> None:
+        """天候を宣言しない世界 (NoWeather) では、天候の集約を作らない。"""
+        assert Weather.at_start(_WORLD, NoWeather()) == ()
 
 
 class TestWeatherFromDeclaration:
