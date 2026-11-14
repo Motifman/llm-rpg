@@ -128,6 +128,10 @@ def _failed(event: ActionAttemptFailedEvent, design: WorldDesign) -> tuple[Stimu
     return event.refusal.stimuli_at(design, event.item_specs, event.at_spot, event.actor_as, event.at)
 
 
+def _happened(event: HappeningFiredEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    return design.happening(event.happening_id).stimuli_when_fired(event.refusal, event.audience, event.at)
+
+
 def _ran_out(event: ItemRanOutEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
     text = design.nouns.item_spec_of(event.spec_id).lasts.ended_notice()
     return (event.where.read(ItemRanOutNotice(text, event.at)),)
@@ -138,6 +142,7 @@ _TRANSLATIONS: dict[type[DomainEvent], Callable[[Any, WorldDesign], tuple[Stimul
     ItemRanOutEvent: _ran_out,
     PersonActedEvent: _acted,
     ActionAttemptFailedEvent: _failed,
+    HappeningFiredEvent: _happened,
 }
 
 NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
@@ -153,7 +158,6 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         GroupDecisionReachedEvent,
         GroupDecisionStartedEvent,
         GroupDecisionUnresolvedEvent,
-        HappeningFiredEvent,
         HungerLevelChangedEvent,
         ItemCameIntoWorldEvent,
         ItemGivenUpEvent,
