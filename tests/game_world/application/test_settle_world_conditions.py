@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
@@ -10,6 +12,7 @@ from ai_rpg_world.game_world.application.settle_world_conditions import (
     SettleWorldConditions,
     SettleWorldConditionsCommand,
     SettlingOccasion,
+    WorldConditionsDidNotSettleError,
 )
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
@@ -38,7 +41,7 @@ from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.probability import Probability
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 from ai_rpg_world.game_world.domain.world_progress import WorldEndedEvent
-from ai_rpg_world.game_world.domain.world_records import HappeningFiredEvent, ReactionFiredEvent
+from ai_rpg_world.game_world.domain.world_records import HappeningFiredEvent, ReactionFiredEvent, ScenarioProgress
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
@@ -422,3 +425,19 @@ class TestSettleWorldConditionsEnding:
         world.settle(_AFTER_COMMAND)
 
         assert [type(event) for event in world.events].count(WorldEndedEvent) == 1
+
+
+class TestSettleWorldConditionsRoundLimit:
+    """SettleWorldConditions が、宣言の数 (出来事 + 反応) + 1 回を超えて回ったら、コードの誤りとして止まることを保証する。"""
+
+    def test_settling_that_never_ends_stops_and_leaves_no_change(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """帳簿が「同じ tick にもう一度起きてよい」と答え続ける誤りがあると、常に真の鐘の出来事で落ち着かせると WorldConditionsDidNotSettleError を投げ、鐘は鳴らず、断りとしても数えない。"""
+        world = _SettledWorld(happenings=(_happening("bell", AlwaysHolds(), RaiseFlagEffect(_BELL)),))
+        monkeypatch.setattr(ScenarioProgress, "may_fire", lambda self, happening, now: True)
+
+        with pytest.raises(WorldConditionsDidNotSettleError):
+            world.settle(_AFTER_TIME)
+
+        assert world.read(_BELL) is False
+        assert world.fired_happenings() == []
+        assert world.scope.refusals == {}

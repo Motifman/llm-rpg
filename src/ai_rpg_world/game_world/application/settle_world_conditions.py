@@ -15,6 +15,10 @@ from ai_rpg_world.game_world.domain.value_object import WorldTick
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 
 
+class WorldConditionsDidNotSettleError(RuntimeError):
+    pass
+
+
 class SettlingOccasion(Enum):
     AFTER_WORLD_TIME_PASSED = "AFTER_WORLD_TIME_PASSED"
     AFTER_COMMAND = "AFTER_COMMAND"
@@ -50,9 +54,14 @@ class _Settling:
         self._fired_reactions: set[ReactionId] = set()
 
     def settle(self) -> None:
-        while self._fire_what_holds():
-            pass
-        self._end_if_over()
+        # 出来事は 1 tick に 1 回、反応は 1 回の落ち着かせに 1 回までなので、発火のある回は宣言の数を超えない。
+        # 超えたら帳簿か発火の記録の誤りで、上限が無いとイベントをためながら回り続ける
+        round_limit = len(self._design.happenings()) + len(self._design.reactions()) + 1
+        for _ in range(round_limit):
+            if not self._fire_what_holds():
+                self._end_if_over()
+                return
+        raise WorldConditionsDidNotSettleError(f"world conditions did not settle within {round_limit} rounds")
 
     def _fire_what_holds(self) -> bool:
         now = self._session.clock().now()
