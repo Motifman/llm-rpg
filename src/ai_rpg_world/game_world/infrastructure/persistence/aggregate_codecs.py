@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar, cast, final
 
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.infrastructure.persistence.group_membership_codec import GroupMembershipCodec
+from ai_rpg_world.game_world.infrastructure.persistence.people_register_codec import PeopleRegisterCodec
+from ai_rpg_world.game_world.infrastructure.persistence.person_outcomes_codec import PersonOutcomesCodec
+from ai_rpg_world.game_world.infrastructure.persistence.person_vitals_codec import PersonVitalsCodec
 from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception import (
     MementoNotStorableException,
     StoredMementoUnreadableException,
@@ -90,5 +94,9 @@ GAME_WORLD_CODECS = AggregateCodecs(
     [
         WorldClockCodec(),
         WorldFlagsCodec(),
+        PersonVitalsCodec(),
+        PersonOutcomesCodec(),
+        GroupMembershipCodec(),
+        PeopleRegisterCodec(),
     ]
 )
