@@ -136,6 +136,48 @@ class TestWhereaboutsPlaceAndRemove:
             Whereabouts.start(WORLD).remove(ALICE)
 
 
+class TestWhereaboutsPlaceDeparted:
+    """place_departed が、去った人の動く世界でだけ、死んだ人の体のある場所に去った人を置くことを保証する。"""
+
+    def test_departed_person_is_placed_outside_the_section_of_the_body(self) -> None:
+        """alice の体が広場の籠の中にあるとき、去った人の動く世界では、去った alice を広場の区画の外に置き、体は籠に残し、OccupantPlacedEvent を 1 件ためる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+        whereabouts.clear_events()
+
+        whereabouts.place_departed(PersonId("alice"), departed_persons_act=True)
+
+        departed = DepartedPerson(PersonId("alice"))
+        assert whereabouts.location_of(departed) == AtSpot(spot=SpotId("plaza"), section=OpenArea())
+        assert whereabouts.is_in_section(ALICE, LIFT)
+        [event] = whereabouts.get_events()
+        assert isinstance(event, OccupantPlacedEvent)
+        assert (event.occupant, event.spot) == (departed, SpotId("plaza"))
+
+    def test_departed_person_of_a_body_on_the_way_is_placed_where_the_passage_began(self) -> None:
+        """alice の体が広場から井戸を通って坑道の入口へ向かう途中、井戸からの区間で死ぬと、去った alice を井戸に置く。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET, LANE)))
+        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset())
+
+        whereabouts.place_departed(PersonId("alice"), departed_persons_act=True)
+
+        assert whereabouts.location_of(DepartedPerson(PersonId("alice"))) == AtSpot(
+            spot=SpotId("well"), section=OpenArea()
+        )
+
+    def test_nobody_is_placed_where_departed_people_do_not_act(self) -> None:
+        """去った人の動かない世界では、去った alice を置かず、イベントもためない。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+
+        whereabouts.place_departed(PersonId("alice"), departed_persons_act=False)
+
+        with pytest.raises(OccupantNotPlacedException):
+            whereabouts.location_of(DepartedPerson(PersonId("alice")))
+        assert whereabouts.get_events() == []
+
+
 class TestWhereaboutsEnterSection:
     """enter_section が、その場所にいる人だけを、定員の空いた区画に入れることを保証する。"""
 
