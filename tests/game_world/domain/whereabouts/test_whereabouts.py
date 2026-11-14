@@ -160,8 +160,8 @@ class TestWhereaboutsPlaceDeparted:
         """alice の体が広場から井戸を通って坑道の入口へ向かう途中、井戸からの区間で死ぬと、去った alice を井戸に置く。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET, LANE)))
-        whereabouts.advance_travels(frozenset())
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         whereabouts.place_departed(PersonId("alice"), departed_persons_act=True)
 
