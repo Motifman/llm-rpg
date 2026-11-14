@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
     GroundItemPickupAttempt,
     ItemHandOverAttempt,
+    LeaveSectionAttempt,
     SpeechAttempt,
     TendAttempt,
     TravelAttempt,
@@ -36,7 +37,10 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
 )
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
-from ai_rpg_world.game_world.domain.exception.perception_exception import PerceptionTargetNotGivenException
+from ai_rpg_world.game_world.domain.exception.perception_exception import (
+    PerceivedItemSpecNotGivenException,
+    PerceptionTargetNotGivenException,
+)
 from ai_rpg_world.game_world.domain.objects_and_items.item import ItemRanOutEvent
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
@@ -359,6 +363,19 @@ class TestStimulusTranslatorBuiltInActs:
 
         assert stimulus.witness.clear.template.template == "{actor}が籠に乗った。"
 
+    def test_leaving_a_section_uses_its_declared_perception(self) -> None:
+        """ハルが籠から降りるときも、区画の出入りの宣言の文「{actor}が籠に乗った。」の刺激になる。"""
+        stimulus = _sight(LeaveSectionAttempt(_HAL, access_to(_CAGE)))
+
+        assert stimulus.witness.clear.template.template == "{actor}が籠に乗った。"
+
+    def test_item_whose_kind_was_not_read_is_refused(self) -> None:
+        """行為の時点で種類を読めなかった品物を拾ったイベントは、呼び名を埋められないので PerceivedItemSpecNotGivenException を投げる。"""
+        event = replace(_acted(GroundItemPickupAttempt(_HAL, _PICKAXE, Openly())), item_specs={})
+
+        with pytest.raises(PerceivedItemSpecNotGivenException):
+            StimulusTranslator().stimuli_of(event, _acts_design())
+
     def test_acting_while_at_no_spot_makes_no_stimulus(self) -> None:
         """どの場所にもいない (移動中の) 人の行為は、見える刺激も聞こえる刺激も作らない。"""
         event = _acted(WaitAttempt(_HAL, NoReason()), at_spot=NotAtSpot())
@@ -417,3 +434,12 @@ class TestStimulusTranslatorDeclaredInteractions:
             StimulusTranslator().stimuli_of(
                 _acted(PersonInteractionAttempt(_HAL, SomeoneInTheDark(), greet, {}, Openly())), design
             )
+
+    def test_carried_item_whose_kind_was_not_read_is_refused(self) -> None:
+        """種類を読めなかった品物への操作は、どの種類の宣言かを引けないので PerceivedItemSpecNotGivenException を投げる。"""
+        design = _acts_design()
+        polish = design.interaction_on_item(ItemSpecId("pickaxe"), InteractionId("polish"))
+        event = replace(_acted(CarriedItemInteractionAttempt(_HAL, _PICKAXE, polish, {}, Openly())), item_specs={})
+
+        with pytest.raises(PerceivedItemSpecNotGivenException):
+            StimulusTranslator().stimuli_of(event, design)
