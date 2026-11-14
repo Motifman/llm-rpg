@@ -1,20 +1,30 @@
 from __future__ import annotations
 
 import sqlite3
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, TypeVar, cast, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
+from ai_rpg_world.game_world.application.world_store import WorldSession, WorldStore
 from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
+    GroundItemsReading,
+    GroupDecisionReading,
     GroupMembershipReading,
+    ItemReading,
     LatestActionsReading,
+    MissedNoticesReading,
+    ObjectStateReading,
     PassageStatesReading,
     PeopleRegisterReading,
+    PersonInventoryReading,
     PersonOutcomesReading,
+    PersonVitalsReading,
     ScenarioProgressReading,
     SpotAtmospheresReading,
+    SpotSearchProgressReading,
     WeatherReading,
     WhereaboutsReading,
     WorldClockReading,
@@ -22,20 +32,39 @@ from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     WorldStageReading,
 )
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
+from ai_rpg_world.game_world.domain.objects_and_items import (
+    GroundItems,
+    GroundItemsMemento,
+    Item,
+    ItemMemento,
+    ObjectState,
+    ObjectStateMemento,
+    PersonInventory,
+    PersonInventoryMemento,
+    SpotSearchProgress,
+    SpotSearchProgressMemento,
+)
+from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PeopleRegister, PeopleRegisterMemento
 from ai_rpg_world.game_world.domain.person import (
     GroupMembership,
     GroupMembershipMemento,
     PersonOutcomes,
     PersonOutcomesMemento,
+    PersonVitals,
+    PersonVitalsMemento,
 )
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
-from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import ObjectId, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import (
     PassageStates,
     PassageStatesMemento,
@@ -45,6 +74,8 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     WhereaboutsMemento,
 )
 from ai_rpg_world.game_world.domain.world_progress import (
+    GroupDecision,
+    GroupDecisionMemento,
     Weather,
     WeatherMemento,
     WorldClock,
@@ -57,6 +88,8 @@ from ai_rpg_world.game_world.domain.world_progress import (
 from ai_rpg_world.game_world.domain.world_records import (
     LatestActions,
     LatestActionsMemento,
+    MissedNotices,
+    MissedNoticesMemento,
     ScenarioProgress,
     ScenarioProgressMemento,
     WorldFlags,
@@ -119,7 +152,7 @@ class _OpenedWorld:
 
 
 @final
-class SqliteWorldStore:
+class SqliteWorldStore(WorldStore):
     def __init__(self, connection: sqlite3.Connection, world: _OpenedWorld) -> None:
         self._connection = connection
         self._world = world
@@ -186,22 +219,23 @@ def _connected(path: Path | str) -> sqlite3.Connection:
 @dataclass
 class _HeldAggregate:
     aggregate: _Remembered
-    read_state: str
+    read_state: str | None
 
 
 @final
-class SqliteWorldSession:
+class SqliteWorldSession(WorldSession):
     def __init__(self, connection: sqlite3.Connection, world: _OpenedWorld) -> None:
         self._connection = connection
         self._world = world
         self._held: dict[tuple[str, str], _HeldAggregate] = {}
+        self._taken_out: dict[tuple[str, str], _Remembered] = {}
         self._in_scope = True
         connection.execute("BEGIN")
 
-    def facts(self) -> _SqliteWorldFacts:
-        return _SqliteWorldFacts(self, self.aggregates(), self._world)
+    def facts(self) -> WorldFacts:
+        return _SqliteWorldFacts(self, _SqliteWorldAggregates(self, self._world), self._world)
 
-    def aggregates(self) -> _SqliteWorldAggregates:
+    def aggregates(self) -> WorldAggregates:
         return _SqliteWorldAggregates(self, self._world)
 
     def clock(self) -> WorldClock:
@@ -229,18 +263,28 @@ class SqliteWorldSession:
                 stored = GAME_WORLD_CODECS.stored(held.aggregate.memento())
                 if stored.state == held.read_state:
                     continue
-                self._connection.execute(
-                    "UPDATE world_state SET version = ?, state = ? WHERE kind = ? AND key = ?",
-                    (stored.version, stored.state, kind, key),
-                )
+                if held.read_state is None:
+                    self._connection.execute(
+                        "INSERT INTO world_state (kind, key, version, state) VALUES (?, ?, ?, ?)",
+                        (kind, key, stored.version, stored.state),
+                    )
+                else:
+                    self._connection.execute(
+                        "UPDATE world_state SET version = ?, state = ? WHERE kind = ? AND key = ?",
+                        (stored.version, stored.state, kind, key),
+                    )
+            for kind, key in self._taken_out:
+                self._connection.execute("DELETE FROM world_state WHERE kind = ? AND key = ?", (kind, key))
             self._connection.execute("COMMIT")
         except BaseException:
             if self._connection.in_transaction:
                 self._connection.execute("ROLLBACK")
             raise
-        emitters = [held.aggregate for held in self._held.values() if isinstance(held.aggregate, AggregateRoot)]
+        aggregates = [held.aggregate for held in self._held.values()] + list(self._taken_out.values())
+        emitters = [aggregate for aggregate in aggregates if isinstance(aggregate, AggregateRoot)]
         events = sorted((event for emitter in emitters for event in emitter.get_events()), key=lambda e: e.sequence)
         self._held.clear()
+        self._taken_out.clear()
         return tuple(events)
 
     def roll_back(self) -> None:
@@ -248,6 +292,7 @@ class SqliteWorldSession:
         self._in_scope = False
         self._connection.execute("ROLLBACK")
         self._held.clear()
+        self._taken_out.clear()
 
     def held_aggregate(
         self, memento_type: type[_Memento], key: str, from_memento: Callable[[_Memento], _Aggregate]
@@ -257,6 +302,8 @@ class SqliteWorldSession:
         held = self._held.get((kind, key))
         if held is not None:
             return cast(_Aggregate, held.aggregate)
+        if (kind, key) in self._taken_out:
+            raise AggregateNotInWorldException(f"{kind} {key} has left this world")
         row = self._connection.execute(
             "SELECT version, state FROM world_state WHERE kind = ? AND key = ?", (kind, key)
         ).fetchone()
@@ -267,13 +314,22 @@ class SqliteWorldSession:
         self._held[(kind, key)] = _HeldAggregate(aggregate, state)
         return aggregate
 
+    def bring_into_world(self, memento_type: type, key: str, aggregate: _Remembered) -> None:
+        self._require_in_scope()
+        self._held[(GAME_WORLD_CODECS.kind_of(memento_type), key)] = _HeldAggregate(aggregate, None)
+
+    def take_out_of_world(self, memento_type: type, key: str) -> None:
+        self._require_in_scope()
+        held_key = (GAME_WORLD_CODECS.kind_of(memento_type), key)
+        self._taken_out[held_key] = self._held.pop(held_key).aggregate
+
     def _require_in_scope(self) -> None:
         if not self._in_scope:
             raise WorldSessionEndedException("this session has already been committed or rolled back")
 
 
 @final
-class _SqliteWorldFacts:
+class _SqliteWorldFacts(WorldFacts):
     def __init__(self, session: SqliteWorldSession, aggregates: _SqliteWorldAggregates, world: _OpenedWorld) -> None:
         self._session = session
         self._aggregates = aggregates
@@ -337,9 +393,33 @@ class _SqliteWorldFacts:
     def latest_actions(self) -> LatestActionsReading:
         return self._session.latest_actions()
 
+    def vitals(self, person: PersonId) -> PersonVitalsReading:
+        return self._aggregates.vitals(person)
+
+    def inventory(self, person: PersonId) -> PersonInventoryReading:
+        return self._aggregates.inventory(person)
+
+    def item(self, item: ItemInstanceId) -> ItemReading:
+        return self._aggregates.item(item)
+
+    def object_state(self, obj: ObjectId) -> ObjectStateReading:
+        return self._aggregates.object_state(obj)
+
+    def ground_items(self, spot: SpotId) -> GroundItemsReading:
+        return self._aggregates.ground_items(spot)
+
+    def search_progress(self, spot: SpotId) -> SpotSearchProgressReading:
+        return self._aggregates.search_progress(spot)
+
+    def missed_notices(self, person: PersonId) -> MissedNoticesReading:
+        return self._aggregates.missed_notices(person)
+
+    def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecisionReading:
+        return self._aggregates.group_decision(decision)
+
 
 @final
-class _SqliteWorldAggregates:
+class _SqliteWorldAggregates(WorldAggregates):
     def __init__(self, session: SqliteWorldSession, world: _OpenedWorld) -> None:
         self._session = session
         self._world = world
@@ -381,3 +461,51 @@ class _SqliteWorldAggregates:
         if isinstance(self._world.design.weather, NoWeather):
             raise AggregateNotInWorldException("this world declares no weather")
         return self._session.held_aggregate(WeatherMemento, self._world.key, Weather.from_memento)
+
+    def vitals(self, person: PersonId) -> PersonVitals:
+        return self._session.held_aggregate(
+            PersonVitalsMemento, person.value, self._world.with_nouns(PersonVitals.from_memento)
+        )
+
+    def inventory(self, person: PersonId) -> PersonInventory:
+        return self._session.held_aggregate(
+            PersonInventoryMemento, person.value, self._world.with_nouns(PersonInventory.from_memento)
+        )
+
+    def item(self, item: ItemInstanceId) -> Item:
+        return self._session.held_aggregate(ItemMemento, item.value, self._world.with_nouns(Item.from_memento))
+
+    def object_state(self, obj: ObjectId) -> ObjectState:
+        return self._session.held_aggregate(
+            ObjectStateMemento, obj.value, self._world.with_nouns(ObjectState.from_memento)
+        )
+
+    def ground_items(self, spot: SpotId) -> GroundItems:
+        return self._session.held_aggregate(
+            GroundItemsMemento, spot.value, self._world.with_nouns(GroundItems.from_memento)
+        )
+
+    def search_progress(self, spot: SpotId) -> SpotSearchProgress:
+        discoverables_here = self._world.design.discoverables_at(spot)
+        return self._session.held_aggregate(
+            SpotSearchProgressMemento,
+            spot.value,
+            lambda memento: SpotSearchProgress.from_memento(memento, discoverables_here),
+        )
+
+    def missed_notices(self, person: PersonId) -> MissedNotices:
+        return self._session.held_aggregate(MissedNoticesMemento, person.value, MissedNotices.from_memento)
+
+    def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecision:
+        return self._session.held_aggregate(
+            GroupDecisionMemento, decision.decision_id.value, self._world.with_nouns(GroupDecision.from_memento)
+        )
+
+    def bring_item_into_world(self, spec: ItemSpecDeclaration, now: WorldTick) -> ItemInstanceId:
+        item = Item.come_into_world(ItemInstanceId(str(uuid.uuid4())), spec, now)
+        self._session.bring_into_world(ItemMemento, item.item_id.value, item)
+        return item.item_id
+
+    def take_item_out_of_world(self, item: ItemInstanceId) -> None:
+        self.item(item).leave_world()
+        self._session.take_out_of_world(ItemMemento, item.value)

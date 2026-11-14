@@ -6,22 +6,90 @@ import pytest
 
 from ai_rpg_world.game_world.application.world_store import WorldStore
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
+from ai_rpg_world.game_world.domain.condition.condition import NoText
+from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoWeather
+from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, FlagId, WorldId, WorldTick
-from ai_rpg_world.game_world.domain.world_progress import WorldEndedEvent, WorldEnding
-from ai_rpg_world.game_world.domain.world_records import WorldFlagLoweredEvent, WorldFlagRaisedEvent, WorldFlags
-from tests.game_world.support.world_design_for_tests import compose_world, nouns
+from ai_rpg_world.game_world.domain.objects_and_items import (
+    GroundItems,
+    Item,
+    ItemCameIntoWorldEvent,
+    ItemInstanceId,
+    ItemLeftWorldEvent,
+    ObjectState,
+    PersonInventory,
+    SpotSearchProgress,
+)
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.person import PersonVitals
+from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
+    DescriptionText,
+    FlagId,
+    HitPoints,
+    ObjectId,
+    PersonId,
+    SpotId,
+    WorldId,
+    WorldTick,
+)
+from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
+from ai_rpg_world.game_world.domain.world_progress import GroupDecision, WorldEndedEvent, WorldEnding
+from ai_rpg_world.game_world.domain.world_records import (
+    MissedNotices,
+    WorldFlagLoweredEvent,
+    WorldFlagRaisedEvent,
+    WorldFlags,
+)
+from tests.game_world.support.verb_declarations_for_tests import everyone_votes_on
+from tests.game_world.support.world_design_for_tests import (
+    character,
+    compose_world,
+    group_decision,
+    item_spec,
+    nouns,
+    obj,
+    spot,
+)
 
 WORLD = WorldId("contract_world")
 BELL = FlagDeclaration(FlagId("bell_rang"), DescriptionText("鐘が鳴った"), initially_raised=False)
 _NOW = WorldTimePassing(WorldTick(3))
 
 
+ALICE = PersonId("alice")
+CAVE = SpotId("cave")
+ROPE = item_spec("rope")
+ROPE_1 = ItemInstanceId("rope_1")
+LAMP = obj("lamp", "cave")
+VOTE = group_decision("vote")
+CARVING = DiscoverableDeclaration(
+    discoverable_id=DiscoverableId("wall_carving"),
+    spot_id=CAVE,
+    found_text=TextWithUnassignedPeople("壁に彫り物がある"),
+    condition=TickAtLeastCondition(tick=WorldTick(0), failure_text=NoText()),
+    when_found=NoEffect(),
+    finding=Finding.ONCE_PER_PERSON,
+)
+
+
 def design_with_bell() -> WorldDesign:
-    return compose_world(nouns(flags=[BELL]))
+    return compose_world(
+        nouns(
+            flags=[BELL],
+            spots=[spot("cave")],
+            characters=[character("alice", "cave")],
+            item_specs=[ROPE],
+            objects=[LAMP],
+            group_decisions=[VOTE],
+        ),
+        discoverables=[CARVING],
+        group_decision_rules=[everyone_votes_on(VOTE)],
+    )
 
 
 class WorldStoreContract(ABC):
@@ -104,3 +172,110 @@ class WorldStoreContract(ABC):
         assert isinstance(weather, NoWeather)
         with pytest.raises(AggregateNotInWorldException):
             session.aggregates().weather()
+
+    def test_item_taken_out_of_world_returns_its_event_and_is_gone_after_commit(self) -> None:
+        """範囲の中で品物を世界から出すと、その品物の ItemLeftWorldEvent が commit の戻りに入り、次の範囲では引けない。"""
+        store = self.store_holding(design_with_bell(), Item.come_into_world(ROPE_1, ROPE, WorldTick(0)))
+        session = store.session()
+
+        session.aggregates().take_item_out_of_world(ROPE_1)
+        events = session.commit()
+
+        assert [(type(event), event.item) for event in events] == [(ItemLeftWorldEvent, ROPE_1)]
+        with pytest.raises(AggregateNotInWorldException):
+            store.session().facts().item(ROPE_1)
+
+    def test_item_taken_out_of_world_cannot_be_read_in_the_same_scope(self) -> None:
+        """世界から出した品物を同じ範囲で引くと AggregateNotInWorldException を投げる。"""
+        store = self.store_holding(design_with_bell(), Item.come_into_world(ROPE_1, ROPE, WorldTick(0)))
+        session = store.session()
+        session.aggregates().take_item_out_of_world(ROPE_1)
+
+        with pytest.raises(AggregateNotInWorldException):
+            session.facts().item(ROPE_1)
+
+    def test_item_brought_into_world_is_read_after_commit(self) -> None:
+        """範囲の中で品物を世界に持ち込むと、ItemCameIntoWorldEvent が commit の戻りに入り、次の範囲で引ける。"""
+        store = self.store_holding(design_with_bell())
+        session = store.session()
+
+        brought = session.aggregates().bring_item_into_world(ROPE, WorldTick(2))
+        events = session.commit()
+
+        assert [type(event) for event in events] == [ItemCameIntoWorldEvent]
+        assert store.session().facts().item(brought).item_id == brought
+
+    def test_item_taken_out_then_rolled_back_is_still_in_world(self) -> None:
+        """品物を世界から出して roll_back すると、次の範囲でもその品物を引ける。"""
+        store = self.store_holding(design_with_bell(), Item.come_into_world(ROPE_1, ROPE, WorldTick(0)))
+        session = store.session()
+        session.aggregates().take_item_out_of_world(ROPE_1)
+
+        session.roll_back()
+
+        assert store.session().facts().item(ROPE_1).item_id == ROPE_1
+
+    def test_item_brought_in_and_taken_out_in_one_scope_returns_both_events(self) -> None:
+        """同じ範囲で品物を持ち込んでから世界から出すと、commit は持ち込みと持ち出しのイベントをその順で返し、品物は残らない。"""
+        store = self.store_holding(design_with_bell())
+        session = store.session()
+
+        brought = session.aggregates().bring_item_into_world(ROPE, WorldTick(2))
+        session.aggregates().take_item_out_of_world(brought)
+        events = session.commit()
+
+        assert [type(event) for event in events] == [ItemCameIntoWorldEvent, ItemLeftWorldEvent]
+        with pytest.raises(AggregateNotInWorldException):
+            store.session().facts().item(brought)
+
+    def test_person_vitals_are_read_back_by_person(self) -> None:
+        """入れた人の体は、その人の ID で引くと、入れたときと同じ memento で読める。"""
+        vitals = PersonVitals.start(ALICE, HitPoints(80, 100))
+        store = self.store_holding(design_with_bell(), vitals)
+
+        assert store.session().facts().vitals(ALICE).memento() == vitals.memento()
+
+    def test_person_inventory_is_read_back_by_person(self) -> None:
+        """入れた人の持ち物は、その人の ID で引くと、入れたときと同じ memento で読める。"""
+        inventory = PersonInventory.start(ALICE, Capacity(20))
+        store = self.store_holding(design_with_bell(), inventory)
+
+        assert store.session().facts().inventory(ALICE).memento() == inventory.memento()
+
+    def test_missed_notices_are_read_back_by_person(self) -> None:
+        """入れた人の取り逃した知らせは、その人の ID で引くと、入れたときと同じ memento で読める。"""
+        notices = MissedNotices.start(ALICE)
+        store = self.store_holding(design_with_bell(), notices)
+
+        assert store.session().facts().missed_notices(ALICE).memento() == notices.memento()
+
+    def test_object_state_is_read_back_by_object(self) -> None:
+        """入れた物の状態は、その物の ID で引くと、入れたときと同じ memento で読める。"""
+        state = ObjectState.from_declaration(LAMP, WorldTick(0))
+        store = self.store_holding(design_with_bell(), state)
+
+        assert store.session().facts().object_state(ObjectId("lamp")).memento() == state.memento()
+
+    def test_ground_items_are_read_back_by_spot(self) -> None:
+        """入れた場所の地面の品物は、その場所の ID で引くと、入れたときと同じ memento で読める。"""
+        ground = GroundItems.start(CAVE)
+        ground.place(ROPE_1)
+        store = self.store_holding(design_with_bell(), ground)
+
+        assert store.session().facts().ground_items(CAVE).memento() == ground.memento()
+
+    def test_search_progress_with_a_finder_is_read_back_by_spot(self) -> None:
+        """その場所で宣言された見つかるものを誰かが見つけた探索の進み具合は、場所の ID で引くと、入れたときと同じ memento で読める。"""
+        progress = SpotSearchProgress.start(CAVE)
+        progress.record_search(ALICE)
+        progress.mark_found(CARVING, ALICE)
+        store = self.store_holding(design_with_bell(), progress)
+
+        assert store.session().facts().search_progress(CAVE).memento() == progress.memento()
+
+    def test_group_decision_is_read_back_by_declaration(self) -> None:
+        """入れた集団の決定は、その宣言で引くと、入れたときと同じ memento で読める。"""
+        decision = GroupDecision.not_started(VOTE)
+        store = self.store_holding(design_with_bell(), decision)
+
+        assert store.session().facts().group_decision(VOTE).memento() == decision.memento()
