@@ -7,7 +7,6 @@ from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.leaf_condition import LeafCondition
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import Anyone, Subject
-from ai_rpg_world.game_world.domain.condition.world_time_conditions import declared_world_stage
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, Ticks, WorldTick
@@ -31,7 +30,7 @@ class SinceStart:
 @dataclass(frozen=True)
 class SinceWorldStageEntered:
     def baseline(self, facts: WorldFacts) -> WorldTick:
-        return declared_world_stage(facts).entered_at()
+        return facts.world_stage().entered_at()
 
     def requirements(self) -> Requirements:
         return replace(Requirements.nothing(), reads_world_stage=True)

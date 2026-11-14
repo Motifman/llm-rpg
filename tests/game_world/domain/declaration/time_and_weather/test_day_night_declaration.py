@@ -5,10 +5,13 @@ import pytest
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
+    DayPhaseChange,
     DayPhaseDeclaration,
     DayPhaseName,
+    NoDayNight,
     TimeOfDay,
 )
+from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
 from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import (
     DayPhaseNameDuplicatedException,
@@ -139,3 +142,57 @@ class TestDayNightDeclarationPhaseAt:
         day = _day(_phase("朝", 6), _phase("夜", 20, dark=True))
 
         assert day.phase_at(TimeOfDay(3)).name == DayPhaseName("夜")
+
+
+class TestDayNightDeclarationPhaseChanges:
+    """DayNightDeclaration.phase_changes が、2 つの tick のあいだで段階が変わったときだけ、その変わり目を返すことを保証する。"""
+
+    def test_returns_change_when_phase_differs(self) -> None:
+        """朝 6・夜 20 の昼夜で tick 5 から 6 へ進むと、夜から朝への変わり目を 1 つ返す。"""
+        day = _day(_phase("朝", 6), _phase("夜", 20, dark=True))
+
+        assert day.phase_changes(WorldTick(5), WorldTick(6)) == (
+            DayPhaseChange(before=DayPhaseName("夜"), after=DayPhaseName("朝")),
+        )
+
+    def test_returns_nothing_within_same_phase(self) -> None:
+        """朝 6・夜 20 の昼夜で tick 7 から 8 へ進むと、同じ朝のままなので変わり目を返さない。"""
+        day = _day(_phase("朝", 6), _phase("夜", 20, dark=True))
+
+        assert day.phase_changes(WorldTick(7), WorldTick(8)) == ()
+
+
+class TestDayNightDeclarationDeclaredPhases:
+    """DayNightDeclaration が、昼夜を宣言していることと、宣言した段階の名前を答えることを保証する。"""
+
+    def test_is_declared(self) -> None:
+        """昼夜の宣言は、昼夜が宣言されているかを問われると、宣言されていると答える。"""
+        assert _day(_phase("昼", 0)).is_declared()
+
+    def test_phase_names_lists_declared_phases(self) -> None:
+        """朝・夜を宣言した昼夜は、段階の名前として朝と夜を返す。"""
+        day = _day(_phase("朝", 6), _phase("夜", 20, dark=True))
+
+        assert day.phase_names() == frozenset({DayPhaseName("朝"), DayPhaseName("夜")})
+
+
+class TestNoDayNight:
+    """昼夜を宣言しない世界の NoDayNight が、昼夜の宣言と同じ問いに「昼夜は無い」と答えることを保証する。"""
+
+    def test_time_of_day_at_raises_not_declared(self) -> None:
+        """1 日の中の位置を問われると、「昼夜を宣言していない」という文面の NotDeclaredInThisWorldException を投げる。"""
+        with pytest.raises(NotDeclaredInThisWorldException, match="^this world declares no day and night$"):
+            NoDayNight().time_of_day_at(WorldTick(0))
+
+    def test_phase_at_raises_not_declared(self) -> None:
+        """段階を問われると、「昼夜を宣言していない」という文面の NotDeclaredInThisWorldException を投げる。"""
+        with pytest.raises(NotDeclaredInThisWorldException, match="^this world declares no day and night$"):
+            NoDayNight().phase_at(TimeOfDay(0))
+
+    def test_phase_changes_returns_nothing(self) -> None:
+        """どの 2 つの tick のあいだの変わり目を問われても、変わり目を返さない。"""
+        assert NoDayNight().phase_changes(WorldTick(5), WorldTick(6)) == ()
+
+    def test_is_not_declared_and_has_no_phase_names(self) -> None:
+        """昼夜が宣言されているかを問われると宣言されていないと答え、段階の名前は 1 つも返さない。"""
+        assert (NoDayNight().is_declared(), NoDayNight().phase_names()) == (False, frozenset())

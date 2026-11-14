@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_declaration import DayPhaseDeclaration
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_name import DayPhaseName
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.time_of_day import TimeOfDay
+from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
 from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import (
     DayPhaseNameDuplicatedException,
@@ -17,8 +19,28 @@ from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
 
 @final
 @dataclass(frozen=True)
+class DayPhaseChange:
+    before: DayPhaseName
+    after: DayPhaseName
+
+
+@final
+@dataclass(frozen=True)
 class NoDayNight:
-    pass
+    def is_declared(self) -> bool:
+        return False
+
+    def phase_names(self) -> frozenset[DayPhaseName]:
+        return frozenset()
+
+    def time_of_day_at(self, now: WorldTick) -> TimeOfDay:
+        raise NotDeclaredInThisWorldException("this world declares no day and night")
+
+    def phase_at(self, time_of_day: TimeOfDay) -> DayPhaseDeclaration:
+        raise NotDeclaredInThisWorldException("this world declares no day and night")
+
+    def phase_changes(self, before: WorldTick, after: WorldTick) -> tuple[DayPhaseChange, ...]:
+        return ()
 
 
 @final
@@ -45,12 +67,25 @@ class DayNightDeclaration:
         if len(set(names)) != len(names):
             raise DayPhaseNameDuplicatedException(f"day phase names must be unique, got {names}")
 
+    def is_declared(self) -> bool:
+        return True
+
+    def phase_names(self) -> frozenset[DayPhaseName]:
+        return frozenset(phase.name for phase in self.phases)
+
     def time_of_day_at(self, now: WorldTick) -> TimeOfDay:
         return TimeOfDay((self.starts_at.tick_of_day + now.value) % self.ticks_per_day.value)
 
     def phase_at(self, time_of_day: TimeOfDay) -> DayPhaseDeclaration:
         begun = [phase for phase in self.phases if phase.begins_at <= time_of_day]
         return begun[-1] if begun else self.phases[-1]
+
+    def phase_changes(self, before: WorldTick, after: WorldTick) -> tuple[DayPhaseChange, ...]:
+        phase_before = self.phase_at(self.time_of_day_at(before))
+        phase_after = self.phase_at(self.time_of_day_at(after))
+        if phase_before == phase_after:
+            return ()
+        return (DayPhaseChange(before=phase_before.name, after=phase_after.name),)
 
     def _require_within_day(self, time_of_day: TimeOfDay) -> None:
         if time_of_day.tick_of_day >= self.ticks_per_day.value:

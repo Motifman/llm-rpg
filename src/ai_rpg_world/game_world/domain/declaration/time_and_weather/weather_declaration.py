@@ -17,6 +17,9 @@ class WeatherDeclaration:
     announce_changes: bool
     obscuring: frozenset[WeatherType]
 
+    def is_declared(self) -> bool:
+        return True
+
     def initial_state(self) -> WeatherState:
         return WeatherState(self.initial)
 

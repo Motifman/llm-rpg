@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
+    NoDayNight,
     TimeOfDay,
     WeatherState,
 )
@@ -108,7 +109,7 @@ class GroupMembershipReading(Protocol):
 class WorldClockReading(Protocol):
     def now(self) -> WorldTick: ...
 
-    def time_of_day(self, day_night: DayNightDeclaration) -> TimeOfDay: ...
+    def time_of_day(self, day_night: DayNightDeclaration | NoDayNight) -> TimeOfDay: ...
 
 
 class WeatherReading(Protocol):

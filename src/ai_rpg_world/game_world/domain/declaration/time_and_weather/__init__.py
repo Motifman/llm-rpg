@@ -1,6 +1,7 @@
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.changes_every import ChangesEvery, NoChange
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_night_declaration import (
     DayNightDeclaration,
+    DayPhaseChange,
     NoDayNight,
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_declaration import DayPhaseDeclaration
@@ -18,6 +19,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type im
 __all__ = [
     "ChangesEvery",
     "DayNightDeclaration",
+    "DayPhaseChange",
     "DayPhaseDeclaration",
     "DayPhaseName",
     "NoChange",
