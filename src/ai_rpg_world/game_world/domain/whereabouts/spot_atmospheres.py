@@ -8,7 +8,7 @@ from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.spot import SpotAtmosphere, SpotDeclaration
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
-    RepeatedMementoKeyException,
+    require_distinct_memento_keys,
 )
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import UnknownSpotException
 from ai_rpg_world.game_world.domain.value_object import SpotId, WorldId
@@ -32,9 +32,10 @@ class SpotAtmospheresMemento:
     atmospheres: frozenset[AtmosphereAtSpot]
 
     def __post_init__(self) -> None:
-        spots = [entry.spot for entry in self.atmospheres]
-        if len(set(spots)) != len(spots):
-            raise RepeatedMementoKeyException(f"world {self.world_id} has a spot with two atmospheres")
+        require_distinct_memento_keys(
+            [entry.spot for entry in self.atmospheres],
+            f"world {self.world_id.value} has a spot with two atmospheres",
+        )
 
 
 class SpotAtmospheres(AggregateRoot[SpotAtmosphereChangedEvent]):

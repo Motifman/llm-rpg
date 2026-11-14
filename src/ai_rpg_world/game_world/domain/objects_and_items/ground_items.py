@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     GroundItemAlreadyPlacedException,
     GroundItemNotFoundException,
@@ -42,8 +42,7 @@ class GroundItemsMemento:
     items: tuple[ItemInstanceId, ...]
 
     def __post_init__(self) -> None:
-        if len(set(self.items)) != len(self.items):
-            raise RepeatedMementoKeyException(f"an item lies twice on the ground at {self.spot_id.value}")
+        require_distinct_memento_keys(self.items, f"an item lies twice on the ground at {self.spot_id.value}")
 
 
 class GroundItems(AggregateRoot[GroundItemsEvent]):

@@ -7,7 +7,7 @@ from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     InventoryFullException,
     ItemAlreadyCarriedException,
@@ -113,9 +113,10 @@ class PersonInventoryMemento:
     packed: tuple[PackedItem, ...]
 
     def __post_init__(self) -> None:
-        items = [held.item for held in self.held] + [packed.item for packed in self.packed]
-        if len(set(items)) != len(items):
-            raise RepeatedMementoKeyException(f"{self.person_id.value} carries an item twice")
+        require_distinct_memento_keys(
+            [held.item for held in self.held] + [packed.item for packed in self.packed],
+            f"{self.person_id.value} carries an item twice",
+        )
 
 
 class PersonInventory(AggregateRoot[PersonInventoryEvent]):

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.eventing import AggregateRoot, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import NoCapacity, SpotDeclaration, SpotSectionDeclaration
-from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantAlreadyInSectionException,
     OccupantAlreadyPlacedException,
@@ -60,9 +60,10 @@ class WhereaboutsMemento:
     locations: frozenset[OccupantLocation]
 
     def __post_init__(self) -> None:
-        occupants = [entry.occupant for entry in self.locations]
-        if len(set(occupants)) != len(occupants):
-            raise RepeatedMementoKeyException(f"world {self.world_id} has an occupant at two locations")
+        require_distinct_memento_keys(
+            [entry.occupant for entry in self.locations],
+            f"world {self.world_id.value} has an occupant at two locations",
+        )
 
 
 class Whereabouts(AggregateRoot[WhereaboutsEvent]):
