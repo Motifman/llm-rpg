@@ -21,6 +21,8 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     ItemDoesNotRunOutException,
     ItemHasNotRunOutException,
 )
+from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
+from ai_rpg_world.game_world.domain.people.text_with_unassigned_people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
@@ -86,6 +88,9 @@ class Lasts:
         if not self.has_run_out(age):
             raise ItemHasNotRunOutException(f"lasts {self.ticks.value} ticks and is {age.value} ticks old")
 
+    def ended_notice(self) -> TextAboutPeople:
+        return TextWithUnassignedPeople.literal(self.ended_text.text).about({})
+
 
 @final
 @dataclass(frozen=True)
@@ -95,6 +100,9 @@ class LastsIndefinitely:
 
     def require_run_out(self, age: Ticks) -> None:
         raise ItemDoesNotRunOutException(f"lasts indefinitely and is {age.value} ticks old")
+
+    def ended_notice(self) -> TextAboutPeople:
+        raise ItemDoesNotRunOutException("lasts indefinitely, so it has no text for running out")
 
 
 @final

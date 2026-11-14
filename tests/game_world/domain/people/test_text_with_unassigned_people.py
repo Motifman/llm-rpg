@@ -92,3 +92,29 @@ class TestTextWithUnassignedPeople:
         """名前の付いた人のプレースホルダーでない書き方を含む文は、作るときに MalformedTemplateException を投げる。シナリオの読み込みで書き間違いを止めるため。"""
         with pytest.raises(MalformedTemplateException):
             TextWithUnassignedPeople(template)
+
+
+class TestTextWithUnassignedPeopleNames:
+    """TextWithUnassignedPeople が、人ではないプレースホルダーを呼び名で埋め、人のプレースホルダーだけを残すことを保証する。"""
+
+    def test_with_names_fills_the_named_placeholder_and_keeps_people(self) -> None:
+        """「{actor}が{origin}からやって来た。」の {origin} を広場で埋めると、{actor} だけが残る。"""
+        text = TextWithUnassignedPeople("{actor}が{origin}からやって来た。")
+
+        named = text.with_names({"origin": DisplayName("広場")})
+
+        assert (named.template, named.placeholders()) == ("{actor}が広場からやって来た。", frozenset({"actor"}))
+
+    def test_with_names_keeps_braces_in_a_name_as_letters(self) -> None:
+        """呼び名に波括弧が入っていても、プレースホルダーにはならず文字として残る。"""
+        text = TextWithUnassignedPeople("{actor}が{item}を拾った。")
+
+        named = text.with_names({"item": DisplayName("{謎}の箱")})
+
+        assert (named.template, named.placeholders()) == ("{actor}が{{謎}}の箱を拾った。", frozenset({"actor"}))
+
+    def test_literal_keeps_braces_in_the_text_as_letters(self) -> None:
+        """literal に波括弧の入った文を渡すと、プレースホルダーの無い文になる。"""
+        text = TextWithUnassignedPeople.literal("{灯}が消えた。")
+
+        assert (text.template, text.placeholders()) == ("{{灯}}が消えた。", frozenset())

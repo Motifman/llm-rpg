@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from string import Formatter
 from typing import TypeVar, final
 
 from ai_rpg_world.game_world.domain.people._person_placeholders import person_placeholders_in
 from ai_rpg_world.game_world.domain.people.person_ref import PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId
 
 _Read = TypeVar("_Read")
 
@@ -20,6 +21,24 @@ class TextWithUnassignedPeople:
 
     def __post_init__(self) -> None:
         person_placeholders_in(self.template)
+
+    @classmethod
+    def literal(cls, text: str) -> TextWithUnassignedPeople:
+        return cls(_as_letters(text))
+
+    def with_names(self, names: Mapping[str, DisplayName]) -> TextWithUnassignedPeople:
+        rebuilt: list[str] = []
+        for literal, field_name, _, _ in Formatter().parse(self.template):
+            rebuilt.append(_as_letters(literal))
+            if field_name is None:
+                continue
+            rebuilt.append(_as_letters(names[field_name].text) if field_name in names else f"{{{field_name}}}")
+        return TextWithUnassignedPeople("".join(rebuilt))
+
+    def about_named(self, people: Mapping[str, PersonId], names: Mapping[str, DisplayName]) -> TextAboutPeople:
+        named = self.with_names(names)
+        placeholders = named.placeholders()
+        return named.about({key: person for key, person in people.items() if key in placeholders})
 
     def placeholders(self) -> frozenset[str]:
         return person_placeholders_in(self.template)
@@ -38,3 +57,7 @@ class TextWithUnassignedPeople:
 
     def about(self, people: Mapping[str, PersonId]) -> TextAboutPeople:
         return TextAboutPeople(template=self, people=people)
+
+
+def _as_letters(text: str) -> str:
+    return text.replace("{", "{{").replace("}", "}}")

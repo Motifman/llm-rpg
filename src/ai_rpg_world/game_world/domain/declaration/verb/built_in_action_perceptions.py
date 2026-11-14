@@ -3,24 +3,31 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from typing_extensions import assert_never
 
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechReach, Whisper
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
 from ai_rpg_world.game_world.domain.declaration.verb.noticed_on_waking import NoticedOnWaking
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
+    AnnouncementInBuiltInActionPerceptionException,
     NotBuiltInActionPerceptionException,
     TargetTextNotFittingTargetException,
     TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
-from ai_rpg_world.game_world.domain.perception import NoTarget
+from ai_rpg_world.game_world.domain.perception import NoTarget, Stimulus
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
+from ai_rpg_world.game_world.domain.value_object import SpotId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import Occupant, Teleported
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -39,6 +46,11 @@ class BuiltInActionPerceptions:
                 f"BuiltInActionPerceptions.by_kind must not declare {not_built_in}, which are not perceived through it"
             )
         for row, perception in self.rows():
+            # 知らせの相手は行為の前の世界で選ぶもので、組み込みの行為には選ぶ人がいない。書いても届かない。
+            if not isinstance(perception.announcement, NoAnnouncement):
+                raise AnnouncementInBuiltInActionPerceptionException(
+                    f"the {row.name} perception cannot announce to people chosen elsewhere"
+                )
             unfilled = sorted(perception.placeholders() - row.nameable)
             if unfilled:
                 raise UnfilledNameInBuiltInActionPerceptionException(
@@ -74,6 +86,13 @@ class BuiltInActionPerceptions:
         if isinstance(reach, Shout):
             return self.shout
         assert_never(reach)
+
+    def arrival_seen_at(
+        self, where: SpotId, arriving: Occupant, origin: SpotId | Teleported, nouns: DeclaredNouns, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
+        if isinstance(origin, Teleported):
+            return ()
+        return self.arrival.seen_at(where, arriving, {"origin": nouns.spot_of(origin).name}, at)
 
     def flaws_for(self, rules: WorldRules, at: DesignLocation) -> list[DesignFlaw]:
         performable = BuiltInPerceptionRow.kinds()

@@ -1,5 +1,6 @@
 from ai_rpg_world.game_world.domain.perception.announcement_stimulus import AnnouncementStimulus
 from ai_rpg_world.game_world.domain.perception.bodily_stimulus import BodilyStimulus
+from ai_rpg_world.game_world.domain.perception.item_ran_out_notice import ItemRanOutNotice
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.no_target import NoTarget
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
@@ -38,6 +39,7 @@ __all__ = [
     "BodilyStimulus",
     "DepartedPerceiver",
     "Felt",
+    "ItemRanOutNotice",
     "LivingPerceiver",
     "MissedNotice",
     "NoTarget",

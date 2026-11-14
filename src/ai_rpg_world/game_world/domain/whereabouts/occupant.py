@@ -11,6 +11,9 @@ from ai_rpg_world.game_world.domain.value_object import PersonId
 class PersonBody:
     person: PersonId
 
+    def is_departed(self) -> bool:
+        return False
+
     def can_hold_items(self) -> bool:
         return True
 
@@ -19,6 +22,9 @@ class PersonBody:
 @dataclass(frozen=True)
 class DepartedPerson:
     person: PersonId
+
+    def is_departed(self) -> bool:
+        return True
 
     def can_hold_items(self) -> bool:
         return False
