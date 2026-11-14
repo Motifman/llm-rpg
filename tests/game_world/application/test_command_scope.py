@@ -5,6 +5,7 @@ import pytest
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.exception.game_world_exception import CountBelowZeroException
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, ItemLeftWorldEvent
 from ai_rpg_world.game_world.domain.value_object import WorldTick
@@ -58,6 +59,21 @@ class TestCommandScopeRefusal:
             scope.run(end_world)
 
         assert scope.refusals == {"GAME_WORLD.WORLD_ALREADY_ENDED": 1}
+
+    def test_domain_exception_without_world_refusal_mark_is_not_counted(self) -> None:
+        """世界の断りの印の無いドメイン例外 (CountBelowZeroException) は、範囲を巻き戻して呼び出し元に届き、refusals には数えない。"""
+        store = store_holding(WorldFlags.start(WORLD))
+        scope = CommandScope(store, CommittedEventsDistributor())
+
+        def raise_bell_then_break(session: WorldSession) -> None:
+            raise_flag(BELL)(session)
+            raise CountBelowZeroException("a bug in counting")
+
+        with pytest.raises(CountBelowZeroException):
+            scope.run(raise_bell_then_break)
+
+        assert raised(store, BELL) is False
+        assert scope.refusals == {}
 
     def test_non_domain_exception_rolls_back_reaches_caller_and_is_not_counted_as_refusal(self) -> None:
         """ドメイン例外でない例外は、範囲を巻き戻して呼び出し元に届くが、refusals には数えない。"""

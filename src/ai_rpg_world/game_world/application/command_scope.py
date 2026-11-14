@@ -6,7 +6,7 @@ from typing import TypeVar, final
 
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.world_store import WorldSession, WorldStore
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 
 _Result = TypeVar("_Result")
 
@@ -26,7 +26,7 @@ class CommandScope:
         session = self._store.session()
         try:
             result = work(session)
-        except GameWorldDomainException as refusal:
+        except WorldRefusal as refusal:
             session.roll_back()
             self._refusals[refusal.error_code] += 1
             raise

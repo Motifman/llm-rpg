@@ -95,21 +95,21 @@ class WorldForActions:
         self.received = BatchesReceived()
         distributor.register_receiver(self.received)
         self.scope = CommandScope(self.store, distributor)
-        self._carry_out = CarryOutAction(self.scope, self.design)
+        self.carry_out = CarryOutAction(self.scope, self.design)
 
     def enter_cage(self, actor: PersonId) -> ActionReply:
         return self.enter(actor, CAGE)
 
     def enter(self, actor: PersonId, declared_section: SpotSectionDeclaration) -> ActionReply:
         access = self.design.section_access(declared_section.section_id)
-        return EnterSection(self._carry_out, self.design)(EnterSectionCommand(EnterSectionAttempt(actor, access)))
+        return EnterSection(self.carry_out, self.design)(EnterSectionCommand(EnterSectionAttempt(actor, access)))
 
     def leave_cage(self, actor: PersonId) -> ActionReply:
         access = self.design.section_access(CAGE.section_id)
-        return LeaveSection(self._carry_out, self.design)(LeaveSectionCommand(LeaveSectionAttempt(actor, access)))
+        return LeaveSection(self.carry_out, self.design)(LeaveSectionCommand(LeaveSectionAttempt(actor, access)))
 
     def travel(self, actor: PersonId, destination: SpotDeclaration) -> ActionReply:
-        return StartTravel(self._carry_out, self.design)(StartTravelCommand(TravelAttempt(actor, destination)))
+        return StartTravel(self.carry_out, self.design)(StartTravelCommand(TravelAttempt(actor, destination)))
 
     def pass_ticks(self, count: int) -> None:
         for _ in range(count):

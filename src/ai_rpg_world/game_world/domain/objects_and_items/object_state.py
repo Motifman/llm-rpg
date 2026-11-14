@@ -29,6 +29,7 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_except
 )
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import (
     NeverHiddenObjectUnrevealedException,
+    NotEnoughCountException,
     NotEnoughStockException,
     OperationNotForStateKindException,
     StateKeyNotOwnedException,
@@ -191,6 +192,10 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
 
     def subtract_from_count(self, key: ObjectStateKeyDeclaration, amount: Count) -> None:
         before = self._count_of(key)
+        if amount > before:
+            raise NotEnoughCountException(
+                f"{self.object_id.value}.{key.key.value} has {before.value}, cannot take {amount.value}"
+            )
         self._change_count(key, before, before - amount)
 
     def take_from_stock(self, key: ObjectStateKeyDeclaration, amount: Count, now: WorldTick) -> None:

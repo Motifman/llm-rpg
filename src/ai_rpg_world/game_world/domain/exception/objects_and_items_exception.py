@@ -1,11 +1,11 @@
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException, WorldRefusal
 
 
 class GroundItemAlreadyPlacedException(GameWorldDomainException):
     error_code = "GAME_WORLD.GROUND_ITEM_ALREADY_PLACED"
 
 
-class GroundItemNotFoundException(GameWorldDomainException):
+class GroundItemNotFoundException(WorldRefusal):
     error_code = "GAME_WORLD.GROUND_ITEM_NOT_FOUND"
 
 
@@ -13,7 +13,7 @@ class StateKeyNotOwnedException(GameWorldDomainException):
     error_code = "GAME_WORLD.STATE_KEY_NOT_OWNED"
 
 
-class ItemAlreadyLeftWorldException(GameWorldDomainException):
+class ItemAlreadyLeftWorldException(WorldRefusal):
     error_code = "GAME_WORLD.ITEM_ALREADY_LEFT_WORLD"
 
 
@@ -29,11 +29,11 @@ class ItemAlreadyCarriedException(GameWorldDomainException):
     error_code = "GAME_WORLD.ITEM_ALREADY_CARRIED"
 
 
-class ItemNotCarriedException(GameWorldDomainException):
+class ItemNotCarriedException(WorldRefusal):
     error_code = "GAME_WORLD.ITEM_NOT_CARRIED"
 
 
-class InventoryFullException(GameWorldDomainException):
+class InventoryFullException(WorldRefusal):
     error_code = "GAME_WORLD.INVENTORY_FULL"
 
 
@@ -45,11 +45,15 @@ class StateValueOfAnotherKindException(GameWorldDomainException):
     error_code = "GAME_WORLD.STATE_VALUE_OF_ANOTHER_KIND"
 
 
-class NotEnoughStockException(GameWorldDomainException):
+class NotEnoughCountException(WorldRefusal):
+    error_code = "GAME_WORLD.NOT_ENOUGH_COUNT"
+
+
+class NotEnoughStockException(WorldRefusal):
     error_code = "GAME_WORLD.NOT_ENOUGH_STOCK"
 
 
-class NotEnoughItemsOfSpecException(GameWorldDomainException):
+class NotEnoughItemsOfSpecException(WorldRefusal):
     error_code = "GAME_WORLD.NOT_ENOUGH_ITEMS_OF_SPEC"
 
 
