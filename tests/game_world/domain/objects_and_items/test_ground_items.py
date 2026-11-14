@@ -17,12 +17,12 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
 )
 from ai_rpg_world.game_world.domain.value_object import SpotId
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
-from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
+from tests.game_world.support.world_design_for_tests import compose_world, nouns, spot
 
 _SQUARE = SpotId("square")
 _LANTERN = ItemInstanceId("lantern#1")
 _PICKAXE = ItemInstanceId("pickaxe#1")
-_DESIGN = compose_world(nouns(spots=(spot("square"),), characters=(character("alice", "square"),)))
+_DESIGN = compose_world(nouns(spots=(spot("square"),)))
 
 
 class TestGroundItems:
