@@ -52,8 +52,9 @@ class AggregateCodecs:
         codec = self._by_type.get(type(memento))
         if codec is None:
             raise MementoNotStorableException(f"no codec is registered for {type(memento).__name__}")
+        written = codec.to_json(memento)
         try:
-            state = json.dumps(codec.to_json(memento), ensure_ascii=False, sort_keys=True, allow_nan=False)
+            state = json.dumps(written, ensure_ascii=False, sort_keys=True, allow_nan=False)
         except (TypeError, ValueError) as error:
             raise MementoNotStorableException(f"{codec.kind} cannot be written as JSON: {error}") from error
         return StoredMemento(kind=codec.kind, version=codec.version, state=state)
@@ -69,9 +70,25 @@ class AggregateCodecs:
                 f"a {stored.kind} row has version {stored.version}, but this code reads version {codec.version}"
             )
         try:
-            return cast(_Memento, codec.from_json(json.loads(stored.state)))
+            return cast(
+                _Memento, codec.from_json(json.loads(stored.state, object_pairs_hook=_object_without_repeated_keys))
+            )
         except (json.JSONDecodeError, StoredMementoUnreadableException, GameWorldDomainException) as error:
-            raise StoredMementoUnreadableException(f"a {stored.kind} row cannot be read: {error}") from error
+            raise StoredMementoUnreadableException(
+                f"a {stored.kind} row cannot be read: {type(error).__name__}: {error}"
+            ) from error
 
 
-GAME_WORLD_CODECS = AggregateCodecs([WorldClockCodec(), WorldFlagsCodec()])
+def _object_without_repeated_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise StoredMementoUnreadableException(f"a key is written more than once in {sorted(key for key, _ in pairs)}")
+    return fields
+
+
+GAME_WORLD_CODECS = AggregateCodecs(
+    [
+        WorldClockCodec(),
+        WorldFlagsCodec(),
+    ]
+)

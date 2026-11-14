@@ -74,6 +74,13 @@ class TestRoundTrip:
 class TestUnreadableRows:
     """読み捨てずに止める行を保証する。"""
 
+    def test_key_written_twice_is_refused(self) -> None:
+        """同じキーが 2 度書かれた行は、後の値で読まずに止まる。"""
+        stored = replace(GAME_WORLD_CODECS.stored(_CLOCK), state='{"world_id": "w1", "now": 1, "now": 2}')
+
+        with pytest.raises(StoredMementoUnreadableException, match="more than once"):
+            GAME_WORLD_CODECS.memento(stored, WorldClockMemento)
+
     def test_row_with_another_version_is_refused(self) -> None:
         """今の版と違う版の行を読むと StoredMementoUnreadableException で止まる。"""
         stored = replace(GAME_WORLD_CODECS.stored(_CLOCK), version=2)
@@ -170,3 +177,28 @@ class TestRegistration:
         """同じ変換を 2 つ渡して AggregateCodecs を作ると ValueError になる。"""
         with pytest.raises(ValueError, match="world_clock"):
             AggregateCodecs([WorldClockCodec(), WorldClockCodec()])
+
+
+@dataclass(frozen=True)
+class _ClockAtNaN:
+    world_id: WorldId
+
+
+class _NaNClockCodec:
+    kind = "nan_clock"
+    version = 1
+    memento_type = _ClockAtNaN
+
+    def to_json(self, memento: _ClockAtNaN) -> object:
+        return {"world_id": memento.world_id.value, "now": float("nan")}
+
+    def from_json(self, raw: object) -> _ClockAtNaN:
+        raise AssertionError("not read in this test")
+
+
+def test_value_json_cannot_hold_is_refused() -> None:
+    """変換が NaN のように JSON に書けない値を返すと、MementoNotStorableException で止まる。"""
+    codecs = AggregateCodecs([_NaNClockCodec()])
+
+    with pytest.raises(MementoNotStorableException, match="nan_clock"):
+        codecs.stored(_ClockAtNaN(_WORLD))
