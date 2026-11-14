@@ -15,7 +15,7 @@ class PassWorldTime:
     def __call__(self, command: PassWorldTimeCommand) -> None:
         # WorldClock.advance → Whereabouts.advance_travels → PersonVitals.pass_time(now, death, hunger) (全員)
         # → 品物の時間 (Lasts の時間が過ぎた品物を、持っている人の PersonInventory か置かれた場所の GroundItems から手放させ、Item.run_out)
-        # → 天候 → モンスター (湧きを確かめ、個体ごとに感じて動き、SoundsThisTick を空にする。monster.md)
+        # → 天候 (Weather.pass_time。ChangesEvery の N の倍数の時刻だけ facts.random() から 1 回引く) → モンスター (湧きを確かめ、個体ごとに感じて動き、SoundsThisTick を空にする。monster.md)
         # 状態効果は #2014 で決めてから足す
         ...
 
