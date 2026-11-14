@@ -1,4 +1,4 @@
-"""物と品物の集約 (Item・ObjectState・PersonInventory・GroundItems・SpotSearchProgress) の memento が JSON を行き来し、知らない形の行を止めることを保証する。"""
+"""物と品物の集約 (Item・ItemSerialCounter・ObjectState・PersonInventory・GroundItems・SpotSearchProgress) の memento が JSON を行き来し、知らない形の行を止めることを保証する。"""
 
 from __future__ import annotations
 
@@ -44,6 +44,8 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     Item,
     ItemInstanceId,
     ItemMemento,
+    ItemSerialCounter,
+    ItemSerialCounterMemento,
     ItemStateKeyValue,
     ObjectState,
     ObjectStateKeyValue,
@@ -69,6 +71,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     SpotId,
     StateKeyId,
     Ticks,
+    WorldId,
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
@@ -76,6 +79,7 @@ from ai_rpg_world.game_world.infrastructure.persistence.aggregate_codecs import 
 from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception import (
     StoredMementoUnreadableException,
 )
+from tests.game_world.support.world_design_for_tests import item_spec
 
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
@@ -191,6 +195,13 @@ def _search_progress() -> SpotSearchProgressMemento:
     return progress.memento()
 
 
+def _item_serial_counter() -> ItemSerialCounterMemento:
+    counter = ItemSerialCounter.start(WorldId("island"))
+    counter.bring_item_into_world(item_spec("rope"), WorldTick(1))
+    counter.bring_item_into_world(item_spec("rope"), WorldTick(2))
+    return counter.memento()
+
+
 _ITEM = _item()
 _OBJECT_STATE = _object_state()
 _INVENTORY = _inventory()
@@ -199,6 +210,7 @@ _SEARCH_PROGRESS = _search_progress()
 
 _MEMENTOS: dict[str, object] = {
     "item": _ITEM,
+    "item_serial_counter": _item_serial_counter(),
     "object_state": _OBJECT_STATE,
     "person_inventory": _INVENTORY,
     "ground_items": _GROUND_ITEMS,

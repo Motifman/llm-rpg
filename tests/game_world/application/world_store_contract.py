@@ -24,6 +24,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     ItemCameIntoWorldEvent,
     ItemInstanceId,
     ItemLeftWorldEvent,
+    ItemSerialCounter,
     ObjectState,
     PersonInventory,
     SpotSearchProgress,
@@ -235,7 +236,7 @@ class WorldStoreContract(ABC):
 
     def test_item_brought_into_world_is_read_after_commit(self) -> None:
         """範囲の中で品物を世界に持ち込むと、ItemCameIntoWorldEvent が commit の戻りに入り、次の範囲で引ける。"""
-        store = self.store_holding(design_with_bell())
+        store = self.store_holding(design_with_bell(), ItemSerialCounter.start(WORLD))
         session = store.session()
 
         brought = session.aggregates().bring_item_into_world(ROPE, WorldTick(2))
@@ -256,7 +257,7 @@ class WorldStoreContract(ABC):
 
     def test_item_brought_in_and_taken_out_in_one_scope_returns_both_events(self) -> None:
         """同じ範囲で品物を持ち込んでから世界から出すと、commit は持ち込みと持ち出しのイベントをその順で返し、品物は残らない。"""
-        store = self.store_holding(design_with_bell())
+        store = self.store_holding(design_with_bell(), ItemSerialCounter.start(WORLD))
         session = store.session()
 
         brought = session.aggregates().bring_item_into_world(ROPE, WorldTick(2))
@@ -266,6 +267,35 @@ class WorldStoreContract(ABC):
         assert [type(event) for event in events] == [ItemCameIntoWorldEvent, ItemLeftWorldEvent]
         with pytest.raises(AggregateNotInWorldException):
             store.session().facts().item(brought)
+
+    def test_item_brought_after_a_rolled_back_one_gets_the_same_id(self) -> None:
+        """範囲の中で品物を持ち込んで roll_back すると、次の範囲で持ち込んだ品物は、巻き戻した品物と同じ ID になる。"""
+        store = self.store_holding(design_with_bell(), ItemSerialCounter.start(WORLD))
+        rolled_back_session = store.session()
+        rolled_back = rolled_back_session.aggregates().bring_item_into_world(ROPE, WorldTick(2))
+        rolled_back_session.roll_back()
+
+        brought = store.session().aggregates().bring_item_into_world(ROPE, WorldTick(2))
+
+        assert brought == rolled_back
+
+    def test_items_brought_in_separate_scopes_get_different_ids(self) -> None:
+        """確定した範囲で品物を持ち込んだあと、次の範囲で持ち込んだ品物は前の品物と別の ID になる。"""
+        store = self.store_holding(design_with_bell(), ItemSerialCounter.start(WORLD))
+        first_session = store.session()
+        first = first_session.aggregates().bring_item_into_world(ROPE, WorldTick(2))
+        first_session.commit()
+
+        second = store.session().aggregates().bring_item_into_world(ROPE, WorldTick(3))
+
+        assert second != first
+
+    def test_bringing_an_item_into_a_world_without_a_serial_counter_is_refused(self) -> None:
+        """番号の帳簿を入れずに始めた世界で品物を持ち込むと AggregateNotInWorldException を投げる。"""
+        store = self.store_holding(design_with_bell())
+
+        with pytest.raises(AggregateNotInWorldException):
+            store.session().aggregates().bring_item_into_world(ROPE, WorldTick(2))
 
     def test_person_vitals_are_read_back_by_person(self) -> None:
         """入れた人の体は、その人の ID で引くと、入れたときと同じ memento で読める。"""
