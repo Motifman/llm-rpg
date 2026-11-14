@@ -7,11 +7,13 @@ from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentV
 from ai_rpg_world.game_world.domain.action.trigger import (
     EachPersonOf,
     GroupDecisionResult,
+    GroupDecisionUnresolved,
     HappeningFired,
     JointActionCompleted,
     LookingAround,
     ReactionFired,
     Trigger,
+    WorldStageChanged,
     WorldTimePassing,
 )
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
@@ -23,7 +25,7 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import StruckByPerson, WorldHappening
-from ai_rpg_world.game_world.domain.value_object import DisplayName, GroupDecisionId, PersonId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import DisplayName, GroupDecisionId, PersonId, WorldStageId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
@@ -53,6 +55,8 @@ _TRIGGERS_WITHOUT_PEOPLE: tuple[Trigger, ...] = (
     JointActionCompleted(JointActionForTests(JointActionId("two_valves"))),
     WorldTimePassing(WorldTick(3)),
     LookingAround(WorldTick(3)),
+    WorldStageChanged(before=WorldStageId("night"), after=WorldStageId("dawn"), at=WorldTick(3)),
+    GroupDecisionUnresolved(_EXILE_VOTE),
 )
 _TRIGGERS_NOT_ACTIONS: tuple[Trigger, ...] = (
     *_TRIGGERS_WITHOUT_PEOPLE,
