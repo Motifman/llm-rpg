@@ -5,7 +5,7 @@ from typing import final
 
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import BrokenRouteException, EmptyRouteException
-from ai_rpg_world.game_world.domain.value_object import SpotId
+from ai_rpg_world.game_world.domain.value_object import SpotId, Ticks
 
 
 @final
@@ -22,6 +22,9 @@ class Route:
     @property
     def destination(self) -> SpotId:
         return self._stops()[-1]
+
+    def total_ticks(self) -> Ticks:
+        return Ticks(sum(passage.travel_ticks.value for passage in self.passages))
 
     def end_of_passage(self, passage_index: int) -> SpotId:
         return self._stops()[passage_index + 1]

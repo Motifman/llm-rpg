@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar, final
+from typing import TYPE_CHECKING, ClassVar, final
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
 from ai_rpg_world.game_world.domain.action.action_attempt import (
@@ -21,16 +21,27 @@ from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechReach
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.exception.action_exception import NoDeliveriesException
+from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
+    NoRouteToDestinationException,
+    OccupantNotAtRouteStartException,
+)
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, PassageId, PersonId, SpotId, Ticks
+from ai_rpg_world.game_world.domain.whereabouts import AtSpot, NoRoute, Occupant, Route
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 
 
 class _BuiltInAttempt(TriggerAnswersNothingByDefault):
@@ -86,6 +97,45 @@ class TravelAttempt(_BuiltInAttempt):
 
     def actor_requirement(self) -> ActorRequirement:
         return LivingOrDeparted()
+
+    def unmet_route_condition(self, design: WorldDesign, facts: WorldFacts) -> FailureReason | HiddenFailure | None:
+        start = self._start(facts)
+        if isinstance(design.route(start, self.destination.spot_id, self._passable(design, facts)), Route):
+            return None
+        route_by_state = design.route(start, self.destination.spot_id, _open_passages(facts))
+        if isinstance(route_by_state, NoRoute):
+            return None
+        for passage in route_by_state.passages:
+            failure = design.passage_traversal(passage.passage_id).failure_reason(facts, self)
+            if failure is not None:
+                return failure
+        return None
+
+    def set_off(self, design: WorldDesign, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        route = design.route(self._start(facts), self.destination.spot_id, self._passable(design, facts))
+        if isinstance(route, NoRoute):
+            raise NoRouteToDestinationException(f"{self.actor.value} has no route to {self.destination.spot_id.value}")
+        world.whereabouts().start_travel(self._occupant(facts), route)
+        return route.total_ticks()
+
+    def _occupant(self, facts: WorldFacts) -> Occupant:
+        return facts.vitals(self.actor).occupant_in_world(facts.rules().departed_persons_act)
+
+    def _start(self, facts: WorldFacts) -> SpotId:
+        location = facts.whereabouts().location_of(self._occupant(facts))
+        if not isinstance(location, AtSpot):
+            raise OccupantNotAtRouteStartException(f"{self.actor.value} is not at any spot")
+        return location.spot
+
+    def _passable(self, design: WorldDesign, facts: WorldFacts) -> frozenset[PassageId]:
+        return frozenset(
+            passage for passage in _open_passages(facts) if design.passage_traversal(passage).holds(facts, self)
+        )
+
+
+def _open_passages(facts: WorldFacts) -> frozenset[PassageId]:
+    passages = facts.passages()
+    return frozenset(passage.passage_id for passage in facts.nouns().all_passages() if passages.is_traversable(passage))
 
 
 @final

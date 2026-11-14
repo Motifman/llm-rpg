@@ -90,10 +90,10 @@ class DropItem:
     def __call__(self, command: DropItemCommand) -> None: ...
 
 class EnterSection:
-    def __call__(self, command: EnterSectionCommand) -> None: ...   # 満員は Whereabouts が断る
+    def __call__(self, command: EnterSectionCommand) -> ActionReply: ...   # 満員は Whereabouts が断る
 
 class LeaveSection:
-    def __call__(self, command: LeaveSectionCommand) -> None: ...
+    def __call__(self, command: LeaveSectionCommand) -> ActionReply: ...
 
 class HoldItem:
     def __call__(self, command: HoldItemCommand) -> None: ...
@@ -110,7 +110,7 @@ class AttackMonster:
     def __call__(self, command: AttackMonsterCommand) -> None: ...
 
 class StartTravel:
-    def __call__(self, command: StartTravelCommand) -> None: ...
+    def __call__(self, command: StartTravelCommand) -> ActionReply: ...
 
 class Speak:
     def __call__(self, command: SpeakCommand) -> None: ...
@@ -157,6 +157,17 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 5. ドメインイベントを配る (ハンドラ、StimulusTranslator → DeliverPerception、trace)
 6. SettleWorldConditions
 7. コマンドへの返事 (通った / 断られた理由) を返す
+
+2〜4 と断られたときは、共通の流れ `CarryOutAction` が受け持つ。行為ごとのユースケースは、行為の試みを持つコマンド (`StartTravelCommand(attempt: TravelAttempt)` など) を受け、`ActionSteps` の 2 つ (3 の `unmet_precondition` と、4 で世界を変えて行っているあいだの長さを返す `change_world`) だけを書く。返事は `ActionDone()` か `ActionRefused(refusal: ActionRefusal)` (#2146)
+
+```python
+class ActionSteps(Protocol[_Attempt]):
+    def unmet_precondition(self, attempt: _Attempt, facts: WorldFacts) -> FailureReason | HiddenFailure | None: ...
+    def change_world(self, attempt: _Attempt, facts: WorldFacts, world: WorldAggregates) -> Ticks: ...
+```
+
+- 体を使う行為だけ疲れ、行為の長さのあいだは体を使わない行為でも行っている (`PersonVitals.start_acting`)。去った人は疲れず、行っているあいだも持たない
+- 集約が断った理由の文は `RefusalTexts.world_state` から引き、表に無ければ `RefusalTexts.unlisted` を使う。例外の文面は返さない (品物の ID が入る)
 
 断られたとき (2 か 3 か 4):
 - 巻き戻し、別の範囲で LatestActions.note_failed_attempt (ActionAttemptFailedEvent)

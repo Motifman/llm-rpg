@@ -58,6 +58,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant, PersonBody
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.action_attempt import Exertion
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
@@ -205,6 +206,13 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         previous = NoPreviousAction() if isinstance(self._busy_until, NotBusy) else self._busy_until
         self._busy_until = until
         self._add(PersonBecameBusyEvent, until=until, previous_until=previous)
+
+    def start_acting(self, exertion: Exertion, until: WorldTick, rule: FatigueRule) -> None:
+        # 去った人は疲れず、行っているあいだも持たない (#2146)
+        if self.is_dead():
+            return
+        exertion.tire(self, rule)
+        self.start_action(until)
 
     def is_busy(self, now: WorldTick) -> bool:
         return isinstance(self._busy_until, WorldTick) and now < self._busy_until
