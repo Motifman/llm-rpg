@@ -19,7 +19,7 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     TravelNotDepartedFromPassageStartException,
     TravelPositionOutsideRouteException,
 )
-from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, SpotSectionId, Ticks
+from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, SpotSectionId, Ticks, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import (
     AtSpot,
     DepartedPerson,
@@ -35,6 +35,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     OpenArea,
     PersonBody,
     Route,
+    Teleported,
     TravelBlockedEvent,
     TravelCancelledEvent,
     TravelInProgress,
@@ -50,6 +51,7 @@ from tests.game_world.support.world_design_for_tests import access_to, compose_w
 ALICE = PersonBody(PersonId("alice"))
 BOB = PersonBody(PersonId("bob"))
 CAROL = PersonBody(PersonId("carol"))
+_NOW = WorldTick(0)
 
 PLAZA = spot("plaza")
 WELL = spot("well")
@@ -296,9 +298,9 @@ class TestWhereaboutsAdvanceTravels:
         whereabouts.start_travel(ALICE, route)
         whereabouts.clear_events()
 
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
         halfway = whereabouts.location_of(ALICE)
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         assert halfway == TravelInProgress(
             route=route, passage_index=0, ticks_left_on_passage=Ticks(1), departed_from=SpotId("plaza")
@@ -314,8 +316,8 @@ class TestWhereaboutsAdvanceTravels:
         whereabouts.start_travel(ALICE, route)
         whereabouts.clear_events()
 
-        whereabouts.advance_travels(frozenset())
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         assert whereabouts.location_of(ALICE) == TravelInProgress(
             route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
@@ -329,7 +331,7 @@ class TestWhereaboutsAdvanceTravels:
         doorway = path("doorway", "well", "mine_entrance", ticks=0)
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(step, doorway)))
 
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("mine_entrance"), section=OpenArea())
 
@@ -340,7 +342,7 @@ class TestWhereaboutsAdvanceTravels:
         step = path("step", "well", "mine_entrance", ticks=1)
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(doorway, step)))
 
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("mine_entrance"), section=OpenArea())
 
@@ -350,7 +352,7 @@ class TestWhereaboutsAdvanceTravels:
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
         whereabouts.clear_events()
 
-        whereabouts.advance_travels(frozenset({PassageId("street")}))
+        whereabouts.advance_travels(frozenset({PassageId("street")}), _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("plaza"), section=OpenArea())
         blocked, entered = whereabouts.get_events()
@@ -362,10 +364,10 @@ class TestWhereaboutsAdvanceTravels:
         """区間を歩き終えて次の区間に差しかかったとき、その通路が閉じていれば途中の場所で止まる。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET, LANE)))
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
         whereabouts.clear_events()
 
-        whereabouts.advance_travels(frozenset({PassageId("lane")}))
+        whereabouts.advance_travels(frozenset({PassageId("lane")}), _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("well"), section=OpenArea())
         assert _kinds(whereabouts) == [TravelBlockedEvent, OccupantEnteredSpotEvent]
@@ -374,7 +376,7 @@ class TestWhereaboutsAdvanceTravels:
         """移動中でない人の居場所は advance_travels で変わらない。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
 
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("plaza"), section=OpenArea())
         assert whereabouts.get_events() == []
@@ -387,11 +389,11 @@ class TestWhereaboutsCancelTravel:
         """2 本目の区間を歩いている人の移動をやめると、途中の場所に戻り、TravelCancelledEvent と OccupantEnteredSpotEvent をためる。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET, LANE)))
-        whereabouts.advance_travels(frozenset())
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
+        whereabouts.advance_travels(frozenset(), _NOW)
         whereabouts.clear_events()
 
-        whereabouts.cancel_travel(ALICE)
+        whereabouts.cancel_travel(ALICE, _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("well"), section=OpenArea())
         cancelled, entered = whereabouts.get_events()
@@ -401,7 +403,7 @@ class TestWhereaboutsCancelTravel:
     def test_cancel_travel_of_someone_not_travelling_is_rejected(self) -> None:
         """移動中でない人の cancel_travel は OccupantNotTravellingException を投げる。"""
         with pytest.raises(OccupantNotTravellingException):
-            _whereabouts((ALICE, "plaza")).cancel_travel(ALICE)
+            _whereabouts((ALICE, "plaza")).cancel_travel(ALICE, _NOW)
 
 
 class TestWhereaboutsTeleport:
@@ -413,7 +415,7 @@ class TestWhereaboutsTeleport:
         whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
         whereabouts.clear_events()
 
-        whereabouts.teleport(ALICE, MINE)
+        whereabouts.teleport(ALICE, MINE, _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("mine_entrance"), section=OpenArea())
         assert _kinds(whereabouts) == [OccupantLeftSectionEvent, OccupantTeleportedEvent, OccupantEnteredSpotEvent]
@@ -430,8 +432,8 @@ class TestWhereaboutsTeleport:
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
         whereabouts.clear_events()
 
-        whereabouts.teleport(ALICE, MINE)
-        whereabouts.advance_travels(frozenset())
+        whereabouts.teleport(ALICE, MINE, _NOW)
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         assert whereabouts.location_of(ALICE) == AtSpot(spot=SpotId("mine_entrance"), section=OpenArea())
         teleported = whereabouts.get_events()[0]
@@ -441,7 +443,7 @@ class TestWhereaboutsTeleport:
     def test_teleport_of_an_occupant_not_placed_is_rejected(self) -> None:
         """置いていない人を teleport すると OccupantNotPlacedException を投げる。"""
         with pytest.raises(OccupantNotPlacedException):
-            Whereabouts.start(WORLD).teleport(ALICE, MINE)
+            Whereabouts.start(WORLD).teleport(ALICE, MINE, _NOW)
 
 
 class TestWhereaboutsTogetherness:
@@ -558,8 +560,8 @@ class TestWhereaboutsRefusalLeavesNothingBehind:
                 lambda w: w.start_travel(BOB, Route(start=SpotId("plaza"), passages=(STREET,))),
                 OccupantNotAtRouteStartException,
             ),
-            (lambda w: w.cancel_travel(ALICE), OccupantNotTravellingException),
-            (lambda w: w.teleport(CAROL, MINE), OccupantNotPlacedException),
+            (lambda w: w.cancel_travel(ALICE, _NOW), OccupantNotTravellingException),
+            (lambda w: w.teleport(CAROL, MINE, _NOW), OccupantNotPlacedException),
             (lambda w: w.remove(CAROL), OccupantNotPlacedException),
             (lambda w: w.place(ALICE, WELL), OccupantAlreadyPlacedException),
         ],
@@ -588,18 +590,18 @@ class TestWhereaboutsMemento:
         whereabouts = _whereabouts((ALICE, "plaza"))
         route = Route(start=SpotId("plaza"), passages=(STREET, LANE))
         whereabouts.start_travel(ALICE, route)
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         rebuilt = rebuilt_from_memento(whereabouts, DESIGN.nouns)
 
         assert rebuilt.location_of(ALICE) == TravelInProgress(
             route=route, passage_index=0, ticks_left_on_passage=Ticks(1), departed_from=SpotId("plaza")
         )
-        rebuilt.advance_travels(frozenset())
+        rebuilt.advance_travels(frozenset(), _NOW)
         assert rebuilt.location_of(ALICE) == TravelInProgress(
             route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
         )
-        rebuilt.advance_travels(frozenset())
+        rebuilt.advance_travels(frozenset(), _NOW)
         assert rebuilt.is_at(ALICE, MINE)
 
     def test_traveller_rebuilt_on_the_second_passage_stays_on_it(self) -> None:
@@ -607,15 +609,15 @@ class TestWhereaboutsMemento:
         whereabouts = _whereabouts((ALICE, "plaza"))
         route = Route(start=SpotId("plaza"), passages=(STREET, LANE))
         whereabouts.start_travel(ALICE, route)
-        whereabouts.advance_travels(frozenset())
-        whereabouts.advance_travels(frozenset())
+        whereabouts.advance_travels(frozenset(), _NOW)
+        whereabouts.advance_travels(frozenset(), _NOW)
 
         rebuilt = rebuilt_from_memento(whereabouts, DESIGN.nouns)
 
         assert rebuilt.location_of(ALICE) == TravelInProgress(
             route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
         )
-        rebuilt.advance_travels(frozenset())
+        rebuilt.advance_travels(frozenset(), _NOW)
         assert rebuilt.is_at(ALICE, MINE)
 
     def test_rebuilt_whereabouts_answer_the_same(self) -> None:
@@ -751,3 +753,82 @@ class TestWhereaboutsMemento:
                     }
                 ),
             )
+
+
+class TestWhereaboutsArrivalOrigin:
+    """OccupantEnteredSpotEvent の origin が最後に歩いた区間の反対の端になり、at が着いた時刻になることを保証する。"""
+
+    def test_walking_the_whole_route_comes_from_the_start_of_the_last_passage(self) -> None:
+        """広場から通りを歩いて井戸に着くと、origin は広場、at は着いた tick になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+        whereabouts.advance_travels(frozenset(), WorldTick(1))
+        whereabouts.clear_events()
+
+        whereabouts.advance_travels(frozenset(), WorldTick(2))
+
+        [entered] = whereabouts.get_events()
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin, entered.at) == (SpotId("well"), SpotId("plaza"), WorldTick(2))
+
+    def test_walking_several_passages_in_one_tick_comes_from_the_start_of_the_last(self) -> None:
+        """1 tick の区間で井戸に着き、同じ tick に 0 tick の戸口を抜けて坑道の入り口に着くと、origin は戸口の出発点の井戸になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        step = path("step", "plaza", "well", ticks=1)
+        doorway = path("doorway", "well", "mine_entrance", ticks=0)
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(step, doorway)))
+        whereabouts.clear_events()
+
+        whereabouts.advance_travels(frozenset(), WorldTick(1))
+
+        [entered] = whereabouts.get_events()
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin) == (SpotId("mine_entrance"), SpotId("well"))
+
+    def test_turning_back_on_a_closed_passage_comes_from_its_far_end(self) -> None:
+        """通りを歩いている途中で通りが閉じて広場に戻ると、origin は通りの向こうの端の井戸になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+        whereabouts.clear_events()
+
+        whereabouts.advance_travels(frozenset({PassageId("street")}), WorldTick(1))
+
+        _, entered = whereabouts.get_events()
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin, entered.at) == (SpotId("plaza"), SpotId("well"), WorldTick(1))
+
+    def test_stopping_before_a_closed_next_passage_comes_from_the_passage_walked(self) -> None:
+        """通りを歩き切って井戸に着き、次の小道が閉じていて井戸で止まると、origin は歩いた通りの出発点の広場になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET, LANE)))
+        whereabouts.advance_travels(frozenset(), WorldTick(1))
+        whereabouts.clear_events()
+
+        whereabouts.advance_travels(frozenset({PassageId("lane")}), WorldTick(2))
+
+        _, entered = whereabouts.get_events()
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin, entered.at) == (SpotId("well"), SpotId("plaza"), WorldTick(2))
+
+    def test_cancelling_on_a_passage_comes_from_its_far_end(self) -> None:
+        """通りを歩いている途中で移動をやめて広場に戻ると、origin は通りの向こうの端の井戸、at はやめた tick になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+        whereabouts.advance_travels(frozenset(), WorldTick(1))
+        whereabouts.clear_events()
+
+        whereabouts.cancel_travel(ALICE, WorldTick(1))
+
+        _, entered = whereabouts.get_events()
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin, entered.at) == (SpotId("plaza"), SpotId("well"), WorldTick(1))
+
+    def test_teleporting_arrives_from_no_spot(self) -> None:
+        """teleport で着くと、origin は Teleported、at は teleport した tick になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+
+        whereabouts.teleport(ALICE, MINE, WorldTick(3))
+
+        entered = whereabouts.get_events()[-1]
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin, entered.at) == (SpotId("mine_entrance"), Teleported(), WorldTick(3))
