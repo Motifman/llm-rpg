@@ -65,3 +65,11 @@ class TestAllows:
 
         assert all(stage.allows(kind) for kind in ActionKind)
         assert stage.allows_interaction(InteractionId("bite"))
+
+
+class TestWorldStageDeclarationIsDeclared:
+    """WorldStageDeclaration.is_declared が、段階を宣言した世界であることを答えることを保証する。"""
+
+    def test_is_declared(self) -> None:
+        """段階の宣言は、段階が宣言されているかを問われると、宣言されていると答える。"""
+        assert _stage(AllActionsAllowed()).is_declared()

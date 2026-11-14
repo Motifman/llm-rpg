@@ -72,14 +72,10 @@ class DeclaredWorldTime:
         weather: WeatherDeclaration | NoWeather,
     ) -> DeclaredWorldTime:
         return cls(
-            has_world_stages=not isinstance(initial_stage, NoWorldStages),
-            day_phases=(
-                frozenset()
-                if isinstance(day_night, NoDayNight)
-                else frozenset(phase.name for phase in day_night.phases)
-            ),
-            has_day_night=not isinstance(day_night, NoDayNight),
-            has_weather=not isinstance(weather, NoWeather),
+            has_world_stages=initial_stage.is_declared(),
+            day_phases=day_night.phase_names(),
+            has_day_night=day_night.is_declared(),
+            has_weather=weather.is_declared(),
         )
 
     def flaws_of(self, location: DesignLocation, requirements: Requirements) -> list[DesignFlaw]:
