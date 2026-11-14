@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    ChangesEvery,
     NoChange,
     NoWeather,
     WeatherDeclaration,
     WeatherState,
+    WeatherTransitions,
     WeatherType,
 )
-from ai_rpg_world.game_world.domain.value_object import WorldId
+from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.world_progress import Weather, WeatherChangedEvent
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.world_in_memory import FractionsInOrder
 
 _WORLD = WorldId("island")
 
@@ -102,3 +105,34 @@ class TestWeatherMemento:
         weather.change(WeatherState(WeatherType.RAIN))
 
         assert rebuilt_from_memento(weather).get_events() == []
+
+
+class TestWeatherPassTime:
+    """Weather.pass_time が、宣言の weather_after が選んだ天候へ変わることを保証する。"""
+
+    def test_changes_to_the_weather_the_declaration_picks(self) -> None:
+        """1 tick ごとに変わる宣言で、晴れから 0.8 を引くと曇りに変わり、WeatherChangedEvent が 1 つたまる。"""
+        declared = WeatherDeclaration(
+            initial=WeatherType.CLEAR,
+            changes=ChangesEvery(Ticks(1), WeatherTransitions.default()),
+            announce_changes=True,
+            obscuring=frozenset(),
+        )
+        weather = Weather.from_declaration(_WORLD, declared)
+
+        weather.pass_time(WorldTick(1), declared, FractionsInOrder((0.8,)))
+
+        assert weather.current() == WeatherState(WeatherType.CLOUDY)
+        [event] = weather.get_events()
+        assert isinstance(event, WeatherChangedEvent)
+        assert (event.before, event.after) == (WeatherState(WeatherType.CLEAR), WeatherState(WeatherType.CLOUDY))
+
+    def test_unchanged_weather_records_nothing(self) -> None:
+        """NoChange の宣言では、時間が過ぎても天候は変わらず、イベントもたまらない。"""
+        declared = _declaration(WeatherType.FOG)
+        weather = Weather.from_declaration(_WORLD, declared)
+
+        weather.pass_time(WorldTick(5), declared, FractionsInOrder(()))
+
+        assert weather.current() == WeatherState(WeatherType.FOG)
+        assert weather.get_events() == []

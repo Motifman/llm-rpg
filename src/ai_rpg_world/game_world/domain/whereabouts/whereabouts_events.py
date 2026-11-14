@@ -4,10 +4,16 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.eventing import DomainEvent
-from ai_rpg_world.game_world.domain.value_object import PassageId, SpotId, SpotSectionId, WorldId
+from ai_rpg_world.game_world.domain.value_object import PassageId, SpotId, SpotSectionId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts.location import Location
 from ai_rpg_world.game_world.domain.whereabouts.occupant import Occupant
 from ai_rpg_world.game_world.domain.whereabouts.route import Route
+
+
+@final
+@dataclass(frozen=True)
+class Teleported:
+    pass
 
 
 @final
@@ -48,6 +54,8 @@ class OccupantEnteredSpotEvent(DomainEvent):
     world_id: WorldId
     occupant: Occupant
     spot: SpotId
+    origin: SpotId | Teleported
+    at: WorldTick
 
 
 @final

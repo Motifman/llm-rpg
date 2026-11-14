@@ -170,6 +170,9 @@ class Item(AggregateRoot[ItemEvent]):
             ItemRanOutEvent(**new_event_stamp(), item=self._item_id, spec_id=self.spec_id, where=where, at=now)
         )
 
+    def has_run_out(self, now: WorldTick) -> bool:
+        return self._in_world and self._spec.lasts.has_run_out(self.age(now))
+
     def value_of(self, key: ItemStateKeyDeclaration) -> StateValue:
         if key not in self._spec.state_keys:
             raise StateKeyNotOwnedException(
