@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item._state_keys import require_own_distinct_keys
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_kind import (
@@ -21,6 +21,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     ItemDoesNotRunOutException,
     ItemHasNotRunOutException,
 )
+from ai_rpg_world.game_world.domain.people.text_with_unassigned_people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
@@ -28,7 +29,12 @@ from ai_rpg_world.game_world.domain.value_object import (
     ItemSpecId,
     StateKeyId,
     Ticks,
+    WorldTick,
 )
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import WhereItemWas
+    from ai_rpg_world.game_world.domain.perception import BodilyStimulus, SightStimulus
 
 
 @final
@@ -83,12 +89,18 @@ class Lasts:
         if age < self.ticks:
             raise ItemHasNotRunOutException(f"lasts {self.ticks.value} ticks and is {age.value} ticks old")
 
+    def ran_out_stimulus(self, where: WhereItemWas, at: WorldTick) -> BodilyStimulus | SightStimulus:
+        return where.ran_out_stimulus(TextWithUnassignedPeople.literal(self.ended_text.text).about({}), at)
+
 
 @final
 @dataclass(frozen=True)
 class LastsIndefinitely:
     def require_run_out(self, age: Ticks) -> None:
         raise ItemDoesNotRunOutException(f"lasts indefinitely and is {age.value} ticks old")
+
+    def ran_out_stimulus(self, where: WhereItemWas, at: WorldTick) -> BodilyStimulus | SightStimulus:
+        raise ItemDoesNotRunOutException(f"lasts indefinitely, so it does not run out at {at.value}")
 
 
 @final
