@@ -12,11 +12,6 @@ from ai_rpg_world.game_world.infrastructure.persistence.aggregate_codecs import 
 
 _ADDED_LATER = frozenset(
     {
-        "GroundItems",
-        "Item",
-        "ObjectState",
-        "PersonInventory",
-        "SpotSearchProgress",
         "PassageStates",
         "SpotAtmospheres",
         "Whereabouts",
