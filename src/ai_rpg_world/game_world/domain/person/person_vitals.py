@@ -208,7 +208,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         self._add(PersonBecameBusyEvent, until=until, previous_until=previous)
 
     def start_acting(self, exertion: Exertion, until: WorldTick, rule: FatigueRule) -> None:
-        # 去った人は疲れず、行っているあいだも持たない (#2146)
+        # 去った人は疲れず、行っているあいだも持たない
         if self.is_dead():
             return
         exertion.tire(self, rule)

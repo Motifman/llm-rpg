@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.person.person_vitals_events import PersonBec
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, OpenArea, PersonBody, TravelInProgress
+from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent
 from tests.game_world.application.action.world_for_action_tests import (
     ADIT,
     ALICE,
@@ -72,6 +73,14 @@ class TestStartTravelRefused:
         assert world.read().facts().whereabouts().location_of(PersonBody(ALICE)) == AtSpot(
             spot=LANDING.spot_id, section=OpenArea()
         )
+
+    def test_refusal_by_passage_condition_commits_only_the_failed_attempt(self) -> None:
+        """通る条件で断られた移動からは ActionAttemptFailedEvent だけが 1 つのまとまりで確定する。"""
+        world = WorldForActions()
+
+        world.travel(ALICE, GALLERY)
+
+        assert [[type(event) for event in batch] for batch in world.received.batches] == [[ActionAttemptFailedEvent]]
 
     def test_travel_to_where_actor_is_refuses_with_no_route(self) -> None:
         """今いる場所を目的地にすると、NO_ROUTE の RefusalCode で断られる。"""
