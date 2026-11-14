@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.changes_every import NoChange
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_declaration import WeatherDeclaration
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.declaration.verb.ending_declaration import EndingDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.objects_and_items import (
@@ -77,6 +78,7 @@ def world_in_memory(
     stage_declarations: tuple[WorldStageDeclaration, ...] = (),
     day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
     weather: Weather | NoWeather = NoWeather(),
+    obscuring: frozenset[WeatherType] = frozenset(),
     fractions: tuple[float, ...] = (),
 ) -> WorldSession:
     spots, characters = _with_everyone_declared(people, characters, spots)
@@ -99,7 +101,7 @@ def world_in_memory(
         world_id=world,
         scenario="world_in_memory",
         scenario_hash="world_in_memory",
-        design=_design(nouns, rules, day_night, weather, world_stage, stage_declarations),
+        design=_design(nouns, rules, day_night, weather, obscuring, world_stage, stage_declarations),
         random=FractionsInOrder(fractions),
     )
     everyone = tuple(character.person_id for character in characters)
@@ -138,6 +140,7 @@ def _design(
     rules: WorldRules | None,
     day_night: DayNightDeclaration | NoDayNight,
     weather: Weather | NoWeather,
+    obscuring: frozenset[WeatherType],
     world_stage: WorldStage | NoWorldStages,
     stage_declarations: tuple[WorldStageDeclaration, ...],
 ) -> WorldDesign:
@@ -164,7 +167,7 @@ def _design(
             NoWeather()
             if isinstance(weather, NoWeather)
             else WeatherDeclaration(
-                initial=weather.current().type, changes=NoChange(), announce_changes=False, obscuring=frozenset()
+                initial=weather.current().type, changes=NoChange(), announce_changes=False, obscuring=obscuring
             )
         ),
         day_night=day_night,
