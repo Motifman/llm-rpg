@@ -96,6 +96,7 @@ refusal_texts:
     GAME_WORLD.BALLOT_ALREADY_CAST: もう票を入れた。
     GAME_WORLD.ABSTAIN_NOT_ALLOWED: 票を入れずに済ませることはできない。
   hidden: 今はできない。
+  unlisted: うまくいかなかった。
 
 built_in_action_perceptions:
   travel:
