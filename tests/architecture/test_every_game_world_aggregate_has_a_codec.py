@@ -10,6 +10,7 @@ from typing import get_type_hints
 from ai_rpg_world.game_world import domain
 from ai_rpg_world.game_world.infrastructure.persistence.aggregate_codecs import GAME_WORLD_CODECS
 
+
 def _aggregates_with_memento() -> dict[str, type]:
     found: dict[str, type] = {}
     for module_info in pkgutil.walk_packages(domain.__path__, domain.__name__ + "."):
