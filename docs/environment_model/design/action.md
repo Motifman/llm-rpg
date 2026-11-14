@@ -136,7 +136,7 @@ PersonInteractionAttempt(actor: PersonId, target: PersonId | SomeoneInTheDark, i
 
 ItemUseAttempt(actor: PersonId, item: ItemInstanceId)
 TendAttempt(actor: PersonId, target: PersonId)
-ItemHandOverAttempt(actor: PersonId, deliveries: tuple[Delivery, ...], manner: Manner)     # 1 件以上
+ItemHandOverAttempt(actor: PersonId, to: PersonId, items: tuple[ItemInstanceId, ...], manner: Manner)     # 品物は 1 つ以上
 GroundItemPickupAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 ItemDropAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 SpotSearchAttempt(actor: PersonId)
@@ -154,7 +154,7 @@ GroupDecisionBallotAttempt(actor: PersonId, decision: GroupDecisionDeclaration, 
 Whisper(to: PersonId) | OrdinaryVoice() | Shout()
 SpeechContent(text: str)                # 空でない文
 WaitReason(text: str) | NoReason()      # 空でない文か、理由なし
-Delivery(item: ItemInstanceId, to: PersonId)   # 1 回で複数の相手に渡せる
+# 1 回で渡す相手は 1 人。相手が複数だと、見ていた人には 1 つの確定の範囲から最初に知覚した刺激しか届かないので、相手ごとに別の行為にする (#2152)
 SomeoneInTheDark()      # 暗がりの見分けのつかない人。相手は世界がその場から選ぶ (1 人なら決まる)。真っ暗では人がいることも分からないので使えない
 VoteFor(person: PersonId) | Abstain()   # world_progress の GroupDecision のものを使う
 

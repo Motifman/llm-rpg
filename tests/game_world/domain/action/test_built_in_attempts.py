@@ -32,7 +32,6 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     TravelAttempt,
     WaitAttempt,
 )
-from ai_rpg_world.game_world.domain.action.delivery import Delivery
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechContent, Whisper
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
@@ -46,7 +45,7 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     BlankSpeechContentException,
     BlankWaitReasonException,
-    NoDeliveriesException,
+    NothingToHandOverException,
 )
 from ai_rpg_world.game_world.domain.exception.trigger_exception import (
     ArgumentNotInTriggerException,
@@ -106,7 +105,7 @@ _TABLE = [
     _Row(WaitAttempt(ALICE, NoReason()), ActionKind.WAIT, DoesNotUseBody(), False, (), True),
     _Row(TendAttempt(ALICE, BOB), ActionKind.TEND, UsesBody(), False, (WithPerson(BOB),), False),
     _Row(
-        ItemHandOverAttempt(ALICE, (Delivery(LAMP, BOB),), Openly()),
+        ItemHandOverAttempt(ALICE, BOB, (LAMP,), Openly()),
         ActionKind.HAND_OVER,
         UsesBody(),
         False,
@@ -285,7 +284,7 @@ class TestSubjectsAndItemsOfBuiltInAttempts:
 
     def test_hand_over_answers_no_single_item(self) -> None:
         """渡す (ItemHandOverAttempt) は品物を 1 つに決められないので、this_item() は ItemNotInTriggerException を投げる。"""
-        attempt = ItemHandOverAttempt(ALICE, (Delivery(LAMP, BOB), Delivery(ROPE, CAROL)), Openly())
+        attempt = ItemHandOverAttempt(ALICE, BOB, (LAMP, ROPE), Openly())
 
         with pytest.raises(ItemNotInTriggerException):
             attempt.this_item()
@@ -319,26 +318,36 @@ class TestSubjectsAndItemsOfBuiltInAttempts:
 
 
 class TestHandOver:
-    """渡す行為 (ItemHandOverAttempt) の届け先と、形の誤りを保証する。"""
+    """渡す行為 (ItemHandOverAttempt) が、1 人の相手に 1 つ以上の品物を渡すことと、形の誤りを保証する。"""
 
-    def test_requires_being_with_each_recipient_once(self) -> None:
-        """複数の相手に渡すとき、相手ごとに 1 つずつ WithPerson を、最初に出てきた順に答える。"""
-        attempt = ItemHandOverAttempt(
-            ALICE, (Delivery(LAMP, BOB), Delivery(ROPE, CAROL), Delivery(ItemInstanceId("knife_1"), BOB)), Openly()
-        )
+    def test_requires_being_with_the_recipient(self) -> None:
+        """ボブにランプとロープを渡すとき、ボブと一緒にいることだけを求める。"""
+        attempt = ItemHandOverAttempt(ALICE, BOB, (LAMP, ROPE), Openly())
 
-        assert attempt.copresence_requirements() == (WithPerson(BOB), WithPerson(CAROL))
+        assert attempt.copresence_requirements() == (WithPerson(BOB),)
+
+    def test_recipient_is_the_target(self) -> None:
+        """渡す相手のボブは、person_as(TARGET) で答える相手になる。"""
+        attempt = ItemHandOverAttempt(ALICE, BOB, (LAMP,), Openly())
+
+        assert attempt.person_as(SubjectKind.TARGET) == BOB
+
+    def test_items_handled_are_the_items_in_the_order_given(self) -> None:
+        """渡す品物は、渡した順に items_handled で答える。"""
+        attempt = ItemHandOverAttempt(ALICE, BOB, (ROPE, LAMP), Openly())
+
+        assert attempt.items_handled() == (ROPE, LAMP)
 
     def test_can_be_done_stealthily(self) -> None:
         """渡すことはこっそり (Stealthily) 行える。作るときに断らない。"""
-        attempt = ItemHandOverAttempt(ALICE, (Delivery(LAMP, BOB),), Stealthily())
+        attempt = ItemHandOverAttempt(ALICE, BOB, (LAMP,), Stealthily())
 
         assert attempt.manner == Stealthily()
 
-    def test_without_deliveries_raises(self) -> None:
-        """渡す品物が 1 件も無いと NoDeliveriesException を投げる。"""
-        with pytest.raises(NoDeliveriesException):
-            ItemHandOverAttempt(ALICE, (), Openly())
+    def test_without_items_raises(self) -> None:
+        """渡す品物が 1 つも無いと NothingToHandOverException を投げる。"""
+        with pytest.raises(NothingToHandOverException):
+            ItemHandOverAttempt(ALICE, BOB, (), Openly())
 
 
 class TestTextsOfAttempts:

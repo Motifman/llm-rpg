@@ -13,8 +13,8 @@ class BlankWaitReasonException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.BLANK_WAIT_REASON"
 
 
-class NoDeliveriesException(GameWorldDomainException):
-    error_code = "GAME_WORLD.ACTION.NO_DELIVERIES"
+class NothingToHandOverException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.NOTHING_TO_HAND_OVER"
 
 
 class StealthNotAllowedException(GameWorldDomainException):

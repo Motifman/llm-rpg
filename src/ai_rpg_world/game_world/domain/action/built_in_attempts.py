@@ -16,7 +16,6 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     WithPerson,
 )
 from ai_rpg_world.game_world.domain.action.declared_section_access import DeclaredSectionAccess
-from ai_rpg_world.game_world.domain.action.delivery import Delivery
 from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechReach
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
@@ -26,7 +25,7 @@ from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
-from ai_rpg_world.game_world.domain.exception.action_exception import NoDeliveriesException
+from ai_rpg_world.game_world.domain.exception.action_exception import NothingToHandOverException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     NoRouteToDestinationException,
     OccupantNotAtRouteStartException,
@@ -213,22 +212,27 @@ class TendAttempt(_BuiltInAttempt):
 class ItemHandOverAttempt(_BuiltInAttempt):
     _KIND = ActionKind.HAND_OVER
     actor: PersonId
-    deliveries: tuple[Delivery, ...]
+    to: PersonId
+    items: tuple[ItemInstanceId, ...]
     manner: Manner
 
     def __post_init__(self) -> None:
-        if not self.deliveries:
-            raise NoDeliveriesException(f"{self.actor.value} hands over nothing")
+        if not self.items:
+            raise NothingToHandOverException(f"{self.actor.value} hands nothing over to {self.to.value}")
 
     def exertion(self) -> Exertion:
         return UsesBody()
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
-        return tuple(delivery.item for delivery in self.deliveries)
+        return self.items
 
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
-        recipients = dict.fromkeys(delivery.to for delivery in self.deliveries)
-        return tuple(WithPerson(recipient) for recipient in recipients)
+        return (WithPerson(self.to),)
+
+    def person_as(self, kind: SubjectKind) -> PersonId:
+        if kind is SubjectKind.TARGET:
+            return self.to
+        return super().person_as(kind)
 
 
 @final
