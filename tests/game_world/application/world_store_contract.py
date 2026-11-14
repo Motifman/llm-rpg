@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoWeathe
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import (
     AggregateNotInWorldException,
     AggregateOwnedTwiceException,
@@ -473,3 +474,17 @@ class WorldStoreContract(ABC):
 
         assert raised is False
         assert events == ()
+
+    def test_domain_exception_without_refusal_mark_in_attempt_apart_is_rolled_back_and_reaches_the_caller(self) -> None:
+        """小さな範囲の中で旗を立ててから、世界が断った印 (WorldRefusal) の無いドメイン例外が起きると、断りとして返さずに呼び出し元に届き、範囲の中で立てた旗は残らない。"""
+        store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD))
+        session = store.session()
+
+        def raise_then_break_a_rule() -> None:
+            session.aggregates().flags().raise_flag(BELL, _NOW)
+            raise ValueOutOfRangeException("a value the design should have refused")
+
+        with pytest.raises(ValueOutOfRangeException):
+            session.attempt_apart(raise_then_break_a_rule)
+
+        assert session.facts().flags().is_raised(BELL) is False

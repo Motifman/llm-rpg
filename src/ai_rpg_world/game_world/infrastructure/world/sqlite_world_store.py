@@ -49,7 +49,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import (
     AggregateNotInWorldException,
     AggregateOwnedTwiceException,
@@ -338,7 +338,7 @@ class SqliteWorldSession(WorldSession):
             self._held.clear()
             self._taken_out.clear()
             del self._written_events[events_before:]
-            if isinstance(failure, GameWorldDomainException):
+            if isinstance(failure, WorldRefusal):
                 return RefusalCode.of(failure)
             raise
         self._connection.execute("RELEASE apart")

@@ -68,7 +68,7 @@ class WorldSession(Protocol):
     def latest_actions(self) -> LatestActions: ...
     def people_register(self) -> PeopleRegister: ...
     def attempt_apart(self, work: Callable[[], None]) -> RefusalCode | NoRefusal: ...
-        # 範囲の中の小さな範囲。work の中で集約が断ったら、work の書き換えとイベントだけを捨てて断った理由を返す
+        # 範囲の中の小さな範囲。work の中で世界が断ったら (WorldRefusal)、work の書き換えとイベントだけを捨てて断った理由を返す
     def commit(self) -> tuple[DomainEvent, ...]: ...          # 確定し、範囲の中で出たイベントを出た順に返す
     def roll_back(self) -> None: ...
 ```
@@ -83,7 +83,7 @@ SQLite の実装 (`SqliteWorldSession`) は次のように動く。
    - 世界から出た集約 (燃え尽きた灯など) のイベントも拾う。範囲が、外した集約を覚えておく
    - まとまりは、知覚の「1 つの確定の範囲から出た刺激は 1 人に 1 つ」の単位になる
 5. `roll_back` は、トランザクションを巻き戻し、手元に持った集約を捨てる。イベントは返さない
-6. `attempt_apart` は、手元の変化を DB に書き出し、それまでのイベントを集約から範囲に移してから `SAVEPOINT` を置く。手元の集約にしか変化が無いので、書き出さずに `SAVEPOINT` を置いても何も戻らない。work の中でドメイン例外が起きたら `ROLLBACK TO` して手元の集約を捨て (次に引くと `SAVEPOINT` の時点の行を読む)、断った理由を返す。ドメイン例外でない例外は、同じく巻き戻してから投げ直す。入れ子にしてよい
+6. `attempt_apart` は、手元の変化を DB に書き出し、それまでのイベントを集約から範囲に移してから `SAVEPOINT` を置く。手元の集約にしか変化が無いので、書き出さずに `SAVEPOINT` を置いても何も戻らない。work の中で世界が断った印 (`WorldRefusal`) のある例外が起きたら `ROLLBACK TO` して手元の集約を捨て (次に引くと `SAVEPOINT` の時点の行を読む)、断った理由を返す。印の無いドメイン例外と、ドメイン例外でない例外は、同じく巻き戻してから投げ直す。断りではなくコードや設計の誤りなので、断りとして記録しない。入れ子にしてよい
 
 `SettleWorldConditions` は、出来事・反応の発火 1 回ごとに、`ForEveryoneEffect` は 1 人ごとに、小さな範囲を使う ([use_cases.md](use_cases.md))。範囲を 1 つの発火ごとに分けて確定すると、効果の中から 1 人ずつ確定できず、イベントのまとまりも分かれて途中でハンドラが走るので、そうしない。
 
