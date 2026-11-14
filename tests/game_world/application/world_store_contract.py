@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 
 import pytest
 
-from ai_rpg_world.game_world.application.world_store import AggregateWithMemento, WorldStore
+from ai_rpg_world.game_world.application.world_store import AcceptedApart, AggregateWithMemento, WorldStore
+from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
@@ -348,3 +349,93 @@ class WorldStoreContract(ABC):
         store = self.store_holding(design_with_bell(), decision)
 
         assert store.session().facts().group_decision(VOTE).memento() == decision.memento()
+
+    def test_refused_attempt_apart_undoes_only_its_own_change_and_events(self) -> None:
+        """旗を立ててから、小さな範囲の中で世界を 2 度終わらせようとして断られると、終わりも WorldEndedEvent も残らず、範囲の前に立てた旗とそのイベントは残り、断った理由の RefusalCode を返す。"""
+        store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD), WorldEnding.start(WORLD))
+        session = store.session()
+        session.aggregates().flags().raise_flag(BELL, _NOW)
+
+        def end_twice() -> None:
+            session.ending().end(WorldTick(3))
+            session.ending().end(WorldTick(3))
+
+        answer = session.attempt_apart(end_twice)
+        ended = session.ending().has_ended()
+        events = session.commit()
+
+        assert answer == RefusalCode("GAME_WORLD.WORLD_ALREADY_ENDED")
+        assert ended is False
+        assert [type(event) for event in events] == [WorldFlagRaisedEvent]
+        assert store.session().facts().flags().is_raised(BELL) is True
+
+    def test_accepted_attempt_apart_keeps_its_change_and_events_in_order_with_earlier_ones(self) -> None:
+        """旗を立ててから、小さな範囲の中で世界を終わらせて通ると、AcceptedApart を返し、commit は範囲の前と中のイベントを起きた順に返す。"""
+        store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD), WorldEnding.start(WORLD))
+        session = store.session()
+        session.aggregates().flags().raise_flag(BELL, _NOW)
+
+        answer = session.attempt_apart(lambda: session.ending().end(WorldTick(3)))
+        session.aggregates().flags().lower_flag(BELL, _NOW)
+        events = session.commit()
+
+        assert answer == AcceptedApart()
+        assert [type(event) for event in events] == [WorldFlagRaisedEvent, WorldEndedEvent, WorldFlagLoweredEvent]
+        assert store.session().ending().has_ended() is True
+
+    def test_item_brought_in_a_refused_attempt_apart_leaves_no_item_and_no_number_used(self) -> None:
+        """小さな範囲の中で品物を持ち込んでから断られると、その品物は世界に無く、次に持ち込んだ品物は巻き戻した品物と同じ ID になる。"""
+        store = self.store_holding(design_with_bell(), ItemSerialCounter.start(WORLD), WorldEnding(WORLD, True))
+        session = store.session()
+        brought: list[ItemInstanceId] = []
+
+        def bring_then_be_refused() -> None:
+            brought.append(session.aggregates().bring_item_into_world(ROPE, WorldTick(2)))
+            session.ending().end(WorldTick(2))
+
+        session.attempt_apart(bring_then_be_refused)
+
+        with pytest.raises(AggregateNotInWorldException):
+            session.facts().item(brought[0])
+        assert session.aggregates().bring_item_into_world(ROPE, WorldTick(2)) == brought[0]
+
+    def test_item_taken_out_before_a_refused_attempt_apart_stays_out_with_its_event(self) -> None:
+        """品物を世界から出したあとの小さな範囲が断られても、品物は世界に戻らず、commit は ItemLeftWorldEvent を返す。"""
+        store = self.store_holding(
+            design_with_bell(), Item.come_into_world(ROPE_1, ROPE, WorldTick(0)), WorldEnding(WORLD, True)
+        )
+        session = store.session()
+        session.aggregates().take_item_out_of_world(ROPE_1)
+
+        session.attempt_apart(lambda: session.ending().end(WorldTick(2)))
+        events = session.commit()
+
+        assert [type(event) for event in events] == [ItemLeftWorldEvent]
+        with pytest.raises(AggregateNotInWorldException):
+            store.session().facts().item(ROPE_1)
+
+    def test_refused_attempt_apart_inside_another_undoes_only_the_inner_change(self) -> None:
+        """小さな範囲の中で旗を立て、その中のもう 1 つの小さな範囲が断られると、内側の分だけが巻き戻り、外側で立てた旗は残る。"""
+        store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD), WorldEnding(WORLD, True))
+        session = store.session()
+
+        def raise_then_be_refused_inside() -> None:
+            session.aggregates().flags().raise_flag(BELL, _NOW)
+            session.attempt_apart(lambda: session.ending().end(WorldTick(3)))
+
+        outer = session.attempt_apart(raise_then_be_refused_inside)
+        events = session.commit()
+
+        assert outer == AcceptedApart()
+        assert [type(event) for event in events] == [WorldFlagRaisedEvent]
+
+    def test_non_domain_exception_in_attempt_apart_reaches_the_caller(self) -> None:
+        """小さな範囲の中でドメイン例外でない例外が起きると、断りとして返さず、そのまま呼び出し元に届く。"""
+        store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD))
+        session = store.session()
+
+        def fail() -> None:
+            raise RuntimeError("bug")
+
+        with pytest.raises(RuntimeError):
+            session.attempt_apart(fail)
