@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.condition import NoText
@@ -134,8 +135,8 @@ def _reaction(name: str) -> ReactionDeclaration:
 
 def _scenario_progress() -> ScenarioProgressMemento:
     progress = ScenarioProgress.start(_WORLD)
-    progress.note_happening_fired(_happening("tide_turns"), WorldTick(5))
-    progress.note_happening_fired(_happening("ship_arrives"), WorldTick(8))
+    progress.note_happening_fired(_happening("tide_turns"), WorldTick(5), frozenset(), NoRefusal())
+    progress.note_happening_fired(_happening("ship_arrives"), WorldTick(8), frozenset(), NoRefusal())
     progress.note_reaction_truth(_reaction("door_closed"), True)
     progress.note_reaction_truth(_reaction("lamp_lit"), False)
     return progress.memento()

@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 
 import pytest
 
-from ai_rpg_world.game_world.application.world_store import AcceptedApart, AggregateWithMemento, WorldStore
-from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.application.world_store import AggregateWithMemento, WorldStore
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
@@ -370,7 +370,7 @@ class WorldStoreContract(ABC):
         assert store.session().facts().flags().is_raised(BELL) is True
 
     def test_accepted_attempt_apart_keeps_its_change_and_events_in_order_with_earlier_ones(self) -> None:
-        """旗を立ててから、小さな範囲の中で世界を終わらせて通ると、AcceptedApart を返し、commit は範囲の前と中のイベントを起きた順に返す。"""
+        """旗を立ててから、小さな範囲の中で世界を終わらせて通ると、NoRefusal を返し、commit は範囲の前と中のイベントを起きた順に返す。"""
         store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD), WorldEnding.start(WORLD))
         session = store.session()
         session.aggregates().flags().raise_flag(BELL, _NOW)
@@ -379,7 +379,7 @@ class WorldStoreContract(ABC):
         session.aggregates().flags().lower_flag(BELL, _NOW)
         events = session.commit()
 
-        assert answer == AcceptedApart()
+        assert answer == NoRefusal()
         assert [type(event) for event in events] == [WorldFlagRaisedEvent, WorldEndedEvent, WorldFlagLoweredEvent]
         assert store.session().ending().has_ended() is True
 
@@ -426,7 +426,7 @@ class WorldStoreContract(ABC):
         outer = session.attempt_apart(raise_then_be_refused_inside)
         events = session.commit()
 
-        assert outer == AcceptedApart()
+        assert outer == NoRefusal()
         assert [type(event) for event in events] == [WorldFlagRaisedEvent]
 
     def test_non_domain_exception_in_attempt_apart_reaches_the_caller(self) -> None:

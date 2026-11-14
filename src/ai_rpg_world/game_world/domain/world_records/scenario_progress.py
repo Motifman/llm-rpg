@@ -4,8 +4,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
 from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
-from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import PersonId, Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 
@@ -37,6 +39,29 @@ class ReactionLastTruth:
 
 @final
 @dataclass(frozen=True)
+class HappeningFiredEvent(DomainEvent):
+    world_id: WorldId
+    happening_id: HappeningId
+    at: WorldTick
+    audience: frozenset[PersonId]
+    refusal: RefusalCode | NoRefusal
+
+
+@final
+@dataclass(frozen=True)
+class ReactionFiredEvent(DomainEvent):
+    world_id: WorldId
+    reaction_id: ReactionId
+    became: bool
+    at: WorldTick
+    refusal: RefusalCode | NoRefusal
+
+
+ScenarioProgressEvent = HappeningFiredEvent | ReactionFiredEvent
+
+
+@final
+@dataclass(frozen=True)
 class ScenarioProgressMemento:
     world_id: WorldId
     last_fired: frozenset[HappeningLastFiredAt]
@@ -53,13 +78,14 @@ class ScenarioProgressMemento:
         )
 
 
-class ScenarioProgress:
+class ScenarioProgress(AggregateRoot[ScenarioProgressEvent]):
     def __init__(
         self,
         world_id: WorldId,
         last_fired: Mapping[HappeningId, WorldTick],
         reaction_truths: Mapping[ReactionId, bool],
     ) -> None:
+        super().__init__()
         self._world_id = world_id
         self._last_fired = dict(last_fired)
         self._reaction_truths = dict(reaction_truths)
@@ -89,8 +115,41 @@ class ScenarioProgress:
             ),
         )
 
-    def note_happening_fired(self, happening: HappeningDeclaration, now: WorldTick) -> None:
+    def note_happening_fired(
+        self,
+        happening: HappeningDeclaration,
+        now: WorldTick,
+        audience: frozenset[PersonId],
+        refusal: RefusalCode | NoRefusal,
+    ) -> None:
         self._last_fired[happening.happening_id] = now
+        # 断られた発火は何も変えていないので、知らせると起きていないことを伝えてしまう
+        notified = audience if isinstance(refusal, NoRefusal) else frozenset()
+        self.add_event(
+            HappeningFiredEvent(
+                **new_event_stamp(),
+                world_id=self._world_id,
+                happening_id=happening.happening_id,
+                at=now,
+                audience=notified,
+                refusal=refusal,
+            )
+        )
+
+    def note_reaction_fired(
+        self, reaction: ReactionDeclaration, truth: bool, now: WorldTick, refusal: RefusalCode | NoRefusal
+    ) -> None:
+        self._reaction_truths[reaction.reaction_id] = truth
+        self.add_event(
+            ReactionFiredEvent(
+                **new_event_stamp(),
+                world_id=self._world_id,
+                reaction_id=reaction.reaction_id,
+                became=truth,
+                at=now,
+                refusal=refusal,
+            )
+        )
 
     def note_reaction_truth(self, reaction: ReactionDeclaration, truth: bool) -> None:
         self._reaction_truths[reaction.reaction_id] = truth

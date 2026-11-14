@@ -8,12 +8,11 @@ from typing import Any, TypeVar, cast, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 from ai_rpg_world.game_world.application.world_store import (
-    AcceptedApart,
     AggregateWithMemento,
     WorldSession,
     WorldStore,
 )
-from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
 from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     GroundItemsReading,
     GroupDecisionReading,
@@ -321,7 +320,7 @@ class SqliteWorldSession(WorldSession):
             PeopleRegisterMemento, self._world.key, self._world.with_nouns(PeopleRegister.from_memento)
         )
 
-    def attempt_apart(self, work: Callable[[], None]) -> RefusalCode | AcceptedApart:
+    def attempt_apart(self, work: Callable[[], None]) -> RefusalCode | NoRefusal:
         self._require_in_scope()
         self._write_held()
         self._connection.execute("SAVEPOINT apart")
@@ -335,7 +334,7 @@ class SqliteWorldSession(WorldSession):
                 return RefusalCode.of(failure)
             raise
         self._connection.execute("RELEASE apart")
-        return AcceptedApart()
+        return NoRefusal()
 
     def commit(self) -> tuple[DomainEvent, ...]:
         self._require_in_scope()
