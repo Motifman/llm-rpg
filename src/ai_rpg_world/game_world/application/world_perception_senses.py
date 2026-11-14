@@ -87,7 +87,7 @@ def perceivers_in_world(facts: WorldFacts) -> tuple[Perceiver, ...]:
     for person in facts.people():
         vitals = facts.vitals(person)
         location = facts.whereabouts().location_of(vitals.occupant_in_world(departed_persons_act))
-        # 耳を澄ます行為がまだ無いので、誰も耳を澄ましていない。
+        # 耳を澄ましているかを世界の状態に持たないので、誰も耳を澄ましていないものとして知覚する。
         perceiver = vitals.perceiver_at(location, departed_persons_act, attentive=False)
         if perceiver is not None:
             perceivers.append(perceiver)

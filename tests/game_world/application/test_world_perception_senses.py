@@ -211,6 +211,15 @@ class TestReachOf:
 
         assert reach.level_at(_HALL.spot_id) == NotReached()
 
+    def test_sound_does_not_pass_a_passage_not_yet_revealed(self) -> None:
+        """現れる前の道の先の広間には、とても大きい音も届かない。"""
+        secret = path("square_hall", "square", "hall", hidden_until_revealed=True)
+        world = world_in_memory(world=_WORLD, spots=(_SQUARE, _HALL), passages=(secret,))
+
+        reach = WorldPerceptionSenses(world.facts(), _NO_WEATHER).reach_of(_SQUARE.spot_id, Loudness.VERY_LOUD)
+
+        assert reach.level_at(_HALL.spot_id) == NotReached()
+
 
 class TestViewFor:
     """WorldPerceptionSenses.view_for が、見る人が最初から知っている相手にだけ名前を見せることを保証する。"""
