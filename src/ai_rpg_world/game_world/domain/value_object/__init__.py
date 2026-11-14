@@ -9,7 +9,7 @@ from ai_rpg_world.game_world.domain.value_object.gold import Gold
 from ai_rpg_world.game_world.domain.value_object.group_decision_id import GroupDecisionId
 from ai_rpg_world.game_world.domain.value_object.group_id import GroupId
 from ai_rpg_world.game_world.domain.value_object.grouping_id import GroupingId
-from ai_rpg_world.game_world.domain.value_object.hands_needed import HandsNeeded
+from ai_rpg_world.game_world.domain.value_object.hands_needed import HANDS_OF_A_PERSON, HandsInUse, HandsNeeded
 from ai_rpg_world.game_world.domain.value_object.heal_amount import HealAmount
 from ai_rpg_world.game_world.domain.value_object.hit_points import HitPoints
 from ai_rpg_world.game_world.domain.value_object.hunger_amount import HungerAmount
@@ -43,6 +43,8 @@ __all__ = [
     "GroupDecisionId",
     "GroupId",
     "GroupingId",
+    "HANDS_OF_A_PERSON",
+    "HandsInUse",
     "HandsNeeded",
     "HealAmount",
     "HitPoints",

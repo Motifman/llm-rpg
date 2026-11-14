@@ -116,14 +116,14 @@ def _object(name: str, spot: str, state_keys: tuple[str, ...] = ()) -> ObjectDec
     )
 
 
-def _item_spec(name: str) -> ItemSpecDeclaration:
+def _item_spec(name: str, hands_needed: int = 1) -> ItemSpecDeclaration:
     return ItemSpecDeclaration(
         item_spec_id=ItemSpecId(name),
         name=DisplayName(name),
         description=DescriptionText(f"{name} の見た目"),
         state_keys=(),
         lights_up=NotALightSource(),
-        hands_needed=HandsNeeded(1),
+        hands_needed=HandsNeeded(hands_needed),
         lasts=LastsIndefinitely(),
     )
 
@@ -148,6 +148,7 @@ def _character(
     name: str,
     spawn_spot: str,
     initial_items: tuple[str, ...] = (),
+    initial_held: tuple[str, ...] = (),
     initial_groups: tuple[str, ...] = (),
     knows_at_start: tuple[str, ...] = (),
 ) -> CharacterDeclaration:
@@ -156,7 +157,7 @@ def _character(
         appearance=DescriptionText(f"{name} の見た目"),
         spawn_spot=SpotId(spawn_spot),
         initial_items=tuple(ItemSpecId(item) for item in initial_items),
-        initial_held=(),
+        initial_held=tuple(ItemSpecId(item) for item in initial_held),
         initial_groups=tuple(GroupId(group) for group in initial_groups),
         knows_at_start=tuple(PersonId(person) for person in knows_at_start),
         max_hp=UsesWorldDefault(),
@@ -679,3 +680,75 @@ class TestCharacterReferences:
         )
 
         assert nouns.character("aki", _LOOKUP_AT).initial_groups == (GroupId("villagers"), GroupId("first_squad"))
+
+
+class TestHandsForItemsHeldAtStart:
+    """DeclaredNouns が、登場人物が始まりに手に持つ物の hands_needed の合計を人の手の数と比べることを保証する。"""
+
+    def test_two_two_handed_items_held_at_start_is_a_flaw(self) -> None:
+        """両手の物を 2 つ initial_held に書くと、手が足りなくなった 2 つめの位置 (initial_held[1]) を指し、その物と要る手の数を書いた DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                item_specs=[_item_spec("pickaxe", hands_needed=2), _item_spec("shovel", hands_needed=2)],
+                characters=[
+                    _character("aki", "hall", initial_items=("pickaxe", "shovel"), initial_held=("pickaxe", "shovel"))
+                ],
+            )
+        )
+
+        assert flaws == (
+            _flaw(
+                "character",
+                "aki",
+                "initial_held[1]",
+                "holding item_spec 'shovel' at start needs 4 hands, but a person has 2",
+            ),
+        )
+
+    def test_same_two_handed_item_held_twice_at_start_is_a_flaw(self) -> None:
+        """同じ両手の物を initial_items と initial_held に 2 回ずつ書くと、書いた回数だけ手を数え、2 つめの位置 (initial_held[1]) を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                item_specs=[_item_spec("pickaxe", hands_needed=2)],
+                characters=[
+                    _character("aki", "hall", initial_items=("pickaxe", "pickaxe"), initial_held=("pickaxe", "pickaxe"))
+                ],
+            )
+        )
+
+        assert flaws == (
+            _flaw(
+                "character",
+                "aki",
+                "initial_held[1]",
+                "holding item_spec 'pickaxe' at start needs 4 hands, but a person has 2",
+            ),
+        )
+
+    def test_items_needing_exactly_the_hands_of_a_person_are_accepted(self) -> None:
+        """片手の物を 2 つ initial_held に書くと、要る手の数が人の手の数ちょうどなので、断らずに作れる。"""
+        nouns = _nouns(
+            spots=[_spot("hall")],
+            item_specs=[_item_spec("lantern"), _item_spec("knife")],
+            characters=[
+                _character("aki", "hall", initial_items=("lantern", "knife"), initial_held=("lantern", "knife"))
+            ],
+        )
+
+        assert nouns.character("aki", _LOOKUP_AT).initial_held == (ItemSpecId("lantern"), ItemSpecId("knife"))
+
+    def test_undeclared_held_item_is_reported_only_as_an_unknown_initial_item(self) -> None:
+        """initial_held の物が宣言に無いときは、手の数を数えずに、initial_items の位置を指す「宣言に無い」の DesignFlaw だけを投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                item_specs=[_item_spec("pickaxe", hands_needed=2)],
+                characters=[
+                    _character("aki", "hall", initial_items=("pickaxe", "drill"), initial_held=("pickaxe", "drill"))
+                ],
+            )
+        )
+
+        assert flaws == (_flaw("character", "aki", "initial_items[1]", "item_spec 'drill' is not declared"),)

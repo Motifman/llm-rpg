@@ -21,12 +21,19 @@ from ai_rpg_world.game_world.domain.exception.person_inventory_exception import 
     PackIsEmptyException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
+from ai_rpg_world.game_world.domain.value_object import (
+    HANDS_OF_A_PERSON,
+    Capacity,
+    Count,
+    Gold,
+    HandsInUse,
+    HandsNeeded,
+    ItemSpecId,
+    PersonId,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
-
-_HANDS = 2
 
 
 @final
@@ -135,8 +142,8 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
             raise ItemAlreadyCarriedException(f"{person_id.value} carries an item twice")
         if len(carried) > capacity.value:
             raise InventoryFullException(f"{person_id.value} carries {len(carried)} items over {capacity.value}")
-        if sum(held_item.hands_needed.value for held_item in held) > _HANDS:
-            raise HeldItemsExceedHandsException(f"{person_id.value} holds more than {_HANDS} hands can")
+        if HandsInUse.of(held_item.hands_needed for held_item in held).exceeds_hands_of_a_person():
+            raise HeldItemsExceedHandsException(f"{person_id.value} holds more than {HANDS_OF_A_PERSON} hands can")
         self._person_id = person_id
         self._capacity = capacity
         self._packed = [packed_item.item for packed_item in packed]
@@ -203,14 +210,14 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         self._require_carried(item)
         if self._is_held(item):
             return
-        while _HANDS - self._hands_in_use() < hands_needed.value:
+        while HANDS_OF_A_PERSON - self._hands_in_use() < hands_needed.value:
             self.put_away(self._held[0].item)
         self._packed.remove(item)
         self._held.append(_ItemInHand(item, hands_needed))
         self.add_event(ItemHeldEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def hold_packed_at_start(self, spec: ItemSpecId, hands_needed: HandsNeeded) -> None:
-        if _HANDS - self._hands_in_use() < hands_needed.value:
+        if HandsInUse.of(held.hands_needed for held in self._held).with_also(hands_needed).exceeds_hands_of_a_person():
             raise HeldItemsExceedHandsException(
                 f"{self._person_id.value} has no free hands to start holding {spec.value}"
             )

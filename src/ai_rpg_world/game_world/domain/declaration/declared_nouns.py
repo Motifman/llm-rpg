@@ -30,10 +30,12 @@ from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocatio
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UnknownNameFlaw, WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.value_object import (
+    HANDS_OF_A_PERSON,
     Capacity,
     GroupDecisionId,
     GroupId,
     GroupingId,
+    HandsInUse,
     HitPoints,
     ItemSpecId,
     ObjectId,
@@ -340,12 +342,30 @@ class DeclaredNouns:
                 flaws += self._item_specs.flaws_if_unknown(
                     item.value, self._characters.location(character, f"initial_items[{index}]")
                 )
+            flaws += self._held_at_start_flaws(character)
             flaws += self._initial_group_flaws(character)
             for index, person in enumerate(character.knows_at_start):
                 flaws += self._characters.flaws_if_unknown(
                     person.value, self._characters.location(character, f"knows_at_start[{index}]")
                 )
         return flaws
+
+    def _held_at_start_flaws(self, character: CharacterDeclaration) -> list[DesignFlaw]:
+        hands_in_use = HandsInUse(0)
+        for index, item in enumerate(character.initial_held):
+            spec = self._item_specs.find(item.value)
+            if spec is None:
+                continue
+            hands_in_use = hands_in_use.with_also(spec.hands_needed)
+            if hands_in_use.exceeds_hands_of_a_person():
+                return [
+                    DesignFlaw(
+                        self._characters.location(character, f"initial_held[{index}]"),
+                        f"holding item_spec {item.value!r} at start needs {hands_in_use.value} hands, "
+                        f"but a person has {HANDS_OF_A_PERSON}",
+                    )
+                ]
+        return []
 
     def _initial_group_flaws(self, character: CharacterDeclaration) -> list[DesignFlaw]:
         flaws: list[DesignFlaw] = []
