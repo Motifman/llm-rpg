@@ -7,12 +7,9 @@ from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.leaf_condition import LeafCondition
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
-    CountValue,
     ObjectStateKeyDeclaration,
     StateValue,
-    StockValue,
 )
-from ai_rpg_world.game_world.domain.exception.condition_exception import StateValueOfAnotherKindException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import Count
 
@@ -26,17 +23,11 @@ def _value_of(key: ObjectStateKeyDeclaration, facts: WorldFacts) -> StateValue:
 
 
 def _count_of(key: ObjectStateKeyDeclaration, facts: WorldFacts) -> Count:
-    value = _value_of(key, facts)
-    if not isinstance(value, CountValue):
-        raise StateValueOfAnotherKindException(f"{key.object_id.value}.{key.key.value} holds {value!r}, not a count")
-    return value.count
+    return facts.object_state(key.object_id).count_of(key, facts.now())
 
 
 def _stock_of(key: ObjectStateKeyDeclaration, facts: WorldFacts) -> Count:
-    value = _value_of(key, facts)
-    if not isinstance(value, StockValue):
-        raise StateValueOfAnotherKindException(f"{key.object_id.value}.{key.key.value} holds {value!r}, not a stock")
-    return value.amount
+    return facts.object_state(key.object_id).stock_of(key, facts.now())
 
 
 @final

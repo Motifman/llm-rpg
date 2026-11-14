@@ -41,6 +41,10 @@ class OperationNotForStateKindException(GameWorldDomainException):
     error_code = "GAME_WORLD.OPERATION_NOT_FOR_STATE_KIND"
 
 
+class StateValueOfAnotherKindException(GameWorldDomainException):
+    error_code = "GAME_WORLD.STATE_VALUE_OF_ANOTHER_KIND"
+
+
 class NotEnoughStockException(GameWorldDomainException):
     error_code = "GAME_WORLD.NOT_ENOUGH_STOCK"
 
