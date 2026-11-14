@@ -35,6 +35,11 @@ class TextWithUnassignedPeople:
             rebuilt.append(_as_letters(names[field_name].text) if field_name in names else f"{{{field_name}}}")
         return TextWithUnassignedPeople("".join(rebuilt))
 
+    def about_named(self, people: Mapping[str, PersonId], names: Mapping[str, DisplayName]) -> TextAboutPeople:
+        named = self.with_names(names)
+        placeholders = named.placeholders()
+        return named.about({key: person for key, person in people.items() if key in placeholders})
+
     def placeholders(self) -> frozenset[str]:
         return person_placeholders_in(self.template)
 
