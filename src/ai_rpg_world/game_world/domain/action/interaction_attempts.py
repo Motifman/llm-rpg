@@ -75,7 +75,7 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
         return stage.allows_interaction(self.interaction.interaction_id)
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
-        return ()
+        return tuple(value for value in self.arguments.values() if isinstance(value, ItemInstanceId))
 
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self.kind(), self.interaction.interaction_id})
@@ -132,7 +132,7 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
         return self.item
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
-        return (self.item,)
+        return (self.item, *super().items_handled())
 
 
 @final

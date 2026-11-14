@@ -313,3 +313,44 @@ class TestArguments:
 
         with pytest.raises(ArgumentsDoNotMatchDeclarationException):
             PersonInteractionAttempt(ALICE, BOB, interaction, {ArgumentName("gift"): TextArgumentValue("花")}, Openly())
+
+
+class TestItemsHandled:
+    """操作の試みの items_handled が、試みが指す品物と、品物の引数に渡した品物をすべて答えることを保証する。"""
+
+    def test_item_arguments_are_handled(self) -> None:
+        """人への操作に品物の引数を 2 つ渡すと、items_handled は引数の品物を両方答え、文の引数は含めない。"""
+        interaction = InteractionForTests(
+            InteractionId("trade"),
+            arguments=(
+                ArgumentDeclaration(ArgumentName("gift"), ItemArgument()),
+                ArgumentDeclaration(ArgumentName("price"), ItemArgument()),
+                ArgumentDeclaration(WORDS, TextArgument()),
+            ),
+        )
+        gift, price = ItemInstanceId("flower_1"), ItemInstanceId("coin_1")
+        attempt = PersonInteractionAttempt(
+            ALICE,
+            BOB,
+            interaction,
+            {ArgumentName("gift"): gift, ArgumentName("price"): price, WORDS: TextArgumentValue("どうぞ")},
+            Openly(),
+        )
+
+        assert set(attempt.items_handled()) == {gift, price}
+
+    def test_carried_item_comes_with_item_arguments(self) -> None:
+        """持っている品物への操作は、操作する品物と品物の引数の両方を items_handled に答える。"""
+        pen = ItemInstanceId("pen_1")
+        interaction = InteractionForTests(
+            InteractionId("write"), arguments=(ArgumentDeclaration(ArgumentName("pen"), ItemArgument()),)
+        )
+        attempt = CarriedItemInteractionAttempt(ALICE, NOTEBOOK, interaction, {ArgumentName("pen"): pen}, Openly())
+
+        assert set(attempt.items_handled()) == {NOTEBOOK, pen}
+
+    def test_object_interaction_without_item_arguments_handles_no_item(self) -> None:
+        """品物の引数の無い物への操作は、items_handled が空。"""
+        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+
+        assert attempt.items_handled() == ()

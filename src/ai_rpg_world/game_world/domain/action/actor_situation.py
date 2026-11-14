@@ -31,18 +31,15 @@ class ActorSituation:
         return cls(
             at_spot=facts.whereabouts().spot_of(actor_as),
             actor_as=actor_as,
-            item_specs=dict(_spec_of(item, facts) for item in attempt.items_handled() if _is_in_world(item, facts)),
+            item_specs={
+                item: spec for item in attempt.items_handled() if (spec := _spec_in_world(item, facts)) is not None
+            },
         )
 
 
-def _spec_of(item: ItemInstanceId, facts: WorldFacts) -> tuple[ItemInstanceId, ItemSpecId]:
-    return item, facts.item(item).spec_id
-
-
-def _is_in_world(item: ItemInstanceId, facts: WorldFacts) -> bool:
-    # 断られた試みは、もう世界に無い品物 (拾われた、使い切った) を指していることがある
+def _spec_in_world(item: ItemInstanceId, facts: WorldFacts) -> ItemSpecId | None:
+    # 断られた試みは、使い切って世界から出た品物を指していることがある
     try:
-        facts.item(item)
+        return facts.item(item).spec_id
     except AggregateNotInWorldException:
-        return False
-    return True
+        return None
