@@ -17,7 +17,9 @@ from ai_rpg_world.being.contract import (
     OccurrenceOrder,
     OwnActionResult,
     OwnBodyState,
+    PersonInText,
     SeenOrHeard,
+    TextWithPeople,
     ToldOrWritten,
     Unknown,
 )
@@ -65,6 +67,37 @@ class TestRequiredFields:
         """経路に 5 つの選択肢以外の値を渡すと ContractViolation で拒む。"""
         with pytest.raises(ContractViolation):
             Observation(**_fields(route="told"))
+
+
+class TestBodyWithPeople:
+    """観測の本文が、文字列のほかに人のプレースホルダーを持つ TextWithPeople でもよく、人の印の無い本文だけを文字列として取り出せることを保証する。"""
+
+    _KICKED = TextWithPeople(
+        template="{actor}が扉を蹴り破った",
+        people={"actor": PersonInText(handle=3, appearance="背の高い男", visible_name=None)},
+    )
+
+    def test_body_with_people_is_kept_as_is(self) -> None:
+        """本文に TextWithPeople を渡すと、その観測は同じ TextWithPeople を本文として持つ。"""
+        observation = Observation(**_fields(body=self._KICKED))
+
+        assert observation.body == self._KICKED
+
+    def test_body_of_another_type_is_rejected(self) -> None:
+        """本文に文字列でも TextWithPeople でもない値を渡すと ContractViolation で拒む。"""
+        with pytest.raises(ContractViolation):
+            Observation(**_fields(body=3))
+
+    def test_body_without_people_returns_the_text_body(self) -> None:
+        """本文が文字列なら、body_without_people はその文字列を返す。"""
+        assert Observation(**_fields()).body_without_people() == "カイが言った: 「水場は北だ」"
+
+    def test_body_without_people_refuses_a_body_with_people(self) -> None:
+        """本文が TextWithPeople なら、body_without_people は人を埋めずに文字列にできないので ContractViolation を投げる。"""
+        observation = Observation(**_fields(body=self._KICKED))
+
+        with pytest.raises(ContractViolation):
+            observation.body_without_people()
 
 
 class TestKnownIfPossibleFields:
