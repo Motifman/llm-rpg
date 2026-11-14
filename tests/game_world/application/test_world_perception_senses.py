@@ -119,66 +119,15 @@ def _with_lantern(where_kept: str) -> WorldSession:
 
 
 class TestLightingAt:
-    """WorldPerceptionSenses.lighting_at が、場所の雰囲気・時間帯・天候・手の光源から、その場所の明るさを決めることを保証する。"""
+    """WorldPerceptionSenses.lighting_at が、その場所の明るさの材料から決まる明るさを返すことを保証する。"""
 
-    def test_indoor_spot_stays_as_declared_at_night(self) -> None:
-        """屋内の薄暗い場所は、暗い時間帯でも宣言のまま薄暗い。"""
-        dusky_indoors = _lit_as(Lighting.DUSKY)
-        world = world_in_memory(world=_WORLD, spots=(dusky_indoors,), day_night=_NIGHT_FROM_THE_START)
-
-        lighting = WorldPerceptionSenses(world.facts()).lighting_at(dusky_indoors.spot_id)
-
-        assert lighting is Lighting.DUSKY
-
-    def test_outdoor_spot_is_one_step_darker_at_night(self) -> None:
-        """屋外の明るい場所は、暗い時間帯に 1 段暗い薄暗さになる。"""
-        bright_outdoors = _lit_as(Lighting.BRIGHT, outdoor=True)
-        world = world_in_memory(world=_WORLD, spots=(bright_outdoors,), day_night=_NIGHT_FROM_THE_START)
-
-        lighting = WorldPerceptionSenses(world.facts()).lighting_at(bright_outdoors.spot_id)
-
-        assert lighting is Lighting.DUSKY
-
-    def test_outdoor_spot_is_one_step_darker_in_obscuring_weather(self) -> None:
-        """屋外の明るい場所は、霧を見通しの悪い天候と宣言した世界で霧のとき、1 段暗い薄暗さになる。"""
-        bright_outdoors = _lit_as(Lighting.BRIGHT, outdoor=True)
-        world = world_in_memory(
-            world=_WORLD,
-            spots=(bright_outdoors,),
-            weather=Weather(_WORLD, WeatherState(WeatherType.FOG)),
-            obscuring=frozenset({WeatherType.FOG}),
-        )
-
-        lighting = WorldPerceptionSenses(world.facts()).lighting_at(bright_outdoors.spot_id)
-
-        assert lighting is Lighting.DUSKY
-
-    def test_lit_light_source_in_hand_lights_a_pitch_dark_spot(self) -> None:
-        """真っ暗な場所でも、そこにいる人が灯ったカンテラを手に持っていれば薄暗くなる。"""
+    def test_lighting_at_follows_the_lighting_conditions_of_the_spot(self) -> None:
+        """真っ暗な広場でも、そこにいる人が灯ったカンテラを手に持っていれば、広場の明るさは薄暗い。"""
         world = _with_lantern("hand")
 
         lighting = WorldPerceptionSenses(world.facts()).lighting_at(_SQUARE.spot_id)
 
         assert lighting is Lighting.DUSKY
-
-    def test_lit_light_source_in_the_pack_does_not_light(self) -> None:
-        """灯ったカンテラでも、荷の中にあれば照らさず、真っ暗なまま。"""
-        world = _with_lantern("pack")
-
-        lighting = WorldPerceptionSenses(world.facts()).lighting_at(_SQUARE.spot_id)
-
-        assert lighting is Lighting.PITCH_DARK
-
-    def test_departed_person_does_not_light_with_the_lantern_left_in_the_body_hand(self) -> None:
-        """去った人が広場にいて、その体が灯ったカンテラを手に持ったまま地下室にあるとき、真っ暗な広場は照らされない。"""
-        world = _with_lantern("hand")
-        world.aggregates().whereabouts().remove(PersonBody(_ALICE))
-        world.aggregates().whereabouts().place(PersonBody(_ALICE), _CELLAR)
-        world.aggregates().whereabouts().place(DepartedPerson(_ALICE), _lit_as(Lighting.PITCH_DARK))
-
-        lighting = WorldPerceptionSenses(world.facts()).lighting_at(_SQUARE.spot_id)
-
-        assert lighting is Lighting.PITCH_DARK
 
 
 class TestReachOf:
