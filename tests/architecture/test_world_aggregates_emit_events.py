@@ -210,6 +210,7 @@ _PreparedCall = tuple[AggregateRoot[Any], Callable[[], None]]
 _WORLD = WorldId("watched_world")
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
+_NOW = WorldTick(0)
 _ALICE_BODY = PersonBody(_ALICE)
 _PLAZA = spot("plaza")
 _WELL = spot("well")
@@ -481,9 +482,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
         _whereabouts(), lambda w: w.start_travel(_ALICE_BODY, Route(start=_PLAZA.spot_id, passages=(_STREET,)))
     ),
     # 道の途中の進みはイベントにせず、着いたときと止められたときだけイベントにする。
-    "Whereabouts.advance_travels": lambda: _with(_travelling(), lambda w: w.advance_travels(frozenset())),
-    "Whereabouts.cancel_travel": lambda: _with(_travelling(), lambda w: w.cancel_travel(_ALICE_BODY)),
-    "Whereabouts.teleport": lambda: _with(_whereabouts(), lambda w: w.teleport(_ALICE_BODY, _MINE)),
+    "Whereabouts.advance_travels": lambda: _with(_travelling(), lambda w: w.advance_travels(frozenset(), _NOW)),
+    "Whereabouts.cancel_travel": lambda: _with(_travelling(), lambda w: w.cancel_travel(_ALICE_BODY, _NOW)),
+    "Whereabouts.teleport": lambda: _with(_whereabouts(), lambda w: w.teleport(_ALICE_BODY, _MINE, _NOW)),
     "Whereabouts.enter_section": lambda: _with(
         _whereabouts(), lambda w: w.enter_section(_ALICE_BODY, _BENCH, frozenset())
     ),
