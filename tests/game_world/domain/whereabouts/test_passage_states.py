@@ -226,7 +226,7 @@ class TestPassageStatesMemento:
         states.reveal(SECRET)
         states.remove(SLIDE)
 
-        rebuilt = rebuilt_from_memento(states, _DESIGN)
+        rebuilt = rebuilt_from_memento(states, _DESIGN.nouns)
 
         assert rebuilt.memento() == states.memento()
         assert (rebuilt.is_traversable(CELLAR_DOOR), rebuilt.is_traversable(SECRET)) == (True, True)
@@ -239,7 +239,7 @@ class TestPassageStatesMemento:
         states = _states()
         states.change_state(CELLAR_DOOR, OPEN)
 
-        assert rebuilt_from_memento(states, _DESIGN).get_events() == []
+        assert rebuilt_from_memento(states, _DESIGN.nouns).get_events() == []
 
     def test_memento_with_an_undeclared_passage_is_rejected(self) -> None:
         """宣言に無い通路 well_tunnel を持つ memento から作り直すと UndeclaredNounException を投げる。"""
@@ -251,7 +251,7 @@ class TestPassageStatesMemento:
         )
 
         with pytest.raises(UndeclaredNounException):
-            PassageStates.from_memento(memento, _DESIGN)
+            PassageStates.from_memento(memento, _DESIGN.nouns)
 
     def test_memento_missing_a_declared_passage_is_rejected(self) -> None:
         """宣言にある滑り台が memento に無いと、初めの状態で埋めずに MementoDoesNotMatchDesignException を投げる。"""
@@ -261,7 +261,7 @@ class TestPassageStatesMemento:
         )
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            PassageStates.from_memento(memento, _DESIGN)
+            PassageStates.from_memento(memento, _DESIGN.nouns)
 
     def test_memento_with_an_undeclared_state_is_rejected(self) -> None:
         """扉の宣言に無い状態 ajar を持つ memento から作り直すと UndeclaredPassageStateException を投げる。"""
@@ -274,7 +274,7 @@ class TestPassageStatesMemento:
         )
 
         with pytest.raises(UndeclaredPassageStateException):
-            PassageStates.from_memento(memento, _DESIGN)
+            PassageStates.from_memento(memento, _DESIGN.nouns)
 
     def test_memento_hiding_a_passage_declared_visible_is_rejected(self) -> None:
         """隠れていると宣言していない通りが隠れている memento から作り直すと PassageNotDeclaredHiddenException を投げる。"""
@@ -285,11 +285,11 @@ class TestPassageStatesMemento:
         )
 
         with pytest.raises(PassageNotDeclaredHiddenException):
-            PassageStates.from_memento(memento, _DESIGN)
+            PassageStates.from_memento(memento, _DESIGN.nouns)
 
     def test_memento_keeping_a_passage_declared_hidden_hidden_is_rebuilt(self) -> None:
         """まだ現していない隠し通路は、隠れたまま作り直せ、通れない。"""
-        rebuilt = rebuilt_from_memento(_states(), _DESIGN)
+        rebuilt = rebuilt_from_memento(_states(), _DESIGN.nouns)
 
         assert rebuilt.is_traversable(SECRET) is False
 

@@ -11,7 +11,6 @@ from ai_rpg_world.game_world.domain.value_object import FlagId, WorldId
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -64,7 +63,7 @@ class WorldFlags(AggregateRoot[WorldFlagsEvent]):
         return cls(world_id, {})
 
     @classmethod
-    def from_memento(cls, memento: WorldFlagsMemento, design: WorldDesign) -> WorldFlags:
+    def from_memento(cls, memento: WorldFlagsMemento) -> WorldFlags:
         return cls(memento.world_id, {position.flag: position.raised for position in memento.positions})
 
     @property

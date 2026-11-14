@@ -14,7 +14,6 @@ from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId,
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
     from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -78,7 +77,7 @@ class LatestActions(AggregateRoot[LatestActionsEvent]):
         return cls(world_id, {})
 
     @classmethod
-    def from_memento(cls, memento: LatestActionsMemento, design: WorldDesign) -> LatestActions:
+    def from_memento(cls, memento: LatestActionsMemento) -> LatestActions:
         return cls(memento.world_id, {(done.who, done.action): done.at for done in memento.last_done})
 
     @property

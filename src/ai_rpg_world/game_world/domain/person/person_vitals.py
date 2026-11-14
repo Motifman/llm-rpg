@@ -58,7 +58,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant, PersonBody
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -114,10 +114,10 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         return cls(person, hp, Alive(), HungerAmount(0), FatigueAmount(0), frozenset(), NotBusy())
 
     @classmethod
-    def from_memento(cls, memento: PersonVitalsMemento, design: WorldDesign) -> PersonVitals:
-        design.nouns.require_declared_character(memento.person)
+    def from_memento(cls, memento: PersonVitalsMemento, nouns: DeclaredNouns) -> PersonVitals:
+        nouns.require_declared_character(memento.person)
         if isinstance(memento.life_state, Down) and isinstance(memento.life_state.cause, StruckByPerson):
-            design.nouns.require_declared_character(memento.life_state.cause.person)
+            nouns.require_declared_character(memento.life_state.cause.person)
         return cls(
             memento.person,
             memento.hp,

@@ -9,7 +9,6 @@ from ai_rpg_world.game_world.domain.value_object import WorldId, WorldStageId, W
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -41,7 +40,7 @@ class WorldStage(AggregateRoot[WorldStageChangedEvent]):
         return cls(world_id, initial.stage_id, now)
 
     @classmethod
-    def from_memento(cls, memento: WorldStageMemento, design: WorldDesign) -> WorldStage:
+    def from_memento(cls, memento: WorldStageMemento) -> WorldStage:
         return cls(memento.world_id, memento.current, memento.entered_at)
 
     @property

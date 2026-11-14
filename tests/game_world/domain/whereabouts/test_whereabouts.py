@@ -567,7 +567,7 @@ class TestWhereaboutsMemento:
         whereabouts.start_travel(ALICE, route)
         whereabouts.advance_travels(frozenset())
 
-        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN.nouns)
 
         assert rebuilt.location_of(ALICE) == TravelInProgress(
             route=route, passage_index=0, ticks_left_on_passage=Ticks(1), departed_from=SpotId("plaza")
@@ -587,7 +587,7 @@ class TestWhereaboutsMemento:
         whereabouts.advance_travels(frozenset())
         whereabouts.advance_travels(frozenset())
 
-        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN.nouns)
 
         assert rebuilt.location_of(ALICE) == TravelInProgress(
             route=route, passage_index=1, ticks_left_on_passage=Ticks(1), departed_from=SpotId("well")
@@ -602,7 +602,7 @@ class TestWhereaboutsMemento:
         whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
         whereabouts.start_travel(BOB, Route(start=SpotId("plaza"), passages=(STREET,)))
 
-        rebuilt = rebuilt_from_memento(whereabouts, DESIGN)
+        rebuilt = rebuilt_from_memento(whereabouts, DESIGN.nouns)
 
         assert rebuilt.memento() == whereabouts.memento()
         assert rebuilt.is_in_section(ALICE, LIFT)
@@ -615,7 +615,7 @@ class TestWhereaboutsMemento:
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
 
-        assert rebuilt_from_memento(whereabouts, DESIGN).get_events() == []
+        assert rebuilt_from_memento(whereabouts, DESIGN.nouns).get_events() == []
 
     def test_memento_travelling_an_undeclared_passage_is_rejected(self) -> None:
         """宣言に無い通路 tunnel を歩いている途中の memento から作り直すと UndeclaredNounException を投げる。"""
@@ -629,7 +629,7 @@ class TestWhereaboutsMemento:
         memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, position)}))
 
         with pytest.raises(UndeclaredNounException):
-            Whereabouts.from_memento(memento, DESIGN)
+            Whereabouts.from_memento(memento, DESIGN.nouns)
 
     @pytest.mark.parametrize(
         "location",
@@ -651,7 +651,7 @@ class TestWhereaboutsMemento:
         memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, location)}))
 
         with pytest.raises(UndeclaredNounException):
-            Whereabouts.from_memento(memento, DESIGN)
+            Whereabouts.from_memento(memento, DESIGN.nouns)
 
     def test_memento_in_a_section_of_another_spot_is_rejected(self) -> None:
         """広場の区画 bench に井戸でいることになっている memento から作り直すと OccupantNotAtSectionSpotException を投げる。"""
@@ -659,7 +659,7 @@ class TestWhereaboutsMemento:
         memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, location)}))
 
         with pytest.raises(OccupantNotAtSectionSpotException):
-            Whereabouts.from_memento(memento, DESIGN)
+            Whereabouts.from_memento(memento, DESIGN.nouns)
 
     @pytest.mark.parametrize(
         ("passage_index", "ticks_left", "departed_from", "expected"),
@@ -692,7 +692,7 @@ class TestWhereaboutsMemento:
         memento = WhereaboutsMemento(world_id=WORLD, locations=frozenset({OccupantLocation(ALICE, position)}))
 
         with pytest.raises(expected):
-            Whereabouts.from_memento(memento, DESIGN)
+            Whereabouts.from_memento(memento, DESIGN.nouns)
 
     def test_travel_started_on_a_passage_that_takes_no_ticks_has_none_left(self) -> None:
         """所要 0 tick の通路を 1 本目に歩き始めた人は、残り 0 tick の移動の途中にいる。"""

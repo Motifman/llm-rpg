@@ -15,7 +15,7 @@ from ai_rpg_world.game_world.domain.value_object import SpotId, WorldId
 from ai_rpg_world.game_world.domain.whereabouts.spot_atmosphere_events import SpotAtmosphereChangedEvent
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -49,9 +49,9 @@ class SpotAtmospheres(AggregateRoot[SpotAtmosphereChangedEvent]):
         return cls(world_id, {declared.spot_id: declared.atmosphere for declared in spots})
 
     @classmethod
-    def from_memento(cls, memento: SpotAtmospheresMemento, design: WorldDesign) -> SpotAtmospheres:
-        remembered = {design.nouns.spot_of(entry.spot).spot_id: entry.atmosphere for entry in memento.atmospheres}
-        declared = design.nouns.all_spots()
+    def from_memento(cls, memento: SpotAtmospheresMemento, nouns: DeclaredNouns) -> SpotAtmospheres:
+        remembered = {nouns.spot_of(entry.spot).spot_id: entry.atmosphere for entry in memento.atmospheres}
+        declared = nouns.all_spots()
         if remembered.keys() != {spot.spot_id for spot in declared}:
             raise MementoDoesNotMatchDesignException(
                 f"SpotAtmospheres of {memento.world_id.value} does not have every declared spot"

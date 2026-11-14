@@ -491,7 +491,7 @@ class TestGroupDecisionMemento:
         decision.withdraw_choice(_CAROL)
         design = _design_with(_declaration())
 
-        rebuilt = rebuilt_from_memento(decision, design)
+        rebuilt = rebuilt_from_memento(decision, design.nouns)
 
         assert rebuilt.memento() == decision.memento()
         assert rebuilt.is_open() is True
@@ -510,7 +510,7 @@ class TestGroupDecisionMemento:
         decision = _started(abstain_allowed=False)
         design = _design_with(_declaration(abstain_allowed=False))
 
-        rebuilt = rebuilt_from_memento(decision, design)
+        rebuilt = rebuilt_from_memento(decision, design.nouns)
 
         with pytest.raises(AbstainNotAllowedException):
             rebuilt.cast(_ALICE, Abstain())
@@ -521,12 +521,12 @@ class TestGroupDecisionMemento:
         decision.cast(_ALICE, VoteFor(_BOB))
         design = _design_with(_declaration())
 
-        assert rebuilt_from_memento(decision, design).get_events() == []
+        assert rebuilt_from_memento(decision, design.nouns).get_events() == []
 
     def test_memento_of_an_undeclared_decision_is_rejected(self) -> None:
         """宣言に無い集団の決定の memento から作り直すと UndeclaredNounException を投げる。"""
         with pytest.raises(UndeclaredNounException):
-            GroupDecision.from_memento(_started().memento(), compose_world())
+            GroupDecision.from_memento(_started().memento(), compose_world().nouns)
 
     def test_memento_with_two_ballots_of_one_voter_is_rejected(self) -> None:
         """alice の票が bob への票と棄権の 2 つある memento から作り直すと、二度目の票と同じ BallotAlreadyCastException を投げる。"""
@@ -539,7 +539,7 @@ class TestGroupDecisionMemento:
         )
 
         with pytest.raises(BallotAlreadyCastException):
-            GroupDecision.from_memento(memento, _design_with(_declaration()))
+            GroupDecision.from_memento(memento, _design_with(_declaration()).nouns)
 
 
 def _memento(
@@ -560,41 +560,41 @@ class TestGroupDecisionRebuiltOnlyIntoStatesOperationsReach:
         memento = _memento(ballots=frozenset({Ballot(_DAVE, VoteFor(_ALICE))}))
 
         with pytest.raises(VoterNotInDecisionException):
-            GroupDecision.from_memento(memento, _design_with(_declaration()))
+            GroupDecision.from_memento(memento, _design_with(_declaration()).nouns)
 
     def test_vote_for_someone_who_is_not_a_choice_is_rejected(self) -> None:
         """候補が alice と bob の決定に、carol への票が入った memento から作り直すと ChoiceNotInDecisionException を投げる。"""
         memento = _memento(ballots=frozenset({Ballot(_ALICE, VoteFor(_CAROL))}))
 
         with pytest.raises(ChoiceNotInDecisionException):
-            GroupDecision.from_memento(memento, _design_with(_declaration()))
+            GroupDecision.from_memento(memento, _design_with(_declaration()).nouns)
 
     def test_abstention_where_the_declaration_forbids_it_is_rejected(self) -> None:
         """棄権を許さない宣言で、alice の棄権が入った memento から作り直すと AbstainNotAllowedException を投げる。"""
         memento = _memento(ballots=frozenset({Ballot(_ALICE, Abstain())}))
 
         with pytest.raises(AbstainNotAllowedException):
-            GroupDecision.from_memento(memento, _design_with(_declaration(abstain_allowed=False)))
+            GroupDecision.from_memento(memento, _design_with(_declaration(abstain_allowed=False)).nouns)
 
     def test_open_decision_without_voters_is_rejected(self) -> None:
         """投票する人がいないのに開いている memento から作り直すと NoVotersGivenException を投げる。"""
         memento = _memento(voters=frozenset())
 
         with pytest.raises(NoVotersGivenException):
-            GroupDecision.from_memento(memento, _design_with(_declaration()))
+            GroupDecision.from_memento(memento, _design_with(_declaration()).nouns)
 
     def test_open_decision_where_every_voter_has_cast_is_rejected(self) -> None:
         """alice と bob の 2 人とも票を入れたのに開いている memento から作り直すと GroupDecisionLeftOpenAfterEveryoneCastException を投げる。"""
         memento = _memento(ballots=frozenset({Ballot(_ALICE, VoteFor(_BOB)), Ballot(_BOB, VoteFor(_BOB))}))
 
         with pytest.raises(GroupDecisionLeftOpenAfterEveryoneCastException):
-            GroupDecision.from_memento(memento, _design_with(_declaration()))
+            GroupDecision.from_memento(memento, _design_with(_declaration()).nouns)
 
     def test_closed_decision_where_every_voter_has_cast_is_rebuilt(self) -> None:
         """alice と bob の 2 人とも票を入れて閉じた memento は作り直せ、閉じたままになる。"""
         memento = _memento(open=False, ballots=frozenset({Ballot(_ALICE, VoteFor(_BOB)), Ballot(_BOB, VoteFor(_BOB))}))
 
-        rebuilt = GroupDecision.from_memento(memento, _design_with(_declaration()))
+        rebuilt = GroupDecision.from_memento(memento, _design_with(_declaration()).nouns)
 
         assert rebuilt.memento() == memento
         assert rebuilt.is_open() is False
