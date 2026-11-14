@@ -89,26 +89,32 @@ class PerceptionReader:
         kinded = split_kind(node, _NOTICE_KINDS, explains_failure=False)
         if kinded.kind == "sight_at":
             fields = self._defaults.fill("sight_at", kinded.body).fields("spot", "texts", "salience")
-            return SightAt(
-                spot=self._names.spot(fields.required("spot")),
-                texts=self.sight_texts(fields.required("texts")),
-                salience=salience(fields.required("salience")),
+            return node.build(
+                lambda: SightAt(
+                    spot=self._names.spot(fields.required("spot")),
+                    texts=self.sight_texts(fields.required("texts")),
+                    salience=salience(fields.required("salience")),
+                )
             )
         if kinded.kind == "sound_from":
             fields = self._defaults.fill("sound_from", kinded.body).fields("spot", "sound", "salience")
-            return SoundFrom(
-                spot=self._names.spot(fields.required("spot")),
-                sound=self.sound(fields.required("sound")),
-                salience=salience(fields.required("salience")),
+            return node.build(
+                lambda: SoundFrom(
+                    spot=self._names.spot(fields.required("spot")),
+                    sound=self.sound(fields.required("sound")),
+                    salience=salience(fields.required("salience")),
+                )
             )
         return self.announcement_to(kinded.body)
 
     def announcement_to(self, node: YamlNode) -> AnnouncementTo:
         fields = self._defaults.fill("announcement_to", node).fields("audience", "text", "salience")
-        return AnnouncementTo(
-            audience=self._conditions.people(fields.required("audience")),
-            text=people_text(fields.required("text")),
-            salience=salience(fields.required("salience")),
+        return node.build(
+            lambda: AnnouncementTo(
+                audience=self._conditions.people(fields.required("audience")),
+                text=people_text(fields.required("text")),
+                salience=salience(fields.required("salience")),
+            )
         )
 
     def _written_or_default(self, fields: YamlFields, field: str) -> YamlNode:

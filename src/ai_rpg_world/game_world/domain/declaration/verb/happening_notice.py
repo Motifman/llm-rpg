@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.sight_texts_declaration import SightTextsDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
+from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import PersonInNoticeTextException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import (
     AnnouncementStimulus,
@@ -31,6 +32,9 @@ class SightAt:
     spot: SpotDeclaration
     texts: SightTextsDeclaration
     salience: Salience
+
+    def __post_init__(self) -> None:
+        _refuse_people("sight_at", self.texts.placeholders())
 
     def requirements(self) -> Requirements:
         return Requirements.nothing()
@@ -62,6 +66,9 @@ class SoundFrom:
     sound: SoundDeclaration
     salience: Salience
 
+    def __post_init__(self) -> None:
+        _refuse_people("sound_from", self.sound.placeholders())
+
     def requirements(self) -> Requirements:
         return Requirements.nothing()
 
@@ -78,6 +85,9 @@ class AnnouncementTo:
     audience: PeopleSelection
     text: TextWithUnassignedPeople
     salience: Salience
+
+    def __post_init__(self) -> None:
+        _refuse_people("announcement_to", self.text.placeholders())
 
     def requirements(self) -> Requirements:
         return self.audience.requirements()
@@ -103,3 +113,9 @@ class NoNotice:
 
 
 HappeningNotice = SightAt | SoundFrom | AnnouncementTo
+
+
+def _refuse_people(notice: str, placeholders: frozenset[str]) -> None:
+    # 出来事には行った人がおらず、知らせの文に当てる人がいない。書けば発火のたびに文を作れない。
+    if placeholders:
+        raise PersonInNoticeTextException(f"the {notice} notice cannot name people, but names {sorted(placeholders)}")

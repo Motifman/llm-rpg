@@ -382,6 +382,7 @@ class HappeningDeclaration:
     effect: Effect
     once: bool                              # 断られた回も「起きた」に数える。once の出来事は、断られたら以後は起きない
     notice: HappeningNotice | NoNotice      # AnnouncementTo の相手は、その出来事の効果を当てる前の世界で選ぶ
+    # 知らせ (SightAt / SoundFrom / AnnouncementTo) の文には人のプレースホルダーを書けない。出来事には行った人がおらず当てる人がいないので、書けば読み込みで止める (二人で合わせる操作の知らせも同じ) (#2152)
 
 HappeningNotice = SightAt | SoundFrom | AnnouncementTo
 # 発火で集約が断ったら (WorldRefusal)、その発火だけを巻き戻し、何も変えずに「その回は起きた」と記録する。

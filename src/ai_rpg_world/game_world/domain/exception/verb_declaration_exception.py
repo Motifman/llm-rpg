@@ -21,6 +21,10 @@ class NotBuiltInActionPerceptionException(GameWorldDomainException):
     error_code = "GAME_WORLD.VERB_DECLARATION.NOT_BUILT_IN_ACTION_PERCEPTION"
 
 
+class PersonInNoticeTextException(GameWorldDomainException):
+    error_code = "GAME_WORLD.VERB_DECLARATION.PERSON_IN_NOTICE_TEXT"
+
+
 class PerceptionOfKindNotDeclaredException(GameWorldDomainException):
     error_code = "GAME_WORLD.VERB_DECLARATION.PERCEPTION_OF_KIND_NOT_DECLARED"
 
