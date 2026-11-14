@@ -11,7 +11,7 @@ import pytest
 from ai_rpg_world.game_world.domain import exception as game_world_exception
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
-from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException, WorldRefusal
 from ai_rpg_world.game_world.domain.people._person_placeholders import person_placeholders_in
 from ai_rpg_world.game_world.domain.perception import NoTarget
 from ai_rpg_world.game_world.domain.perception.salience import Background, Notable
@@ -121,6 +121,12 @@ class TestCommonJaDefaultReads:
         assert (haru.hp, haru.pack_capacity) == (HitPoints(100, 100), Capacity(20))
 
 
+def _world_refusal_codes() -> frozenset[str]:
+    for module in pkgutil.iter_modules(game_world_exception.__path__):
+        importlib.import_module(f"{game_world_exception.__name__}.{module.name}")
+    return frozenset(cls.error_code for cls in WorldRefusal.__subclasses__())
+
+
 class TestRefusalTexts:
     """ja_default.yaml の断りの文の表が、共通の決まりをすべて持ち、集約の断りの鍵が実在する error_code であることを保証する。"""
 
@@ -135,6 +141,12 @@ class TestRefusalTexts:
         written = set(_common()["refusal_texts"]["world_state"])  # type: ignore[index]
 
         assert written - _error_codes() == set()
+
+    def test_every_world_refusal_has_its_text(self) -> None:
+        """世界の断りの印 (WorldRefusal) のある例外の error_code は、どれも集約の断りの文の表にある (表に無いと unlisted の文に落ちる)。"""
+        written = set(_common()["refusal_texts"]["world_state"])  # type: ignore[index]
+
+        assert _world_refusal_codes() - written == set()
 
 
 class TestBuiltInActionPerceptions:

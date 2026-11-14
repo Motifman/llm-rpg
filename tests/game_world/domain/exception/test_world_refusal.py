@@ -7,8 +7,6 @@ import pkgutil
 import ai_rpg_world.game_world.domain.exception as exception_package
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException, WorldRefusal
 
-# エージェントが、できないことを試したときに、ゲームとして普通に起きる断り (#2165)。
-# 印の無いドメイン例外は、行為の中で起きると run を止める
 _WORLD_REFUSALS = frozenset(
     {
         "GroundItemNotFoundException",
@@ -62,7 +60,7 @@ class TestWorldRefusalMark:
     """世界が断った例外にだけ WorldRefusal の印が付いていることを、表に対して保証する。"""
 
     def test_exactly_the_listed_exceptions_are_world_refusals(self) -> None:
-        """WorldRefusal を継承するドメイン例外は、表に載せた 33 件とちょうど一致する。印の付け忘れも付けすぎも落ちる。"""
+        """WorldRefusal を継承するドメイン例外は、表に載せたものとちょうど一致する。印の付け忘れも付けすぎも落ちる。"""
         marked = {
             name
             for name, cls in _domain_exceptions().items()
