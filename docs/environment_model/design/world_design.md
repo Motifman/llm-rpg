@@ -157,6 +157,8 @@ class Lasts:                                # 世界に出てから ticks で、
     ticks: Ticks                            # 1 以上
     ended_text: DescriptionText             # 持っていた本人と、地面にあればその場所で見えていた人に届く文。消えたあと何も残さない
 
+    def has_run_out(self, age: Ticks) -> bool: ...   # age が ticks 以上か。LastsIndefinitely はいつも偽
+
 @final
 @dataclass(frozen=True)
 class GroupDeclaration:
@@ -502,6 +504,8 @@ class DayPhaseDeclaration:
 class ChangesEvery:
     ticks: Ticks
     transitions: WeatherTransitions        # 書かなければ既定の表
+    def weather_at(self, now: WorldTick, current: WeatherType, random: RandomSource) -> WeatherType: ...
+        # now が ticks の倍数のときだけ random から 1 回引いて transitions で選ぶ。NoChange.weather_at は引かずに current を返す
     # WeatherTransitions(odds: tuple[NextWeatherOdds, ...]): 今の天候ごとに、次の天候と 1 以上の重み (WeightedWeather) の見込み。roll で重みの累積から選ぶ。見込みの無い天候は変わらない
 
 @final

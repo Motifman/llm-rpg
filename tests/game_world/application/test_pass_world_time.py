@@ -27,7 +27,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_transit
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
-from ai_rpg_world.game_world.domain.objects_and_items import ItemRanOutEvent
+from ai_rpg_world.game_world.domain.objects_and_items import ItemGivenUpEvent, ItemRanOutEvent
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
 from ai_rpg_world.game_world.domain.person.person_vitals_events import PersonDiedEvent
@@ -223,6 +223,18 @@ class TestPassWorldTimeItems:
         assert world.carried_by_haru() == ()
         ran_out = world.events_of(ItemRanOutEvent)
         assert [(event.item, event.where, event.at) for event in ran_out] == [(lamp, CarriedBy(_HARU), WorldTick(5))]
+
+    def test_held_item_past_its_time_leaves_the_hands(self) -> None:
+        """手に持ったランプも、5 tick 進めると手から外れ、ItemGivenUpEvent が was_held=True で出る。"""
+        held_lamp = replace(_haru_carrying(_LAMP), initial_held=(_LAMP.item_spec_id,))
+        world = _World(characters=(held_lamp,), item_specs=(_LAMP,))
+        (lamp,) = world.carried_by_haru()
+
+        world.pass_ticks(5)
+
+        assert world.carried_by_haru() == ()
+        given_up = world.events_of(ItemGivenUpEvent)
+        assert [(event.item, event.was_held) for event in given_up] == [(lamp, True)]
 
     def test_item_that_ran_out_is_gone_from_the_world(self) -> None:
         """切れたランプは世界から出て、次の範囲では引けない (AggregateNotInWorldException)。"""
