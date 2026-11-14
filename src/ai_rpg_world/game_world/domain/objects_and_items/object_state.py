@@ -36,7 +36,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 from ai_rpg_world.game_world.domain.value_object import Count, ObjectId, PersonId, StateKeyId, Ticks, WorldTick
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -151,9 +151,9 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
         )
 
     @classmethod
-    def from_memento(cls, memento: ObjectStateMemento, design: WorldDesign) -> ObjectState:
+    def from_memento(cls, memento: ObjectStateMemento, nouns: DeclaredNouns) -> ObjectState:
         return cls(
-            design.nouns.object_of(memento.object_id),
+            nouns.object_of(memento.object_id),
             values=memento.values,
             stock_levels=memento.stock_levels,
             revealed=memento.revealed,

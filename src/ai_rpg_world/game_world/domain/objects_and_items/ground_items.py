@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, final
+from typing import final
 
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
@@ -13,9 +13,6 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import SpotId
-
-if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -58,7 +55,7 @@ class GroundItems(AggregateRoot[GroundItemsEvent]):
         return cls(spot_id, items=())
 
     @classmethod
-    def from_memento(cls, memento: GroundItemsMemento, design: WorldDesign) -> GroundItems:
+    def from_memento(cls, memento: GroundItemsMemento) -> GroundItems:
         return cls(memento.spot_id, items=memento.items)
 
     @property

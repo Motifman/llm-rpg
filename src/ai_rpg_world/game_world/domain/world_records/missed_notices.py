@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, final
+from typing import final
 
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.value_object import PersonId
-
-if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -28,7 +25,7 @@ class MissedNotices:
         return cls(person, ())
 
     @classmethod
-    def from_memento(cls, memento: MissedNoticesMemento, design: WorldDesign) -> MissedNotices:
+    def from_memento(cls, memento: MissedNoticesMemento) -> MissedNotices:
         return cls(memento.person, memento.notices)
 
     @property

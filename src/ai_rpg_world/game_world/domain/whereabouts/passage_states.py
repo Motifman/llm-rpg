@@ -25,7 +25,7 @@ from ai_rpg_world.game_world.domain.whereabouts.passage_state_events import (
 )
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 class PassagePresence(Enum):
@@ -91,10 +91,10 @@ class PassageStates(AggregateRoot[PassageStatesEvent]):
         )
 
     @classmethod
-    def from_memento(cls, memento: PassageStatesMemento, design: WorldDesign) -> PassageStates:
+    def from_memento(cls, memento: PassageStatesMemento, nouns: DeclaredNouns) -> PassageStates:
         for condition in memento.passages:
-            design.nouns.require_declared_passage(condition.passage)
-        return cls(memento.world_id, design.nouns.all_passages(), memento.passages)
+            nouns.require_declared_passage(condition.passage)
+        return cls(memento.world_id, nouns.all_passages(), memento.passages)
 
     @property
     def world_id(self) -> WorldId:

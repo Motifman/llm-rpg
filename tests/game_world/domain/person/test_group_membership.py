@@ -211,7 +211,7 @@ class TestGroupMembershipMemento:
         membership.join(_BOB, _BLUE)
         membership.leave(_BOB, _BLUE)
 
-        rebuilt = rebuilt_from_memento(membership, _DESIGN)
+        rebuilt = rebuilt_from_memento(membership, _DESIGN.nouns)
 
         assert rebuilt.memento() == membership.memento()
         assert rebuilt.memento() != _membership().memento()
@@ -226,7 +226,7 @@ class TestGroupMembershipMemento:
         membership = _membership()
         membership.join(_ALICE, _RED)
 
-        assert rebuilt_from_memento(membership, _DESIGN).get_events() == []
+        assert rebuilt_from_memento(membership, _DESIGN.nouns).get_events() == []
 
 
 class TestGroupMembershipMementoRefusals:
@@ -237,21 +237,21 @@ class TestGroupMembershipMementoRefusals:
         memento = _memento(PersonGroupInGrouping(_ALICE, GroupingId("teams"), GroupId("green")))
 
         with pytest.raises(UndeclaredNounException):
-            GroupMembership.from_memento(memento, _DESIGN)
+            GroupMembership.from_memento(memento, _DESIGN.nouns)
 
     def test_person_not_declared_is_refused(self) -> None:
         """宣言に無い carol が red に入っている memento から作り直すと、UndeclaredNounException を投げる。"""
         memento = _memento(PersonGroupInGrouping(PersonId("carol"), GroupingId("teams"), GroupId("red")))
 
         with pytest.raises(UndeclaredNounException):
-            GroupMembership.from_memento(memento, _DESIGN)
+            GroupMembership.from_memento(memento, _DESIGN.nouns)
 
     def test_group_of_another_grouping_is_refused(self) -> None:
         """roles の集団 keeper を teams の所属として持つ memento から作り直すと、MementoDoesNotMatchDesignException を投げる。"""
         memento = _memento(PersonGroupInGrouping(_ALICE, GroupingId("teams"), GroupId("keeper")))
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            GroupMembership.from_memento(memento, _DESIGN)
+            GroupMembership.from_memento(memento, _DESIGN.nouns)
 
     def test_two_groups_of_one_grouping_for_a_person_is_refused(self) -> None:
         """alice が teams で red と blue の両方に入っている memento を作ると、RepeatedMementoKeyException を投げる。"""

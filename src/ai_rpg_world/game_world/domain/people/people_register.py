@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.domain.value_object import DescriptionText, Display
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 
 
 @final
@@ -78,8 +78,7 @@ class PeopleRegister(AggregateRoot[PersonNamedEvent]):
         return cls(world, characters, {})
 
     @classmethod
-    def from_memento(cls, memento: PeopleRegisterMemento, design: WorldDesign) -> PeopleRegister:
-        nouns = design.nouns
+    def from_memento(cls, memento: PeopleRegisterMemento, nouns: DeclaredNouns) -> PeopleRegister:
         for entry in memento.names:
             nouns.require_declared_character(entry.person)
         return cls(memento.world_id, nouns.all_characters(), {entry.person: entry.name for entry in memento.names})

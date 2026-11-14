@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, final
+from typing import final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
@@ -11,9 +11,6 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     TimeOfDay,
 )
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
-
-if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -54,7 +51,7 @@ class WorldClock(AggregateRoot[WorldClockEvent]):
         return cls(world_id, WorldTick(0))
 
     @classmethod
-    def from_memento(cls, memento: WorldClockMemento, design: WorldDesign) -> WorldClock:
+    def from_memento(cls, memento: WorldClockMemento) -> WorldClock:
         return cls(memento.world_id, memento.now)
 
     @property

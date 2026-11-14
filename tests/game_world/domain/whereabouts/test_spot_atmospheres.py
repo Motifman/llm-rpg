@@ -102,7 +102,7 @@ class TestSpotAtmospheresMemento:
         atmospheres = _atmospheres()
         atmospheres.change(CELLAR, atmosphere(Lighting.BRIGHT))
 
-        rebuilt = rebuilt_from_memento(atmospheres, _DESIGN)
+        rebuilt = rebuilt_from_memento(atmospheres, _DESIGN.nouns)
 
         assert rebuilt.memento() == atmospheres.memento()
         assert rebuilt.atmosphere_of(CELLAR) == atmosphere(Lighting.BRIGHT)
@@ -113,7 +113,7 @@ class TestSpotAtmospheresMemento:
         atmospheres = _atmospheres()
         atmospheres.change(CELLAR, atmosphere(Lighting.BRIGHT))
 
-        assert rebuilt_from_memento(atmospheres, _DESIGN).get_events() == []
+        assert rebuilt_from_memento(atmospheres, _DESIGN.nouns).get_events() == []
 
     def test_memento_with_an_undeclared_spot_is_rejected(self) -> None:
         """宣言に無い場所 attic の雰囲気を持つ memento から作り直すと UndeclaredNounException を投げる。"""
@@ -125,7 +125,7 @@ class TestSpotAtmospheresMemento:
         )
 
         with pytest.raises(UndeclaredNounException):
-            SpotAtmospheres.from_memento(memento, _DESIGN)
+            SpotAtmospheres.from_memento(memento, _DESIGN.nouns)
 
     def test_memento_missing_a_declared_spot_is_rejected(self) -> None:
         """宣言にある地下室が memento に無いと、宣言の雰囲気で埋めずに MementoDoesNotMatchDesignException を投げる。"""
@@ -134,7 +134,7 @@ class TestSpotAtmospheresMemento:
         )
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            SpotAtmospheres.from_memento(memento, _DESIGN)
+            SpotAtmospheres.from_memento(memento, _DESIGN.nouns)
 
     def test_memento_with_one_spot_twice_is_rejected(self) -> None:
         """地下室が暗いと明るいの 2 つで書かれた memento は、作るときに RepeatedMementoKeyException を投げる。"""

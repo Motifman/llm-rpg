@@ -12,7 +12,6 @@ from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
     from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
-    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 
 
 @final
@@ -70,7 +69,7 @@ class ScenarioProgress:
         return cls(world_id, {}, {})
 
     @classmethod
-    def from_memento(cls, memento: ScenarioProgressMemento, design: WorldDesign) -> ScenarioProgress:
+    def from_memento(cls, memento: ScenarioProgressMemento) -> ScenarioProgress:
         return cls(
             memento.world_id,
             {fired.happening: fired.at for fired in memento.last_fired},

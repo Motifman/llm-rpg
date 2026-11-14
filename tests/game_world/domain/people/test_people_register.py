@@ -179,7 +179,7 @@ class TestPeopleRegisterMemento:
         register = _register()
         register.name(_ALICE, DisplayName("アリス"))
 
-        rebuilt = rebuilt_from_memento(register, _DESIGN)
+        rebuilt = rebuilt_from_memento(register, _DESIGN.nouns)
 
         assert rebuilt.memento() == register.memento()
         assert rebuilt.memento() != _register().memento()
@@ -195,7 +195,7 @@ class TestPeopleRegisterMemento:
         register = _register()
         register.name(_ALICE, DisplayName("アリス"))
 
-        assert rebuilt_from_memento(register, _DESIGN).get_events() == []
+        assert rebuilt_from_memento(register, _DESIGN.nouns).get_events() == []
 
 
 class TestPeopleRegisterMementoRefusals:
@@ -208,7 +208,7 @@ class TestPeopleRegisterMementoRefusals:
         )
 
         with pytest.raises(UndeclaredNounException):
-            PeopleRegister.from_memento(memento, _DESIGN)
+            PeopleRegister.from_memento(memento, _DESIGN.nouns)
 
     def test_two_names_for_one_person_is_refused(self) -> None:
         """alice にアリスとアリサの 2 つの名前がある memento を作ると、RepeatedMementoKeyException を投げる。"""

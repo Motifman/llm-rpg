@@ -5,7 +5,6 @@ import pytest
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
-from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.world_records_exception import (
@@ -174,7 +173,7 @@ class TestSpotSearchProgressMemento:
         progress.record_search(_BOB)
         progress.mark_found(_PERSONAL_HINT, _ALICE)
 
-        rebuilt = rebuilt_from_memento(progress, _design_with(_SHARED_CHEST, _PERSONAL_HINT))
+        rebuilt = rebuilt_from_memento(progress, _discoverables_in_cave(_SHARED_CHEST, _PERSONAL_HINT))
 
         assert rebuilt.memento() == progress.memento()
         assert rebuilt.memento() != SpotSearchProgress.start(_CAVE).memento()
@@ -190,7 +189,7 @@ class TestSpotSearchProgressMemento:
         progress = SpotSearchProgress.start(_CAVE)
         progress.record_search(_ALICE)
 
-        assert rebuilt_from_memento(progress).get_events() == []
+        assert rebuilt_from_memento(progress, _discoverables_in_cave()).get_events() == []
 
     def test_same_person_with_two_counts_is_refused(self) -> None:
         """alice の探した回数が 1 と 2 の 2 つある memento から作り直すと、RepeatedMementoKeyException を投げる。"""
@@ -201,11 +200,13 @@ class TestSpotSearchProgressMemento:
         )
 
         with pytest.raises(RepeatedMementoKeyException):
-            SpotSearchProgress.from_memento(memento, _design_with())
+            SpotSearchProgress.from_memento(memento, _discoverables_in_cave())
 
 
-def _design_with(*discoverables: DiscoverableDeclaration) -> WorldDesign:
-    return compose_world(nouns(spots=(spot("cave"), spot("beach"))), discoverables=discoverables)
+def _discoverables_in_cave(*discoverables: DiscoverableDeclaration) -> tuple[DiscoverableDeclaration, ...]:
+    return compose_world(nouns(spots=(spot("cave"), spot("beach"))), discoverables=discoverables).discoverables_at(
+        _CAVE
+    )
 
 
 def _memento(
@@ -222,7 +223,7 @@ class TestSpotSearchProgressStartsOnlyInReachableState:
         memento = _memento(counts=(PersonSearchCount(_ALICE, Count(0)),))
 
         with pytest.raises(SearchCountIsZeroException):
-            SpotSearchProgress.from_memento(memento, _design_with())
+            SpotSearchProgress.from_memento(memento, _discoverables_in_cave())
 
     def test_discoverable_of_another_spot_is_refused(self) -> None:
         """浜の見つかる物を洞窟で alice が見つけたことになっている memento から作り直すと、DiscoverableElsewhereException を投げる。"""
@@ -230,14 +231,14 @@ class TestSpotSearchProgressStartsOnlyInReachableState:
         memento = _memento(finders=(DiscoverableFinder(coin.discoverable_id, _ALICE),))
 
         with pytest.raises(DiscoverableElsewhereException):
-            SpotSearchProgress.from_memento(memento, _design_with(coin))
+            SpotSearchProgress.from_memento(memento, _discoverables_in_cave(coin))
 
     def test_undeclared_discoverable_is_refused(self) -> None:
         """宣言に無い見つかる物を alice が見つけたことになっている memento から作り直すと、DiscoverableElsewhereException を投げる。"""
         memento = _memento(finders=(DiscoverableFinder(DiscoverableId("ghost_chest"), _ALICE),))
 
         with pytest.raises(DiscoverableElsewhereException):
-            SpotSearchProgress.from_memento(memento, _design_with())
+            SpotSearchProgress.from_memento(memento, _discoverables_in_cave())
 
     def test_once_in_world_discoverable_found_by_two_people_is_refused(self) -> None:
         """世界で 1 度だけ見つかる宝箱を alice と bob が見つけたことになっている memento から作り直すと、OnceInWorldFoundByManyException を投げる。"""
@@ -249,7 +250,7 @@ class TestSpotSearchProgressStartsOnlyInReachableState:
         )
 
         with pytest.raises(OnceInWorldFoundByManyException):
-            SpotSearchProgress.from_memento(memento, _design_with(_SHARED_CHEST))
+            SpotSearchProgress.from_memento(memento, _discoverables_in_cave(_SHARED_CHEST))
 
     def test_once_per_person_discoverable_found_by_two_people_is_accepted(self) -> None:
         """1 人ずつ見つかる壁の彫り物を alice と bob が見つけた memento からは作り直せ、2 人とも見つけている。"""
@@ -260,7 +261,7 @@ class TestSpotSearchProgressStartsOnlyInReachableState:
             )
         )
 
-        rebuilt = SpotSearchProgress.from_memento(memento, _design_with(_PERSONAL_HINT))
+        rebuilt = SpotSearchProgress.from_memento(memento, _discoverables_in_cave(_PERSONAL_HINT))
 
         assert rebuilt.is_found(_PERSONAL_HINT, _ALICE)
         assert rebuilt.is_found(_PERSONAL_HINT, _BOB)

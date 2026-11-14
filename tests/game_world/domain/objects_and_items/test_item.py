@@ -352,7 +352,7 @@ class TestItemMemento:
         item.set(_WICK, ChoiceValue(_LIT))
         item.set(_OIL, CountValue(Count(1)))
 
-        rebuilt = rebuilt_from_memento(item, _design_with(spec))
+        rebuilt = rebuilt_from_memento(item, _design_with(spec).nouns)
 
         assert rebuilt.memento() == item.memento()
         assert rebuilt.memento() != _came_into_world(spec).memento()
@@ -368,7 +368,7 @@ class TestItemMemento:
         item = _came_into_world(spec)
         item.leave_world()
 
-        rebuilt = rebuilt_from_memento(item, _design_with(spec))
+        rebuilt = rebuilt_from_memento(item, _design_with(spec).nouns)
 
         assert rebuilt.memento() == item.memento()
         with pytest.raises(ItemAlreadyLeftWorldException):
@@ -380,7 +380,7 @@ class TestItemMemento:
         item = _came_into_world(spec)
         item.set(_WICK, ChoiceValue(_LIT))
 
-        assert rebuilt_from_memento(item, _design_with(spec)).get_events() == []
+        assert rebuilt_from_memento(item, _design_with(spec).nouns).get_events() == []
 
 
 class TestItemMementoAgainstDesign:
@@ -391,14 +391,14 @@ class TestItemMementoAgainstDesign:
         memento = _came_into_world().memento()
 
         with pytest.raises(UndeclaredNounException):
-            Item.from_memento(memento, compose_world())
+            Item.from_memento(memento, compose_world().nouns)
 
     def test_missing_state_key_is_refused(self) -> None:
         """宣言にある oil の値が無い memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
         memento = _lantern_memento(ItemStateKeyValue(_WICK.key, ChoiceValue(_LIT)))
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            Item.from_memento(memento, _design_with(_lantern()))
+            Item.from_memento(memento, _design_with(_lantern()).nouns)
 
     def test_undeclared_state_key_is_refused(self) -> None:
         """宣言に無い鍵 fuel の値を持つ memento を作り直すと、MementoDoesNotMatchDesignException を投げる。"""
@@ -409,7 +409,7 @@ class TestItemMementoAgainstDesign:
         )
 
         with pytest.raises(MementoDoesNotMatchDesignException):
-            Item.from_memento(memento, _design_with(_lantern()))
+            Item.from_memento(memento, _design_with(_lantern()).nouns)
 
     def test_value_not_fitting_the_key_kind_is_refused(self) -> None:
         """選択の鍵 wick に数の値を持つ memento を作り直すと、StateValueMismatchesKindException を投げる。"""
@@ -419,7 +419,7 @@ class TestItemMementoAgainstDesign:
         )
 
         with pytest.raises(StateValueMismatchesKindException):
-            Item.from_memento(memento, _design_with(_lantern()))
+            Item.from_memento(memento, _design_with(_lantern()).nouns)
 
 
 class TestItemRefusesRepeatedKey:
@@ -433,7 +433,7 @@ class TestItemRefusesRepeatedKey:
         )
 
         with pytest.raises(RepeatedMementoKeyException):
-            Item.from_memento(memento, _design_with(_lantern()))
+            Item.from_memento(memento, _design_with(_lantern()).nouns)
 
     def test_same_key_with_two_values_is_refused_by_constructor(self) -> None:
         """wick が unlit と lit の 2 つある値で Item を直に作ると、RepeatedMementoKeyException を投げる。"""
