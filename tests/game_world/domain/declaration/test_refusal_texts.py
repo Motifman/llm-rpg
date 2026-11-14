@@ -13,6 +13,8 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
     TooTired,
 )
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure, NoText
+from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     BlankRefusalCodeException,
@@ -25,6 +27,8 @@ from ai_rpg_world.game_world.domain.value_object import PersonId
 
 ALICE = PersonId("alice")
 HIDDEN = TextWithUnassignedPeople("今はできない。")
+UNLISTED = TextWithUnassignedPeople("うまくいかなかった。")
+SECTION_FULL = RefusalCode("GAME_WORLD.WHEREABOUTS.SECTION_FULL")
 
 
 def _common_rules(**overrides: str) -> dict[CommonRuleRefusalKind, TextWithUnassignedPeople]:
@@ -60,7 +64,9 @@ class TestRefusalTexts:
 
     def test_text_for_common_rule_assigns_the_actor(self) -> None:
         """{actor} を書いた文は、行った人の PersonId を当てた TextAboutPeople で返る。"""
-        texts = RefusalTexts(common_rules=_common_rules(BUSY="{actor}は手が離せない。"), world_state={}, hidden=HIDDEN)
+        texts = RefusalTexts(
+            common_rules=_common_rules(BUSY="{actor}は手が離せない。"), world_state={}, hidden=HIDDEN, unlisted=UNLISTED
+        )
 
         assert texts.common_rule_text(Busy(), ALICE) == TextAboutPeople(
             TextWithUnassignedPeople("{actor}は手が離せない。"), {"actor": ALICE}
@@ -69,7 +75,10 @@ class TestRefusalTexts:
     def test_text_without_placeholder_assigns_no_one(self) -> None:
         """人を書いていない文は、誰も当てずにそのまま返る。"""
         texts = RefusalTexts(
-            common_rules=_common_rules(TOO_TIRED="疲れすぎて動けない。"), world_state={}, hidden=HIDDEN
+            common_rules=_common_rules(TOO_TIRED="疲れすぎて動けない。"),
+            world_state={},
+            hidden=HIDDEN,
+            unlisted=UNLISTED,
         )
 
         assert texts.common_rule_text(TooTired(), ALICE) == TextAboutPeople(
@@ -82,24 +91,75 @@ class TestRefusalTexts:
         del common_rules[CommonRuleRefusalKind.OUT_OF_REACH]
 
         with pytest.raises(MissingCommonRuleRefusalTextException):
-            RefusalTexts(common_rules=common_rules, world_state={}, hidden=HIDDEN)
+            RefusalTexts(common_rules=common_rules, world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
 
-    @pytest.mark.parametrize("where", ["common_rules", "world_state", "hidden"])
+    @pytest.mark.parametrize("where", ["common_rules", "world_state", "hidden", "unlisted"])
     def test_person_other_than_actor_raises(self, where: str) -> None:
         """どの文にも {actor} 以外の人 ({target} など) を書くと、作るときに UnknownPersonInRefusalTextException を投げる。"""
         bad = TextWithUnassignedPeople("{target}が遠い。")
         common_rules = _common_rules()
         world_state = {RefusalCode("GAME_WORLD.WHEREABOUTS.SECTION_FULL"): TextWithUnassignedPeople("満員だ。")}
         hidden = HIDDEN
+        unlisted = UNLISTED
         if where == "common_rules":
             common_rules[CommonRuleRefusalKind.NOT_TOGETHER] = bad
         elif where == "world_state":
             world_state[RefusalCode("GAME_WORLD.WHEREABOUTS.SECTION_FULL")] = bad
-        else:
+        elif where == "hidden":
             hidden = bad
+        else:
+            unlisted = bad
 
         with pytest.raises(UnknownPersonInRefusalTextException):
-            RefusalTexts(common_rules=common_rules, world_state=world_state, hidden=hidden)
+            RefusalTexts(common_rules=common_rules, world_state=world_state, hidden=hidden, unlisted=unlisted)
+
+
+class TestWorldStateText:
+    """RefusalTexts.world_state_text が、集約の断りの文を表から引き、表に無い理由には unlisted の文を返すことを保証する。"""
+
+    def test_listed_code_returns_its_text_with_actor(self) -> None:
+        """表に書いた RefusalCode は、その文に行った人を当てて返る。"""
+        texts = RefusalTexts(
+            common_rules=_common_rules(),
+            world_state={SECTION_FULL: TextWithUnassignedPeople("{actor}の乗る場所が無い。")},
+            hidden=HIDDEN,
+            unlisted=UNLISTED,
+        )
+
+        assert texts.world_state_text(SECTION_FULL, ALICE) == TextAboutPeople(
+            TextWithUnassignedPeople("{actor}の乗る場所が無い。"), {"actor": ALICE}
+        )
+
+    def test_unlisted_code_returns_unlisted_text(self) -> None:
+        """表に無い RefusalCode は、hidden ではなく unlisted の文で返る。"""
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+
+        assert texts.world_state_text(SECTION_FULL, ALICE) == TextAboutPeople(UNLISTED, {})
+
+
+class TestPreconditionText:
+    """RefusalTexts.precondition_text が、作者の条件の理由を文にし、伏せた理由には hidden の文を返すことを保証する。"""
+
+    def test_failure_reason_with_text_returns_authored_text(self) -> None:
+        """文のある FailureReason は、作者の文がそのまま返る。"""
+        authored = TextAboutPeople(TextWithUnassignedPeople("{actor}は鍵を持っていない。"), {"actor": ALICE})
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+
+        assert texts.precondition_text(FailureReason(ConditionPath.root(), authored), ALICE) == authored
+
+    def test_hidden_failure_returns_hidden_text(self) -> None:
+        """HiddenFailure は、hidden の文で返る。"""
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+
+        assert texts.precondition_text(HiddenFailure(ConditionPath.root()), ALICE) == TextAboutPeople(HIDDEN, {})
+
+    def test_failure_reason_without_text_returns_hidden_text(self) -> None:
+        """文の無い FailureReason (NoText) は、hidden の文で返る。"""
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+
+        assert texts.precondition_text(FailureReason(ConditionPath.root(), NoText()), ALICE) == TextAboutPeople(
+            HIDDEN, {}
+        )
 
 
 class TestRefusalCode:

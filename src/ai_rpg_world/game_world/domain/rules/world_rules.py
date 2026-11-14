@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.rules_exception import (
@@ -18,6 +18,9 @@ from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.rules.tend_rule import NoTending, TendRule
 from ai_rpg_world.game_world.domain.sound.hearing_values import HearingValues
 from ai_rpg_world.game_world.domain.value_object import Capacity, HitPoints, Ticks
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 
 # 移動は通る通路の時間で決まり、話すことと待つことは行っているあいだを作らない
 _KINDS_WITHOUT_DEFAULT_DURATION = frozenset(
@@ -51,6 +54,11 @@ class WorldRules:
                 f"WorldRules.action_durations must not declare {not_applicable}, which take no default duration"
             )
         object.__setattr__(self, "action_durations", MappingProxyType(dict(self.action_durations)))
+
+    def duration_of(self, kind: ActionKind, declared: Ticks | DefaultDuration) -> Ticks:
+        if isinstance(declared, Ticks):
+            return declared
+        return self.action_durations[kind]
 
     def allows_tending(self) -> bool:
         return isinstance(self.tend, TendRule)
