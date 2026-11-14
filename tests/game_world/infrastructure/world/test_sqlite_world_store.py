@@ -49,9 +49,16 @@ def _created(path: Path | str, design: WorldDesign, *aggregates: _Remembered) ->
             stored = GAME_WORLD_CODECS.stored(aggregate.memento())
             connection.execute(
                 "INSERT INTO world_state (kind, key, version, state) VALUES (?, ?, ?, ?)",
-                (stored.kind, WORLD.value, stored.version, stored.state),
+                (stored.kind, _owner_key(aggregate.memento()), stored.version, stored.state),
             )
     return SqliteWorldStore.open(path, scenario_hash=_HASH, design=design, random=SeedableRandomSource(1))
+
+
+def _owner_key(memento: object) -> str:
+    for owner in ("world_id", "person", "person_id", "item_id", "object_id", "spot_id", "decision_id"):
+        if hasattr(memento, owner):
+            return str(getattr(memento, owner).value)
+    raise AssertionError(f"{type(memento).__name__} has no owner")
 
 
 class TestSqliteWorldStoreContract(WorldStoreContract):
