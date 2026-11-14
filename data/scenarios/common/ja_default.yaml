@@ -101,6 +101,7 @@ refusal_texts:
   unlisted: うまくいかなかった。
 
 built_in_action_perceptions:
+  item_joiner: と
   travel:
     witness:
       clear: "{actor}が{destination}へ去っていった。"

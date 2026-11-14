@@ -10,6 +10,7 @@ from typing_extensions import assert_never
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechReach, Whisper
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
+from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.verb.noticed_on_waking import NoticedOnWaking
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
@@ -38,6 +39,7 @@ class BuiltInActionPerceptions:
     ordinary_voice: PerceptionDeclaration
     shout: PerceptionDeclaration
     arrival: PerceptionDeclaration
+    item_joiner: ItemNameJoiner
 
     def __post_init__(self) -> None:
         not_built_in = sorted(kind.name for kind in self.by_kind.keys() - BuiltInPerceptionRow.kinds())

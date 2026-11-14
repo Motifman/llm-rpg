@@ -63,6 +63,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     SectionAccessDeclaration,
     WorldStageEffectsDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw
@@ -258,6 +259,7 @@ def built_in_action_perceptions(without: Iterable[ActionKind] = ()) -> BuiltInAc
         ordinary_voice=lever_pulled_quietly(),
         shout=lever_pulled_quietly(),
         arrival=lever_pulled_quietly(),
+        item_joiner=ItemNameJoiner("と"),
     )
 
 
