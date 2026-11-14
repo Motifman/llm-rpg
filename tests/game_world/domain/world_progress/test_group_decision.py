@@ -16,7 +16,8 @@ from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     NoVotersGivenException,
     VoterNotInDecisionException,
 )
-from ai_rpg_world.game_world.domain.value_object import DisplayName, GroupDecisionId, PersonId
+from ai_rpg_world.game_world.domain.person import Alive, Dead, Down, WorldHappening
+from ai_rpg_world.game_world.domain.value_object import DisplayName, GroupDecisionId, PersonId, WorldTick
 from ai_rpg_world.game_world.domain.world_progress import (
     Abstain,
     Ballot,
@@ -428,6 +429,65 @@ class TestGroupDecisionWithdrawVoter:
         decision.withdraw_voter(_ALICE)
 
         assert decision.get_events() == []
+
+
+class TestGroupDecisionWithdrawPerson:
+    """GroupDecision.withdraw_person が、外す人の体の状態から、選ばれる人からも外すかを決めることを保証する。"""
+
+    def test_dead_person_is_withdrawn_as_choice_before_as_voter(self) -> None:
+        """死んだ carol を外すと、ChoiceWithdrawnEvent のあとに VoterWithdrawnEvent をためる。"""
+        decision = _started()
+
+        decision.withdraw_person(_CAROL, Dead(died_at=WorldTick(4)))
+
+        assert [type(event) for event in decision.get_events()] == [ChoiceWithdrawnEvent, VoterWithdrawnEvent]
+
+    def test_dead_person_is_not_chosen_by_ballots_cast_for_them(self) -> None:
+        """alice と bob が carol に入れ、carol だけがまだ入れていないときに carol が死ぬと、2 人の票は戻り、集計されずに開いたままになる。"""
+        decision = _started()
+        decision.cast(_ALICE, VoteFor(_CAROL))
+        decision.cast(_BOB, VoteFor(_CAROL))
+        decision.clear_events()
+
+        decision.withdraw_person(_CAROL, Dead(died_at=WorldTick(4)))
+
+        assert decision.is_open() is True
+        returned = decision.get_events()[0]
+        assert isinstance(returned, ChoiceWithdrawnEvent)
+        assert returned.returned_to == frozenset({_ALICE, _BOB})
+
+    def test_fallen_person_stays_a_choice(self) -> None:
+        """alice と bob が carol に入れ、carol だけがまだ入れていないときに carol が倒れると、carol は投票する人から外れ、残りの票で carol が選ばれる。"""
+        decision = _started()
+        decision.cast(_ALICE, VoteFor(_CAROL))
+        decision.cast(_BOB, VoteFor(_CAROL))
+
+        decision.withdraw_person(_CAROL, Down(fell_at=WorldTick(4), cause=WorldHappening()))
+
+        event = _last_event(decision)
+        assert isinstance(event, GroupDecisionReachedEvent)
+        assert event.chosen == _CAROL
+
+    def test_living_person_is_not_withdrawn(self) -> None:
+        """生きている carol を外そうとしても、何も変えずイベントもためない。"""
+        decision = _started()
+
+        decision.withdraw_person(_CAROL, Alive())
+
+        assert decision.get_events() == []
+        assert decision.memento() == _started().memento()
+
+    def test_withdrawing_dead_person_twice_changes_nothing_the_second_time(self) -> None:
+        """死んだ carol を 2 度外しても、2 度目は状態を変えずイベントもためない。"""
+        decision = _started()
+        decision.withdraw_person(_CAROL, Dead(died_at=WorldTick(4)))
+        after_first = decision.memento()
+        decision.clear_events()
+
+        decision.withdraw_person(_CAROL, Dead(died_at=WorldTick(4)))
+
+        assert decision.get_events() == []
+        assert decision.memento() == after_first
 
 
 class TestGroupDecisionClose:
