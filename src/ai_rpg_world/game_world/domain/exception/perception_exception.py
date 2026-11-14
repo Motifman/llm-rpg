@@ -7,3 +7,7 @@ class DeadPersonCannotPerceiveAsLivingException(GameWorldDomainException):
 
 class TargetNotInvolvedException(GameWorldDomainException):
     error_code = "GAME_WORLD.PERCEPTION.TARGET_NOT_INVOLVED"
+
+
+class PerceptionTargetNotGivenException(GameWorldDomainException):
+    error_code = "GAME_WORLD.PERCEPTION.TARGET_NOT_GIVEN"

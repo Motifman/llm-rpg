@@ -21,6 +21,10 @@ class NotBuiltInActionPerceptionException(GameWorldDomainException):
     error_code = "GAME_WORLD.VERB_DECLARATION.NOT_BUILT_IN_ACTION_PERCEPTION"
 
 
+class AnnouncementInBuiltInActionPerceptionException(GameWorldDomainException):
+    error_code = "GAME_WORLD.VERB_DECLARATION.ANNOUNCEMENT_IN_BUILT_IN_ACTION_PERCEPTION"
+
+
 class UnfilledNameInBuiltInActionPerceptionException(GameWorldDomainException):
     error_code = "GAME_WORLD.VERB_DECLARATION.UNFILLED_NAME_IN_BUILT_IN_ACTION_PERCEPTION"
 

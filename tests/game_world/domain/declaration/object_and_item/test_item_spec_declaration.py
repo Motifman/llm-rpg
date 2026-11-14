@@ -31,6 +31,8 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_except
     StateKeyOwnerMismatchException,
     StateValueMismatchesKindException,
 )
+from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import ItemDoesNotRunOutException
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     DescriptionText,
@@ -187,3 +189,24 @@ class TestLasts:
         lasts = Lasts(ticks=Ticks(1), ended_text=DescriptionText("灯が燃え尽きた。"))
 
         assert (lasts.ticks, lasts.ended_text) == (Ticks(1), DescriptionText("灯が燃え尽きた。"))
+
+
+class TestLastsEndedNotice:
+    """Lasts と LastsIndefinitely が、品物の時間が切れたときの文を、宣言の ended_text から答えることを保証する。"""
+
+    def test_ended_text_becomes_a_text_about_nobody(self) -> None:
+        """ended_text「カンテラの灯が燃え尽きた。」は、人を当てない同じ文になる。"""
+        lasts = Lasts(ticks=Ticks(3), ended_text=DescriptionText("カンテラの灯が燃え尽きた。"))
+
+        assert lasts.ended_notice() == TextWithUnassignedPeople("カンテラの灯が燃え尽きた。").about({})
+
+    def test_braces_in_ended_text_stay_letters(self) -> None:
+        """ended_text に波括弧が入っていても、プレースホルダーとして読まずに文字のまま残す。"""
+        lasts = Lasts(ticks=Ticks(3), ended_text=DescriptionText("{灯}が消えた。"))
+
+        assert lasts.ended_notice().template.placeholders() == frozenset()
+
+    def test_item_lasting_indefinitely_has_no_ended_notice(self) -> None:
+        """いつまでも消えない品物に時間切れの文を尋ねると ItemDoesNotRunOutException を投げる。"""
+        with pytest.raises(ItemDoesNotRunOutException):
+            LastsIndefinitely().ended_notice()

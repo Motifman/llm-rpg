@@ -12,20 +12,24 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
 )
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
+    AnnouncementInBuiltInActionPerceptionException,
     NotBuiltInActionPerceptionException,
     TargetTextNotFittingTargetException,
     TargetTextWithoutTargetException,
     UnfilledNameInBuiltInActionPerceptionException,
 )
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.perception import SightStimulus
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import PersonBody, Teleported
 from tests.game_world.support.verb_declarations_for_tests import (
     bell_rung_for_everyone,
     lever_pulled_quietly,
     seen_clearly_only,
 )
+from tests.game_world.support.world_design_for_tests import nouns, spot
 
 _REFUSED_KINDS = (
     ActionKind.INTERACT_WITH_OBJECT,
@@ -52,6 +56,7 @@ _KEPT_KINDS = (
 )
 
 
+_NOUNS = nouns(spots=(spot("plaza"), spot("well")))
 _ORIGIN_UNFILLED = TextWithUnassignedPeople("{origin}の方から物音がした。")
 _NO_ONE = TextWithUnassignedPeople("物音がした。")
 
@@ -175,10 +180,6 @@ class TestBuiltInActionPerceptionsNames:
                 lever_pulled_quietly(),
                 sound=SoundDeclaration(loudness=Loudness.NORMAL, clear=_NO_ONE, muffled=_ORIGIN_UNFILLED),
             ),
-            replace(
-                bell_rung_for_everyone(),
-                announcement=replace(bell_rung_for_everyone().announcement, text=_ORIGIN_UNFILLED),
-            ),
         ],
         ids=[
             "dim",
@@ -188,11 +189,10 @@ class TestBuiltInActionPerceptionsNames:
             "on_failure",
             "sound_clear",
             "sound_muffled",
-            "announcement",
         ],
     )
     def test_unfilled_name_in_any_text_raises(self, perception: PerceptionDeclaration) -> None:
-        """ささやく知覚の、見た人の dim・unseen_actor・noticed_later、相手が見る文、失敗の文、音の clear・muffled、知らせのどれか 1 つに、埋まらない {origin} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
+        """ささやく知覚の、見た人の dim・unseen_actor・noticed_later、相手が見る文、失敗の文、音の clear・muffled のどれか 1 つに、埋まらない {origin} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
         with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
             _perceptions(whisper=perception)
 
@@ -262,6 +262,44 @@ class TestBuiltInActionPerceptionsTargetTexts:
 
         with pytest.raises(TargetTextWithoutTargetException):
             _perceptions(**{field: perception})
+
+
+class TestBuiltInActionPerceptionsAnnouncement:
+    """BuiltInActionPerceptions が、世界の知らせを書いた行を作るときに断ることを保証する。"""
+
+    def test_arrival_with_announcement_raises_naming_the_row(self) -> None:
+        """着いたの行に世界の知らせを書くと、行の名前 arrival を添えて AnnouncementInBuiltInActionPerceptionException を投げる。"""
+        with pytest.raises(AnnouncementInBuiltInActionPerceptionException, match="arrival"):
+            _perceptions(arrival=bell_rung_for_everyone())
+
+    def test_by_kind_row_with_announcement_raises_naming_the_row(self) -> None:
+        """拾うの行に世界の知らせを書くと、行の名前 PICK_UP を添えて AnnouncementInBuiltInActionPerceptionException を投げる。"""
+        with pytest.raises(AnnouncementInBuiltInActionPerceptionException, match="PICK_UP"):
+            _perceptions(by_kind={ActionKind.PICK_UP: bell_rung_for_everyone()})
+
+
+class TestBuiltInActionPerceptionsArrival:
+    """BuiltInActionPerceptions.arrival_seen_at が、来た場所の呼び名で arrival の文を埋め、teleport では刺激を作らないことを保証する。"""
+
+    def test_walking_in_fills_origin_with_the_spot_name(self) -> None:
+        """広場から井戸に歩いて着くと、arrival の文の {origin} が広場の呼び名で埋まった見える刺激が 1 つできる。"""
+        perceptions = _perceptions(arrival=_seen_as("{actor}が{origin}から来た。"))
+
+        [stimulus] = perceptions.arrival_seen_at(
+            SpotId("well"), PersonBody(PersonId("hal")), SpotId("plaza"), _NOUNS, WorldTick(2)
+        )
+
+        assert isinstance(stimulus, SightStimulus)
+        assert stimulus.witness.clear.template.template == "{actor}がplazaから来た。"
+
+    def test_teleporting_in_makes_no_stimulus(self) -> None:
+        """teleport で着いたときは来た場所が無いので、刺激を作らない。"""
+        perceptions = _perceptions(arrival=_seen_as("{actor}が{origin}から来た。"))
+
+        assert (
+            perceptions.arrival_seen_at(SpotId("well"), PersonBody(PersonId("hal")), Teleported(), _NOUNS, WorldTick(2))
+            == ()
+        )
 
 
 class TestBuiltInActionPerceptionsKeepsItsOwnTable:

@@ -260,6 +260,20 @@ class TestSpeechAndArrivalPerceptions:
         assert [flaw.location.field for flaw in flaws] == ["built_in_action_perceptions"]
         assert "speak" in flaws[0].reason
 
+    def test_arrival_with_announcement_is_a_flaw_naming_arrival(self, tmp_path: Path) -> None:
+        """arrival の行に世界の知らせ (announcement) を書くと、組み込みの行為の知覚の表の DesignFlaw になり、理由に arrival が出る。"""
+        text = _LIFT_LANDING + (
+            "built_in_action_perceptions:\n"
+            "  arrival:\n"
+            '    witness: { clear: "{actor}が来た。" }\n'
+            "    announcement: { audience: { where: { all_of: [] } }, text: 誰かが来た。, salience: notable }\n"
+        )
+
+        flaws = _flaws(tmp_path, text)
+
+        assert [flaw.location.field for flaw in flaws] == ["built_in_action_perceptions"]
+        assert "arrival" in flaws[0].reason
+
 
 class TestBuiltInTargetTexts:
     """built_in_action_perceptions の相手が見る文 (target) を、相手のいる行為にだけ書けることを保証する。"""

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
-from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 
 _WITH_TARGET = (ActionKind.HAND_OVER, ActionKind.TEND)
@@ -20,7 +18,6 @@ _WITHOUT_TARGET = (
     ActionKind.PUT_AWAY,
     ActionKind.CAST_BALLOT,
 )
-_LOCATION = DesignLocation("built_in_action_perceptions", "row", "announcement")
 
 
 class TestBuiltInPerceptionRowTarget:
@@ -81,19 +78,3 @@ class TestBuiltInPerceptionRowNames:
     def test_row_without_target_cannot_name_target(self) -> None:
         """ふつうに話すの行は {actor}・{speech} だけを書ける。"""
         assert BuiltInPerceptionRow.speak().nameable == frozenset({"actor", "speech"})
-
-
-class TestBuiltInPerceptionRowPlacement:
-    """BuiltInPerceptionRow が、知らせの条件に相手を読めるかを、相手がいるかから決めることを保証する。"""
-
-    def test_row_with_target_allows_reading_target(self) -> None:
-        """渡すの行の照らし合わせの場所は、相手 (TARGET) を読める。"""
-        placement = BuiltInPerceptionRow.of_kind(ActionKind.HAND_OVER).placement(_LOCATION)
-
-        assert SubjectKind.TARGET in placement.subjects
-
-    def test_row_without_target_refuses_reading_target(self) -> None:
-        """拾うの行の照らし合わせの場所は、相手 (TARGET) を読めず、行う人 (ACTOR) は読める。"""
-        placement = BuiltInPerceptionRow.of_kind(ActionKind.PICK_UP).placement(_LOCATION)
-
-        assert (SubjectKind.TARGET in placement.subjects, SubjectKind.ACTOR in placement.subjects) == (False, True)

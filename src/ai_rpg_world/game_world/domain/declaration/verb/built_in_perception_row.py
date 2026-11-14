@@ -4,8 +4,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import final
 
-from ai_rpg_world.game_world.domain.declaration.rule_placement import RulePlacement
-from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import NotBuiltInActionPerceptionException
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 
@@ -51,11 +49,6 @@ class BuiltInPerceptionRow:
     def nameable(self) -> frozenset[str]:
         people = {_ACTOR, _TARGET} if self.has_target else {_ACTOR}
         return self.names_of_things | people
-
-    def placement(self, location: DesignLocation) -> RulePlacement:
-        if self.has_target:
-            return RulePlacement.in_person_interaction(location, frozenset())
-        return RulePlacement.in_action(location, frozenset())
 
 
 _ROW_OF_KIND: Mapping[ActionKind, BuiltInPerceptionRow] = {
