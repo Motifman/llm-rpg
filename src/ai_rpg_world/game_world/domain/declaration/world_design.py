@@ -273,11 +273,6 @@ class WorldDesign:
                     look.when,
                 )
 
-        for row, perception in built_in_action_perceptions.rows():
-            review.requirements(
-                row.placement(DesignLocation("built_in_action_perceptions", row.name, "announcement")),
-                perception.requirements(),
-            )
         review.flaws += world_rules.design_flaws(replace(_WORLD_LOCATION, field="world_rules"))
         review.flaws += built_in_action_perceptions.flaws_for(
             world_rules, replace(_WORLD_LOCATION, field="built_in_action_perceptions")

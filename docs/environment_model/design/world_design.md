@@ -604,6 +604,7 @@ class BuiltInActionPerceptions:             # どの世界にもある行為 (�
     # 刺激に変える役が宣言の呼び名 (DisplayName) で先に埋め、人のプレースホルダーだけを残した TextAboutPeople にする
     # 操作 (INTERACT_WITH_*)・区画の出入り (ENTER_SECTION / LEAVE_SECTION) は宣言の perceived_as で知覚されるので、書けば作れない (D2026)
     # モンスターへの攻撃 (ATTACK_MONSTER) は表の行に持ち、{monster} を書ける (#1971、monster.md)
+    # どの行にも世界の知らせ (announcement) は書けない。知らせの相手は行為の前の世界で選ぶもので、組み込みの行為には選ぶところが無く、書いても届かないため。書けば作れない (#2152)
 
 @final
 @dataclass(frozen=True)

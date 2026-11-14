@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
 )
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
+    AnnouncementInBuiltInActionPerceptionException,
     NotBuiltInActionPerceptionException,
     TargetTextNotFittingTargetException,
     TargetTextWithoutTargetException,
@@ -175,10 +176,6 @@ class TestBuiltInActionPerceptionsNames:
                 lever_pulled_quietly(),
                 sound=SoundDeclaration(loudness=Loudness.NORMAL, clear=_NO_ONE, muffled=_ORIGIN_UNFILLED),
             ),
-            replace(
-                bell_rung_for_everyone(),
-                announcement=replace(bell_rung_for_everyone().announcement, text=_ORIGIN_UNFILLED),
-            ),
         ],
         ids=[
             "dim",
@@ -188,11 +185,10 @@ class TestBuiltInActionPerceptionsNames:
             "on_failure",
             "sound_clear",
             "sound_muffled",
-            "announcement",
         ],
     )
     def test_unfilled_name_in_any_text_raises(self, perception: PerceptionDeclaration) -> None:
-        """ささやく知覚の、見た人の dim・unseen_actor・noticed_later、相手が見る文、失敗の文、音の clear・muffled、知らせのどれか 1 つに、埋まらない {origin} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
+        """ささやく知覚の、見た人の dim・unseen_actor・noticed_later、相手が見る文、失敗の文、音の clear・muffled のどれか 1 つに、埋まらない {origin} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
         with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
             _perceptions(whisper=perception)
 
@@ -262,6 +258,20 @@ class TestBuiltInActionPerceptionsTargetTexts:
 
         with pytest.raises(TargetTextWithoutTargetException):
             _perceptions(**{field: perception})
+
+
+class TestBuiltInActionPerceptionsAnnouncement:
+    """BuiltInActionPerceptions が、世界の知らせを書いた行を作るときに断ることを保証する。"""
+
+    def test_arrival_with_announcement_raises_naming_the_row(self) -> None:
+        """着いたの行に世界の知らせを書くと、行の名前 arrival を添えて AnnouncementInBuiltInActionPerceptionException を投げる。"""
+        with pytest.raises(AnnouncementInBuiltInActionPerceptionException, match="arrival"):
+            _perceptions(arrival=bell_rung_for_everyone())
+
+    def test_by_kind_row_with_announcement_raises_naming_the_row(self) -> None:
+        """拾うの行に世界の知らせを書くと、行の名前 PICK_UP を添えて AnnouncementInBuiltInActionPerceptionException を投げる。"""
+        with pytest.raises(AnnouncementInBuiltInActionPerceptionException, match="PICK_UP"):
+            _perceptions(by_kind={ActionKind.PICK_UP: bell_rung_for_everyone()})
 
 
 class TestBuiltInActionPerceptionsKeepsItsOwnTable:

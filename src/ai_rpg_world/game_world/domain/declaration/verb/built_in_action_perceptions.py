@@ -8,11 +8,13 @@ from typing import final
 from typing_extensions import assert_never
 
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechReach, Whisper
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.verb.built_in_perception_row import BuiltInPerceptionRow
 from ai_rpg_world.game_world.domain.declaration.verb.noticed_on_waking import NoticedOnWaking
 from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
+    AnnouncementInBuiltInActionPerceptionException,
     NotBuiltInActionPerceptionException,
     TargetTextNotFittingTargetException,
     TargetTextWithoutTargetException,
@@ -39,6 +41,11 @@ class BuiltInActionPerceptions:
                 f"BuiltInActionPerceptions.by_kind must not declare {not_built_in}, which are not perceived through it"
             )
         for row, perception in self.rows():
+            # 知らせの相手は行為の前の世界で選ぶもので、組み込みの行為には選ぶ人がいない。書いても届かない。
+            if not isinstance(perception.announcement, NoAnnouncement):
+                raise AnnouncementInBuiltInActionPerceptionException(
+                    f"the {row.name} perception cannot announce to people chosen elsewhere"
+                )
             unfilled = sorted(perception.placeholders() - row.nameable)
             if unfilled:
                 raise UnfilledNameInBuiltInActionPerceptionException(
