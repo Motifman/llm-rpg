@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
+from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoWeather, WeatherDeclaration, WeatherState
-from ai_rpg_world.game_world.domain.value_object import WorldId
+from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
 
 
 @final
@@ -58,6 +59,9 @@ class Weather(AggregateRoot[WeatherChangedEvent]):
         self.add_event(
             WeatherChangedEvent(**new_event_stamp(), world_id=self._world_id, before=before, after=new_state)
         )
+
+    def pass_time(self, now: WorldTick, declaration: WeatherDeclaration, random: RandomSource) -> None:
+        self.change(declaration.weather_after(now, self._current, random))
 
     def current(self) -> WeatherState:
         return self._current
