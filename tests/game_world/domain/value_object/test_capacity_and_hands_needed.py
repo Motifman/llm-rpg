@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
-from ai_rpg_world.game_world.domain.value_object import Capacity, HandsNeeded
+from ai_rpg_world.game_world.domain.value_object import Capacity, HandsInUse, HandsNeeded
 
 
 class TestCapacity:
@@ -45,3 +45,20 @@ class TestHandsNeeded:
         """真偽値や小数の 1 は ValueOutOfRangeException を投げる。"""
         with pytest.raises(ValueOutOfRangeException):
             HandsNeeded(raw)  # type: ignore[arg-type]
+
+
+class TestHandsInUse:
+    """HandsInUse が、使っている手の数を足し合わせ、人の手の数を超えるかを答えることを保証する。"""
+
+    def test_one_and_two_handed_items_exceed_the_hands_of_a_person(self) -> None:
+        """片手の物と両手の物を合わせると 3 つの手が要り、人の手の数 2 を超える。"""
+        hands_in_use = HandsInUse.of([HandsNeeded(1), HandsNeeded(2)])
+
+        assert hands_in_use.exceeds_hands_of_a_person()
+
+    def test_two_one_handed_items_do_not_exceed_the_hands_of_a_person(self) -> None:
+        """片手の物を 2 つ持つと、要る手の数は人の手の数ちょうどで、超えない。"""
+        hands_in_use = HandsInUse.of([HandsNeeded(1)]).with_also(HandsNeeded(1))
+
+        assert hands_in_use == HandsInUse(2)
+        assert not hands_in_use.exceeds_hands_of_a_person()

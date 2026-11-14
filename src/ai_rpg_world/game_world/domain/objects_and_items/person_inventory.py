@@ -26,6 +26,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Capacity,
     Count,
     Gold,
+    HandsInUse,
     HandsNeeded,
     ItemSpecId,
     PersonId,
@@ -141,7 +142,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
             raise ItemAlreadyCarriedException(f"{person_id.value} carries an item twice")
         if len(carried) > capacity.value:
             raise InventoryFullException(f"{person_id.value} carries {len(carried)} items over {capacity.value}")
-        if sum(held_item.hands_needed.value for held_item in held) > HANDS_OF_A_PERSON:
+        if HandsInUse.of(held_item.hands_needed for held_item in held).exceeds_hands_of_a_person():
             raise HeldItemsExceedHandsException(f"{person_id.value} holds more than {HANDS_OF_A_PERSON} hands can")
         self._person_id = person_id
         self._capacity = capacity
@@ -216,7 +217,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
         self.add_event(ItemHeldEvent(**new_event_stamp(), person=self._person_id, item=item))
 
     def hold_packed_at_start(self, spec: ItemSpecId, hands_needed: HandsNeeded) -> None:
-        if HANDS_OF_A_PERSON - self._hands_in_use() < hands_needed.value:
+        if HandsInUse.of(held.hands_needed for held in self._held).with_also(hands_needed).exceeds_hands_of_a_person():
             raise HeldItemsExceedHandsException(
                 f"{self._person_id.value} has no free hands to start holding {spec.value}"
             )

@@ -35,6 +35,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     GroupDecisionId,
     GroupId,
     GroupingId,
+    HandsInUse,
     HitPoints,
     ItemSpecId,
     ObjectId,
@@ -350,17 +351,17 @@ class DeclaredNouns:
         return flaws
 
     def _held_at_start_flaws(self, character: CharacterDeclaration) -> list[DesignFlaw]:
-        hands_in_use = 0
+        hands_in_use = HandsInUse(0)
         for index, item in enumerate(character.initial_held):
             spec = self._item_specs.find(item.value)
             if spec is None:
                 continue
-            hands_in_use += spec.hands_needed.value
-            if hands_in_use > HANDS_OF_A_PERSON:
+            hands_in_use = hands_in_use.with_also(spec.hands_needed)
+            if hands_in_use.exceeds_hands_of_a_person():
                 return [
                     DesignFlaw(
                         self._characters.location(character, f"initial_held[{index}]"),
-                        f"holding item_spec {item.value!r} at start needs {hands_in_use} hands, "
+                        f"holding item_spec {item.value!r} at start needs {hands_in_use.value} hands, "
                         f"but a person has {HANDS_OF_A_PERSON}",
                     )
                 ]

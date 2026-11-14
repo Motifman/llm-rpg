@@ -706,6 +706,27 @@ class TestHandsForItemsHeldAtStart:
             ),
         )
 
+    def test_same_two_handed_item_held_twice_at_start_is_a_flaw(self) -> None:
+        """同じ両手の物を initial_items と initial_held に 2 回ずつ書くと、書いた回数だけ手を数え、2 つめの位置 (initial_held[1]) を指す DesignFlaw を投げる。"""
+        flaws = _flaws_of(
+            lambda: _nouns(
+                spots=[_spot("hall")],
+                item_specs=[_item_spec("pickaxe", hands_needed=2)],
+                characters=[
+                    _character("aki", "hall", initial_items=("pickaxe", "pickaxe"), initial_held=("pickaxe", "pickaxe"))
+                ],
+            )
+        )
+
+        assert flaws == (
+            _flaw(
+                "character",
+                "aki",
+                "initial_held[1]",
+                "holding item_spec 'pickaxe' at start needs 4 hands, but a person has 2",
+            ),
+        )
+
     def test_items_needing_exactly_the_hands_of_a_person_are_accepted(self) -> None:
         """片手の物を 2 つ initial_held に書くと、要る手の数が人の手の数ちょうどなので、断らずに作れる。"""
         nouns = _nouns(
