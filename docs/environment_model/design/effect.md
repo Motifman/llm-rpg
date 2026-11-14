@@ -61,6 +61,7 @@ class RandomBranchEffect:                  # facts.random() から 1 つ引き�
 @final
 @dataclass(frozen=True)
 class ForEveryoneEffect:                   # 1 人ずつを attempt_apart にし、断られた人の分だけを巻き戻す (#1978 の E3)
+                                            # 行為の効果の中でも同じで、1 人が断られても行為は通る。1 人ごとの断った理由は、いまはどこにも残らない
     people: PeopleSelection
     effect: Effect                          # 中では EachPerson が「その人」を指す
 

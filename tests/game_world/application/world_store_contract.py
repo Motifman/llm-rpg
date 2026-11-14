@@ -439,3 +439,37 @@ class WorldStoreContract(ABC):
 
         with pytest.raises(RuntimeError):
             session.attempt_apart(fail)
+
+    def test_item_taken_out_in_a_refused_attempt_apart_stays_in_world(self) -> None:
+        """小さな範囲の中で品物を世界から出してから断られると、品物は世界に残り、commit は ItemLeftWorldEvent を返さない。"""
+        store = self.store_holding(
+            design_with_bell(), Item.come_into_world(ROPE_1, ROPE, WorldTick(0)), WorldEnding(WORLD, True)
+        )
+        session = store.session()
+
+        def take_out_then_be_refused() -> None:
+            session.aggregates().take_item_out_of_world(ROPE_1)
+            session.ending().end(WorldTick(2))
+
+        session.attempt_apart(take_out_then_be_refused)
+        events = session.commit()
+
+        assert events == ()
+        assert store.session().facts().item(ROPE_1).item_id == ROPE_1
+
+    def test_refused_attempt_apart_drops_events_of_an_accepted_one_inside_it(self) -> None:
+        """小さな範囲の中で旗を立て、中のもう 1 つの小さな範囲が通ったあと外側が断られると、旗は立っておらず、commit は WorldFlagRaisedEvent を返さない。"""
+        store = self.store_holding(design_with_bell(), WorldFlags.start(WORLD), WorldEnding(WORLD, True))
+        session = store.session()
+
+        def raise_then_pass_inside_then_be_refused() -> None:
+            session.aggregates().flags().raise_flag(BELL, _NOW)
+            session.attempt_apart(lambda: None)
+            session.ending().end(WorldTick(3))
+
+        session.attempt_apart(raise_then_pass_inside_then_be_refused)
+        raised = session.facts().flags().is_raised(BELL)
+        events = session.commit()
+
+        assert raised is False
+        assert events == ()

@@ -323,6 +323,7 @@ class SqliteWorldSession(WorldSession):
     def attempt_apart(self, work: Callable[[], None]) -> RefusalCode | NoRefusal:
         self._require_in_scope()
         self._write_held()
+        events_before = len(self._written_events)
         self._connection.execute("SAVEPOINT apart")
         try:
             work()
@@ -330,6 +331,8 @@ class SqliteWorldSession(WorldSession):
             self._connection.execute("ROLLBACK TO apart")
             self._connection.execute("RELEASE apart")
             self._held.clear()
+            self._taken_out.clear()
+            del self._written_events[events_before:]
             if isinstance(failure, GameWorldDomainException):
                 return RefusalCode.of(failure)
             raise
