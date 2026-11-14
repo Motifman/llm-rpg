@@ -54,6 +54,7 @@ from ai_rpg_world.game_world.domain.exception.perception_exception import (
     PerceivedItemSpecNotGivenException,
     PerceptionTargetNotGivenException,
 )
+from ai_rpg_world.game_world.domain.exception.world_design_exception import UndeclaredVerbException
 from ai_rpg_world.game_world.domain.objects_and_items.item import ItemRanOutEvent
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
@@ -625,3 +626,8 @@ class TestStimulusTranslatorHappenings:
     def test_happening_without_notice_makes_no_stimulus(self) -> None:
         """知らせを宣言していない出来事の発火は、刺激を作らない。"""
         assert StimulusTranslator().stimuli_of(_fired("quiet"), _happenings_design()) == ()
+
+    def test_firing_of_an_undeclared_happening_is_refused(self) -> None:
+        """宣言に無い出来事の発火を渡すと、どの知らせかを引けないので UndeclaredVerbException を投げる。"""
+        with pytest.raises(UndeclaredVerbException):
+            StimulusTranslator().stimuli_of(_fired("unknown"), _happenings_design())
