@@ -18,7 +18,7 @@ class ActionAttempt(Protocol):
     def done_as(self) -> frozenset[ActionKind | InteractionId]: ...   # 最後に行った行為として記録する鍵。組み込みの行為は {kind}、作者の操作は {kind, interaction_id}
 
 
-Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | JointActionCompleted | WorldTimePassing | LookingAround | EachPersonOf
+Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | JointActionCompleted | WorldTimePassing | LookingAround | WorldConditionsSettling | EachPersonOf
 # どのきっかけも person_as、this_item、acting_person、argument、fall_cause_for を持つ。GroupDecisionResult は CHOSEN_BY_GROUP だけを答え、ほかの行為でないきっかけは何も答えない
 # 行為でないきっかけの acting_person は NoActingPerson、fall_cause_for は WorldHappening()。EachPersonOf は person_as(EACH_PERSON) のほかは外のきっかけに任せる
 
@@ -58,6 +58,11 @@ class WorldTimePassing:                     # 時間が進んだことがきっ�
 @dataclass(frozen=True)
 class LookingAround:                        # 物の見え方 (ObjectLook) を確かめるきっかけ。何も答えない
     tick: WorldTick
+
+@final
+@dataclass(frozen=True)
+class WorldConditionsSettling:              # 終わりの条件を確かめるきっかけ (SettleWorldConditions)。何も答えない
+    tick: WorldTick                         # コマンドの後の判定を「時間が進んだから終わった」と読ませないよう、WorldTimePassing と分ける
 
 ActorRequirement = LivingOnly | LivingOrDeparted
 CopresenceRequirement = WithPerson | WithObject | WithGroundItem | WithMonster   # 商人と市場 (取引の Issue) は、設計するときに足す

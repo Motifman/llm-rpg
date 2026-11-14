@@ -204,6 +204,30 @@ class TestForEveryoneEffect:
 
         assert (_hp(world, CAROL), _hp(world, ALICE)) == (7, 10)
 
+    def test_refusal_for_one_person_undoes_only_that_persons_share(self) -> None:
+        """縄を持つ Alice と Carol、持たない Bob の全員に「3 の痛手を受けて縄を 1 本失う」を当てると、Bob の分だけが断られて巻き戻り、Bob は傷つかず、ほかの 2 人は傷ついて縄を失う。"""
+        world = world_in_memory(
+            world=WORLD,
+            people=(ALICE, BOB, CAROL),
+            item_specs=(_ROPE,),
+            vitals=(vitals(ALICE), vitals(BOB), vitals(CAROL)),
+            inventories=(inventory(ALICE), inventory(BOB), inventory(CAROL)),
+        )
+        for person in (ALICE, CAROL):
+            rope = world.aggregates().bring_item_into_world(_ROPE, WorldTick(0))
+            world.aggregates().inventory(person).receive(rope, _ROPE.item_spec_id)
+        hurt_and_lose_rope = SequenceEffect(
+            (DamageEffect(EachPerson(), Damage(3)), TakeItemEffect(EachPerson(), _ROPE, Count(1)))
+        )
+
+        ForEveryoneEffect(_some_of(ALICE, BOB, CAROL), hurt_and_lose_rope).apply(
+            world.facts(), world.aggregates(), _QUAKE
+        )
+
+        assert (_hp(world, ALICE), _hp(world, BOB), _hp(world, CAROL)) == (7, 10, 7)
+        assert world.aggregates().inventory(ALICE).items() == ()
+        assert world.aggregates().inventory(CAROL).items() == ()
+
     def test_outer_trigger_still_answers_fall_cause(self) -> None:
         """Bob の行為で Alice と Bob の全員に体力ぶんの痛手を与えると、Alice は Bob に、Bob は世界の出来事で倒れる。"""
         world = _world()

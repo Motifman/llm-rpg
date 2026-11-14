@@ -101,7 +101,8 @@ class ForEveryoneEffect:
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         for person in _in_world_order(self.people.select(facts, trigger), facts):
-            self.effect.apply(facts, world, EachPersonOf(trigger, person))
+            # 1 人が断られただけで、ほかの全員の分まで巻き戻さないようにする (#1978 の E3)
+            world.attempt_apart(lambda person=person: self.effect.apply(facts, world, EachPersonOf(trigger, person)))
 
     def requirements(self) -> Requirements:
         return self.people.requirements().combined_with(

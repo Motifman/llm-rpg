@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
@@ -10,6 +10,11 @@ from ai_rpg_world.game_world.domain.declaration.verb.sight_texts_declaration imp
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import Salience
+from ai_rpg_world.game_world.domain.value_object import PersonId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.trigger import Trigger
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 
 
 @final
@@ -22,6 +27,9 @@ class SightAt:
     def requirements(self) -> Requirements:
         return Requirements.nothing()
 
+    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
+        return frozenset()
+
 
 @final
 @dataclass(frozen=True)
@@ -32,6 +40,9 @@ class SoundFrom:
 
     def requirements(self) -> Requirements:
         return Requirements.nothing()
+
+    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
+        return frozenset()
 
 
 @final
@@ -44,12 +55,18 @@ class AnnouncementTo:
     def requirements(self) -> Requirements:
         return self.audience.requirements()
 
+    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
+        return self.audience.select(facts, trigger)
+
 
 @final
 @dataclass(frozen=True)
 class NoNotice:
     def requirements(self) -> Requirements:
         return Requirements.nothing()
+
+    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
+        return frozenset()
 
 
 HappeningNotice = SightAt | SoundFrom | AnnouncementTo
