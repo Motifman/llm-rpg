@@ -152,6 +152,13 @@ class PassageStates(AggregateRoot[PassageStatesEvent]):
             if self._presence_of(passage) is PassagePresence.PRESENT and _leaves(passage, spot)
         )
 
+    def sound_carrying(self, declared: tuple[PassageDeclaration, ...]) -> tuple[PassageInState, ...]:
+        return tuple(
+            PassageInState(passage=passage, state=self._states[passage.passage_id])
+            for passage in declared
+            if self._presence_of(passage) is PassagePresence.PRESENT
+        )
+
     def in_state(self, passage: PassageDeclaration) -> PassageInState:
         self._presence_of(passage)
         return PassageInState(passage=passage, state=self._states[passage.passage_id])

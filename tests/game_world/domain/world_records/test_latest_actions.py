@@ -3,15 +3,18 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
 from ai_rpg_world.game_world.domain.exception.world_records_exception import LatestActionsDisagreeWithAnyoneException
+from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, SpotId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson
 from ai_rpg_world.game_world.domain.world_records import (
     ActionAttemptFailedEvent,
     ActionLastDoneAt,
@@ -21,7 +24,7 @@ from ai_rpg_world.game_world.domain.world_records import (
     PersonActedEvent,
 )
 from tests.game_world.domain.whereabouts._builders import thing
-from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests, situation_for_tests
 from tests.game_world.support.declarations_for_tests import InteractionForTests
 
 _WORLD = WorldId("mine")
@@ -34,6 +37,12 @@ _ALICE_PULLS_LEVER = ObjectInteractionAttempt(
     _ALICE, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), {}, Openly()
 )
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+
+_IN_THE_MINE_WITH_ROPE = ActorSituation(
+    at_spot=SpotId("mine"),
+    actor_as=DepartedPerson(_ALICE),
+    item_specs={ItemInstanceId("item_1"): ItemSpecId("rope")},
+)
 
 
 class TestLatestActionsNote:
@@ -51,7 +60,7 @@ class TestLatestActionsNote:
         """alice が tick 4 に探したら、alice の SEARCH も誰でもの SEARCH も tick 4、bob の SEARCH は NeverDone。"""
         latest = LatestActions.start(_WORLD)
 
-        latest.note(_ALICE_SEARCHES, WorldTick(4))
+        latest.note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(4))
 
         assert latest.last_done_at(_ALICE, ActionKind.SEARCH) == WorldTick(4)
         assert latest.last_done_at(Anyone(), ActionKind.SEARCH) == WorldTick(4)
@@ -61,8 +70,8 @@ class TestLatestActionsNote:
         """alice が tick 4、bob が tick 6 に探したら、誰でもの SEARCH は tick 6、alice の SEARCH は tick 4 のまま。"""
         latest = LatestActions.start(_WORLD)
 
-        latest.note(_ALICE_SEARCHES, WorldTick(4))
-        latest.note(_BOB_SEARCHES, WorldTick(6))
+        latest.note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(4))
+        latest.note(_BOB_SEARCHES, situation_for_tests(), WorldTick(6))
 
         assert latest.last_done_at(Anyone(), ActionKind.SEARCH) == WorldTick(6)
         assert latest.last_done_at(_ALICE, ActionKind.SEARCH) == WorldTick(4)
@@ -71,21 +80,26 @@ class TestLatestActionsNote:
         """alice が tick 3 にレバーを引いたら、INTERACT_WITH_OBJECT でも pull_lever でも tick 3 を答える。"""
         latest = LatestActions.start(_WORLD)
 
-        latest.note(_ALICE_PULLS_LEVER, WorldTick(3))
+        latest.note(_ALICE_PULLS_LEVER, situation_for_tests(), WorldTick(3))
 
         assert latest.last_done_at(_ALICE, ActionKind.INTERACT_WITH_OBJECT) == WorldTick(3)
         assert latest.last_done_at(Anyone(), _PULL_LEVER) == WorldTick(3)
         assert latest.last_done_at(_ALICE, ActionKind.SEARCH) == NeverDone()
 
     def test_note_records_person_acted_event(self) -> None:
-        """note は、世界・行った行為・tick を持つ PersonActedEvent をためる。"""
+        """note は、世界・行った行為・tick と、行う人のいた場所・行う人の姿・扱った品物の種類を持つ PersonActedEvent をためる。"""
         latest = LatestActions.start(_WORLD)
 
-        latest.note(_ALICE_SEARCHES, WorldTick(4))
+        latest.note(_ALICE_SEARCHES, _IN_THE_MINE_WITH_ROPE, WorldTick(4))
 
         [event] = latest.get_events()
         assert isinstance(event, PersonActedEvent)
         assert (event.world_id, event.attempt, event.at) == (_WORLD, _ALICE_SEARCHES, WorldTick(4))
+        assert (event.at_spot, event.actor_as, dict(event.item_specs)) == (
+            SpotId("mine"),
+            DepartedPerson(_ALICE),
+            {ItemInstanceId("item_1"): ItemSpecId("rope")},
+        )
 
 
 class TestLatestActionsFailedAttempt:
@@ -95,20 +109,25 @@ class TestLatestActionsFailedAttempt:
         """alice の探す試みが tick 5 に断られても、alice の SEARCH の last_done_at は NeverDone のまま。"""
         latest = LatestActions.start(_WORLD)
 
-        latest.note_failed_attempt(_refusal_of(_ALICE_SEARCHES), WorldTick(5))
+        latest.note_failed_attempt(_refusal_of(_ALICE_SEARCHES), situation_for_tests(), WorldTick(5))
 
         assert latest.last_done_at(_ALICE, ActionKind.SEARCH) == NeverDone()
 
     def test_failed_attempt_records_event_with_refusal(self) -> None:
-        """note_failed_attempt は、世界・断った理由 (ActionRefusal)・tick を持つ ActionAttemptFailedEvent をためる。"""
+        """note_failed_attempt は、世界・断った理由 (ActionRefusal)・tick と、行う人のいた場所・姿・扱った品物の種類を持つ ActionAttemptFailedEvent をためる。"""
         latest = LatestActions.start(_WORLD)
         refusal = _refusal_of(_ALICE_SEARCHES)
 
-        latest.note_failed_attempt(refusal, WorldTick(5))
+        latest.note_failed_attempt(refusal, _IN_THE_MINE_WITH_ROPE, WorldTick(5))
 
         [event] = latest.get_events()
         assert isinstance(event, ActionAttemptFailedEvent)
         assert (event.world_id, event.refusal, event.at) == (_WORLD, refusal, WorldTick(5))
+        assert (event.at_spot, event.actor_as, dict(event.item_specs)) == (
+            SpotId("mine"),
+            DepartedPerson(_ALICE),
+            {ItemInstanceId("item_1"): ItemSpecId("rope")},
+        )
 
 
 def _refusal_of(attempt: ActionAttemptForTests) -> ActionRefusal:
@@ -133,9 +152,9 @@ class TestLatestActionsMemento:
     def test_rebuilt_latest_actions_answer_the_same_ticks(self) -> None:
         """alice が tick 4 に探し tick 5 にレバーを引き、bob が tick 6 に探したあと作り直すと、どの last_done_at も元と同じ。"""
         latest = LatestActions.start(_WORLD)
-        latest.note(_ALICE_SEARCHES, WorldTick(4))
-        latest.note(_ALICE_PULLS_LEVER, WorldTick(5))
-        latest.note(_BOB_SEARCHES, WorldTick(6))
+        latest.note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(4))
+        latest.note(_ALICE_PULLS_LEVER, situation_for_tests(), WorldTick(5))
+        latest.note(_BOB_SEARCHES, situation_for_tests(), WorldTick(6))
 
         rebuilt = rebuilt_from_memento(latest)
 
@@ -149,18 +168,18 @@ class TestLatestActionsMemento:
     def test_memento_does_not_depend_on_the_order_of_noting(self) -> None:
         """tick 4 に alice と bob が探したとき、alice から記録しても bob から記録しても、memento は等しい。"""
         alice_first = LatestActions.start(_WORLD)
-        alice_first.note(_ALICE_SEARCHES, WorldTick(4))
-        alice_first.note(_BOB_SEARCHES, WorldTick(4))
+        alice_first.note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(4))
+        alice_first.note(_BOB_SEARCHES, situation_for_tests(), WorldTick(4))
         bob_first = LatestActions.start(_WORLD)
-        bob_first.note(_BOB_SEARCHES, WorldTick(4))
-        bob_first.note(_ALICE_SEARCHES, WorldTick(4))
+        bob_first.note(_BOB_SEARCHES, situation_for_tests(), WorldTick(4))
+        bob_first.note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(4))
 
         assert alice_first.memento() == bob_first.memento()
 
     def test_rebuilding_records_no_event(self) -> None:
         """行為を記録したあとの memento から作り直しても、作り直したものはイベントをためていない。"""
         latest = LatestActions.start(_WORLD)
-        latest.note(_ALICE_SEARCHES, WorldTick(4))
+        latest.note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(4))
 
         assert rebuilt_from_memento(latest).get_events() == []
 

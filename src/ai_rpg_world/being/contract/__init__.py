@@ -20,6 +20,12 @@ from ai_rpg_world.being.contract.observation import (
     UnknownValue,
 )
 from ai_rpg_world.being.contract.offered_being_tools import OfferedBeingTools
+from ai_rpg_world.being.contract.text_with_people import (
+    PersonInText,
+    PersonPlaceholderValue,
+    TextWithPeople,
+    UnidentifiedPerson,
+)
 
 __all__ = [
     "KNOWN_IF_POSSIBLE_FIELDS",
@@ -39,10 +45,14 @@ __all__ = [
     "Orientation",
     "OwnActionResult",
     "OwnBodyState",
+    "PersonInText",
+    "PersonPlaceholderValue",
     "Route",
     "Scene",
     "SeenOrHeard",
+    "TextWithPeople",
     "ToldOrWritten",
+    "UnidentifiedPerson",
     "Unknown",
     "UnknownValue",
 ]

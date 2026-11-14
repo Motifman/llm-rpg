@@ -56,7 +56,7 @@ from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception
     StoredMementoUnreadableException,
 )
 from tests.game_world.domain.whereabouts._builders import thing
-from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests, situation_for_tests
 from tests.game_world.support.declarations_for_tests import InteractionForTests
 from tests.game_world.support.world_design_for_tests import world_stage
 
@@ -88,9 +88,12 @@ def _stage() -> object:
 
 def _latest_actions() -> LatestActionsMemento:
     latest = LatestActions.start(_WORLD)
-    latest.note(ActionAttemptForTests(actor_id=_ALICE, action_kind=ActionKind.SEARCH), WorldTick(4))
+    latest.note(
+        ActionAttemptForTests(actor_id=_ALICE, action_kind=ActionKind.SEARCH), situation_for_tests(), WorldTick(4)
+    )
     latest.note(
         ObjectInteractionAttempt(_BOB, thing("lever", "landing"), InteractionForTests(_PULL_LEVER), {}, Openly()),
+        situation_for_tests(),
         WorldTick(6),
     )
     return latest.memento()

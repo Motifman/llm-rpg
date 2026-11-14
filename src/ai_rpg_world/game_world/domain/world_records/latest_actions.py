@@ -8,12 +8,15 @@ from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
 from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.world_records_exception import LatestActionsDisagreeWithAnyoneException
+from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, SpotId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import NotAtSpot, Occupant
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
     from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+    from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 
 
 @final
@@ -28,6 +31,9 @@ class NeverDone:
 class PersonActedEvent(DomainEvent):
     world_id: WorldId
     attempt: ActionAttempt
+    at_spot: SpotId | NotAtSpot
+    actor_as: Occupant
+    item_specs: Mapping[ItemInstanceId, ItemSpecId]
     at: WorldTick
 
 
@@ -36,6 +42,9 @@ class PersonActedEvent(DomainEvent):
 class ActionAttemptFailedEvent(DomainEvent):
     world_id: WorldId
     refusal: ActionRefusal
+    at_spot: SpotId | NotAtSpot
+    actor_as: Occupant
+    item_specs: Mapping[ItemInstanceId, ItemSpecId]
     at: WorldTick
 
 
@@ -90,14 +99,34 @@ class LatestActions(AggregateRoot[LatestActionsEvent]):
             last_done=frozenset(ActionLastDoneAt(who, action, at) for (who, action), at in self._last_done.items()),
         )
 
-    def note(self, attempt: ActionAttempt, now: WorldTick) -> None:
+    def note(self, attempt: ActionAttempt, situation: ActorSituation, now: WorldTick) -> None:
         for action in attempt.done_as():
             self._last_done[(attempt.actor, action)] = now
             self._last_done[(Anyone(), action)] = now
-        self.add_event(PersonActedEvent(**new_event_stamp(), world_id=self._world_id, attempt=attempt, at=now))
+        self.add_event(
+            PersonActedEvent(
+                **new_event_stamp(),
+                world_id=self._world_id,
+                attempt=attempt,
+                at_spot=situation.at_spot,
+                actor_as=situation.actor_as,
+                item_specs=situation.item_specs,
+                at=now,
+            )
+        )
 
-    def note_failed_attempt(self, refusal: ActionRefusal, now: WorldTick) -> None:
-        self.add_event(ActionAttemptFailedEvent(**new_event_stamp(), world_id=self._world_id, refusal=refusal, at=now))
+    def note_failed_attempt(self, refusal: ActionRefusal, situation: ActorSituation, now: WorldTick) -> None:
+        self.add_event(
+            ActionAttemptFailedEvent(
+                **new_event_stamp(),
+                world_id=self._world_id,
+                refusal=refusal,
+                at_spot=situation.at_spot,
+                actor_as=situation.actor_as,
+                item_specs=situation.item_specs,
+                at=now,
+            )
+        )
 
     def last_done_at(self, who: PersonId | Anyone, action: ActionKind | InteractionId) -> WorldTick | NeverDone:
         return self._last_done.get((who, action), NeverDone())

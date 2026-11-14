@@ -60,6 +60,8 @@ from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_attempt import Exertion
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+    from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+    from ai_rpg_world.game_world.domain.whereabouts.location import Location
 
 
 @final
@@ -239,6 +241,16 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         if departed_persons_act and self.is_dead():
             return DepartedPerson(self._person)
         return PersonBody(self._person)
+
+    def perceiver_at(self, location: Location, departed_persons_act: bool, attentive: bool) -> Perceiver | None:
+        # 知覚する人の型が person.life_state を読むので、モジュールの頭で import すると循環する。
+        from ai_rpg_world.game_world.domain.perception.perceiver import DepartedPerceiver, LivingPerceiver
+
+        if isinstance(self._life_state, Dead):
+            if departed_persons_act:
+                return DepartedPerceiver(person=self._person, location=location)
+            return None
+        return LivingPerceiver(person=self._person, life=self._life_state, location=location, attentive=attentive)
 
     def fatigue_reached_limit(self, rule: FatigueRule) -> bool:
         return self._fatigue >= rule.limit

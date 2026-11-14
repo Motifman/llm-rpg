@@ -26,7 +26,7 @@ from typing import Any
 
 import pytest
 from tests.game_world.domain.whereabouts._builders import CLOSED, OPEN, atmosphere, door, path, section, spot
-from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests, situation_for_tests
 from tests.game_world.support.world_in_memory import FractionsInOrder
 
 from ai_rpg_world.eventing.aggregate_root import AggregateRoot
@@ -589,7 +589,8 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "WorldFlags.raise_flag": lambda: _with(WorldFlags.start(_WORLD), lambda f: f.raise_flag(_BELL_RUNG, _TICK_PASSING)),
     "WorldFlags.lower_flag": lambda: _with(WorldFlags.start(_WORLD), lambda f: f.lower_flag(_GATE_SHUT, _TICK_PASSING)),
     "LatestActions.note": lambda: _with(
-        LatestActions.start(_WORLD), lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), _NOW)
+        LatestActions.start(_WORLD),
+        lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), situation_for_tests(), _NOW),
     ),
     "LatestActions.note_failed_attempt": lambda: _with(
         LatestActions.start(_WORLD),
@@ -599,6 +600,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
                 reason=TooTired(),
                 text=TextWithUnassignedPeople("{actor}は疲れている").about({"actor": _ALICE}),
             ),
+            situation_for_tests(),
             _NOW,
         ),
     ),

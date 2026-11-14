@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
+from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
 from ai_rpg_world.game_world.domain.sound.hearing_quality import (
     HearingQuality,
@@ -76,6 +77,11 @@ class SoundStimulus:
     involved: tuple[PersonId, ...]
     salience: Salience
     at: WorldTick
+
+    def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
+        return self.perceived_by(
+            perceiver, senses.reach_of(self.origin, self.loudness), senses.hearing(), senses.view_for(perceiver.person)
+        )
 
     def perceived_by(
         self, perceiver: Perceiver, reach: SoundReach, values: HearingValues, view: PeopleAsSeen

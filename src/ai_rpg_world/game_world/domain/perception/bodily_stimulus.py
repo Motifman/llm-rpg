@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeo
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
+from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
@@ -19,6 +20,9 @@ class BodilyStimulus:
     text: TextAboutPeople
     salience: Salience
     at: WorldTick
+
+    def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
+        return self.perceived_by(perceiver, senses.view_for(perceiver.person))
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome:
         if not perceiver.feels_body_of(self.person):

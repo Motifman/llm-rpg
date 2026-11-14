@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal, WorldStateRefusal
+from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -60,11 +61,17 @@ class CarryOutAction:
             text = self._texts.precondition_text(failure, attempt.actor)
             raise _Refused(ActionRefusal(attempt=attempt, reason=PreconditionRefusal(failure), text=text))
         now = facts.now()
+        situation = ActorSituation.of(attempt, facts)
         world = session.aggregates()
         busy_for = steps.change_world(attempt, facts, world)
         world.vitals(attempt.actor).start_acting(attempt.exertion(), now + busy_for, facts.rules().fatigue)
-        session.latest_actions().note(attempt, now)
+        session.latest_actions().note(attempt, situation, now)
 
     def _note_refusal(self, refusal: ActionRefusal) -> ActionRefused:
-        self._scope.run(lambda session: session.latest_actions().note_failed_attempt(refusal, session.facts().now()))
+        self._scope.run(lambda session: self._note_failed_attempt(refusal, session))
         return ActionRefused(refusal)
+
+    def _note_failed_attempt(self, refusal: ActionRefusal, session: WorldSession) -> None:
+        facts = session.facts()
+        situation = ActorSituation.of(refusal.attempt, facts)
+        session.latest_actions().note_failed_attempt(refusal, situation, facts.now())

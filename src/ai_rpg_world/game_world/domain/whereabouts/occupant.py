@@ -14,6 +14,9 @@ class PersonBody:
     def is_departed(self) -> bool:
         return False
 
+    def can_hold_items(self) -> bool:
+        return True
+
 
 @final
 @dataclass(frozen=True)
@@ -22,6 +25,9 @@ class DepartedPerson:
 
     def is_departed(self) -> bool:
         return True
+
+    def can_hold_items(self) -> bool:
+        return False
 
 
 Occupant = PersonBody | DepartedPerson
