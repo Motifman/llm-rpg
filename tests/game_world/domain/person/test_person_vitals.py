@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.action_attempt import DoesNotUseBody, UsesBody
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     GameWorldDomainException,
@@ -598,6 +599,38 @@ class TestBusy:
         """Down・Dead の人は行為を始められず、PersonNotAliveException を投げる。"""
         with pytest.raises(PersonNotAliveException):
             make().start_action(WorldTick(20))
+
+
+class TestStartActing:
+    """start_acting が、行為を始めた人を体の使い方に応じて疲れさせ、行っているあいだを始め、去った人には何もしないことを保証する。"""
+
+    def test_action_using_body_tires_and_makes_busy(self) -> None:
+        """UsesBody の行為は疲れを per_exertion だけ増やし、渡した tick まで行っているあいだにする。"""
+        vitals = _vitals()
+
+        vitals.start_acting(UsesBody(), WorldTick(3), _fatigue(per_exertion=2))
+
+        assert vitals.fatigue() == FatigueAmount(2)
+        assert vitals.is_busy(WorldTick(2))
+
+    def test_action_not_using_body_makes_busy_without_tiring(self) -> None:
+        """DoesNotUseBody の行為は疲れを増やさず、行っているあいだだけを始める。"""
+        vitals = _vitals()
+
+        vitals.start_acting(DoesNotUseBody(), WorldTick(3), _fatigue(per_exertion=2))
+
+        assert vitals.fatigue() == FatigueAmount(0)
+        assert vitals.is_busy(WorldTick(2))
+
+    def test_dead_person_acting_changes_nothing(self) -> None:
+        """死んだ人 (去った人として行う) が行為を始めても、疲れも行っているあいだも変わらず、イベントもためない。"""
+        vitals = _dead()
+        vitals.clear_events()
+
+        vitals.start_acting(UsesBody(), WorldTick(30), _fatigue())
+
+        assert not vitals.is_busy(WorldTick(29))
+        assert vitals.get_events() == []
 
 
 class TestStatusEffects:

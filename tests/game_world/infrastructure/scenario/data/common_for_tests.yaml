@@ -54,6 +54,7 @@ refusal_texts:
     no_one_found_in_the_dark: 暗くて誰も見つからない。
   world_state: {}
   hidden: 今はできない。
+  unlisted: うまくいかなかった。
 
 built_in_action_perceptions:
   travel: &quiet { witness: { clear: "{actor}が動いた。" }, sound: null }

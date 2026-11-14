@@ -4,6 +4,7 @@ from collections.abc import Mapping
 
 import pytest
 
+from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.rules_exception import (
     ActionDurationNotApplicableException,
     MissingActionDurationException,
@@ -153,3 +154,19 @@ class TestWorldRulesActionDurations:
         durations[ActionKind.PICK_UP] = Ticks(9)
 
         assert rules.action_durations[ActionKind.PICK_UP] == Ticks(1)
+
+
+class TestWorldRulesDurationOf:
+    """WorldRules.duration_of が、宣言の長さと世界の既定の長さから、行為の長さを決めることを保証する。"""
+
+    def test_declared_ticks_are_used_as_they_are(self) -> None:
+        """宣言が Ticks を書いていれば、世界の既定に関わらずその長さになる。"""
+        rules = _rules({**_durations(), ActionKind.ENTER_SECTION: Ticks(4)})
+
+        assert rules.duration_of(ActionKind.ENTER_SECTION, Ticks(2)) == Ticks(2)
+
+    def test_default_duration_uses_world_default_of_the_kind(self) -> None:
+        """宣言が DefaultDuration なら、その行為の種類の action_durations の長さになる。"""
+        rules = _rules({**_durations(), ActionKind.ENTER_SECTION: Ticks(4)})
+
+        assert rules.duration_of(ActionKind.ENTER_SECTION, DefaultDuration()) == Ticks(4)
