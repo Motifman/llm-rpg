@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any, TypeVar, cast, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
-from ai_rpg_world.game_world.application.world_store import AggregateWithMemento, WorldSession, WorldStore
+from ai_rpg_world.game_world.application.world_store import (
+    AggregateWithMemento,
+    WorldSession,
+    WorldStore,
+)
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
 from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
     GroundItemsReading,
     GroupDecisionReading,
@@ -44,6 +49,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import (
     AggregateNotInWorldException,
     AggregateOwnedTwiceException,
@@ -292,6 +298,7 @@ class SqliteWorldSession(WorldSession):
         self._world = world
         self._held: dict[tuple[str, str], _HeldAggregate] = {}
         self._taken_out: dict[tuple[str, str], AggregateWithMemento] = {}
+        self._written_events: list[DomainEvent] = []
         self._in_scope = True
         connection.execute("BEGIN")
 
@@ -318,36 +325,38 @@ class SqliteWorldSession(WorldSession):
             PeopleRegisterMemento, self._world.key, self._world.with_nouns(PeopleRegister.from_memento)
         )
 
+    def attempt_apart(self, work: Callable[[], None]) -> RefusalCode | NoRefusal:
+        self._require_in_scope()
+        self._write_held()
+        events_before = len(self._written_events)
+        self._connection.execute("SAVEPOINT apart")
+        try:
+            work()
+        except BaseException as failure:
+            self._connection.execute("ROLLBACK TO apart")
+            self._connection.execute("RELEASE apart")
+            self._held.clear()
+            self._taken_out.clear()
+            del self._written_events[events_before:]
+            if isinstance(failure, WorldRefusal):
+                return RefusalCode.of(failure)
+            raise
+        self._connection.execute("RELEASE apart")
+        return NoRefusal()
+
     def commit(self) -> tuple[DomainEvent, ...]:
         self._require_in_scope()
         self._in_scope = False
         try:
-            for (kind, key), held in self._held.items():
-                stored = GAME_WORLD_CODECS.stored(held.aggregate.memento())
-                if stored.state == held.read_state:
-                    continue
-                if held.read_state is None:
-                    self._connection.execute(
-                        "INSERT INTO world_state (kind, key, version, state) VALUES (?, ?, ?, ?)",
-                        (kind, key, stored.version, stored.state),
-                    )
-                else:
-                    self._connection.execute(
-                        "UPDATE world_state SET version = ?, state = ? WHERE kind = ? AND key = ?",
-                        (stored.version, stored.state, kind, key),
-                    )
-            for kind, key in self._taken_out:
-                self._connection.execute("DELETE FROM world_state WHERE kind = ? AND key = ?", (kind, key))
+            self._write_held()
             self._connection.execute("COMMIT")
         except BaseException:
             if self._connection.in_transaction:
                 self._connection.execute("ROLLBACK")
             raise
-        aggregates = [held.aggregate for held in self._held.values()] + list(self._taken_out.values())
-        emitters = [aggregate for aggregate in aggregates if isinstance(aggregate, AggregateRoot)]
-        events = sorted((event for emitter in emitters for event in emitter.get_events()), key=lambda e: e.sequence)
+        events = sorted(self._written_events, key=lambda event: event.sequence)
         self._held.clear()
-        self._taken_out.clear()
+        self._written_events.clear()
         return tuple(events)
 
     def roll_back(self) -> None:
@@ -355,6 +364,31 @@ class SqliteWorldSession(WorldSession):
         self._in_scope = False
         self._connection.execute("ROLLBACK")
         self._held.clear()
+        self._taken_out.clear()
+        self._written_events.clear()
+
+    def _write_held(self) -> None:
+        for (kind, key), held in self._held.items():
+            stored = GAME_WORLD_CODECS.stored(held.aggregate.memento())
+            if stored.state == held.read_state:
+                continue
+            if held.read_state is None:
+                self._connection.execute(
+                    "INSERT INTO world_state (kind, key, version, state) VALUES (?, ?, ?, ?)",
+                    (kind, key, stored.version, stored.state),
+                )
+            else:
+                self._connection.execute(
+                    "UPDATE world_state SET version = ?, state = ? WHERE kind = ? AND key = ?",
+                    (stored.version, stored.state, kind, key),
+                )
+            held.read_state = stored.state
+        for kind, key in self._taken_out:
+            self._connection.execute("DELETE FROM world_state WHERE kind = ? AND key = ?", (kind, key))
+        aggregates = [held.aggregate for held in self._held.values()] + list(self._taken_out.values())
+        for emitter in (aggregate for aggregate in aggregates if isinstance(aggregate, AggregateRoot)):
+            self._written_events.extend(emitter.get_events())
+            emitter.clear_events()
         self._taken_out.clear()
 
     def held_aggregate(
@@ -578,3 +612,6 @@ class _SqliteWorldAggregates(WorldAggregates):
     def take_item_out_of_world(self, item: ItemInstanceId) -> None:
         self.item(item).leave_world()
         self._session.take_out_of_world(ItemMemento, item.value)
+
+    def attempt_apart(self, work: Callable[[], None]) -> None:
+        self._session.attempt_apart(work)

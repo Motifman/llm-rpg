@@ -7,6 +7,7 @@ from typing import final
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
+from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
@@ -77,6 +78,13 @@ class SoundStimulus:
     involved: tuple[PersonId, ...]
     salience: Salience
     at: WorldTick
+
+    @property
+    def always_delivered(self) -> bool:
+        return False
+
+    def delivery_rank(self) -> DeliveryRank:
+        return DeliveryRank.of(Sense.SOUND, self.salience)
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
         return self.perceived_by(

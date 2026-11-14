@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
@@ -55,3 +56,5 @@ class WorldAggregates(Protocol):
     def bring_item_into_world(self, spec: ItemSpecDeclaration, now: WorldTick) -> ItemInstanceId: ...
 
     def take_item_out_of_world(self, item: ItemInstanceId) -> None: ...
+
+    def attempt_apart(self, work: Callable[[], None]) -> None: ...

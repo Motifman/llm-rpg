@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
@@ -9,12 +10,14 @@ from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import NoN
 from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
-from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import PersonId, Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 from ai_rpg_world.game_world.domain.world_records import (
+    HappeningFiredEvent,
     HappeningLastFiredAt,
     NeverFired,
+    ReactionFiredEvent,
     ReactionLastTruth,
     ScenarioProgress,
     ScenarioProgressMemento,
@@ -53,7 +56,7 @@ class TestScenarioProgressHappenings:
         """once の出来事 (船の入港) は、tick 3 で一度起きたら、tick 4 以降の may_fire が偽を返す。"""
         progress = ScenarioProgress.start(_WORLD)
 
-        progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(3))
+        progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(3), frozenset(), NoRefusal())
 
         assert not progress.may_fire(_SHIP_ARRIVES, WorldTick(4))
         assert not progress.may_fire(_SHIP_ARRIVES, WorldTick(100))
@@ -62,8 +65,8 @@ class TestScenarioProgressHappenings:
         """潮の変わり目が tick 2 と tick 7 に起きたら、last_fired_at は tick 7 を返す。"""
         progress = ScenarioProgress.start(_WORLD)
 
-        progress.note_happening_fired(_TIDE_TURNS, WorldTick(2))
-        progress.note_happening_fired(_TIDE_TURNS, WorldTick(7))
+        progress.note_happening_fired(_TIDE_TURNS, WorldTick(2), frozenset(), NoRefusal())
+        progress.note_happening_fired(_TIDE_TURNS, WorldTick(7), frozenset(), NoRefusal())
 
         assert progress.last_fired_at(_TIDE_TURNS.happening_id) == WorldTick(7)
 
@@ -71,7 +74,7 @@ class TestScenarioProgressHappenings:
         """潮の変わり目が起きても、船の入港は NeverFired のままで、起きてよい。"""
         progress = ScenarioProgress.start(_WORLD)
 
-        progress.note_happening_fired(_TIDE_TURNS, WorldTick(2))
+        progress.note_happening_fired(_TIDE_TURNS, WorldTick(2), frozenset(), NoRefusal())
 
         assert progress.last_fired_at(_SHIP_ARRIVES.happening_id) == NeverFired()
         assert progress.may_fire(_SHIP_ARRIVES, WorldTick(3))
@@ -80,7 +83,7 @@ class TestScenarioProgressHappenings:
         """once でない潮の変わり目も、tick 5 に起きたら同じ tick 5 の may_fire は偽、tick 6 では真。"""
         progress = ScenarioProgress.start(_WORLD)
 
-        progress.note_happening_fired(_TIDE_TURNS, WorldTick(5))
+        progress.note_happening_fired(_TIDE_TURNS, WorldTick(5), frozenset(), NoRefusal())
 
         assert not progress.may_fire(_TIDE_TURNS, WorldTick(5))
         assert progress.may_fire(_TIDE_TURNS, WorldTick(6))
@@ -150,8 +153,8 @@ class TestScenarioProgressMemento:
     def test_rebuilt_progress_answers_the_same(self) -> None:
         """船の到着が tick 3、潮の変わりが tick 4 に起き、扉は閉じている (真) と記録したあと作り直すと、同じ答えを返す。"""
         progress = ScenarioProgress.start(_WORLD)
-        progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(3))
-        progress.note_happening_fired(_TIDE_TURNS, WorldTick(4))
+        progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(3), frozenset(), NoRefusal())
+        progress.note_happening_fired(_TIDE_TURNS, WorldTick(4), frozenset(), NoRefusal())
         progress.note_reaction_truth(_DOOR_CLOSED, True)
 
         rebuilt = rebuilt_from_memento(progress)
@@ -190,3 +193,60 @@ class TestScenarioProgressMementoRefusesRepeatedKey:
                 last_fired=frozenset(),
                 reaction_truths=frozenset({ReactionLastTruth(door, True), ReactionLastTruth(door, False)}),
             )
+
+
+_BELL_HEARD_BY = frozenset({PersonId("alice"), PersonId("bob")})
+
+
+class TestScenarioProgressFiredEvents:
+    """ScenarioProgress が、出来事と反応の発火を記録するたびに、知らせの相手と断った理由を載せたイベントを出すことを保証する。"""
+
+    def test_fired_happening_emits_event_with_its_audience(self) -> None:
+        """tick 4 に断られずに起きた出来事を記録すると、相手 2 人を載せ、断りの無い HappeningFiredEvent を 1 つ出す。"""
+        progress = ScenarioProgress.start(_WORLD)
+
+        progress.note_happening_fired(_TIDE_TURNS, WorldTick(4), _BELL_HEARD_BY, NoRefusal())
+
+        [event] = progress.get_events()
+        assert isinstance(event, HappeningFiredEvent)
+        assert (event.world_id, event.happening_id, event.at) == (_WORLD, _TIDE_TURNS.happening_id, WorldTick(4))
+        assert event.audience == _BELL_HEARD_BY
+        assert event.refusal == NoRefusal()
+
+    def test_refused_happening_emits_event_with_no_audience_and_counts_as_fired(self) -> None:
+        """断られた出来事を記録すると、相手を渡しても HappeningFiredEvent の相手は空で断った理由が載り、once の出来事は以後起きない。"""
+        progress = ScenarioProgress.start(_WORLD)
+        pack_full = RefusalCode("PERSON_INVENTORY.PACK_FULL")
+
+        progress.note_happening_fired(_SHIP_ARRIVES, WorldTick(4), _BELL_HEARD_BY, pack_full)
+
+        [event] = progress.get_events()
+        assert isinstance(event, HappeningFiredEvent)
+        assert event.audience == frozenset()
+        assert event.refusal == pack_full
+        assert not progress.may_fire(_SHIP_ARRIVES, WorldTick(5))
+
+    def test_fired_reaction_emits_event_and_notes_its_new_truth(self) -> None:
+        """真と記録した扉の反応が偽になって発火したと記録すると、偽への変わり目を載せた ReactionFiredEvent を出し、以後は偽を変わっていないと答える。"""
+        progress = ScenarioProgress.start(_WORLD)
+        progress.note_reaction_truth(_DOOR_CLOSED, True)
+
+        progress.note_reaction_fired(_DOOR_CLOSED, False, WorldTick(6), NoRefusal())
+
+        [event] = progress.get_events()
+        assert isinstance(event, ReactionFiredEvent)
+        assert (event.reaction_id, event.became, event.at, event.refusal) == (
+            _DOOR_CLOSED.reaction_id,
+            False,
+            WorldTick(6),
+            NoRefusal(),
+        )
+        assert not progress.reaction_changed(_DOOR_CLOSED, False)
+
+    def test_noting_the_first_truth_of_a_reaction_emits_nothing(self) -> None:
+        """反応の最初の真偽を記録するだけでは、イベントを出さない。"""
+        progress = ScenarioProgress.start(_WORLD)
+
+        progress.note_reaction_truth(_DOOR_CLOSED, True)
+
+        assert progress.get_events() == []

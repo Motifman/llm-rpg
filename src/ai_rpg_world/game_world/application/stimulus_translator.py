@@ -100,6 +100,10 @@ from ai_rpg_world.game_world.domain.world_records.latest_actions import (
     ActionAttemptFailedEvent,
     PersonActedEvent,
 )
+from ai_rpg_world.game_world.domain.world_records.scenario_progress import (
+    HappeningFiredEvent,
+    ReactionFiredEvent,
+)
 from ai_rpg_world.game_world.domain.world_records.world_flags import (
     WorldFlagLoweredEvent,
     WorldFlagRaisedEvent,
@@ -145,6 +149,7 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         GroupDecisionReachedEvent,
         GroupDecisionStartedEvent,
         GroupDecisionUnresolvedEvent,
+        HappeningFiredEvent,
         HungerLevelChangedEvent,
         ItemCameIntoWorldEvent,
         ItemGivenUpEvent,
@@ -174,6 +179,7 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         PersonNamedEvent,
         PersonOutcomeDecidedEvent,
         PersonRevivedEvent,
+        ReactionFiredEvent,
         SpotAtmosphereChangedEvent,
         SpotSearchedEvent,
         StatusEffectAddedEvent,

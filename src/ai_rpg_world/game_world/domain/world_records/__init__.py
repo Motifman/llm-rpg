@@ -9,10 +9,13 @@ from ai_rpg_world.game_world.domain.world_records.latest_actions import (
 )
 from ai_rpg_world.game_world.domain.world_records.missed_notices import MissedNotices, MissedNoticesMemento
 from ai_rpg_world.game_world.domain.world_records.scenario_progress import (
+    HappeningFiredEvent,
     HappeningLastFiredAt,
     NeverFired,
+    ReactionFiredEvent,
     ReactionLastTruth,
     ScenarioProgress,
+    ScenarioProgressEvent,
     ScenarioProgressMemento,
 )
 from ai_rpg_world.game_world.domain.world_records.world_flags import (
@@ -28,6 +31,7 @@ __all__ = [
     "ActionAttemptFailedEvent",
     "ActionLastDoneAt",
     "FlagPosition",
+    "HappeningFiredEvent",
     "HappeningLastFiredAt",
     "LatestActions",
     "LatestActionsEvent",
@@ -37,8 +41,10 @@ __all__ = [
     "NeverDone",
     "NeverFired",
     "PersonActedEvent",
+    "ReactionFiredEvent",
     "ReactionLastTruth",
     "ScenarioProgress",
+    "ScenarioProgressEvent",
     "ScenarioProgressMemento",
     "WorldFlagLoweredEvent",
     "WorldFlagRaisedEvent",

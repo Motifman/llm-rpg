@@ -99,6 +99,12 @@ class LookingAround(_NotAnAction):
 
 @final
 @dataclass(frozen=True)
+class WorldConditionsSettling(_NotAnAction):
+    tick: WorldTick
+
+
+@final
+@dataclass(frozen=True)
 class EachPersonOf:
     outer: Trigger
     person: PersonId
@@ -131,5 +137,6 @@ Trigger = (
     | JointActionCompleted
     | WorldTimePassing
     | LookingAround
+    | WorldConditionsSettling
     | EachPersonOf
 )

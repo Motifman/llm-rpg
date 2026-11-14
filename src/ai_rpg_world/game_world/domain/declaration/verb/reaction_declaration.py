@@ -15,3 +15,6 @@ class ReactionDeclaration:
     condition: Condition
     when_becomes_true: Effect
     when_becomes_false: Effect
+
+    def effect_when(self, truth: bool) -> Effect:
+        return self.when_becomes_true if truth else self.when_becomes_false

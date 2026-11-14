@@ -30,6 +30,8 @@ class WorldAggregates(Protocol):
         # 新しい ID (uuid) を決め、Item.come_into_world で作って登録し、ID を返す。登場人物の initial_items もここを通る
     def take_item_out_of_world(self, item: ItemInstanceId) -> None: ...
         # Item.leave_world を呼び、登録から外す
+    def attempt_apart(self, work: Callable[[], None]) -> None: ...
+        # work の中で集約が断ったら、work の書き換えだけを巻き戻して続ける (persistence.md の小さな範囲)
 ```
 
 - `bring_item_into_world` は集約の操作ではなく「作って入れる」リポジトリの操作なので、値を返す
@@ -58,7 +60,8 @@ class RandomBranchEffect:                  # facts.random() から 1 つ引き�
 
 @final
 @dataclass(frozen=True)
-class ForEveryoneEffect:
+class ForEveryoneEffect:                   # 1 人ずつを attempt_apart にし、断られた人の分だけを巻き戻す (#1978 の E3)
+                                            # 行為の効果の中でも同じで、1 人が断られても行為は通る。1 人ごとの断った理由は、いまはどこにも残らない
     people: PeopleSelection
     effect: Effect                          # 中では EachPerson が「その人」を指す
 
