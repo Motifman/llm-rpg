@@ -67,6 +67,12 @@ class AggregateCodecs:
     def memento_types(self) -> frozenset[type]:
         return frozenset(self._by_type)
 
+    def kind_of(self, memento_type: type) -> str:
+        codec = self._by_type.get(memento_type)
+        if codec is None:
+            raise MementoNotStorableException(f"no codec is registered for {memento_type.__name__}")
+        return codec.kind
+
     def stored(self, memento: object) -> StoredMemento:
         codec = self._by_type.get(type(memento))
         if codec is None:
