@@ -10,16 +10,7 @@ from typing import get_type_hints
 from ai_rpg_world.game_world import domain
 from ai_rpg_world.game_world.infrastructure.persistence.aggregate_codecs import GAME_WORLD_CODECS
 
-_ADDED_LATER = frozenset(
-    {
-        "Weather",
-        "WorldEnding",
-        "WorldStage",
-        "LatestActions",
-        "MissedNotices",
-        "ScenarioProgress",
-    }
-)
+_ADDED_LATER: frozenset[str] = frozenset()
 
 
 def _aggregates_with_memento() -> dict[str, type]:
