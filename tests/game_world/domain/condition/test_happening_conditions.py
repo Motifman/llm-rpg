@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, NoText
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.condition.happening_conditions import (
@@ -17,7 +18,7 @@ from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from tests.game_world.domain.condition._builders import ALICE, text, world
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _BY_ALICE = ActionAttemptForTests(actor_id=ALICE)
 
@@ -45,14 +46,14 @@ class TestHappeningHasFiredCondition:
         a_world = world()
         assert not condition.holds(a_world.facts(), _BY_ALICE)
 
-        a_world.scenario_progress.note_happening_fired(_LANDSLIDE, WorldTick(2))
+        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(2))
 
         assert condition.holds(a_world.facts(), _BY_ALICE)
 
     def test_other_happening_firing_does_not_count(self) -> None:
         """地震が起きても、崖崩れの条件は偽のまま。"""
         a_world = world()
-        a_world.scenario_progress.note_happening_fired(_EARTHQUAKE, WorldTick(2))
+        a_world.scenario_progress().note_happening_fired(_EARTHQUAKE, WorldTick(2))
 
         assert not HappeningHasFiredCondition(happening=_LANDSLIDE.happening_id, failure_text=NoText()).holds(
             a_world.facts(), _BY_ALICE
@@ -75,9 +76,9 @@ class TestHappeningHasFiredCondition:
         )
 
 
-def _at_tick(a_world: WorldInMemory, tick: int) -> WorldInMemory:
+def _at_tick(a_world: WorldSession, tick: int) -> WorldSession:
     while a_world.clock().now() < WorldTick(tick):
-        a_world.clock().advance(a_world.day_night)
+        a_world.clock().advance(a_world.facts().day_night())
     return a_world
 
 
@@ -90,7 +91,7 @@ class TestTicksSinceHappeningAtLeastCondition:
             happening=_LANDSLIDE.happening_id, ticks=Ticks(3), failure_text=NoText()
         )
         a_world = world()
-        a_world.scenario_progress.note_happening_fired(_LANDSLIDE, WorldTick(2))
+        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(2))
 
         assert not condition.holds(_at_tick(a_world, 4).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 5).facts(), _BY_ALICE)
@@ -101,8 +102,8 @@ class TestTicksSinceHappeningAtLeastCondition:
             happening=_LANDSLIDE.happening_id, ticks=Ticks(3), failure_text=NoText()
         )
         a_world = world()
-        a_world.scenario_progress.note_happening_fired(_LANDSLIDE, WorldTick(1))
-        a_world.scenario_progress.note_happening_fired(_LANDSLIDE, WorldTick(6))
+        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(1))
+        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(6))
 
         assert not condition.holds(_at_tick(a_world, 8).facts(), _BY_ALICE)
 

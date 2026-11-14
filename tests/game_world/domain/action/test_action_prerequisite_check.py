@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt, LivingOrDeparted
 from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
@@ -54,7 +55,7 @@ from ai_rpg_world.game_world.domain.world_progress import WorldStage
 from ai_rpg_world.game_world.domain.world_progress.group_decision import VoteFor
 from tests.game_world.domain.whereabouts._builders import WORLD, section, spot, thing
 from tests.game_world.support.declarations_for_tests import InteractionForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 ALICE = PersonId("alice")
@@ -78,7 +79,7 @@ TEXTS = RefusalTexts(
 _CHECK = ActionPrerequisiteCheck()
 
 
-def _world(**overrides: object) -> WorldInMemory:
+def _world(**overrides: object) -> WorldSession:
     arguments: dict[str, object] = {
         "world": WORLD,
         "people": (ALICE, BOB),
@@ -88,13 +89,13 @@ def _world(**overrides: object) -> WorldInMemory:
         "vitals": (PersonVitals.start(ALICE, HitPoints(10, 10)), PersonVitals.start(BOB, HitPoints(10, 10))),
     }
     arguments.update(overrides)
-    world = WorldInMemory(**arguments)  # type: ignore[arg-type]
-    world.whereabouts.place(PersonBody(ALICE), LANDING)
-    world.whereabouts.place(PersonBody(BOB), LANDING)
+    world = world_in_memory(**arguments)  # type: ignore[arg-type]
+    world.aggregates().whereabouts().place(PersonBody(ALICE), LANDING)
+    world.aggregates().whereabouts().place(PersonBody(BOB), LANDING)
     return world
 
 
-def _reason(attempt: ActionAttempt, world: WorldInMemory) -> object:
+def _reason(attempt: ActionAttempt, world: WorldSession) -> object:
     refusal = _CHECK.refusal(attempt, world.facts(), TEXTS)
     return None if refusal is None else refusal.reason
 
@@ -103,10 +104,12 @@ def _speak() -> SpeechAttempt:
     return SpeechAttempt(ALICE, OrdinaryVoice(), SpeechContent("おはよう"))
 
 
-def _make_dead(world: WorldInMemory, person: PersonId) -> None:
-    vitals = world.vitals[person]
+def _make_dead(world: WorldSession, person: PersonId) -> None:
+    vitals = world.aggregates().vitals(person)
     vitals.take_damage(Damage(10), WorldTick(0), WorldHappening())
-    vitals.pass_time(WorldTick(0) + world.rules.death.grace, world.rules.death, world.rules.hunger)
+    vitals.pass_time(
+        WorldTick(0) + world.facts().rules().death.grace, world.facts().rules().death, world.facts().rules().hunger
+    )
 
 
 class TestNothingBroken:
@@ -123,7 +126,7 @@ class TestBusy:
     def test_busy_person_is_refused_except_for_speaking(self) -> None:
         """行っている最中 (is_busy) の人が探そうとすると Busy で断り、話すことは断らない。"""
         world = _world()
-        world.vitals[ALICE].start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
 
         assert _reason(SpotSearchAttempt(ALICE), world) == Busy()
         assert _reason(_speak(), world) is None
@@ -131,7 +134,7 @@ class TestBusy:
     def test_person_whose_action_has_ended_is_not_busy(self) -> None:
         """行っているあいだが今の tick までに終わっていれば、Busy で断らない。"""
         world = _world()
-        world.vitals[ALICE].start_action(until=WorldTick(0))
+        world.aggregates().vitals(ALICE).start_action(until=WorldTick(0))
 
         assert _reason(SpotSearchAttempt(ALICE), world) is None
 
@@ -148,7 +151,7 @@ class TestReach:
     def test_object_reachable_only_from_section_is_reachable_from_inside(self) -> None:
         """籠の中にいれば、籠の中からしか届かないレバーに触れる。"""
         world = _world()
-        world.whereabouts.enter_section(PersonBody(ALICE), CAGE, frozenset())
+        world.aggregates().whereabouts().enter_section(PersonBody(ALICE), CAGE, frozenset())
         attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, {}, Openly())
 
         assert _reason(attempt, world) is None
@@ -156,7 +159,7 @@ class TestReach:
     def test_object_at_another_spot_is_not_together(self) -> None:
         """別の場所にある物に触ろうとすると、区画より先に NotTogether で断る。"""
         world = _world()
-        world.whereabouts.teleport(PersonBody(ALICE), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(ALICE), SHORE)
         attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, {}, Openly())
 
         assert _reason(attempt, world) == NotTogether()
@@ -164,7 +167,7 @@ class TestReach:
     def test_person_at_another_spot_is_not_together(self) -> None:
         """相手が別の場所にいるのに介抱しようとすると NotTogether で断る。"""
         world = _world()
-        world.whereabouts.teleport(PersonBody(BOB), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE)
 
         assert _reason(TendAttempt(ALICE, BOB), world) == NotTogether()
 
@@ -172,11 +175,11 @@ class TestReach:
         """拾おうとした品物が、いる場所の地面に無ければ NotTogether で断り、あれば断らない。"""
         world = _world()
         lamp = ItemInstanceId("lamp_1")
-        world.ground_items_at(SHORE.spot_id).place(lamp)
+        world.aggregates().ground_items(SHORE.spot_id).place(lamp)
         attempt = GroundItemPickupAttempt(ALICE, lamp, Openly())
 
         assert _reason(attempt, world) == NotTogether()
-        world.whereabouts.teleport(PersonBody(ALICE), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(ALICE), SHORE)
         assert _reason(attempt, world) is None
 
 
@@ -189,7 +192,7 @@ def _stage(allowed: frozenset[ActionKind | InteractionId]) -> WorldStageDeclarat
     )
 
 
-def _world_in_stage(declaration: WorldStageDeclaration) -> WorldInMemory:
+def _world_in_stage(declaration: WorldStageDeclaration) -> WorldSession:
     return _world(
         world_stage=WorldStage.from_initial_stage(WORLD, declaration, WorldTick(0)),
         stage_declarations=(declaration,),
@@ -223,7 +226,7 @@ class TestActorCannotAct:
         """departed_persons_act の世界で死んで去った人は、移動と耳を澄ますことは断られず、話すことは ActorCannotAct で断る。"""
         world = _world(rules=replace(world_rules_for_tests(), departed_persons_act=True))
         _make_dead(world, ALICE)
-        world.whereabouts.place(DepartedPerson(ALICE), LANDING)
+        world.aggregates().whereabouts().place(DepartedPerson(ALICE), LANDING)
 
         assert _reason(TravelAttempt(ALICE, SHORE), world) is None
         assert _reason(ListeningAttempt(ALICE), world) is None
@@ -233,7 +236,7 @@ class TestActorCannotAct:
         """去った人にもできる物への操作は、体ではなく去った人の居場所で届くかを確かめる。"""
         world = _world(rules=replace(world_rules_for_tests(), departed_persons_act=True))
         _make_dead(world, ALICE)
-        world.whereabouts.place(DepartedPerson(ALICE), SHORE)
+        world.aggregates().whereabouts().place(DepartedPerson(ALICE), SHORE)
         haunt = InteractionForTests(InteractionId("haunt"), actor_requirement=LivingOrDeparted())
 
         assert _reason(ObjectInteractionAttempt(ALICE, LEVER, haunt, {}, Openly()), world) == NotTogether()
@@ -248,14 +251,14 @@ class TestActorCannotAct:
     def test_fallen_person_cannot_act(self) -> None:
         """倒れた (Down) 人は、去った人にもできる移動も ActorCannotAct で断る。"""
         world = _world(rules=replace(world_rules_for_tests(), departed_persons_act=True))
-        world.vitals[ALICE].take_damage(Damage(10), WorldTick(0), WorldHappening())
+        world.aggregates().vitals(ALICE).take_damage(Damage(10), WorldTick(0), WorldHappening())
 
         assert _reason(TravelAttempt(ALICE, SHORE), world) == ActorCannotAct()
 
     def test_person_whose_outcome_is_decided_cannot_act(self) -> None:
         """生きていても結末が決まった人は、ActorCannotAct で断る。"""
         world = _world()
-        world.outcomes.decide(ALICE, DeclaredOutcome(OutcomeId("rescued")))
+        world.aggregates().outcomes().decide(ALICE, DeclaredOutcome(OutcomeId("rescued")))
 
         assert _reason(_speak(), world) == ActorCannotAct()
 
@@ -271,7 +274,7 @@ class TestTooTired:
             levels=(FatigueLevel(FatigueAmount(0), FatigueLevelName("元気")),),
         )
         world = _world(rules=replace(world_rules_for_tests(), fatigue=fatigue))
-        world.vitals[ALICE].exert(fatigue)
+        world.aggregates().vitals(ALICE).exert(fatigue)
 
         assert _reason(GroupDecisionBallotAttempt(ALICE, EXILE, VoteFor(BOB)), world) is None
         assert _reason(SpotSearchAttempt(ALICE), world) == TooTired()
@@ -283,7 +286,7 @@ class TestRefusalText:
     def test_refusal_carries_the_attempt_and_the_text_about_the_actor(self) -> None:
         """Busy で断ると、ActionRefusal は試した行為と、RefusalTexts の BUSY の文に行った人を当てた TextAboutPeople を持つ。"""
         world = _world()
-        world.vitals[ALICE].start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
         attempt = SpotSearchAttempt(ALICE)
 
         assert _CHECK.refusal(attempt, world.facts(), TEXTS) == ActionRefusal(
@@ -299,14 +302,14 @@ class TestOrderOfRules:
     def test_fallen_busy_person_is_refused_as_unable_to_act(self) -> None:
         """行っている最中に倒れた人は、Busy ではなく ActorCannotAct で断る。"""
         world = _world()
-        world.vitals[ALICE].start_action(until=WorldTick(5))
-        world.vitals[ALICE].take_damage(Damage(10), WorldTick(0), WorldHappening())
+        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).take_damage(Damage(10), WorldTick(0), WorldHappening())
 
         assert _reason(SpotSearchAttempt(ALICE), world) == ActorCannotAct()
 
     def test_stage_is_checked_before_busy(self) -> None:
         """段階で許されず、行っている最中でもある行為は、NotAllowedInThisStage で断る。"""
         world = _world_in_stage(_stage(frozenset({ActionKind.SPEAK})))
-        world.vitals[ALICE].start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
 
         assert _reason(SpotSearchAttempt(ALICE), world) == NotAllowedInThisStage()

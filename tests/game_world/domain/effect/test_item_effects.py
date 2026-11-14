@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import Actor, SubjectKind, Target, ThisItem
@@ -38,7 +39,7 @@ from ai_rpg_world.game_world.domain.exception.person_inventory_exception import 
     ItemNotPackedException,
     PackIsEmptyException,
 )
-from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId
+from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, ItemLeftWorldEvent
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     DescriptionText,
@@ -51,7 +52,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from tests.game_world.domain.effect._builders import ALICE, BOB, WORLD, inventory, item_spec
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _APPLE = item_spec("apple")
 _ROPE = item_spec("rope")
@@ -62,21 +63,26 @@ _THE_ITEM = ArgumentName("the_item")
 
 def _world(
     *items: tuple[ItemInstanceId, ItemSpecDeclaration], capacity: int = 10, fractions: tuple[float, ...] = ()
-) -> WorldInMemory:
+) -> WorldSession:
     alice = inventory(ALICE, capacity)
     for item_id, spec in items:
         alice.receive(item_id, spec.item_spec_id)
-    return WorldInMemory(
+    return world_in_memory(
         world=WORLD,
         people=(ALICE, BOB),
+        item_specs=tuple({spec.item_spec_id: spec for _, spec in items}.values()),
         inventories=(alice, inventory(BOB)),
         items=tuple(Item.come_into_world(item_id, spec, WorldTick(0)) for item_id, spec in items),
         fractions=fractions,
     )
 
 
-def _held(world: WorldInMemory, item: ItemInstanceId) -> None:
-    world.inventories[ALICE].hold(item, HandsNeeded(1))
+def _left_world(world: WorldSession) -> set[ItemInstanceId]:
+    return {event.item for event in world.commit() if isinstance(event, ItemLeftWorldEvent)}
+
+
+def _held(world: WorldSession, item: ItemInstanceId) -> None:
+    world.aggregates().inventory(ALICE).hold(item, HandsNeeded(1))
 
 
 def _bob_acts(**arguments: TextArgumentValue | ItemInstanceId) -> ActionAttemptForTests:
@@ -104,10 +110,10 @@ class TestGiveItemEffect:
             world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE)
         )
 
-        given = world.inventories[ALICE].packed_items()
+        given = world.aggregates().inventory(ALICE).packed_items()
         assert len(given) == 2
-        assert all(world.items[item].spec_id == _APPLE.item_spec_id for item in given)
-        assert world.inventories[ALICE].count_of(_APPLE.item_spec_id) == Count(2)
+        assert all(world.aggregates().item(item).spec_id == _APPLE.item_spec_id for item in given)
+        assert world.aggregates().inventory(ALICE).count_of(_APPLE.item_spec_id) == Count(2)
 
     def test_full_pack_refusal_comes_out_as_domain_exception(self) -> None:
         """荷が満杯の Alice に与えると、PersonInventory が InventoryFullException で断り、効果はそのまま外へ出す。"""
@@ -131,8 +137,8 @@ class TestTakeItemEffect:
             world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE)
         )
 
-        assert world.inventories[ALICE].items() == (_APPLE_1,)
-        assert set(world.items) == {_APPLE_1}
+        assert world.aggregates().inventory(ALICE).items() == (_APPLE_1,)
+        assert _left_world(world) == {_APPLE_2, _APPLE_3}
 
     def test_takes_nothing_when_too_few(self) -> None:
         """りんごを 1 つしか持たない Alice から 2 つ取ろうとすると、NotEnoughItemsOfSpecException で断り、1 つも取らない。"""
@@ -143,8 +149,8 @@ class TestTakeItemEffect:
                 world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE)
             )
 
-        assert world.inventories[ALICE].items() == (_APPLE_1,)
-        assert set(world.items) == {_APPLE_1}
+        assert world.aggregates().inventory(ALICE).items() == (_APPLE_1,)
+        assert _left_world(world) == set()
 
 
 class TestMoveItemEffectByArgument:
@@ -159,9 +165,9 @@ class TestMoveItemEffectByArgument:
             world.facts(), world.aggregates(), _bob_acts(the_item=_LANTERN_1)
         )
 
-        assert world.inventories[ALICE].items() == ()
-        assert world.inventories[BOB].packed_items() == (_LANTERN_1,)
-        assert world.inventories[BOB].count_of(_LANTERN.item_spec_id) == Count(1)
+        assert world.aggregates().inventory(ALICE).items() == ()
+        assert world.aggregates().inventory(BOB).packed_items() == (_LANTERN_1,)
+        assert world.aggregates().inventory(BOB).count_of(_LANTERN.item_spec_id) == Count(1)
 
     def test_in_hands_refuses_packed_item(self) -> None:
         """荷にある縄を InHands で指すと、ItemNotHeldException で断り、どちらの持ち物も変わらない。"""
@@ -172,8 +178,8 @@ class TestMoveItemEffectByArgument:
                 world.facts(), world.aggregates(), _bob_acts(the_item=_ROPE_1)
             )
 
-        assert world.inventories[ALICE].items() == (_ROPE_1,)
-        assert world.inventories[BOB].items() == ()
+        assert world.aggregates().inventory(ALICE).items() == (_ROPE_1,)
+        assert world.aggregates().inventory(BOB).items() == ()
 
     def test_in_pack_refuses_held_item(self) -> None:
         """手にあるカンテラを InPack で指すと、ItemNotPackedException で断り、どちらの持ち物も変わらない。"""
@@ -185,8 +191,8 @@ class TestMoveItemEffectByArgument:
                 world.facts(), world.aggregates(), _bob_acts(the_item=_LANTERN_1)
             )
 
-        assert world.inventories[ALICE].held_items() == (_LANTERN_1,)
-        assert world.inventories[BOB].items() == ()
+        assert world.aggregates().inventory(ALICE).held_items() == (_LANTERN_1,)
+        assert world.aggregates().inventory(BOB).items() == ()
 
     @pytest.mark.parametrize("held", [True, False])
     def test_anywhere_moves_item_from_hands_or_pack(self, held: bool) -> None:
@@ -199,7 +205,7 @@ class TestMoveItemEffectByArgument:
             world.facts(), world.aggregates(), _bob_acts(the_item=_ROPE_1)
         )
 
-        assert world.inventories[BOB].packed_items() == (_ROPE_1,)
+        assert world.aggregates().inventory(BOB).packed_items() == (_ROPE_1,)
 
     def test_text_argument_is_refused(self) -> None:
         """品物を指すはずの引数に文が入っていると、ArgumentIsNotAnItemException を投げ、何も移さない。"""
@@ -210,7 +216,7 @@ class TestMoveItemEffectByArgument:
                 world.facts(), world.aggregates(), _bob_acts(the_item=TextArgumentValue("縄"))
             )
 
-        assert world.inventories[ALICE].items() == (_ROPE_1,)
+        assert world.aggregates().inventory(ALICE).items() == (_ROPE_1,)
 
     def test_requires_both_subjects_and_the_argument(self) -> None:
         """要るものは、手放す人と受け取る人の主語と、読む引数の名前。"""
@@ -240,8 +246,8 @@ class TestMoveItemEffectRandomItemOf:
 
         MoveItemEffect(Target(), Actor(), RandomItemOf()).apply(world.facts(), world.aggregates(), _bob_acts())
 
-        assert world.inventories[ALICE].items() == (_ROPE_1,)
-        assert world.inventories[BOB].packed_items() == (_KNIFE_1,)
+        assert world.aggregates().inventory(ALICE).items() == (_ROPE_1,)
+        assert world.aggregates().inventory(BOB).packed_items() == (_KNIFE_1,)
 
     def test_empty_pack_is_refused_by_inventory(self) -> None:
         """Alice の荷が空なら (手にカンテラを持っていても)、PersonInventory が PackIsEmptyException で断る。"""
@@ -251,7 +257,7 @@ class TestMoveItemEffectRandomItemOf:
         with pytest.raises(PackIsEmptyException):
             MoveItemEffect(Target(), Actor(), RandomItemOf()).apply(world.facts(), world.aggregates(), _bob_acts())
 
-        assert world.inventories[ALICE].items() == (_LANTERN_1,)
+        assert world.aggregates().inventory(ALICE).items() == (_LANTERN_1,)
 
     def test_requires_both_subjects_and_chance(self) -> None:
         """要るものは、手放す人と受け取る人の主語と、偶然。"""
@@ -293,7 +299,7 @@ class TestSetItemValueEffect:
             world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=ALICE, item=_LANTERN_1)
         )
 
-        assert world.items[_LANTERN_1].value_of(lit) == FlagValue(True)
+        assert world.aggregates().item(_LANTERN_1).value_of(lit) == FlagValue(True)
 
     def test_value_that_does_not_fit_the_key_is_refused(self) -> None:
         """旗の鍵に数の値を置く SetItemValueEffect は StateValueMismatchesKindException を投げる。"""

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.declaration.spot import NoSmell, Temperature, Unchanged
 from ai_rpg_world.game_world.domain.effect.spot_and_passage_effects import (
@@ -14,7 +15,7 @@ from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from tests.game_world.domain.effect._builders import WORLD
 from tests.game_world.domain.whereabouts._builders import OPEN, door, path, spot
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _PLAZA = spot("plaza")
 _CELLAR = spot("cellar", Lighting.DARK)
@@ -24,8 +25,8 @@ _STAIRS = path("stairs", "plaza", "cellar")
 _QUAKE = HappeningFired(HappeningForTests(HappeningId("quake")))
 
 
-def _world() -> WorldInMemory:
-    return WorldInMemory(world=WORLD, spots=(_PLAZA, _CELLAR), passages=(_GATE, _TUNNEL, _STAIRS))
+def _world() -> WorldSession:
+    return world_in_memory(world=WORLD, spots=(_PLAZA, _CELLAR), passages=(_GATE, _TUNNEL, _STAIRS))
 
 
 class TestPassageEffects:
@@ -37,7 +38,7 @@ class TestPassageEffects:
 
         ChangePassageStateEffect(_GATE, OPEN).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.passages.is_traversable(_GATE)
+        assert world.aggregates().passages().is_traversable(_GATE)
 
     def test_reveal_passage_makes_hidden_passage_traversable(self) -> None:
         """隠れたトンネルを現すと、トンネルは通れる。"""
@@ -45,7 +46,7 @@ class TestPassageEffects:
 
         RevealPassageEffect(_TUNNEL).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.passages.is_traversable(_TUNNEL)
+        assert world.aggregates().passages().is_traversable(_TUNNEL)
 
     def test_remove_passage_makes_passage_closed(self) -> None:
         """階段を無くすと、階段は通れない道に入る。"""
@@ -53,7 +54,7 @@ class TestPassageEffects:
 
         RemovePassageEffect(_STAIRS).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert _STAIRS.passage_id in world.passages.closed_passages()
+        assert _STAIRS.passage_id in world.aggregates().passages().closed_passages()
 
 
 class TestChangeAtmosphereEffect:
@@ -62,13 +63,13 @@ class TestChangeAtmosphereEffect:
     def test_changes_given_fields_and_keeps_unchanged_ones(self) -> None:
         """暗い地下室を明るくし、においを足すと、明るさとにおいだけが変わり、温度と物音は前のまま。"""
         world = _world()
-        before = world.atmospheres.atmosphere_of(_CELLAR)
+        before = world.aggregates().atmospheres().atmosphere_of(_CELLAR)
 
         ChangeAtmosphereEffect(
             _CELLAR, Lighting.BRIGHT, Unchanged(), Unchanged(), DescriptionText("焦げたにおい")
         ).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        after = world.atmospheres.atmosphere_of(_CELLAR)
+        after = world.aggregates().atmospheres().atmosphere_of(_CELLAR)
         assert after.lighting is Lighting.BRIGHT
         assert after.smell == DescriptionText("焦げたにおい")
         assert after.temperature == before.temperature
@@ -85,7 +86,7 @@ class TestChangeAtmosphereEffect:
             world.facts(), world.aggregates(), _QUAKE
         )
 
-        after = world.atmospheres.atmosphere_of(_CELLAR)
+        after = world.aggregates().atmospheres().atmosphere_of(_CELLAR)
         assert after.smell == DescriptionText("焦げたにおい")
         assert after.temperature is Temperature.COLD
 
@@ -100,4 +101,4 @@ class TestChangeAtmosphereEffect:
             world.facts(), world.aggregates(), _QUAKE
         )
 
-        assert world.atmospheres.atmosphere_of(_CELLAR).smell == NoSmell()
+        assert world.aggregates().atmospheres().atmosphere_of(_CELLAR).smell == NoSmell()

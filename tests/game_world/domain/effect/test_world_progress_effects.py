@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import final
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
@@ -26,7 +27,7 @@ from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.world_progress import GroupDecisionStartedEvent, WorldStage
 from tests.game_world.domain.effect._builders import ALICE, BOB, CAROL, WORLD, EachPersonIsOneOf, FixedTruth
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _DUSK = HappeningFired(HappeningForTests(HappeningId("dusk")))
 _EXILE_VOTE = GroupDecisionDeclaration(
@@ -50,10 +51,11 @@ _DAY = _stage("day")
 _NIGHT = _stage("night")
 
 
-def _world() -> WorldInMemory:
-    return WorldInMemory(
+def _world() -> WorldSession:
+    return world_in_memory(
         world=WORLD,
         people=(ALICE, BOB, CAROL),
+        group_decisions=(_EXILE_VOTE,),
         world_stage=WorldStage.from_initial_stage(WORLD, _DAY, WorldTick(0)),
         stage_declarations=(_DAY, _NIGHT),
     )
@@ -89,7 +91,7 @@ class TestStartAndCloseGroupDecisionEffect:
 
         start.apply(world.facts(), world.aggregates(), _DUSK)
 
-        decision = world.group_decision_of(_EXILE_VOTE)
+        decision = world.aggregates().group_decision(_EXILE_VOTE)
         assert decision.is_open()
         (started,) = decision.get_events()
         assert isinstance(started, GroupDecisionStartedEvent)
@@ -110,11 +112,11 @@ class TestStartAndCloseGroupDecisionEffect:
     def test_close_tallies_open_decision(self) -> None:
         """開いている追放の投票を締めると、決定は閉じる。"""
         world = _world()
-        world.group_decision_of(_EXILE_VOTE).start(frozenset({ALICE}), frozenset({BOB}))
+        world.aggregates().group_decision(_EXILE_VOTE).start(frozenset({ALICE}), frozenset({BOB}))
 
         CloseGroupDecisionEffect(_EXILE_VOTE).apply(world.facts(), world.aggregates(), _DUSK)
 
-        assert not world.group_decision_of(_EXILE_VOTE).is_open()
+        assert not world.aggregates().group_decision(_EXILE_VOTE).is_open()
 
 
 class TestWhichDecisionsAreClosed:

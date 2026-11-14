@@ -39,7 +39,7 @@ class TestIsMemberHolds:
         """bob が狼なら、相手 (bob) が狼である条件は真で、failure_reason は None。"""
         wolves = _wolves(MembershipVisibility.SELF_ONLY)
         a_world = world()
-        a_world.membership.join(BOB, wolves)
+        a_world.aggregates().membership().join(BOB, wolves)
 
         condition = _is_wolf(Target(), wolves)
 
@@ -82,7 +82,7 @@ class TestHiddenMembership:
         """members_know_each_other の狼に alice が入っていれば、bob が狼でないことを知りうるので FailureReason を返す。"""
         wolves = _wolves(MembershipVisibility.NOBODY, members_know_each_other=True)
         a_world = world()
-        a_world.membership.join(ALICE, wolves)
+        a_world.aggregates().membership().join(ALICE, wolves)
 
         assert _is_wolf(Target(), wolves).failure_reason(a_world.facts(), _ALICE_TO_BOB) == FailureReason(
             failed_part=_ROOT, text=_NOT_A_WOLF.about({})

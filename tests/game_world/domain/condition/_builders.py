@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import (
     GroupDeclaration,
     GroupingDeclaration,
@@ -16,7 +17,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     PersonId,
     WorldId,
 )
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 WORLD = WorldId("village")
 ALICE = PersonId("alice")
@@ -32,8 +33,8 @@ def vitals(person: PersonId) -> PersonVitals:
     return PersonVitals.start(person, HitPoints(current=5, maximum=5))
 
 
-def world(*, people: tuple[PersonId, ...] = (ALICE, BOB, CAROL), fractions: tuple[float, ...] = ()) -> WorldInMemory:
-    return WorldInMemory(
+def world(*, people: tuple[PersonId, ...] = (ALICE, BOB, CAROL), fractions: tuple[float, ...] = ()) -> WorldSession:
+    return world_in_memory(
         world=WORLD,
         people=people,
         vitals=tuple(vitals(person) for person in people),

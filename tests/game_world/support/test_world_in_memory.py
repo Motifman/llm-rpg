@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
 from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import (
@@ -38,6 +39,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherType,
 )
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
+from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ObjectState, PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PersonHandle
@@ -85,7 +87,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, OpenArea, PersonBody, Route, TravelInProgress
 from ai_rpg_world.game_world.domain.world_progress import Weather, WorldStage
 from tests.game_world.domain.whereabouts._builders import path, spot
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 _WORLD = WorldId("island")
@@ -174,12 +176,15 @@ def _world(
     day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
     weather: Weather | NoWeather = NoWeather(),
     fractions: tuple[float, ...] = (),
-) -> WorldInMemory:
-    return WorldInMemory(
+) -> WorldSession:
+    return world_in_memory(
         world=_WORLD,
         people=(_ALICE, _BOB),
         spots=(_SQUARE, _WELL_SIDE),
         passages=(_LANE,),
+        objects=(_WELL,),
+        item_specs=(_PEAR, _APPLE),
+        group_decisions=(_EXILE_VOTE,),
         vitals=(
             PersonVitals.start(_ALICE, HitPoints(current=5, maximum=5)),
             PersonVitals.start(_BOB, HitPoints(current=5, maximum=5)),
@@ -196,7 +201,7 @@ def _world(
 
 
 class TestFactsSeeWhatAggregatesChanged:
-    """WorldInMemory の aggregates で集約を書き換えると、同じ世界の facts の読む型がその変化を読むことを保証する。"""
+    """world_in_memory の作業単位の aggregates で集約を書き換えると、同じ世界の facts の読む型がその変化を読むことを保証する。"""
 
     def test_teleport_is_seen_as_the_new_spot(self) -> None:
         """広場にいる alice を井戸端へテレポートすると、facts の whereabouts は alice が井戸端にいると答える。"""
@@ -370,13 +375,13 @@ class TestItemsComingIntoAndLeavingTheWorld:
         assert world.facts().item(pear).age(WorldTick(5)) == Ticks(3)
 
     def test_item_taken_out_can_no_longer_be_found(self) -> None:
-        """世界に出したりんごを世界から消すと、facts の item で引くと LookupError を投げる。"""
+        """世界に出したりんごを世界から消すと、facts の item で引くと AggregateNotInWorldException を投げる。"""
         world = _world()
         apple = world.aggregates().bring_item_into_world(_APPLE, WorldTick(0))
 
         world.aggregates().take_item_out_of_world(apple)
 
-        with pytest.raises(LookupError):
+        with pytest.raises(AggregateNotInWorldException):
             world.facts().item(apple)
 
 
@@ -416,12 +421,13 @@ class TestAggregatesAreTheSameInstances:
         assert world.facts().scenario_progress() is world.facts().scenario_progress()
         assert world.facts().latest_actions() is world.facts().latest_actions()
 
-    def test_item_is_the_one_given_to_the_world(self) -> None:
-        """世界に渡したりんごは、item で取り出すと同じ集約。"""
+    def test_item_given_to_the_world_is_the_same_each_time(self) -> None:
+        """世界に渡したりんごは、item で何度取り出しても同じ集約で、りんごとして読める。"""
         apple = Item.come_into_world(ItemInstanceId("apple-1"), _APPLE, WorldTick(0))
         world = _world(items=(apple,))
 
-        assert world.aggregates().item(apple.item_id) is apple
+        assert world.aggregates().item(apple.item_id) is world.aggregates().item(apple.item_id)
+        assert world.facts().item(apple.item_id).spec_id == _APPLE.item_spec_id
 
 
 class TestWorldWithoutOptionalDeclarations:
@@ -432,13 +438,13 @@ class TestWorldWithoutOptionalDeclarations:
         assert _world().facts().world_stage() == NoWorldStages()
 
     def test_world_stage_aggregate_without_stages_fails_loudly(self) -> None:
-        """段階を宣言しない世界で aggregates の world_stage を取り出すと LookupError を投げる。"""
-        with pytest.raises(LookupError):
+        """段階を宣言しない世界で aggregates の world_stage を取り出すと AggregateNotInWorldException を投げる。"""
+        with pytest.raises(AggregateNotInWorldException):
             _world().aggregates().world_stage()
 
     def test_weather_aggregate_without_weather_fails_loudly(self) -> None:
-        """天候を宣言しない世界で aggregates の weather を取り出すと LookupError を投げる。"""
-        with pytest.raises(LookupError):
+        """天候を宣言しない世界で aggregates の weather を取り出すと AggregateNotInWorldException を投げる。"""
+        with pytest.raises(AggregateNotInWorldException):
             _world().aggregates().weather()
 
     def test_no_day_night(self) -> None:
@@ -484,13 +490,29 @@ class TestClockPeopleAndNouns:
     def test_rules_are_the_given_world_rules(self) -> None:
         """渡した世界の規則を、facts の rules がそのまま答える。"""
         rules = world_rules_for_tests()
-        world = WorldInMemory(world=_WORLD, rules=rules)
+        world = world_in_memory(world=_WORLD, rules=rules)
 
         assert world.facts().rules() is rules
 
     def test_people_are_everyone_in_the_world(self) -> None:
         """alice と bob の世界の people は、渡した順の 2 人。"""
         assert _world().facts().people() == (_ALICE, _BOB)
+
+    def test_people_keep_the_given_order_when_some_are_declared_as_characters(self) -> None:
+        """people に bob、alice の順で渡し、alice だけを characters に宣言すると、people は bob、alice の順。"""
+        world = world_in_memory(
+            world=_WORLD, people=(_BOB, _ALICE), spots=(_SQUARE,), characters=(_character(_ALICE, "背の高い人"),)
+        )
+
+        assert world.facts().people() == (_BOB, _ALICE)
+
+    def test_characters_not_in_people_come_after_them(self) -> None:
+        """people に alice だけを渡し、characters に bob を宣言すると、people は alice、bob の順。"""
+        world = world_in_memory(
+            world=_WORLD, people=(_ALICE,), spots=(_SQUARE,), characters=(_character(_BOB, "赤い帽子の人"),)
+        )
+
+        assert world.facts().people() == (_ALICE, _BOB)
 
     def test_nouns_know_the_declared_spots(self) -> None:
         """広場と井戸端を宣言した世界の nouns は、広場の名前から広場の宣言を引ける。"""
@@ -533,11 +555,11 @@ def _character(person: PersonId, appearance: str) -> CharacterDeclaration:
 
 
 class TestPeopleRegister:
-    """WorldInMemory が、登場人物の宣言から名簿を開き、facts から読めるようにすることを保証する。"""
+    """world_in_memory が、登場人物の宣言から名簿を開き、facts から読めるようにすることを保証する。"""
 
     def test_register_is_opened_from_the_given_characters(self) -> None:
         """characters に bob、alice の順で渡すと、facts の people_register は bob に番号 0、alice に番号 1 と見た目を答える。"""
-        world = WorldInMemory(
+        world = world_in_memory(
             world=_WORLD,
             spots=(_SQUARE,),
             characters=(_character(_BOB, "赤い帽子の人"), _character(_ALICE, "背の高い人")),
@@ -551,8 +573,8 @@ class TestPeopleRegister:
 
     def test_recorded_name_is_seen_by_facts(self) -> None:
         """名簿に alice の名前「ミナ」を記録すると、facts の people_register の name_of がそれを答える。"""
-        world = WorldInMemory(world=_WORLD, spots=(_SQUARE,), characters=(_character(_ALICE, "背の高い人"),))
+        world = world_in_memory(world=_WORLD, spots=(_SQUARE,), characters=(_character(_ALICE, "背の高い人"),))
 
-        world.people_register.name(_ALICE, DisplayName("ミナ"))
+        world.people_register().name(_ALICE, DisplayName("ミナ"))
 
         assert world.facts().people_register().name_of(_ALICE) == DisplayName("ミナ")

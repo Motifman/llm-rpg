@@ -1,54 +1,43 @@
 from __future__ import annotations
 
-import uuid
-
-from ai_rpg_world.game_world.domain.condition.aggregate_readings import (
-    GroundItemsReading,
-    GroupDecisionReading,
-    GroupMembershipReading,
-    ItemReading,
-    LatestActionsReading,
-    MissedNoticesReading,
-    ObjectStateReading,
-    PassageStatesReading,
-    PeopleRegisterReading,
-    PersonInventoryReading,
-    PersonOutcomesReading,
-    PersonVitalsReading,
-    ScenarioProgressReading,
-    SpotAtmospheresReading,
-    SpotSearchProgressReading,
-    WeatherReading,
-    WhereaboutsReading,
-    WorldClockReading,
-    WorldFlagsReading,
-    WorldStageReading,
-)
+from ai_rpg_world.game_world.application.world_store import AggregateWithMemento, WorldSession
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
-from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration, ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration, SpotDeclaration, SpotSectionDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
-from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.changes_every import NoChange
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_declaration import WeatherDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.ending_declaration import EndingDeclaration
+from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItems,
     Item,
+    ItemSerialCounter,
     ObjectState,
     PersonInventory,
     SpotSearchProgress,
 )
-from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PeopleRegister
 from ai_rpg_world.game_world.domain.person import GroupMembership, PersonOutcomes, PersonVitals
+from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
-from ai_rpg_world.game_world.domain.value_object import GroupDecisionId, ObjectId, PersonId, SpotId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, WorldId
 from ai_rpg_world.game_world.domain.whereabouts import PassageStates, SpotAtmospheres, Whereabouts
-from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldClock, WorldStage
+from ai_rpg_world.game_world.domain.world_progress import GroupDecision, Weather, WorldClock, WorldEnding, WorldStage
 from ai_rpg_world.game_world.domain.world_records import LatestActions, MissedNotices, ScenarioProgress, WorldFlags
+from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
+from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
+from tests.game_world.support.world_design_for_tests import (
+    built_in_action_perceptions,
+    introduction,
+    refusal_texts,
+    spot,
+)
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 
@@ -65,234 +54,160 @@ class FractionsInOrder(RandomSource):
         return self._left.pop(0)
 
 
-class WorldInMemory:
-    def __init__(
-        self,
-        *,
-        world: WorldId,
-        rules: WorldRules | None = None,
-        people: tuple[PersonId, ...] = (),
-        characters: tuple[CharacterDeclaration, ...] = (),
-        spots: tuple[SpotDeclaration, ...] = (),
-        passages: tuple[PassageDeclaration, ...] = (),
-        objects: tuple[ObjectDeclaration, ...] = (),
-        sections: tuple[SpotSectionDeclaration, ...] = (),
-        vitals: tuple[PersonVitals, ...] = (),
-        inventories: tuple[PersonInventory, ...] = (),
-        items: tuple[Item, ...] = (),
-        object_states: tuple[ObjectState, ...] = (),
-        world_stage: WorldStage | NoWorldStages = NoWorldStages(),
-        stage_declarations: tuple[WorldStageDeclaration, ...] = (),
-        day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
-        weather: Weather | NoWeather = NoWeather(),
-        fractions: tuple[float, ...] = (),
-    ) -> None:
-        self.rules = rules if rules is not None else world_rules_for_tests()
-        self.people = people
-        self.nouns = DeclaredNouns(
-            flags=(),
-            spots=spots,
-            passages=passages,
-            objects=objects,
-            item_specs=(),
-            groupings=(),
-            groups=(),
-            characters=characters,
-            world_stages=stage_declarations,
-            group_decisions=(),
-            sections=sections,
-            outcomes=(),
-        )
-        self.clock_aggregate = WorldClock.start(world)
-        self.whereabouts = Whereabouts.start(world)
-        self.passages = PassageStates.start(world, passages)
-        self.atmospheres = SpotAtmospheres.start(world, spots)
-        self.outcomes = PersonOutcomes.start(world, people)
-        self.membership = GroupMembership.start(world, {})
-        self.people_register = PeopleRegister.from_characters(world, characters)
-        self.vitals = {v.person: v for v in vitals}
-        self.inventories = {i.person_id: i for i in inventories}
-        self.items = {i.item_id: i for i in items}
-        self.object_states = {o.object_id: o for o in object_states}
-        self.ground_items: dict[SpotId, GroundItems] = {}
-        self.search_progresses: dict[SpotId, SpotSearchProgress] = {}
-        self.missed_notices: dict[PersonId, MissedNotices] = {}
-        self.group_decisions: dict[GroupDecisionId, GroupDecision] = {}
-        self.world_stage = world_stage
-        self.flags = WorldFlags.start(world)
-        self.scenario_progress = ScenarioProgress.start(world)
-        self.latest_actions = LatestActions.start(world)
-        self.day_night = day_night
-        self.weather = weather
-        self.random = FractionsInOrder(fractions)
-
-    def facts(self) -> WorldFacts:
-        return _FactsInMemory(self)
-
-    def aggregates(self) -> WorldAggregates:
-        return _AggregatesInMemory(self)
-
-    def clock(self) -> WorldClock:
-        return self.clock_aggregate
-
-    def ground_items_at(self, spot: SpotId) -> GroundItems:
-        return self.ground_items.setdefault(spot, GroundItems.start(spot))
-
-    def search_progress_at(self, spot: SpotId) -> SpotSearchProgress:
-        return self.search_progresses.setdefault(spot, SpotSearchProgress.start(spot))
-
-    def missed_notices_of(self, person: PersonId) -> MissedNotices:
-        return self.missed_notices.setdefault(person, MissedNotices.start(person))
-
-    def group_decision_of(self, decision: GroupDecisionDeclaration) -> GroupDecision:
-        return self.group_decisions.setdefault(decision.decision_id, GroupDecision.not_started(decision))
+def world_in_memory(
+    *,
+    world: WorldId,
+    rules: WorldRules | None = None,
+    people: tuple[PersonId, ...] = (),
+    characters: tuple[CharacterDeclaration, ...] = (),
+    spots: tuple[SpotDeclaration, ...] = (),
+    passages: tuple[PassageDeclaration, ...] = (),
+    objects: tuple[ObjectDeclaration, ...] = (),
+    item_specs: tuple[ItemSpecDeclaration, ...] = (),
+    group_decisions: tuple[GroupDecisionDeclaration, ...] = (),
+    sections: tuple[SpotSectionDeclaration, ...] = (),
+    vitals: tuple[PersonVitals, ...] = (),
+    inventories: tuple[PersonInventory, ...] = (),
+    items: tuple[Item, ...] = (),
+    object_states: tuple[ObjectState, ...] = (),
+    world_stage: WorldStage | NoWorldStages = NoWorldStages(),
+    stage_declarations: tuple[WorldStageDeclaration, ...] = (),
+    day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
+    weather: Weather | NoWeather = NoWeather(),
+    fractions: tuple[float, ...] = (),
+) -> WorldSession:
+    spots, characters = _with_everyone_declared(people, characters, spots)
+    nouns = DeclaredNouns(
+        flags=(),
+        spots=spots,
+        passages=passages,
+        objects=objects,
+        item_specs=item_specs,
+        groupings=(),
+        groups=(),
+        characters=characters,
+        world_stages=stage_declarations,
+        group_decisions=group_decisions,
+        sections=sections,
+        outcomes=(),
+    )
+    store = SqliteWorldStore.create(
+        ":memory:",
+        world_id=world,
+        scenario="world_in_memory",
+        scenario_hash="world_in_memory",
+        design=_design(nouns, rules, day_night, weather, world_stage, stage_declarations),
+        random=FractionsInOrder(fractions),
+    )
+    everyone = tuple(character.person_id for character in characters)
+    store.start_world(
+        _aggregates_at_start(world, nouns, everyone, vitals, inventories, items, object_states, world_stage, weather)
+    )
+    return store.session()
 
 
-class _FactsInMemory(WorldFacts):
-    def __init__(self, world: WorldInMemory) -> None:
-        self._world = world
-
-    def now(self) -> WorldTick:
-        return self._world.clock_aggregate.now()
-
-    def rules(self) -> WorldRules:
-        return self._world.rules
-
-    def day_night(self) -> DayNightDeclaration | NoDayNight:
-        return self._world.day_night
-
-    def nouns(self) -> DeclaredNouns:
-        return self._world.nouns
-
-    def random(self) -> RandomSource:
-        return self._world.random
-
-    def people(self) -> tuple[PersonId, ...]:
-        return self._world.people
-
-    def people_register(self) -> PeopleRegisterReading:
-        return self._world.people_register
-
-    def whereabouts(self) -> WhereaboutsReading:
-        return self._world.whereabouts
-
-    def passages(self) -> PassageStatesReading:
-        return self._world.passages
-
-    def atmospheres(self) -> SpotAtmospheresReading:
-        return self._world.atmospheres
-
-    def outcomes(self) -> PersonOutcomesReading:
-        return self._world.outcomes
-
-    def membership(self) -> GroupMembershipReading:
-        return self._world.membership
-
-    def clock(self) -> WorldClockReading:
-        return self._world.clock_aggregate
-
-    def weather(self) -> WeatherReading | NoWeather:
-        return self._world.weather
-
-    def world_stage(self) -> WorldStageReading | NoWorldStages:
-        return self._world.world_stage
-
-    def flags(self) -> WorldFlagsReading:
-        return self._world.flags
-
-    def scenario_progress(self) -> ScenarioProgressReading:
-        return self._world.scenario_progress
-
-    def latest_actions(self) -> LatestActionsReading:
-        return self._world.latest_actions
-
-    def vitals(self, person: PersonId) -> PersonVitalsReading:
-        return self._world.vitals[person]
-
-    def inventory(self, person: PersonId) -> PersonInventoryReading:
-        return self._world.inventories[person]
-
-    def item(self, item: ItemInstanceId) -> ItemReading:
-        return self._world.items[item]
-
-    def object_state(self, obj: ObjectId) -> ObjectStateReading:
-        return self._world.object_states[obj]
-
-    def ground_items(self, spot: SpotId) -> GroundItemsReading:
-        return self._world.ground_items_at(spot)
-
-    def search_progress(self, spot: SpotId) -> SpotSearchProgressReading:
-        return self._world.search_progress_at(spot)
-
-    def missed_notices(self, person: PersonId) -> MissedNoticesReading:
-        return self._world.missed_notices_of(person)
-
-    def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecisionReading:
-        return self._world.group_decision_of(decision)
+def _with_everyone_declared(
+    people: tuple[PersonId, ...], characters: tuple[CharacterDeclaration, ...], spots: tuple[SpotDeclaration, ...]
+) -> tuple[tuple[SpotDeclaration, ...], tuple[CharacterDeclaration, ...]]:
+    declared = {character.person_id: character for character in characters}
+    if any(person not in declared for person in people) and not spots:
+        spots = (spot("somewhere"),)
+    in_given_order = tuple(declared.get(person) or _character_at(person, spots[0]) for person in people)
+    return spots, in_given_order + tuple(character for character in characters if character.person_id not in people)
 
 
-class _AggregatesInMemory(WorldAggregates):
-    def __init__(self, world: WorldInMemory) -> None:
-        self._world = world
+def _character_at(person: PersonId, spawn: SpotDeclaration) -> CharacterDeclaration:
+    return CharacterDeclaration(
+        person_id=person,
+        appearance=DescriptionText(f"{person.value} の見た目"),
+        spawn_spot=spawn.spot_id,
+        initial_items=(),
+        initial_held=(),
+        initial_groups=(),
+        knows_at_start=(),
+        max_hp=UsesWorldDefault(),
+        pack_capacity=UsesWorldDefault(),
+    )
 
-    def flags(self) -> WorldFlags:
-        return self._world.flags
 
-    def passages(self) -> PassageStates:
-        return self._world.passages
+def _design(
+    nouns: DeclaredNouns,
+    rules: WorldRules | None,
+    day_night: DayNightDeclaration | NoDayNight,
+    weather: Weather | NoWeather,
+    world_stage: WorldStage | NoWorldStages,
+    stage_declarations: tuple[WorldStageDeclaration, ...],
+) -> WorldDesign:
+    return WorldDesign(
+        nouns=nouns,
+        object_interactions=(),
+        item_interactions=(),
+        item_uses=(),
+        section_accesses=(),
+        passage_traversals=(),
+        world_stage_effects=(),
+        object_looks=(),
+        group_decision_rules=(),
+        happenings=(),
+        reactions=(),
+        discoverables=(),
+        joint_actions=(),
+        person_interactions=(),
+        ending=EndingDeclaration(ends_when=AlwaysHolds()),
+        world_rules=rules if rules is not None else world_rules_for_tests(),
+        refusal_texts=refusal_texts(),
+        built_in_action_perceptions=built_in_action_perceptions(without=(ActionKind.TEND,)),
+        weather=(
+            NoWeather()
+            if isinstance(weather, NoWeather)
+            else WeatherDeclaration(
+                initial=weather.current().type, changes=NoChange(), announce_changes=False, obscuring=frozenset()
+            )
+        ),
+        day_night=day_night,
+        initial_stage=(
+            NoWorldStages()
+            if isinstance(world_stage, NoWorldStages)
+            else next(stage for stage in stage_declarations if stage.stage_id == world_stage.current())
+        ),
+        introduction=introduction(),
+        warnings=(),
+    )
 
-    def atmospheres(self) -> SpotAtmospheres:
-        return self._world.atmospheres
 
-    def whereabouts(self) -> Whereabouts:
-        return self._world.whereabouts
-
-    def vitals(self, person: PersonId) -> PersonVitals:
-        return self._world.vitals[person]
-
-    def outcomes(self) -> PersonOutcomes:
-        return self._world.outcomes
-
-    def membership(self) -> GroupMembership:
-        return self._world.membership
-
-    def inventory(self, person: PersonId) -> PersonInventory:
-        return self._world.inventories[person]
-
-    def item(self, item: ItemInstanceId) -> Item:
-        return self._world.items[item]
-
-    def object_state(self, obj: ObjectId) -> ObjectState:
-        return self._world.object_states[obj]
-
-    def ground_items(self, spot: SpotId) -> GroundItems:
-        return self._world.ground_items_at(spot)
-
-    def search_progress(self, spot: SpotId) -> SpotSearchProgress:
-        return self._world.search_progress_at(spot)
-
-    def missed_notices(self, person: PersonId) -> MissedNotices:
-        return self._world.missed_notices_of(person)
-
-    def world_stage(self) -> WorldStage:
-        stage = self._world.world_stage
-        if isinstance(stage, NoWorldStages):
-            raise LookupError("this world declares no world stages")
-        return stage
-
-    def group_decision(self, decision: GroupDecisionDeclaration) -> GroupDecision:
-        return self._world.group_decision_of(decision)
-
-    def weather(self) -> Weather:
-        weather = self._world.weather
-        if isinstance(weather, NoWeather):
-            raise LookupError("this world declares no weather")
-        return weather
-
-    def bring_item_into_world(self, spec: ItemSpecDeclaration, now: WorldTick) -> ItemInstanceId:
-        item = Item.come_into_world(ItemInstanceId(str(uuid.uuid4())), spec, now)
-        self._world.items[item.item_id] = item
-        return item.item_id
-
-    def take_item_out_of_world(self, item: ItemInstanceId) -> None:
-        self._world.items.pop(item).leave_world()
+def _aggregates_at_start(
+    world: WorldId,
+    nouns: DeclaredNouns,
+    everyone: tuple[PersonId, ...],
+    vitals: tuple[PersonVitals, ...],
+    inventories: tuple[PersonInventory, ...],
+    items: tuple[Item, ...],
+    object_states: tuple[ObjectState, ...],
+    world_stage: WorldStage | NoWorldStages,
+    weather: Weather | NoWeather,
+) -> tuple[AggregateWithMemento, ...]:
+    spots = nouns.all_spots()
+    return (
+        WorldClock.start(world),
+        WorldEnding.start(world),
+        ScenarioProgress.start(world),
+        LatestActions.start(world),
+        PeopleRegister.from_characters(world, nouns.all_characters()),
+        WorldFlags.start(world),
+        Whereabouts.start(world),
+        PassageStates.start(world, nouns.all_passages()),
+        SpotAtmospheres.start(world, spots),
+        PersonOutcomes.start(world, everyone),
+        GroupMembership.start(world, {}),
+        ItemSerialCounter.start(world),
+        *(() if isinstance(world_stage, NoWorldStages) else (world_stage,)),
+        *(() if isinstance(weather, NoWeather) else (weather,)),
+        *vitals,
+        *inventories,
+        *items,
+        *object_states,
+        *(MissedNotices.start(person) for person in everyone),
+        *(GroundItems.start(declared.spot_id) for declared in spots),
+        *(SpotSearchProgress.start(declared.spot_id) for declared in spots),
+        *(GroupDecision.not_started(decision) for decision in nouns.all_group_decisions()),
+    )
