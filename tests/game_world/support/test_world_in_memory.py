@@ -93,6 +93,7 @@ from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 _WORLD = WorldId("island")
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
+_NOW = WorldTick(0)
 _SQUARE = spot("square")
 _WELL_SIDE = spot("well_side")
 _LANE = path("lane", "square", "well_side", ticks=2)
@@ -208,7 +209,7 @@ class TestFactsSeeWhatAggregatesChanged:
         world = _world()
         world.aggregates().whereabouts().place(PersonBody(_ALICE), _SQUARE)
 
-        world.aggregates().whereabouts().teleport(PersonBody(_ALICE), _WELL_SIDE)
+        world.aggregates().whereabouts().teleport(PersonBody(_ALICE), _WELL_SIDE, _NOW)
 
         assert world.facts().whereabouts().location_of(PersonBody(_ALICE)) == AtSpot(
             spot=_WELL_SIDE.spot_id, section=OpenArea()
