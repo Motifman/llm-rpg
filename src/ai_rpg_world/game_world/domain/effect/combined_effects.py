@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from functools import reduce
+from functools import partial, reduce
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.trigger import EachPersonOf
@@ -102,7 +102,7 @@ class ForEveryoneEffect:
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         for person in _in_world_order(self.people.select(facts, trigger), facts):
             # 1 人が断られただけで、ほかの全員の分まで巻き戻さないようにする (#1978 の E3)
-            world.attempt_apart(lambda person=person: self.effect.apply(facts, world, EachPersonOf(trigger, person)))
+            world.attempt_apart(partial(self.effect.apply, facts, world, EachPersonOf(trigger, person)))
 
     def requirements(self) -> Requirements:
         return self.people.requirements().combined_with(

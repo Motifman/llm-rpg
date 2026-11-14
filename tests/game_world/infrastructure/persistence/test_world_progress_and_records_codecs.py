@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
 from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition

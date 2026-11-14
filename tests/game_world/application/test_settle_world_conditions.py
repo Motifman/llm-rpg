@@ -50,9 +50,7 @@ _BOB = PersonId("bob")
 _ROPE = item_spec("rope")
 _BELL = FlagDeclaration(FlagId("bell_rang"), DescriptionText("鐘が鳴った"), initially_raised=False)
 _DOOR = FlagDeclaration(FlagId("door_opened"), DescriptionText("扉が開いた"), initially_raised=False)
-_BOB_WITH_FULL_PACK = replace(
-    character("bob", "cave"), initial_items=(_ROPE.item_spec_id,), pack_capacity=Capacity(1)
-)
+_BOB_WITH_FULL_PACK = replace(character("bob", "cave"), initial_items=(_ROPE.item_spec_id,), pack_capacity=Capacity(1))
 _AFTER_TIME = SettleWorldConditionsCommand(SettlingOccasion.AFTER_WORLD_TIME_PASSED)
 _AFTER_COMMAND = SettleWorldConditionsCommand(SettlingOccasion.AFTER_COMMAND)
 
@@ -72,7 +70,9 @@ def _happening(
     return HappeningDeclaration(HappeningId(name), condition, effect, once, notice)
 
 
-def _reaction(name: str, condition: Condition, when_true: Effect, when_false: Effect = NoEffect()) -> ReactionDeclaration:
+def _reaction(
+    name: str, condition: Condition, when_true: Effect, when_false: Effect = NoEffect()
+) -> ReactionDeclaration:
     return ReactionDeclaration(ReactionId(name), condition, when_true, when_false)
 
 
@@ -108,7 +108,9 @@ class _SettledWorld:
             ),
             happenings=(*happenings, _NEVER_RINGS_ANYTHING),
             reactions=reactions,
-            ending=EndingDeclaration(ends_when=ends_when if ends_when is not None else NotCondition(AlwaysHolds(), NoText())),
+            ending=EndingDeclaration(
+                ends_when=ends_when if ends_when is not None else NotCondition(AlwaysHolds(), NoText())
+            ),
         )
         self.store = SqliteWorldStore.create(
             ":memory:",
@@ -133,7 +135,9 @@ class _SettledWorld:
         self.scope.run(lambda session: session.clock().advance(self._design.day_night))
 
     def raise_flag(self, flag: FlagDeclaration) -> None:
-        self.scope.run(lambda session: session.aggregates().flags().raise_flag(flag, WorldTimePassing(session.clock().now())))
+        self.scope.run(
+            lambda session: session.aggregates().flags().raise_flag(flag, WorldTimePassing(session.clock().now()))
+        )
 
     def read(self, flag: FlagDeclaration) -> bool:
         return self.scope.run(lambda session: session.facts().flags().is_raised(flag))
@@ -231,9 +235,7 @@ class TestSettleWorldConditionsChance:
         )
 
         world.settle(_AFTER_COMMAND)
-        noted_after_command = world.scope.run(
-            lambda session: session.scenario_progress().memento().reaction_truths
-        )
+        noted_after_command = world.scope.run(lambda session: session.scenario_progress().memento().reaction_truths)
         world.settle(_AFTER_TIME)
         noted_after_time = world.scope.run(lambda session: session.scenario_progress().memento().reaction_truths)
 
@@ -285,7 +287,9 @@ class TestSettleWorldConditionsRefusal:
                 _happening(
                     "reward",
                     AlwaysHolds(),
-                    SequenceEffect((RaiseFlagEffect(_BELL), GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1)))),
+                    SequenceEffect(
+                        (RaiseFlagEffect(_BELL), GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1)))
+                    ),
                     notice=_announcement_to_everyone_while(AlwaysHolds()),
                 ),
             ),
@@ -305,7 +309,12 @@ class TestSettleWorldConditionsRefusal:
         """荷が満杯の bob に縄を渡す once の出来事は、断られたあと、次の tick に落ち着かせても試し直さない。"""
         world = _SettledWorld(
             happenings=(
-                _happening("reward", AlwaysHolds(), GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1)), once=True),
+                _happening(
+                    "reward",
+                    AlwaysHolds(),
+                    GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1)),
+                    once=True,
+                ),
             ),
             bob_pack_full=True,
         )
@@ -319,7 +328,9 @@ class TestSettleWorldConditionsRefusal:
     def test_refused_reaction_keeps_no_change_and_notes_its_new_truth(self) -> None:
         """鐘が鳴ったら荷が満杯の bob に縄を渡す反応は、断られても真になったと記録して理由を載せ、同じ真のままなら試し直さない。"""
         world = _SettledWorld(
-            reactions=(_reaction("reward", _raised(_BELL), GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1))),),
+            reactions=(
+                _reaction("reward", _raised(_BELL), GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1))),
+            ),
             bob_pack_full=True,
         )
         world.settle(_AFTER_TIME)
@@ -340,7 +351,9 @@ class TestSettleWorldConditionsRefusal:
                 _happening(
                     "supply",
                     AlwaysHolds(),
-                    ForEveryoneEffect(PeopleSelection(where=AlwaysHolds()), GiveItemEffect(EachPerson(), _ROPE, Count(1))),
+                    ForEveryoneEffect(
+                        PeopleSelection(where=AlwaysHolds()), GiveItemEffect(EachPerson(), _ROPE, Count(1))
+                    ),
                 ),
             ),
             bob_pack_full=True,
