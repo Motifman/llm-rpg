@@ -36,7 +36,12 @@ from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNo
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration, NoDayNight, NoWeather
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    DayNightDeclaration,
+    NoDayNight,
+    NoWeather,
+    WeatherDeclaration,
+)
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import (
@@ -401,6 +406,9 @@ class _SqliteWorldFacts(WorldFacts):
 
     def day_night(self) -> DayNightDeclaration | NoDayNight:
         return self._world.design.day_night
+
+    def weather_declaration(self) -> WeatherDeclaration | NoWeather:
+        return self._world.design.weather
 
     def nouns(self) -> DeclaredNouns:
         return self._world.design.nouns

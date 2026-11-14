@@ -19,7 +19,8 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
     NoNextWeatherDeclaredException,
     WeatherTransitionDuplicatedException,
 )
-from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability, Ticks
+from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability, Ticks, WorldTick
+from tests.game_world.support.world_in_memory import FractionsInOrder
 
 
 def _transitions(*odds: NextWeatherOdds) -> WeatherTransitions:
@@ -202,3 +203,36 @@ class TestNoWeather:
     def test_is_not_declared(self) -> None:
         """天候が宣言されているかを問われると、宣言されていないと答える。"""
         assert not NoWeather().is_declared()
+
+
+class TestWeatherDeclarationWeatherAfter:
+    """WeatherDeclaration.weather_after が、時計が進んだあとの時刻が ChangesEvery.ticks の倍数のときだけ乱数を 1 回引いて次の天候を選ぶことを保証する。"""
+
+    def test_changes_every_draws_once_at_a_multiple_of_its_ticks(self) -> None:
+        """3 tick ごとに変わる宣言は、時刻 6 で 1 回引き、0.8 なら晴れから既定の表で曇りを選ぶ。"""
+        declared = _declaration(ChangesEvery(Ticks(3), WeatherTransitions.default()))
+        random = FractionsInOrder((0.8,))
+
+        after = declared.weather_after(WorldTick(6), WeatherState(WeatherType.CLEAR), random)
+
+        assert after == WeatherState(WeatherType.CLOUDY)
+        assert random.left() == 0
+
+    def test_changes_every_draws_nothing_between_multiples(self) -> None:
+        """3 tick ごとに変わる宣言は、時刻 4 では引かず、今の天候を返す。"""
+        declared = _declaration(ChangesEvery(Ticks(3), WeatherTransitions.default()))
+        random = FractionsInOrder((0.8,))
+
+        after = declared.weather_after(WorldTick(4), WeatherState(WeatherType.CLEAR), random)
+
+        assert after == WeatherState(WeatherType.CLEAR)
+        assert random.left() == 1
+
+    def test_no_change_never_draws(self) -> None:
+        """NoChange の宣言は、どの時刻でも引かず、今の天候を返す。"""
+        random = FractionsInOrder((0.8,))
+
+        after = _declaration(NoChange()).weather_after(WorldTick(3), WeatherState(WeatherType.RAIN), random)
+
+        assert after == WeatherState(WeatherType.RAIN)
+        assert random.left() == 1
