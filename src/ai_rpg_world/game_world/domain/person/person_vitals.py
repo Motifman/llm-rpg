@@ -231,6 +231,9 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
     def can_act(self) -> bool:
         return isinstance(self._life_state, Alive)
 
+    def life_state(self) -> LifeState:
+        return self._life_state
+
     def is_dead(self) -> bool:
         return isinstance(self._life_state, Dead)
 

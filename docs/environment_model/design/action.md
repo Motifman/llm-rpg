@@ -18,7 +18,7 @@ class ActionAttempt(Protocol):
     def done_as(self) -> frozenset[ActionKind | InteractionId]: ...   # 最後に行った行為として記録する鍵。組み込みの行為は {kind}、作者の操作は {kind, interaction_id}
 
 
-Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | JointActionCompleted | WorldTimePassing | LookingAround | EachPersonOf
+Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | GroupDecisionUnresolved | WorldStageChanged | JointActionCompleted | WorldTimePassing | LookingAround | EachPersonOf
 # どのきっかけも person_as、this_item、acting_person、argument、fall_cause_for を持つ。GroupDecisionResult は CHOSEN_BY_GROUP だけを答え、ほかの行為でないきっかけは何も答えない
 # 行為でないきっかけの acting_person は NoActingPerson、fall_cause_for は WorldHappening()。EachPersonOf は person_as(EACH_PERSON) のほかは外のきっかけに任せる
 
@@ -48,6 +48,18 @@ class ReactionFired:
 class GroupDecisionResult:
     decision: GroupDecisionDeclaration
     chosen: PersonId
+
+@final
+@dataclass(frozen=True)
+class GroupDecisionUnresolved:              # 集団の決定が決まらなかったこと (when_undecided)。選ばれた人がいないので何も答えない
+    decision: GroupDecisionDeclaration
+
+@final
+@dataclass(frozen=True)
+class WorldStageChanged:                    # 段階が変わったこと。出る段階の when_left と入る段階の when_entered に同じものを渡す。何も答えない
+    before: WorldStageId
+    after: WorldStageId
+    at: WorldTick
 
 @final
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
-from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import PersonId, WorldStageId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
@@ -73,6 +73,20 @@ class GroupDecisionResult(_NotAnAction):
 
 @final
 @dataclass(frozen=True)
+class GroupDecisionUnresolved(_NotAnAction):
+    decision: GroupDecisionDeclaration
+
+
+@final
+@dataclass(frozen=True)
+class WorldStageChanged(_NotAnAction):
+    before: WorldStageId
+    after: WorldStageId
+    at: WorldTick
+
+
+@final
+@dataclass(frozen=True)
 class WorldTimePassing(_NotAnAction):
     tick: WorldTick
 
@@ -112,6 +126,8 @@ Trigger = (
     | HappeningFired
     | ReactionFired
     | GroupDecisionResult
+    | GroupDecisionUnresolved
+    | WorldStageChanged
     | JointActionCompleted
     | WorldTimePassing
     | LookingAround
