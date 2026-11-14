@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, S
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
+from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.no_target import NoTarget
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
@@ -79,6 +80,9 @@ class SightStimulus:
 
     def __post_init__(self) -> None:
         self.target.require_among(self.involved)
+
+    def delivery_rank(self) -> DeliveryRank:
+        return DeliveryRank.of(Sense.SIGHT, self.salience)
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
         return self.perceived_by(
