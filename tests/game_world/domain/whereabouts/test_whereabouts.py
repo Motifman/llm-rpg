@@ -23,6 +23,7 @@ from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, Spo
 from ai_rpg_world.game_world.domain.whereabouts import (
     AtSpot,
     DepartedPerson,
+    NotAtSpot,
     OccupantEnteredSectionEvent,
     OccupantEnteredSpotEvent,
     OccupantLeftSectionEvent,
@@ -484,6 +485,28 @@ class TestWhereaboutsTogetherness:
         """置いていない人の location_of は OccupantNotPlacedException を投げる。"""
         with pytest.raises(OccupantNotPlacedException):
             Whereabouts.start(WORLD).location_of(ALICE)
+
+
+class TestWhereaboutsSpotOf:
+    """spot_of が、その人のいる場所を答え、どの場所にもいなければ NotAtSpot を答えることを保証する。"""
+
+    def test_occupant_in_section_is_at_the_spot_of_the_section(self) -> None:
+        """区画の中にいる人の spot_of は、区画のある場所の SpotId。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+
+        assert whereabouts.spot_of(ALICE) == SpotId("plaza")
+
+    def test_travelling_occupant_is_not_at_any_spot(self) -> None:
+        """移動中の人の spot_of は NotAtSpot。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        assert whereabouts.spot_of(ALICE) == NotAtSpot()
+
+    def test_occupant_not_placed_is_not_at_any_spot(self) -> None:
+        """世界に置かれていない人の spot_of は、例外を投げずに NotAtSpot。"""
+        assert _whereabouts((ALICE, "plaza")).spot_of(BOB) == NotAtSpot()
 
 
 class TestWhereaboutsCanReach:

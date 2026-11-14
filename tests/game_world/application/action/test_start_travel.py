@@ -9,7 +9,7 @@ from ai_rpg_world.game_world.domain.person.person_vitals_events import PersonBec
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, OpenArea, PersonBody, TravelInProgress
-from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent
+from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent, PersonActedEvent
 from tests.game_world.application.action.world_for_action_tests import (
     ADIT,
     ALICE,
@@ -47,6 +47,15 @@ class TestStartTravelDone:
         busy = [event for event in world.events() if isinstance(event, PersonBecameBusyEvent)]
         assert [event.until for event in busy] == [WorldTick(4)]
 
+    def test_person_acted_event_holds_the_spot_departed_from(self) -> None:
+        """通った移動の PersonActedEvent は、確定した後は移動中でも、出発した場所を at_spot に持つ。"""
+        world = WorldForActions()
+
+        world.travel(ALICE, SHAFT)
+
+        [acted] = [event for event in world.events() if isinstance(event, PersonActedEvent)]
+        assert (acted.at_spot, acted.actor_as) == (LANDING.spot_id, PersonBody(ALICE))
+
     def test_travel_from_inside_section_leaves_the_section(self) -> None:
         """区画の中から移動を始めると、区画を出て移動中になる。"""
         world = WorldForActions()
@@ -81,6 +90,15 @@ class TestStartTravelRefused:
         world.travel(ALICE, GALLERY)
 
         assert [[type(event) for event in batch] for batch in world.received.batches] == [[ActionAttemptFailedEvent]]
+
+    def test_failed_attempt_event_holds_the_spot_where_actor_stayed(self) -> None:
+        """断られた移動の ActionAttemptFailedEvent は、行う人のいた場所を at_spot に持つ。"""
+        world = WorldForActions()
+
+        world.travel(ALICE, GALLERY)
+
+        [failed] = [event for event in world.events() if isinstance(event, ActionAttemptFailedEvent)]
+        assert (failed.at_spot, failed.actor_as) == (LANDING.spot_id, PersonBody(ALICE))
 
     def test_travel_to_where_actor_is_refuses_with_no_route(self) -> None:
         """今いる場所を目的地にすると、NO_ROUTE の RefusalCode で断られる。"""

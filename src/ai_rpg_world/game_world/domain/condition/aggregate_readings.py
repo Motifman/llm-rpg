@@ -40,12 +40,13 @@ from ai_rpg_world.game_world.domain.value_object import (
     ItemSpecId,
     PassageId,
     PersonId,
+    SpotId,
     Ticks,
     WorldStageId,
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
-from ai_rpg_world.game_world.domain.whereabouts import Location, Occupant, PassageInState
+from ai_rpg_world.game_world.domain.whereabouts import Location, NotAtSpot, Occupant, PassageInState
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.subject import Anyone
@@ -60,6 +61,8 @@ if TYPE_CHECKING:
 
 class WhereaboutsReading(Protocol):
     def location_of(self, occupant: Occupant) -> Location: ...
+
+    def spot_of(self, occupant: Occupant) -> SpotId | NotAtSpot: ...
 
     def occupants_at(self, spot: SpotDeclaration) -> tuple[Occupant, ...]: ...
 

@@ -1,6 +1,7 @@
 from ai_rpg_world.game_world.domain.whereabouts.location import (
     AtSpot,
     Location,
+    NotAtSpot,
     OpenArea,
     TravelInProgress,
     TravelPosition,
@@ -47,6 +48,7 @@ from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
 )
 
 __all__ = [
+    "NotAtSpot",
     "AtSpot",
     "AtmosphereAtSpot",
     "DepartedPerson",

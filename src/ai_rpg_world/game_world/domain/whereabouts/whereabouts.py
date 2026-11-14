@@ -22,6 +22,7 @@ from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, Spo
 from ai_rpg_world.game_world.domain.whereabouts.location import (
     AtSpot,
     Location,
+    NotAtSpot,
     OpenArea,
     TravelInProgress,
     TravelPosition,
@@ -189,6 +190,10 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
 
     def occupants_at(self, spot: SpotDeclaration) -> tuple[Occupant, ...]:
         return tuple(occupant for occupant in self._locations if self._spot_of(occupant) == spot.spot_id)
+
+    def spot_of(self, occupant: Occupant) -> SpotId | NotAtSpot:
+        spot = self._spot_of(occupant)
+        return NotAtSpot() if spot is None else spot
 
     def are_together(self, actor: Occupant, target: Occupant) -> bool:
         here = self._spot_of(actor)

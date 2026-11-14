@@ -66,6 +66,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self._KIND})
 
+    def items_handled(self) -> tuple[ItemInstanceId, ...]:
+        return ()
+
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.ACTOR:
             return self.actor
@@ -83,6 +86,9 @@ class _OnOneItem(_BuiltInAttempt):
 
     def this_item(self) -> ItemInstanceId:
         return self.item
+
+    def items_handled(self) -> tuple[ItemInstanceId, ...]:
+        return (self.item,)
 
 
 @final
@@ -216,6 +222,9 @@ class ItemHandOverAttempt(_BuiltInAttempt):
 
     def exertion(self) -> Exertion:
         return UsesBody()
+
+    def items_handled(self) -> tuple[ItemInstanceId, ...]:
+        return tuple(delivery.item for delivery in self.deliveries)
 
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         recipients = dict.fromkeys(delivery.to for delivery in self.deliveries)

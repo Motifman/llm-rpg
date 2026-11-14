@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     LivingOnly,
     UsesBody,
 )
+from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
@@ -26,8 +27,9 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, PersonId, SpotId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
+from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
 
 @final
@@ -70,6 +72,9 @@ class ActionAttemptForTests(ActionAttempt):
             return self.target
         raise SubjectNotInTriggerException(f"{self!r} does not answer {kind.name}")
 
+    def items_handled(self) -> tuple[ItemInstanceId, ...]:
+        return () if self.item is None else (self.item,)
+
     def this_item(self) -> ItemInstanceId:
         if self.item is None:
             raise ItemNotInTriggerException(f"{self!r} does not answer the item")
@@ -94,3 +99,7 @@ class ActionAttemptForTests(ActionAttempt):
 
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self.action_kind})
+
+
+def situation_for_tests() -> ActorSituation:
+    return ActorSituation(at_spot=SpotId("somewhere"), actor_as=PersonBody(PersonId("alice")), item_specs={})
