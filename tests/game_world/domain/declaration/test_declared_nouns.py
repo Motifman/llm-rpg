@@ -410,6 +410,46 @@ class TestLookupById:
             nouns.object_of(ObjectId("lever"))
 
 
+class TestRequireDeclared:
+    """DeclaredNouns.require_declared_* が、宣言にある ID なら何もせず、無い ID なら UndeclaredNounException を投げることを保証する。"""
+
+    def _nouns(self) -> DeclaredNouns:
+        return _nouns(
+            spots=[_spot("hall"), _spot("cellar")],
+            passages=[_passage("stairs", ("hall", "cellar"))],
+            characters=[_character("alice", "hall")],
+        )
+
+    def test_declared_ids_pass_without_raising(self) -> None:
+        """宣言した人・場所・通路の ID を渡すと、例外を投げずに戻る。"""
+        nouns = self._nouns()
+
+        nouns.require_declared_character(PersonId("alice"))
+        nouns.require_declared_spot(SpotId("cellar"))
+        nouns.require_declared_passage(PassageId("stairs"))
+
+    def test_undeclared_character_raises_undeclared_noun_exception(self) -> None:
+        """宣言に無い人 bob の PersonId を渡すと UndeclaredNounException を投げる。"""
+        nouns = self._nouns()
+
+        with pytest.raises(UndeclaredNounException):
+            nouns.require_declared_character(PersonId("bob"))
+
+    def test_undeclared_spot_raises_undeclared_noun_exception(self) -> None:
+        """宣言に無い場所 attic の SpotId を渡すと UndeclaredNounException を投げる。"""
+        nouns = self._nouns()
+
+        with pytest.raises(UndeclaredNounException):
+            nouns.require_declared_spot(SpotId("attic"))
+
+    def test_undeclared_passage_raises_undeclared_noun_exception(self) -> None:
+        """宣言に無い通路 ladder の PassageId を渡すと UndeclaredNounException を投げる。"""
+        nouns = self._nouns()
+
+        with pytest.raises(UndeclaredNounException):
+            nouns.require_declared_passage(PassageId("ladder"))
+
+
 def _flaw(declaration: str, name: str, field: str, reason: str) -> DesignFlaw:
     return DesignFlaw(DesignLocation(declaration, name, field), reason)
 

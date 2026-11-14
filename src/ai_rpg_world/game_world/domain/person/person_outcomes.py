@@ -78,7 +78,7 @@ class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
     def from_memento(cls, memento: PersonOutcomesMemento, design: WorldDesign) -> PersonOutcomes:
         nouns = design.nouns
         for entry in memento.outcomes:
-            nouns.character_of(entry.person)
+            nouns.require_declared_character(entry.person)
         declared = {character.person_id for character in nouns.all_characters()}
         recorded = {entry.person for entry in memento.outcomes}
         if recorded != declared:

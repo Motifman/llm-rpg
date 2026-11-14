@@ -115,9 +115,9 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
 
     @classmethod
     def from_memento(cls, memento: PersonVitalsMemento, design: WorldDesign) -> PersonVitals:
-        design.nouns.character_of(memento.person)
+        design.nouns.require_declared_character(memento.person)
         if isinstance(memento.life_state, Down) and isinstance(memento.life_state.cause, StruckByPerson):
-            design.nouns.character_of(memento.life_state.cause.person)
+            design.nouns.require_declared_character(memento.life_state.cause.person)
         return cls(
             memento.person,
             memento.hp,

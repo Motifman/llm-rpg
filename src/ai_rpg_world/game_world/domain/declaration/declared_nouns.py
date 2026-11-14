@@ -71,10 +71,13 @@ class _DeclaredOfKind(Generic[_Declaration]):
         return self._by_name.get(name)
 
     def with_id(self, declared_id: Any) -> _Declaration:
+        self.require(declared_id)
+        return self._by_name[str(declared_id.value)]
+
+    def require(self, declared_id: Any) -> None:
         name = str(declared_id.value)
         if name not in self._by_name:
             raise UndeclaredNounException(f"{self.kind} {name!r} is not declared")
-        return self._by_name[name]
 
     def flaws_if_unknown(self, name: str, at: DesignLocation) -> list[DesignFlaw]:
         if name in self._by_name:
@@ -146,11 +149,17 @@ class DeclaredNouns:
     def spot_of(self, spot_id: SpotId) -> SpotDeclaration:
         return self._spots.with_id(spot_id)
 
+    def require_declared_spot(self, spot_id: SpotId) -> None:
+        self._spots.require(spot_id)
+
     def passage(self, name: str, at: DesignLocation) -> PassageDeclaration:
         return self._passages.get(name, at)
 
     def passage_of(self, passage_id: PassageId) -> PassageDeclaration:
         return self._passages.with_id(passage_id)
+
+    def require_declared_passage(self, passage_id: PassageId) -> None:
+        self._passages.require(passage_id)
 
     def object(self, name: str, at: DesignLocation) -> ObjectDeclaration:
         return self._objects.get(name, at)
@@ -188,6 +197,9 @@ class DeclaredNouns:
 
     def character_of(self, person: PersonId) -> CharacterDeclaration:
         return self._characters.with_id(person)
+
+    def require_declared_character(self, person: PersonId) -> None:
+        self._characters.require(person)
 
     def all_characters(self) -> tuple[CharacterDeclaration, ...]:
         return tuple(self._characters)
