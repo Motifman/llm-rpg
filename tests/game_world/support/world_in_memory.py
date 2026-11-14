@@ -53,6 +53,9 @@ class FractionsInOrder(RandomSource):
             raise LookupError("every fraction the test gave has been drawn")
         return self._left.pop(0)
 
+    def left(self) -> int:
+        return len(self._left)
+
 
 def world_in_memory(
     *,

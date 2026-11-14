@@ -81,8 +81,11 @@ class Lasts:
         if self.ticks < Ticks(1):
             raise LastingTicksBelowOneException(f"Lasts ticks must be >= 1 tick, got {self.ticks.value}")
 
+    def has_run_out(self, age: Ticks) -> bool:
+        return age >= self.ticks
+
     def require_run_out(self, age: Ticks) -> None:
-        if age < self.ticks:
+        if not self.has_run_out(age):
             raise ItemHasNotRunOutException(f"lasts {self.ticks.value} ticks and is {age.value} ticks old")
 
     def ended_notice(self) -> TextAboutPeople:
@@ -92,6 +95,9 @@ class Lasts:
 @final
 @dataclass(frozen=True)
 class LastsIndefinitely:
+    def has_run_out(self, age: Ticks) -> bool:
+        return False
+
     def require_run_out(self, age: Ticks) -> None:
         raise ItemDoesNotRunOutException(f"lasts indefinitely and is {age.value} ticks old")
 
