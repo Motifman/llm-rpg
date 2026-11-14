@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.infrastructure.persistence.ground_items_codec impor
 from ai_rpg_world.game_world.infrastructure.persistence.group_decision_codec import GroupDecisionCodec
 from ai_rpg_world.game_world.infrastructure.persistence.group_membership_codec import GroupMembershipCodec
 from ai_rpg_world.game_world.infrastructure.persistence.item_codec import ItemCodec
+from ai_rpg_world.game_world.infrastructure.persistence.item_serial_counter_codec import ItemSerialCounterCodec
 from ai_rpg_world.game_world.infrastructure.persistence.latest_actions_codec import LatestActionsCodec
 from ai_rpg_world.game_world.infrastructure.persistence.missed_notices_codec import MissedNoticesCodec
 from ai_rpg_world.game_world.infrastructure.persistence.object_state_codec import ObjectStateCodec
@@ -120,6 +121,7 @@ GAME_WORLD_CODECS = AggregateCodecs(
         GroupMembershipCodec(),
         PeopleRegisterCodec(),
         ItemCodec(),
+        ItemSerialCounterCodec(),
         ObjectStateCodec(),
         PersonInventoryCodec(),
         GroundItemsCodec(),

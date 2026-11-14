@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +49,8 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     GroundItemsMemento,
     Item,
     ItemMemento,
+    ItemSerialCounter,
+    ItemSerialCounterMemento,
     ObjectState,
     ObjectStateMemento,
     PersonInventory,
@@ -260,6 +261,7 @@ _ONE_PER_WORLD: frozenset[type] = frozenset(
         GroupMembershipMemento,
         WeatherMemento,
         WorldStageMemento,
+        ItemSerialCounterMemento,
     }
 )
 
@@ -558,7 +560,10 @@ class _SqliteWorldAggregates(WorldAggregates):
         )
 
     def bring_item_into_world(self, spec: ItemSpecDeclaration, now: WorldTick) -> ItemInstanceId:
-        item = Item.come_into_world(ItemInstanceId(str(uuid.uuid4())), spec, now)
+        counter = self._session.held_aggregate(
+            ItemSerialCounterMemento, self._world.key, ItemSerialCounter.from_memento
+        )
+        item = counter.make_numbered_item(spec, now)
         self._session.bring_into_world(ItemMemento, item.item_id.value, item)
         return item.item_id
 

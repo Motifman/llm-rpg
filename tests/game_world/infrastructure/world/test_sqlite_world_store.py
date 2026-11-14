@@ -8,6 +8,7 @@ import pytest
 from ai_rpg_world.game_world.application.world_store import AggregateWithMemento
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.objects_and_items import ItemSerialCounter
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from ai_rpg_world.game_world.domain.world_progress import WorldEnding, WorldEndingMemento
 from ai_rpg_world.game_world.domain.world_records import WorldFlags
@@ -27,6 +28,7 @@ from ai_rpg_world.game_world.infrastructure.world.stored_world_exception import 
 )
 from tests.game_world.application.world_store_contract import (
     BELL,
+    ROPE,
     WORLD,
     WorldStoreContract,
     design_with_bell,
@@ -213,3 +215,23 @@ class TestSqliteWorldStoreStartingWhileSessionOpen:
 
         with pytest.raises(WorldSessionStillOpenException):
             store.start_world([WorldFlags.start(WORLD)])
+
+
+class TestSqliteWorldStoreItemIdsAcrossReopening:
+    """世界を開き直しても、品物の通し番号が続きから振られることを保証する。"""
+
+    def test_item_brought_after_reopening_does_not_reuse_an_earlier_id(self, tmp_path: Path) -> None:
+        """品物を持ち込んで確定し、DB を開き直してから持ち込んだ品物は、前に持ち込んだ品物と別の ID になる。"""
+        path = tmp_path / "world.sqlite"
+        store = _created(path, design_with_bell(), ItemSerialCounter.start(WORLD))
+        session = store.session()
+        earlier = session.aggregates().bring_item_into_world(ROPE, WorldTick(1))
+        session.commit()
+        store.close()
+        reopened = SqliteWorldStore.open(
+            path, scenario_hash=_HASH, design=design_with_bell(), random=SeedableRandomSource(1)
+        )
+
+        later = reopened.session().aggregates().bring_item_into_world(ROPE, WorldTick(2))
+
+        assert later != earlier

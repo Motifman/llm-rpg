@@ -16,6 +16,10 @@ from ai_rpg_world.game_world.domain.objects_and_items.item import (
     ItemStateKeyValue,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.objects_and_items.item_serial_counter import (
+    ItemSerialCounter,
+    ItemSerialCounterMemento,
+)
 from ai_rpg_world.game_world.domain.objects_and_items.object_state import (
     ObjectRevealedEvent,
     ObjectState,
@@ -73,6 +77,8 @@ __all__ = [
     "ItemPutAwayEvent",
     "ItemRanOutEvent",
     "ItemReceivedEvent",
+    "ItemSerialCounter",
+    "ItemSerialCounterMemento",
     "ItemStateChangedEvent",
     "ItemStateKeyValue",
     "LyingAt",
