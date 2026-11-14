@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, final
 
+from typing_extensions import assert_never
+
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
 from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import (
@@ -191,8 +193,11 @@ class PersonInteractionAttempt(_InteractionAttempt):
         return design.person_interaction(self.interaction.interaction_id)
 
     def _witnessed_target(self) -> PersonId | NoTarget:
-        # 暗がりの誰かに向けたときは、相手が行為の記録に残らないので、相手の文を当てられない。
-        return self.target if isinstance(self.target, PersonId) else NoTarget()
+        if isinstance(self.target, SomeoneInTheDark):
+            return NoTarget()
+        if isinstance(self.target, PersonId):
+            return self.target
+        assert_never(self.target)
 
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         if isinstance(self.target, SomeoneInTheDark):

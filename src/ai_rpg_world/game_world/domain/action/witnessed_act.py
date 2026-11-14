@@ -27,7 +27,6 @@ class WitnessedAct:
     source: SoundSource
 
     def stimuli_at(self, where: SpotId | NotAtSpot, actor: Occupant, at: WorldTick) -> tuple[Stimulus, ...]:
-        # どの場所にもいない人 (移動中) の行為は、その場所の人にも、隣の場所の人にも届かない。
         if isinstance(where, NotAtSpot):
             return ()
         return self.perception.seen_at(
