@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.action.trigger import (
     LookingAround,
     ReactionFired,
     Trigger,
+    WorldConditionsSettling,
     WorldStageChanged,
     WorldTimePassing,
 )
@@ -55,6 +56,7 @@ _TRIGGERS_WITHOUT_PEOPLE: tuple[Trigger, ...] = (
     JointActionCompleted(JointActionForTests(JointActionId("two_valves"))),
     WorldTimePassing(WorldTick(3)),
     LookingAround(WorldTick(3)),
+    WorldConditionsSettling(WorldTick(3)),
     WorldStageChanged(before=WorldStageId("night"), after=WorldStageId("dawn"), at=WorldTick(3)),
     GroupDecisionUnresolved(_EXILE_VOTE),
 )
@@ -65,7 +67,7 @@ _TRIGGERS_NOT_ACTIONS: tuple[Trigger, ...] = (
 
 
 class TestTriggersWithoutPeople:
-    """出来事・反応・二人で合わせる操作・時間の経過・見渡すことのきっかけが、主語も品物も答えないことを保証する。"""
+    """出来事・反応・二人で合わせる操作・時間の経過・見渡すこと・終わりの判定のきっかけが、主語も品物も答えないことを保証する。"""
 
     @pytest.mark.parametrize("trigger", _TRIGGERS_WITHOUT_PEOPLE)
     @pytest.mark.parametrize("kind", list(SubjectKind))

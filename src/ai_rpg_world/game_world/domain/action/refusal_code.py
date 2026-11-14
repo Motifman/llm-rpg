@@ -19,3 +19,9 @@ class RefusalCode:
     @classmethod
     def of(cls, exception: GameWorldDomainException) -> RefusalCode:
         return cls(exception.error_code)
+
+
+@final
+@dataclass(frozen=True)
+class NoRefusal:
+    pass
