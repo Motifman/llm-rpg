@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
@@ -39,7 +40,7 @@ from tests.game_world.domain.effect._builders import (
 )
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _APPLE = item_spec("apple")
 _ROPE = item_spec("rope")
@@ -48,8 +49,8 @@ _QUAKE = HappeningFired(HappeningForTests(HappeningId("quake")))
 _ALICE_ACTS = ActionAttemptForTests(actor_id=ALICE)
 
 
-def _world(fractions: tuple[float, ...] = (), people: tuple[PersonId, ...] = (ALICE, BOB, CAROL)) -> WorldInMemory:
-    return WorldInMemory(
+def _world(fractions: tuple[float, ...] = (), people: tuple[PersonId, ...] = (ALICE, BOB, CAROL)) -> WorldSession:
+    return world_in_memory(
         world=WORLD,
         people=people,
         vitals=(vitals(ALICE), vitals(BOB), vitals(CAROL)),
@@ -58,8 +59,8 @@ def _world(fractions: tuple[float, ...] = (), people: tuple[PersonId, ...] = (AL
     )
 
 
-def _hp(world: WorldInMemory, person: PersonId) -> int:
-    return world.vitals[person].hp().current
+def _hp(world: WorldSession, person: PersonId) -> int:
+    return world.aggregates().vitals(person).hp().current
 
 
 def _requiring(*kinds: SubjectKind, uses_chance: bool = False) -> Requirements:
@@ -81,7 +82,7 @@ class TestSequenceEffect:
             world.facts(), world.aggregates(), _ALICE_ACTS
         )
 
-        assert world.inventories[ALICE].items() == ()
+        assert world.aggregates().inventory(ALICE).items() == ()
 
     def test_refusal_in_middle_comes_out_and_stops_later_steps(self) -> None:
         """りんごを与える → 持たない縄を取る → ナイフを与える、と並べると、縄で NotEnoughItemsOfSpecException が外へ出て、ナイフは与えない。"""
@@ -97,7 +98,7 @@ class TestSequenceEffect:
         with pytest.raises(NotEnoughItemsOfSpecException):
             sequence.apply(world.facts(), world.aggregates(), _ALICE_ACTS)
 
-        assert world.inventories[ALICE].count_of(_KNIFE.item_spec_id) == Count(0)
+        assert world.aggregates().inventory(ALICE).count_of(_KNIFE.item_spec_id) == Count(0)
 
     def test_requires_what_every_step_requires(self) -> None:
         """要るものは、どの段の要るものも合わせたもの。"""
@@ -211,8 +212,10 @@ class TestForEveryoneEffect:
             world.facts(), world.aggregates(), ActionAttemptForTests(actor_id=BOB)
         )
 
-        assert world.vitals[ALICE].memento().life_state == Down(fell_at=WorldTick(0), cause=StruckByPerson(BOB))
-        assert world.vitals[BOB].memento().life_state == Down(fell_at=WorldTick(0), cause=WorldHappening())
+        assert world.aggregates().vitals(ALICE).memento().life_state == Down(
+            fell_at=WorldTick(0), cause=StruckByPerson(BOB)
+        )
+        assert world.aggregates().vitals(BOB).memento().life_state == Down(fell_at=WorldTick(0), cause=WorldHappening())
 
     def test_requires_selection_and_effect_without_each_person(self) -> None:
         """要るものは、選び方 (Target を要る) と効果 (EachPerson と Actor を要る) を合わせ、中だけで使う EachPerson を外したもの。"""
@@ -257,7 +260,7 @@ class TestForSomeoneEffect:
         )
 
         assert (_hp(world, ALICE), _hp(world, BOB), _hp(world, CAROL)) == (10, 10, 10)
-        assert world.random.next_fraction() == 0.5
+        assert world.facts().random().next_fraction() == 0.5
 
     def test_requires_chance_selection_and_effect_without_each_person(self) -> None:
         """要るものは、選び方 (Target を要る) と効果の要るものから EachPerson を外したものと、偶然。"""

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, NoText
@@ -29,7 +30,7 @@ from tests.game_world.domain.condition._builders import ALICE, BOB, WORLD, text,
 from tests.game_world.domain.whereabouts._builders import thing
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
 from tests.game_world.support.declarations_for_tests import InteractionForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _PULL_LEVER = InteractionId("pull_lever")
 _BY_ALICE = ActionAttemptForTests(actor_id=ALICE)
@@ -53,8 +54,8 @@ _DAY = _stage("day")
 _NIGHT = _stage("night")
 
 
-def _staged_world() -> WorldInMemory:
-    return WorldInMemory(
+def _staged_world() -> WorldSession:
+    return world_in_memory(
         world=WORLD,
         people=(ALICE, BOB),
         vitals=(vitals(ALICE), vitals(BOB)),
@@ -63,9 +64,9 @@ def _staged_world() -> WorldInMemory:
     )
 
 
-def _at_tick(a_world: WorldInMemory, tick: int) -> WorldInMemory:
+def _at_tick(a_world: WorldSession, tick: int) -> WorldSession:
     while a_world.clock().now() < WorldTick(tick):
-        a_world.clock().advance(a_world.day_night)
+        a_world.clock().advance(a_world.facts().day_night())
     return a_world
 
 
@@ -82,7 +83,7 @@ class TestTicksSinceLastActionSinceStart:
         """bob が tick 3 にレバーを引いたら、誰でもが 3 tick 以上引いていない条件は tick 5 で偽、tick 6 で真。"""
         condition = _since_lever(3, SinceStart())
         a_world = world()
-        a_world.latest_actions.note(_BOB_PULLS_LEVER, WorldTick(3))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, WorldTick(3))
 
         assert not condition.holds(_at_tick(a_world, 5).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 6).facts(), _BY_ALICE)
@@ -100,8 +101,8 @@ class TestTicksSinceLastActionSinceStart:
             who=Actor(), action=ActionKind.SEARCH, ticks=Ticks(3), since=SinceStart(), failure_text=NoText()
         )
         a_world = world()
-        a_world.latest_actions.note(_ALICE_SEARCHES, WorldTick(1))
-        a_world.latest_actions.note(_BOB_SEARCHES, WorldTick(4))
+        a_world.latest_actions().note(_ALICE_SEARCHES, WorldTick(1))
+        a_world.latest_actions().note(_BOB_SEARCHES, WorldTick(4))
 
         assert condition.holds(_at_tick(a_world, 4).facts(), _BY_ALICE)
 
@@ -127,7 +128,7 @@ class TestTicksSinceLastActionSinceWorldStageEntered:
         """tick 2 にレバーを引き、tick 5 に夜へ入ったなら、3 tick 以上の条件は tick 7 で偽、tick 8 で真。"""
         condition = _since_lever(3, SinceWorldStageEntered())
         a_world = _staged_world()
-        a_world.latest_actions.note(_BOB_PULLS_LEVER, WorldTick(2))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, WorldTick(2))
         _at_tick(a_world, 5)
         a_world.aggregates().world_stage().enter(_NIGHT, WorldTick(5))
 
@@ -139,7 +140,7 @@ class TestTicksSinceLastActionSinceWorldStageEntered:
         condition = _since_lever(3, SinceWorldStageEntered())
         a_world = _at_tick(_staged_world(), 5)
         a_world.aggregates().world_stage().enter(_NIGHT, WorldTick(5))
-        a_world.latest_actions.note(_BOB_PULLS_LEVER, WorldTick(6))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, WorldTick(6))
 
         assert not condition.holds(_at_tick(a_world, 8).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 9).facts(), _BY_ALICE)

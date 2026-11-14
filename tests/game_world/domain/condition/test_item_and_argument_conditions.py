@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.argument_condition import ArgumentEqualsCondition
@@ -38,7 +39,7 @@ from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from tests.game_world.domain.condition._builders import ALICE, WORLD
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _LIT = ItemStateKeyDeclaration(
     item_spec_id=ItemSpecId("torch"), key=StateKeyId("lit"), kind=FlagStateKind(), initial=FlagValue(False)
@@ -55,11 +56,11 @@ _TORCH = ItemSpecDeclaration(
 _PASSWORD = ArgumentName("password")
 
 
-def _world_with_torch_from(tick: int) -> tuple[WorldInMemory, ItemInstanceId]:
+def _world_with_torch_from(tick: int) -> tuple[WorldSession, ItemInstanceId]:
     torch = Item.come_into_world(ItemInstanceId("torch-1"), _TORCH, WorldTick(tick))
-    a_world = WorldInMemory(world=WORLD, items=(torch,))
+    a_world = world_in_memory(world=WORLD, item_specs=(_TORCH,), items=(torch,))
     for _ in range(3):
-        a_world.clock().advance(a_world.day_night)
+        a_world.clock().advance(a_world.facts().day_night())
     return a_world, torch.item_id
 
 
@@ -102,7 +103,7 @@ class TestArgumentEquals:
     def test_same_text_holds(self) -> None:
         """合言葉に「ひらけ」と書いた行為は、「ひらけ」と等しい条件で真、「とじろ」で偽。"""
         attempt = ActionAttemptForTests(actor_id=ALICE, arguments={_PASSWORD: TextArgumentValue("ひらけ")})
-        facts = WorldInMemory(world=WORLD).facts()
+        facts = world_in_memory(world=WORLD).facts()
 
         assert ArgumentEqualsCondition(
             argument=_PASSWORD, expected=TextArgumentValue("ひらけ"), failure_text=NoText()
@@ -117,7 +118,7 @@ class TestArgumentEquals:
 
         assert not ArgumentEqualsCondition(
             argument=_PASSWORD, expected=TextArgumentValue("torch-1"), failure_text=NoText()
-        ).holds(WorldInMemory(world=WORLD).facts(), attempt)
+        ).holds(world_in_memory(world=WORLD).facts(), attempt)
 
     def test_requires_the_argument_name(self) -> None:
         """requirements() の uses_action_arguments に、読む引数の名前が入る。"""
@@ -134,4 +135,6 @@ class TestArgumentEquals:
         )
 
         with pytest.raises(ArgumentNotInTriggerException):
-            condition.holds(WorldInMemory(world=WORLD).facts(), HappeningFired(HappeningForTests(HappeningId("dawn"))))
+            condition.holds(
+                world_in_memory(world=WORLD).facts(), HappeningFired(HappeningForTests(HappeningId("dawn")))
+            )

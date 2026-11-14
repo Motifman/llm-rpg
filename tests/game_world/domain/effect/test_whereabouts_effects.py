@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import NamedPerson, SubjectKind
@@ -25,7 +26,7 @@ from ai_rpg_world.game_world.domain.whereabouts import AtSpot, DepartedPerson, O
 from tests.game_world.domain.effect._builders import ALICE, BOB, WORLD, character, vitals
 from tests.game_world.domain.whereabouts._builders import section, spot
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 _PLAZA = spot("plaza")
@@ -46,8 +47,8 @@ def _dead(person: PersonId) -> PersonVitals:
     return dead
 
 
-def _world(*people_vitals: PersonVitals, departed_persons_act: bool = False) -> WorldInMemory:
-    world = WorldInMemory(
+def _world(*people_vitals: PersonVitals, departed_persons_act: bool = False) -> WorldSession:
+    world = world_in_memory(
         world=WORLD,
         rules=replace(world_rules_for_tests(), departed_persons_act=departed_persons_act),
         people=tuple(v.person for v in people_vitals),
@@ -55,7 +56,7 @@ def _world(*people_vitals: PersonVitals, departed_persons_act: bool = False) -> 
         vitals=people_vitals,
     )
     for person_vitals in people_vitals:
-        world.whereabouts.place(PersonBody(person_vitals.person), _PLAZA)
+        world.aggregates().whereabouts().place(PersonBody(person_vitals.person), _PLAZA)
     return world
 
 
@@ -63,8 +64,8 @@ def _named(person: PersonId) -> NamedPerson:
     return NamedPerson(character(person))
 
 
-def _depart(world: WorldInMemory, person: PersonId) -> None:
-    world.whereabouts.place(DepartedPerson(person), _PLAZA)
+def _depart(world: WorldSession, person: PersonId) -> None:
+    world.aggregates().whereabouts().place(DepartedPerson(person), _PLAZA)
 
 
 class TestTeleportEffect:
@@ -76,7 +77,7 @@ class TestTeleportEffect:
 
         TeleportEffect(_named(ALICE), _WELL).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.whereabouts.is_at(PersonBody(ALICE), _WELL)
+        assert world.aggregates().whereabouts().is_at(PersonBody(ALICE), _WELL)
 
     def test_moves_departed_person_and_leaves_body(self) -> None:
         """去った人が動く世界で、死んだ Alice を井戸へ移すと、去った Alice が井戸にいて、体は広場に残る。"""
@@ -85,8 +86,8 @@ class TestTeleportEffect:
 
         TeleportEffect(_named(ALICE), _WELL).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.whereabouts.is_at(DepartedPerson(ALICE), _WELL)
-        assert world.whereabouts.is_at(PersonBody(ALICE), _PLAZA)
+        assert world.aggregates().whereabouts().is_at(DepartedPerson(ALICE), _WELL)
+        assert world.aggregates().whereabouts().is_at(PersonBody(ALICE), _PLAZA)
 
     def test_moves_dead_body_when_departed_persons_do_not_act(self) -> None:
         """去った人が動かない世界で、死んだ Alice を井戸へ移すと、体が井戸へ移る。"""
@@ -94,7 +95,7 @@ class TestTeleportEffect:
 
         TeleportEffect(_named(ALICE), _WELL).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.whereabouts.is_at(PersonBody(ALICE), _WELL)
+        assert world.aggregates().whereabouts().is_at(PersonBody(ALICE), _WELL)
 
     def test_requires_only_its_subject(self) -> None:
         """要るものは、移す人の主語だけ。"""
@@ -122,22 +123,22 @@ class TestPutIntoAndTakeOutOfSectionEffect:
 
         PutIntoSectionEffect(_named(ALICE), _BENCH).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.whereabouts.is_in_section(PersonBody(ALICE), _BENCH)
+        assert world.aggregates().whereabouts().is_in_section(PersonBody(ALICE), _BENCH)
 
     @pytest.mark.parametrize("make_bob", [_fallen, _dead])
     def test_fallen_or_dead_bodies_do_not_fill_section(self, make_bob: Callable[[PersonId], PersonVitals]) -> None:
         """定員 1 の長椅子に倒れた (または死んだ) Bob の体があっても、Alice を入れられる。"""
         world = _world(vitals(ALICE), make_bob(BOB))
-        world.whereabouts.enter_section(PersonBody(BOB), _BENCH, frozenset({BOB}))
+        world.aggregates().whereabouts().enter_section(PersonBody(BOB), _BENCH, frozenset({BOB}))
 
         PutIntoSectionEffect(_named(ALICE), _BENCH).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.whereabouts.is_in_section(PersonBody(ALICE), _BENCH)
+        assert world.aggregates().whereabouts().is_in_section(PersonBody(ALICE), _BENCH)
 
     def test_living_person_fills_section(self) -> None:
         """定員 1 の長椅子に起きている Bob がいると、Whereabouts が SectionFullException で断る。"""
         world = _world(vitals(ALICE), vitals(BOB))
-        world.whereabouts.enter_section(PersonBody(BOB), _BENCH, frozenset())
+        world.aggregates().whereabouts().enter_section(PersonBody(BOB), _BENCH, frozenset())
 
         with pytest.raises(SectionFullException):
             PutIntoSectionEffect(_named(ALICE), _BENCH).apply(world.facts(), world.aggregates(), _QUAKE)
@@ -145,11 +146,13 @@ class TestPutIntoAndTakeOutOfSectionEffect:
     def test_takes_person_out_of_section(self) -> None:
         """長椅子にいる Alice を出すと、Alice は広場の区画の外にいる。"""
         world = _world(vitals(ALICE))
-        world.whereabouts.enter_section(PersonBody(ALICE), _BENCH, frozenset())
+        world.aggregates().whereabouts().enter_section(PersonBody(ALICE), _BENCH, frozenset())
 
         TakeOutOfSectionEffect(_named(ALICE)).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.whereabouts.location_of(PersonBody(ALICE)) == AtSpot(spot=_PLAZA.spot_id, section=OpenArea())
+        assert world.aggregates().whereabouts().location_of(PersonBody(ALICE)) == AtSpot(
+            spot=_PLAZA.spot_id, section=OpenArea()
+        )
 
 
 class TestRemoveBodyEffect:
@@ -163,5 +166,5 @@ class TestRemoveBodyEffect:
         RemoveBodyEffect(_named(ALICE)).apply(world.facts(), world.aggregates(), _QUAKE)
 
         with pytest.raises(OccupantNotPlacedException):
-            world.whereabouts.location_of(PersonBody(ALICE))
-        assert world.whereabouts.is_at(DepartedPerson(ALICE), _PLAZA)
+            world.aggregates().whereabouts().location_of(PersonBody(ALICE))
+        assert world.aggregates().whereabouts().is_at(DepartedPerson(ALICE), _PLAZA)

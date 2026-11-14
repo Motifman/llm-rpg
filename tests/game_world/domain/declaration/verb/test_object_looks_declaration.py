@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import LookingAround
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
@@ -7,7 +8,7 @@ from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb import NoLook, ObjectLook, ObjectLooksDeclaration
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, FlagId, ObjectId, WorldTick
 from tests.game_world.domain.condition._builders import world
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _FLOODGATE_OPEN = FlagDeclaration(
     flag_id=FlagId("north_floodgate_open"), meaning=DescriptionText("北の水門が開いている"), initially_raised=False
@@ -27,10 +28,10 @@ def _raised(flag: FlagDeclaration) -> FlagIsRaisedCondition:
     return FlagIsRaisedCondition(flag=flag, failure_text=NoText())
 
 
-def _world_with_raised(*flags: FlagDeclaration) -> WorldInMemory:
+def _world_with_raised(*flags: FlagDeclaration) -> WorldSession:
     a_world = world()
     for flag in flags:
-        a_world.flags.raise_flag(flag, LookingAround(WorldTick(0)))
+        a_world.aggregates().flags().raise_flag(flag, LookingAround(WorldTick(0)))
     return a_world
 
 

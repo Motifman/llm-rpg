@@ -177,8 +177,8 @@ class TestForEveryone:
     def test_each_person_points_at_each_selected_person(self) -> None:
         """全員から選び、alice と bob だけが村人なら、子の文の {each_person} は村人でない carol を指し、位置は [0]。"""
         a_world = world()
-        a_world.membership.join(ALICE, _VILLAGERS)
-        a_world.membership.join(BOB, _VILLAGERS)
+        a_world.aggregates().membership().join(ALICE, _VILLAGERS)
+        a_world.aggregates().membership().join(BOB, _VILLAGERS)
         condition = ForEveryoneCondition(
             people=_everyone(), condition=_villager(text("{each_person}は村人ではない")), failure_text=NoText()
         )
@@ -193,7 +193,7 @@ class TestForEveryone:
         """選ばれた全員が村人なら、holds は真で failure_reason は None。"""
         a_world = world()
         for person in (ALICE, BOB, CAROL):
-            a_world.membership.join(person, _VILLAGERS)
+            a_world.aggregates().membership().join(person, _VILLAGERS)
         condition = ForEveryoneCondition(people=_everyone(), condition=_villager(), failure_text=NoText())
 
         assert condition.holds(a_world.facts(), _BY_ALICE)
@@ -202,7 +202,7 @@ class TestForEveryone:
     def test_own_text_is_about_the_first_failing_person(self) -> None:
         """子が文を持たなければ、ForEveryone の文の {each_person} に、facts.people() の順で最初に偽になった人を当てる。"""
         a_world = world()
-        a_world.membership.join(ALICE, _VILLAGERS)
+        a_world.aggregates().membership().join(ALICE, _VILLAGERS)
         condition = ForEveryoneCondition(
             people=_everyone(), condition=_villager(), failure_text=text("{each_person}がまだだ")
         )
@@ -228,7 +228,7 @@ class TestForSomeone:
     def test_one_satisfying_person_is_enough(self) -> None:
         """carol だけが村人でも、holds は真で failure_reason は None。"""
         a_world = world()
-        a_world.membership.join(CAROL, _VILLAGERS)
+        a_world.aggregates().membership().join(CAROL, _VILLAGERS)
         condition = ForSomeoneCondition(people=_everyone(), condition=_villager(), failure_text=NoText())
 
         assert condition.holds(a_world.facts(), _BY_ALICE)
@@ -311,7 +311,7 @@ class TestHiddenFailureThroughConnectives:
     def test_not_is_not_hidden(self) -> None:
         """Not は子が真になった理由を知らないので、伏せずに Not 自身の文を返す。"""
         a_world = world()
-        a_world.membership.join(BOB, _WOLVES)
+        a_world.aggregates().membership().join(BOB, _WOLVES)
         condition = NotCondition(child=self._wolf(Target()), failure_text=text("相手を選べ"))
 
         reason = condition.failure_reason(a_world.facts(), ActionAttemptForTests(actor_id=ALICE, target=BOB))

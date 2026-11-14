@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.condition.chance_condition import ChanceCondition
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, NoText
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
@@ -39,7 +40,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.world_progress import Weather, WorldStage
 from tests.game_world.domain.condition._builders import ALICE, WORLD, text, world
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _BY_ALICE = ActionAttemptForTests(actor_id=ALICE)
 
@@ -67,9 +68,9 @@ _DAY_NIGHT = DayNightDeclaration(
 )
 
 
-def _advanced(a_world: WorldInMemory, ticks: int) -> WorldInMemory:
+def _advanced(a_world: WorldSession, ticks: int) -> WorldSession:
     for _ in range(ticks):
-        a_world.clock().advance(a_world.day_night)
+        a_world.clock().advance(a_world.facts().day_night())
     return a_world
 
 
@@ -118,8 +119,8 @@ class TestTickConditions:
 class TestWorldStageConditions:
     """WorldStageIsCondition と TicksInWorldStageAtLeastCondition が facts.world_stage() を読むことを保証する。"""
 
-    def _world_in(self, stage: WorldStageDeclaration) -> WorldInMemory:
-        return WorldInMemory(
+    def _world_in(self, stage: WorldStageDeclaration) -> WorldSession:
+        return world_in_memory(
             world=WORLD,
             world_stage=WorldStage.from_initial_stage(WORLD, stage, WorldTick(0)),
             stage_declarations=(_DAYTIME, _VOTING),
@@ -162,8 +163,8 @@ class TestTimeOfDayIs:
         morning = TimeOfDayIsCondition(phase=_MORNING, failure_text=NoText())
         night = TimeOfDayIsCondition(phase=_NIGHT, failure_text=NoText())
 
-        tick_one = _advanced(WorldInMemory(world=WORLD, day_night=_DAY_NIGHT), 1).facts()
-        tick_two = _advanced(WorldInMemory(world=WORLD, day_night=_DAY_NIGHT), 2).facts()
+        tick_one = _advanced(world_in_memory(world=WORLD, day_night=_DAY_NIGHT), 1).facts()
+        tick_two = _advanced(world_in_memory(world=WORLD, day_night=_DAY_NIGHT), 2).facts()
 
         assert morning.holds(tick_one, _BY_ALICE) and not night.holds(tick_one, _BY_ALICE)
         assert night.holds(tick_two, _BY_ALICE) and not morning.holds(tick_two, _BY_ALICE)
@@ -179,7 +180,7 @@ class TestWeatherIs:
 
     def test_current_weather_holds(self) -> None:
         """雨の世界で、雨である条件は真、晴れである条件は偽。"""
-        facts = WorldInMemory(world=WORLD, weather=Weather(WORLD, WeatherState(WeatherType.RAIN))).facts()
+        facts = world_in_memory(world=WORLD, weather=Weather(WORLD, WeatherState(WeatherType.RAIN))).facts()
 
         assert WeatherIsCondition(weather=WeatherType.RAIN, failure_text=NoText()).holds(facts, _BY_ALICE)
         assert not WeatherIsCondition(weather=WeatherType.CLEAR, failure_text=NoText()).holds(facts, _BY_ALICE)

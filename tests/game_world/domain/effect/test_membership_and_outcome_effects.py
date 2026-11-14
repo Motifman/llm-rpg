@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.subject import NamedPerson
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import (
@@ -26,7 +27,7 @@ from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from tests.game_world.domain.effect._builders import ALICE, BOB, WORLD, character
 from tests.game_world.domain.whereabouts._builders import spot
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _PLAZA = spot("plaza")
 _QUAKE = HappeningFired(HappeningForTests(HappeningId("quake")))
@@ -47,10 +48,10 @@ _ESCAPED = OutcomeDeclaration(
 _ALICE = NamedPerson(character(ALICE))
 
 
-def _world() -> WorldInMemory:
-    world = WorldInMemory(world=WORLD, people=(ALICE, BOB), spots=(_PLAZA,))
-    world.whereabouts.place(PersonBody(ALICE), _PLAZA)
-    world.whereabouts.place(PersonBody(BOB), _PLAZA)
+def _world() -> WorldSession:
+    world = world_in_memory(world=WORLD, people=(ALICE, BOB), spots=(_PLAZA,))
+    world.aggregates().whereabouts().place(PersonBody(ALICE), _PLAZA)
+    world.aggregates().whereabouts().place(PersonBody(BOB), _PLAZA)
     return world
 
 
@@ -62,11 +63,11 @@ class TestGroupEffects:
         world = _world()
 
         JoinGroupEffect(_ALICE, _RESCUERS).apply(world.facts(), world.aggregates(), _QUAKE)
-        joined = world.membership.is_member(ALICE, _RESCUERS)
+        joined = world.aggregates().membership().is_member(ALICE, _RESCUERS)
         LeaveGroupEffect(_ALICE, _RESCUERS).apply(world.facts(), world.aggregates(), _QUAKE)
 
         assert joined
-        assert not world.membership.is_member(ALICE, _RESCUERS)
+        assert not world.aggregates().membership().is_member(ALICE, _RESCUERS)
 
 
 class TestSetOutcomeEffect:
@@ -78,10 +79,10 @@ class TestSetOutcomeEffect:
 
         SetOutcomeEffect(_ALICE, _ESCAPED).apply(world.facts(), world.aggregates(), _QUAKE)
 
-        assert world.outcomes.outcome_of(ALICE) == DeclaredOutcome(_ESCAPED)
+        assert world.aggregates().outcomes().outcome_of(ALICE) == DeclaredOutcome(_ESCAPED)
         with pytest.raises(OccupantNotPlacedException):
-            world.whereabouts.location_of(PersonBody(ALICE))
-        assert world.whereabouts.is_at(PersonBody(BOB), _PLAZA)
+            world.aggregates().whereabouts().location_of(PersonBody(ALICE))
+        assert world.aggregates().whereabouts().is_at(PersonBody(BOB), _PLAZA)
 
     def test_second_outcome_is_refused(self) -> None:
         """結末が決まった Alice にもう一度結末を決めると、PersonOutcomes が OutcomeAlreadyDecidedException で断る。"""

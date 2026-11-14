@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.condition.condition import Condition, FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
@@ -11,7 +12,7 @@ from ai_rpg_world.game_world.domain.condition.subject import Actor, EachPerson, 
 from ai_rpg_world.game_world.domain.person import PersonVitals, WorldHappening
 from ai_rpg_world.game_world.domain.value_object import Damage, HitPoints, PersonId, WorldId, WorldTick
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
@@ -52,8 +53,8 @@ class _CanAct(Condition):
         return False
 
 
-def _world() -> WorldInMemory:
-    return WorldInMemory(
+def _world() -> WorldSession:
+    return world_in_memory(
         world=WorldId("island"),
         people=(_ALICE, _BOB, _CAROL),
         vitals=tuple(PersonVitals.start(p, HitPoints(current=3, maximum=3)) for p in (_ALICE, _BOB, _CAROL)),

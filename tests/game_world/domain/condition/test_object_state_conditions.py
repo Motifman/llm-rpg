@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.object_state_conditions import (
     ObjectCountAtLeastCondition,
@@ -40,7 +41,8 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from tests.game_world.domain.condition._builders import ALICE, WORLD
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_design_for_tests import spot
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _BY_ALICE = ActionAttemptForTests(actor_id=ALICE)
 _OPEN = ChoiceName("open")
@@ -72,8 +74,10 @@ _POND = _object("pond", _FISH)
 
 
 def _facts() -> WorldFacts:
-    return WorldInMemory(
+    return world_in_memory(
         world=WORLD,
+        spots=(spot("square"),),
+        objects=(_CHEST, _JAR, _POND),
         object_states=tuple(
             ObjectState.from_declaration(declaration, WorldTick(0)) for declaration in (_CHEST, _JAR, _POND)
         ),

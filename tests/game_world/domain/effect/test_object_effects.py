@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson
 from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
@@ -56,7 +57,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
     NotEnoughStockException,
 )
 from ai_rpg_world.game_world.domain.exception.trigger_exception import ArgumentNotInTriggerException
-from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, ObjectState
+from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, ItemLeftWorldEvent, ObjectState
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     DescriptionText,
@@ -73,7 +74,8 @@ from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from tests.game_world.domain.effect._builders import ALICE, WORLD, inventory, item_spec
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_design_for_tests import spot
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _SHRINE = ObjectId("shrine")
 _APPLE = item_spec("apple")
@@ -102,7 +104,7 @@ def _shrine(*, hidden: bool = False) -> ObjectDeclaration:
     )
 
 
-def _world(*, hidden: bool = False, apples: int = 0, gold: int = 0, ticks: int = 0) -> WorldInMemory:
+def _world(*, hidden: bool = False, apples: int = 0, gold: int = 0, ticks: int = 0) -> WorldSession:
     alice = inventory(ALICE)
     items = []
     for number in range(1, apples + 1):
@@ -110,9 +112,12 @@ def _world(*, hidden: bool = False, apples: int = 0, gold: int = 0, ticks: int =
         alice.receive(item, _APPLE.item_spec_id)
         items.append(Item.come_into_world(item, _APPLE, WorldTick(0)))
     alice.earn(Gold(gold))
-    world = WorldInMemory(
+    world = world_in_memory(
         world=WORLD,
         people=(ALICE,),
+        spots=(spot("plaza"),),
+        objects=(_shrine(hidden=hidden),),
+        item_specs=(_APPLE,),
         inventories=(alice,),
         items=tuple(items),
         object_states=(ObjectState.from_declaration(_shrine(hidden=hidden), WorldTick(0)),),
@@ -136,8 +141,8 @@ class _ArgumentsWithoutActor:
         return NoActingPerson()
 
 
-def _value(world: WorldInMemory, key: ObjectStateKeyDeclaration) -> object:
-    return world.object_states[_SHRINE].value_of(key, world.facts().now())
+def _value(world: WorldSession, key: ObjectStateKeyDeclaration) -> object:
+    return world.aggregates().object_state(_SHRINE).value_of(key, world.facts().now())
 
 
 class TestObjectValueEffects:
@@ -189,7 +194,7 @@ class TestObjectValueEffects:
 
         RevealObjectEffect(_shrine(hidden=True)).apply(world.facts(), world.aggregates(), _alice_acts())
 
-        assert world.object_states[_SHRINE].is_revealed()
+        assert world.aggregates().object_state(_SHRINE).is_revealed()
 
 
 class TestWriteTextEffect:
@@ -260,9 +265,11 @@ class TestDepositToObjectEffects:
 
         DepositItemToObjectEffect(Actor(), _APPLE, _OFFERINGS).apply(world.facts(), world.aggregates(), _alice_acts())
 
-        assert world.inventories[ALICE].count_of(_APPLE.item_spec_id) == Count(1)
-        assert len(world.items) == 1
+        assert world.aggregates().inventory(ALICE).count_of(_APPLE.item_spec_id) == Count(1)
         assert _value(world, _OFFERINGS) == CountValue(Count(3))
+        assert [type(event) for event in world.commit() if isinstance(event, ItemLeftWorldEvent)] == [
+            ItemLeftWorldEvent
+        ]
 
     def test_deposit_item_without_item_is_refused(self) -> None:
         """りんごを持たない Alice が供えようとすると、NotEnoughItemsOfSpecException で断り、供え物の数は 2 のまま。"""
@@ -281,7 +288,7 @@ class TestDepositToObjectEffects:
 
         DepositGoldToObjectEffect(Actor(), Gold(3), _OFFERINGS).apply(world.facts(), world.aggregates(), _alice_acts())
 
-        assert world.inventories[ALICE].available_gold() == Gold(7)
+        assert world.aggregates().inventory(ALICE).available_gold() == Gold(7)
         assert _value(world, _OFFERINGS) == CountValue(Count(5))
 
     def test_deposit_gold_beyond_purse_is_refused(self) -> None:

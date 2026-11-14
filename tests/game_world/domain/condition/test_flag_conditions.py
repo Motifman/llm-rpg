@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, NoText
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
@@ -12,7 +13,7 @@ from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from tests.game_world.domain.condition._builders import ALICE, text, world
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _BY_ALICE = ActionAttemptForTests(actor_id=ALICE)
 _DAWN = HappeningFired(HappeningForTests(HappeningId("dawn")))
@@ -29,10 +30,10 @@ _BLUE_KEY = _flag("blue_key_found")
 _GREEN_KEY = _flag("green_key_found", initially_raised=True)
 
 
-def _with_raised(*flags: FlagDeclaration) -> WorldInMemory:
+def _with_raised(*flags: FlagDeclaration) -> WorldSession:
     a_world = world()
     for flag in flags:
-        a_world.flags.raise_flag(flag, _DAWN)
+        a_world.aggregates().flags().raise_flag(flag, _DAWN)
     return a_world
 
 
@@ -45,10 +46,10 @@ class TestFlagIsRaisedCondition:
         a_world = world()
         assert not condition.holds(a_world.facts(), _BY_ALICE)
 
-        a_world.flags.raise_flag(_RED_KEY, _DAWN)
+        a_world.aggregates().flags().raise_flag(_RED_KEY, _DAWN)
         assert condition.holds(a_world.facts(), _BY_ALICE)
 
-        a_world.flags.lower_flag(_RED_KEY, _DAWN)
+        a_world.aggregates().flags().lower_flag(_RED_KEY, _DAWN)
         assert not condition.holds(a_world.facts(), _BY_ALICE)
 
     def test_flag_declared_raised_holds_from_the_start(self) -> None:

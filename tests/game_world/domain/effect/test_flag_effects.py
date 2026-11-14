@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
@@ -11,7 +12,7 @@ from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.world_records import WorldFlagLoweredEvent, WorldFlagRaisedEvent
 from tests.game_world.domain.effect._builders import WORLD
 from tests.game_world.support.declarations_for_tests import HappeningForTests
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _FLOOD = HappeningFired(HappeningForTests(HappeningId("flood")))
 _BRIDGE_OUT = FlagDeclaration(
@@ -27,12 +28,12 @@ class TestRaiseFlagEffect:
 
     def test_apply_raises_the_flag_with_the_trigger(self) -> None:
         """洪水の出来事で当てると、橋が流れた旗が立ち、旗の集約に洪水をきっかけとする WorldFlagRaisedEvent がたまる。"""
-        a_world = WorldInMemory(world=WORLD)
+        a_world = world_in_memory(world=WORLD)
 
         RaiseFlagEffect(flag=_BRIDGE_OUT).apply(a_world.facts(), a_world.aggregates(), _FLOOD)
 
         assert a_world.facts().flags().is_raised(_BRIDGE_OUT)
-        [event] = a_world.flags.get_events()
+        [event] = a_world.aggregates().flags().get_events()
         assert isinstance(event, WorldFlagRaisedEvent)
         assert event.trigger == _FLOOD
 
@@ -48,12 +49,12 @@ class TestLowerFlagEffect:
 
     def test_apply_lowers_the_flag_with_the_trigger(self) -> None:
         """洪水の出来事で当てると、初めから立っている灯台の旗が下り、洪水をきっかけとする WorldFlagLoweredEvent がたまる。"""
-        a_world = WorldInMemory(world=WORLD)
+        a_world = world_in_memory(world=WORLD)
 
         LowerFlagEffect(flag=_LAMP_LIT).apply(a_world.facts(), a_world.aggregates(), _FLOOD)
 
         assert not a_world.facts().flags().is_raised(_LAMP_LIT)
-        [event] = a_world.flags.get_events()
+        [event] = a_world.aggregates().flags().get_events()
         assert isinstance(event, WorldFlagLoweredEvent)
         assert event.trigger == _FLOOD
 

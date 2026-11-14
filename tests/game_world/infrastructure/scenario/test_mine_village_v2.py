@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import LookingAround
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition, NotCondition
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
@@ -35,7 +36,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldTick,
 )
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
-from tests.game_world.support.world_in_memory import WorldInMemory
+from tests.game_world.support.world_in_memory import world_in_memory
 
 _MINE_VILLAGE = Path(__file__).parents[4] / "data" / "scenarios" / "mine_village_v2.yaml"
 
@@ -209,10 +210,16 @@ def _looks(loaded: LoadedScenario, name: str) -> ObjectLooksDeclaration:
     return loaded.design.looks_of(ObjectId(name))
 
 
-def _world_with(loaded: LoadedScenario, *raised: str, states: tuple[ObjectState, ...] = ()) -> WorldInMemory:
-    a_world = WorldInMemory(world=WorldId("mine_village"), object_states=states)
+def _world_with(loaded: LoadedScenario, *raised: str, states: tuple[ObjectState, ...] = ()) -> WorldSession:
+    nouns = loaded.design.nouns
+    a_world = world_in_memory(
+        world=WorldId("mine_village"),
+        spots=nouns.all_spots(),
+        objects=tuple(nouns.object_of(state.object_id) for state in states),
+        object_states=states,
+    )
     for name in raised:
-        a_world.flags.raise_flag(
+        a_world.aggregates().flags().raise_flag(
             loaded.design.nouns.flag(name, DesignLocation("flag", name, "")), LookingAround(_START)
         )
     return a_world
