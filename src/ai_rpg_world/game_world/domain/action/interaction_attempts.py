@@ -74,6 +74,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool:
         return stage.allows_interaction(self.interaction.interaction_id)
 
+    def items_handled(self) -> tuple[ItemInstanceId, ...]:
+        return ()
+
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self.kind(), self.interaction.interaction_id})
 
@@ -127,6 +130,9 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
 
     def this_item(self) -> ItemInstanceId:
         return self.item
+
+    def items_handled(self) -> tuple[ItemInstanceId, ...]:
+        return (self.item,)
 
 
 @final

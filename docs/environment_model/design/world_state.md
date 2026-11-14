@@ -322,8 +322,15 @@ class WorldEnding:                                # 世界に 1 つ
 
 
 class LatestActions:                              # 世界に 1 つ
-    def note(self, attempt: ActionAttempt, now: WorldTick) -> None: ...   # PersonActedEvent(attempt, at)
-    def note_failed_attempt(self, refusal: ActionRefusal, now: WorldTick) -> None: ...   # ActionAttemptFailedEvent(refusal, at) を出すだけで、last_done_at は変えない
+    def note(self, attempt: ActionAttempt, situation: ActorSituation, now: WorldTick) -> None: ...   # PersonActedEvent(attempt, at_spot, actor_as, item_specs, at)
+    def note_failed_attempt(self, refusal: ActionRefusal, situation: ActorSituation, now: WorldTick) -> None: ...   # ActionAttemptFailedEvent(refusal, at_spot, actor_as, item_specs, at) を出すだけで、last_done_at は変えない
+
+@final
+@dataclass(frozen=True)
+class ActorSituation:                     # 世界を変える前の、行う人の状況。変換役が刺激を作るのに使う (#2146)
+    at_spot: SpotId | NotAtSpot           # 移動では出発した場所。移動中なら NotAtSpot
+    actor_as: Occupant                    # PersonBody か DepartedPerson
+    item_specs: Mapping[ItemInstanceId, ItemSpecId]   # 試みが扱う品物ごとの種類。使い切る品物も、世界に残っているうちに読む
 
     def last_done_at(self, who: PersonId | Anyone, action: ActionKind | InteractionId) -> WorldTick | NeverDone: ...
         # note は attempt.done_as() の鍵ごとに、行った人と Anyone の両方へ時刻を記録する
