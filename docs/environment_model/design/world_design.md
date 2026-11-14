@@ -637,6 +637,7 @@ class RefusalTexts:                         # 作者の条件に付かない、�
     common_rules: Mapping[CommonRuleRefusalKind, TextWithUnassignedPeople]   # Busy、TooTired、NotTogether、OutOfReach など ([action.md](action.md))
     world_state: Mapping[RefusalCode, TextWithUnassignedPeople]              # 集約が断ったとき (籠が満員、荷が空)。error_code ごと
     hidden: TextWithUnassignedPeople                                         # 行う人が知りえない所属を見て断ったとき。理由を言わない文
+    unlisted: TextWithUnassignedPeople                                       # world_state の表に無い RefusalCode で断ったとき (#2146)
 
 @final
 @dataclass(frozen=True)
