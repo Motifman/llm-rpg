@@ -215,7 +215,7 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
         passage_index = travel.passage_index
         ticks_left = travel.ticks_left_on_passage.value
         departed_from = travel.departed_from
-        # 引き返して戻る人は、歩いていた区間の向こうの端から来たように見える。
+        # 区間を 1 つも歩き切らずに出発点へ戻る人は、歩いていた区間の向こうの端から来たように見える。
         came_from = route.end_of_passage(passage_index)
         spare = 1
         while True:
