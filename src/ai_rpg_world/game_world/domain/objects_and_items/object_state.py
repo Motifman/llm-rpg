@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     WrittenText,
     WrittenTextStateKind,
 )
+from ai_rpg_world.game_world.domain.exception.condition_exception import StateValueOfAnotherKindException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     MementoDoesNotMatchDesignException,
     require_distinct_memento_keys,
@@ -193,8 +194,7 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
         self._change_count(key, before, before - amount)
 
     def take_from_stock(self, key: ObjectStateKeyDeclaration, amount: Count, now: WorldTick) -> None:
-        kind = self._require_kind(key, StockStateKind)
-        level = self._stocks[key.key].refilled(kind, now)
+        level = self._stock_level(key, now)
         if amount > level.amount:
             raise NotEnoughStockException(
                 f"{self.object_id.value}.{key.key.value} has {level.amount.value}, cannot take {amount.value}"
@@ -224,9 +224,25 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
 
     def value_of(self, key: ObjectStateKeyDeclaration, now: WorldTick) -> StateValue:
         self._require_owned(key)
-        if isinstance(key.kind, StockStateKind):
-            return StockValue(self._stocks[key.key].refilled(key.kind, now).amount)
+        if key.kind.holds_stock():
+            return StockValue(self._stock_level(key, now).amount)
         return self._values[key.key]
+
+    def count_of(self, key: ObjectStateKeyDeclaration, now: WorldTick) -> Count:
+        value = self.value_of(key, now)
+        if not key.kind.holds_count():
+            raise StateValueOfAnotherKindException(
+                f"{key.object_id.value}.{key.key.value} holds {value!r}, not a count"
+            )
+        return self._count_of(key)
+
+    def stock_of(self, key: ObjectStateKeyDeclaration, now: WorldTick) -> Count:
+        value = self.value_of(key, now)
+        if not key.kind.holds_stock():
+            raise StateValueOfAnotherKindException(
+                f"{key.object_id.value}.{key.key.value} holds {value!r}, not a stock"
+            )
+        return self._stock_level(key, now).amount
 
     def is_revealed(self) -> bool:
         return self._revealed
@@ -242,6 +258,10 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
         value = self._values[key.key]
         assert isinstance(value, CountValue)
         return value.count
+
+    def _stock_level(self, key: ObjectStateKeyDeclaration, now: WorldTick) -> _StockLevel:
+        kind = self._require_kind(key, StockStateKind)
+        return self._stocks[key.key].refilled(kind, now)
 
     def _change_count(self, key: ObjectStateKeyDeclaration, before: Count, after: Count) -> None:
         if after == before:
@@ -274,7 +294,7 @@ class ObjectState(AggregateRoot[ObjectStateEvent]):
 def _require_matches(
     declaration: ObjectDeclaration, values: dict[StateKeyId, StateValue], stocks: dict[StateKeyId, _StockLevel]
 ) -> None:
-    declared_stocks = {key.key for key in declaration.state_keys if isinstance(key.kind, StockStateKind)}
+    declared_stocks = {key.key for key in declaration.state_keys if key.kind.holds_stock()}
     declared_values = {key.key for key in declaration.state_keys} - declared_stocks
     if declared_values != values.keys() or declared_stocks != stocks.keys():
         raise MementoDoesNotMatchDesignException(

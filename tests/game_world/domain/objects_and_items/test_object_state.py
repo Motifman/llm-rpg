@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
@@ -22,6 +24,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
 )
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
+from ai_rpg_world.game_world.domain.exception.condition_exception import StateValueOfAnotherKindException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import (
     CountBelowZeroException,
     MementoDoesNotMatchDesignException,
@@ -361,6 +364,61 @@ class TestObjectStateStock:
 
         assert state.value_of(water, WorldTick(10)) == StockValue(Count(2))
         assert state.get_events() == []
+
+
+class TestObjectStateCountAndStockQueries:
+    """ObjectState.count_of / stock_of が、鍵の種類に合う数・在庫だけを返し、違う種類は断ることを保証する。"""
+
+    def test_count_of_returns_the_current_count(self) -> None:
+        """初め 2 の数の鍵に 3 を足したあと count_of を聞くと Count(5) を返す。"""
+        state = _created()
+        state.add_to_count(_BUCKETS, Count(3))
+
+        count = state.count_of(_BUCKETS, _START)
+
+        assert count == Count(5)
+
+    @pytest.mark.parametrize(
+        ("key", "held"),
+        [(_COVERED, "FlagValue(raised=True)"), (_water(initial=1), "StockValue(amount=Count(value=1))")],
+    )
+    def test_count_of_a_key_of_another_kind_is_refused(self, key: ObjectStateKeyDeclaration, held: str) -> None:
+        """旗や在庫の鍵に count_of を聞くと、いま持つ値を書いた「well.<鍵> holds <値>, not a count」で StateValueOfAnotherKindException を投げる。"""
+        state = _created(_well(_BUCKETS, key))
+
+        with pytest.raises(
+            StateValueOfAnotherKindException, match=re.escape(f"well.{key.key.value} holds {held}, not a count")
+        ):
+            state.count_of(key, _START)
+
+    def test_stock_of_returns_the_refilled_amount(self) -> None:
+        """在庫 0・3 tick ごとの補充の鍵に tick 7 で stock_of を聞くと、value_of と同じく補充後の Count(2) を返す。"""
+        water = _water(initial=0, refills_every=Ticks(3))
+        state = _created(_well(water))
+
+        amount = state.stock_of(water, WorldTick(7))
+
+        assert amount == Count(2)
+        assert state.value_of(water, WorldTick(7)) == StockValue(amount)
+
+    def test_stock_of_a_key_of_another_kind_is_refused(self) -> None:
+        """数の鍵に stock_of を聞くと「well.buckets holds CountValue(count=Count(value=2)), not a stock」で StateValueOfAnotherKindException を投げる。"""
+        state = _created()
+
+        with pytest.raises(
+            StateValueOfAnotherKindException,
+            match=re.escape("well.buckets holds CountValue(count=Count(value=2)), not a stock"),
+        ):
+            state.stock_of(_BUCKETS, _START)
+
+    @pytest.mark.parametrize("query", ["count_of", "stock_of"])
+    def test_key_of_another_object_is_refused_before_its_kind(self, query: str) -> None:
+        """ほかの物の鍵に count_of / stock_of を聞くと、種類を見る前に StateKeyNotOwnedException を投げる。"""
+        state = _created()
+        other = _key("covered", FlagStateKind(), FlagValue(raised=True), object_id=ObjectId("gate"))
+
+        with pytest.raises(StateKeyNotOwnedException):
+            getattr(state, query)(other, _START)
 
 
 class TestObjectStateWriteText:
