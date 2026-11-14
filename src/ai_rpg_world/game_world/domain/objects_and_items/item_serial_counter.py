@@ -41,6 +41,6 @@ class ItemSerialCounter:
     def memento(self) -> ItemSerialCounterMemento:
         return ItemSerialCounterMemento(world_id=self._world_id, issued=self._issued)
 
-    def bring_item_into_world(self, spec: ItemSpecDeclaration, now: WorldTick) -> Item:
+    def make_numbered_item(self, spec: ItemSpecDeclaration, now: WorldTick) -> Item:
         self._issued += 1
         return Item.come_into_world(ItemInstanceId(f"item_{self._issued}"), spec, now)

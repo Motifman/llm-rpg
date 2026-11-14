@@ -563,7 +563,7 @@ class _SqliteWorldAggregates(WorldAggregates):
         counter = self._session.held_aggregate(
             ItemSerialCounterMemento, self._world.key, ItemSerialCounter.from_memento
         )
-        item = counter.bring_item_into_world(spec, now)
+        item = counter.make_numbered_item(spec, now)
         self._session.bring_into_world(ItemMemento, item.item_id.value, item)
         return item.item_id
 

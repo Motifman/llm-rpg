@@ -197,8 +197,8 @@ def _search_progress() -> SpotSearchProgressMemento:
 
 def _item_serial_counter() -> ItemSerialCounterMemento:
     counter = ItemSerialCounter.start(WorldId("island"))
-    counter.bring_item_into_world(item_spec("rope"), WorldTick(1))
-    counter.bring_item_into_world(item_spec("rope"), WorldTick(2))
+    counter.make_numbered_item(item_spec("rope"), WorldTick(1))
+    counter.make_numbered_item(item_spec("rope"), WorldTick(2))
     return counter.memento()
 
 

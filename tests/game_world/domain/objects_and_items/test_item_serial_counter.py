@@ -20,8 +20,8 @@ class TestItemSerialCounter:
         """同じ世界で同じ品物を 2 つ持ち込むと、2 つは別の ID になる。"""
         counter = ItemSerialCounter.start(_WORLD)
 
-        first = counter.bring_item_into_world(_ROPE, WorldTick(0))
-        second = counter.bring_item_into_world(_ROPE, WorldTick(0))
+        first = counter.make_numbered_item(_ROPE, WorldTick(0))
+        second = counter.make_numbered_item(_ROPE, WorldTick(0))
 
         assert first.item_id != second.item_id
 
@@ -29,19 +29,19 @@ class TestItemSerialCounter:
         """始めたばかりの帳簿 2 つに同じ順で品物を持ち込むと、同じ順に同じ ID が出る。"""
         one, other = ItemSerialCounter.start(_WORLD), ItemSerialCounter.start(_WORLD)
 
-        ids_in_one = [one.bring_item_into_world(_ROPE, WorldTick(tick)).item_id for tick in range(3)]
-        ids_in_other = [other.bring_item_into_world(_ROPE, WorldTick(tick)).item_id for tick in range(3)]
+        ids_in_one = [one.make_numbered_item(_ROPE, WorldTick(tick)).item_id for tick in range(3)]
+        ids_in_other = [other.make_numbered_item(_ROPE, WorldTick(tick)).item_id for tick in range(3)]
 
         assert ids_in_one == ids_in_other
 
     def test_counter_rebuilt_from_memento_continues_after_the_last_id(self) -> None:
         """持ち込んだあとの memento から作り直した帳簿は、それまでに出したどの ID とも違う ID を出す。"""
         counter = ItemSerialCounter.start(_WORLD)
-        issued = {counter.bring_item_into_world(_ROPE, WorldTick(0)).item_id for _ in range(2)}
+        issued = {counter.make_numbered_item(_ROPE, WorldTick(0)).item_id for _ in range(2)}
 
         rebuilt = ItemSerialCounter.from_memento(counter.memento())
 
-        assert rebuilt.bring_item_into_world(_ROPE, WorldTick(1)).item_id not in issued
+        assert rebuilt.make_numbered_item(_ROPE, WorldTick(1)).item_id not in issued
 
     def test_memento_with_a_negative_count_is_refused(self) -> None:
         """出した数が負の memento は ValueOutOfRangeException で止まる。"""
