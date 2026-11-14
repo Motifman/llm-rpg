@@ -61,10 +61,11 @@ class PerceptionDeclaration:
     ) -> tuple[Stimulus, ...]:
         people = {"actor": actor.person} | ({"target": target} if isinstance(target, PersonId) else {})
         involved = tuple(people.values())
+        sight_target = self._sight_target(where, target, people, names)
         sight = SightStimulus(
             where=where,
             witness=self.witness.about_named(people, names),
-            target=self._sight_target(where, target, people, names),
+            target=sight_target,
             seen_in_dark=self.seen_in_dark,
             manner=manner,
             actor_departed=actor.is_departed(),

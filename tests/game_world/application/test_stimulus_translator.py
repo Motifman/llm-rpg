@@ -17,12 +17,18 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     TravelAttempt,
     WaitAttempt,
 )
-from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
+from ai_rpg_world.game_world.domain.action.interaction_attempts import (
+    CarriedItemInteractionAttempt,
+    ObjectInteractionAttempt,
+    PersonInteractionAttempt,
+    SomeoneInTheDark,
+)
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechContent, Whisper
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
 from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts
 from ai_rpg_world.game_world.domain.declaration.verb import (
+    ItemInteractionDeclaration,
     NoticedOnWaking,
     ObjectInteractionDeclaration,
     PerceptionDeclaration,
@@ -30,6 +36,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
 )
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.exception.perception_exception import PerceptionTargetNotGivenException
 from ai_rpg_world.game_world.domain.objects_and_items.item import ItemRanOutEvent
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
@@ -216,12 +223,22 @@ def _acts_design() -> WorldDesign:
         ActionKind.TEND: tend,
     }
     lever = obj("lever", "well")
+    pickaxe = replace(item_spec("pickaxe"), name=DisplayName("つるはし"))
+    greet = replace(
+        pull_lever(()),
+        interaction_id=InteractionId("greet"),
+        perceived_as=_seen("{actor}が{target}に会釈した。", "{actor}があなたに会釈した。"),
+        reaches_unseen=True,
+    )
+    polish = replace(
+        pull_lever(()), interaction_id=InteractionId("polish"), perceived_as=_seen("{actor}がつるはしを磨いた。")
+    )
     return compose_world(
         nouns(
             spots=(replace(spot("plaza"), name=DisplayName("広場")), spot("well")),
             objects=(lever,),
             item_specs=(
-                replace(item_spec("pickaxe"), name=DisplayName("つるはし")),
+                pickaxe,
                 replace(item_spec("rope"), name=DisplayName("ロープ")),
             ),
             sections=(_CAGE,),
@@ -232,6 +249,8 @@ def _acts_design() -> WorldDesign:
             ),
         ),
         section_accesses=(replace(access_to(_CAGE), perceived_as=_seen("{actor}が籠に乗った。")),),
+        item_interactions=(ItemInteractionDeclaration(item_spec=pickaxe, interaction=polish),),
+        person_interactions=(greet,),
         world_rules=replace(world_rules_for_tests(), tend=TendRule(revive_hp_rate=Rate(0.6))),
         built_in_action_perceptions_=replace(
             perceptions,
@@ -367,3 +386,34 @@ class TestStimulusTranslatorDeclaredInteractions:
         stimulus = _sight(ObjectInteractionAttempt(_HAL, lever, interaction, {}, Openly()))
 
         assert stimulus.witness.clear.template.template == "{actor}がレバーを引いた。"
+
+    def test_carried_item_interaction_uses_the_perception_declared_on_its_kind(self) -> None:
+        """ハルが持っているつるはしを磨くと、品物の種類 (つるはし) の操作の文「{actor}がつるはしを磨いた。」の刺激になる。"""
+        design = _acts_design()
+        polish = design.interaction_on_item(ItemSpecId("pickaxe"), InteractionId("polish"))
+
+        stimulus = _sight(CarriedItemInteractionAttempt(_HAL, _PICKAXE, polish, {}, Openly()))
+
+        assert stimulus.witness.clear.template.template == "{actor}がつるはしを磨いた。"
+
+    def test_person_interaction_tells_its_target(self) -> None:
+        """ハルがミナに会釈すると、ミナには相手の文「{actor}があなたに会釈した。」が当たる。"""
+        greet = _acts_design().person_interaction(InteractionId("greet"))
+
+        stimulus = _sight(PersonInteractionAttempt(_HAL, _MINA, greet, {}, Openly()))
+
+        assert isinstance(stimulus.target, SightTarget)
+        assert (stimulus.target.person, stimulus.target.texts.clear.template.template) == (
+            _MINA,
+            "{actor}があなたに会釈した。",
+        )
+
+    def test_person_interaction_at_someone_in_the_dark_with_a_target_text_is_refused(self) -> None:
+        """暗がりの誰かに会釈すると、相手がイベントに残らず相手の文を当てられないので PerceptionTargetNotGivenException を投げる。"""
+        design = _acts_design()
+        greet = design.person_interaction(InteractionId("greet"))
+
+        with pytest.raises(PerceptionTargetNotGivenException):
+            StimulusTranslator().stimuli_of(
+                _acted(PersonInteractionAttempt(_HAL, SomeoneInTheDark(), greet, {}, Openly())), design
+            )
