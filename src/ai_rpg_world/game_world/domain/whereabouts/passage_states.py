@@ -93,7 +93,7 @@ class PassageStates(AggregateRoot[PassageStatesEvent]):
     @classmethod
     def from_memento(cls, memento: PassageStatesMemento, design: WorldDesign) -> PassageStates:
         for condition in memento.passages:
-            design.nouns.passage_of(condition.passage)
+            design.nouns.require_declared_passage(condition.passage)
         return cls(memento.world_id, design.nouns.all_passages(), memento.passages)
 
     @property

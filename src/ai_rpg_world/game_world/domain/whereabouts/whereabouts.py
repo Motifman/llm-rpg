@@ -279,7 +279,7 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
 
 def _resumed(location: AtSpot | TravelPosition, design: WorldDesign) -> Location:
     if isinstance(location, AtSpot):
-        design.nouns.spot_of(location.spot)
+        design.nouns.require_declared_spot(location.spot)
         if not isinstance(location.section, OpenArea):
             section = design.nouns.section_of(location.section)
             if section.spot_id != location.spot:
@@ -287,5 +287,5 @@ def _resumed(location: AtSpot | TravelPosition, design: WorldDesign) -> Location
                     f"{location.section.value} is in {section.spot_id.value!r}, not {location.spot.value!r}"
                 )
         return location
-    design.nouns.spot_of(location.departed_from)
+    design.nouns.require_declared_spot(location.departed_from)
     return location.resumed_on(tuple(design.nouns.passage_of(passage) for passage in location.route_passages))

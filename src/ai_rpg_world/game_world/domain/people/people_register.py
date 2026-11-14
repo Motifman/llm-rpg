@@ -81,7 +81,7 @@ class PeopleRegister(AggregateRoot[PersonNamedEvent]):
     def from_memento(cls, memento: PeopleRegisterMemento, design: WorldDesign) -> PeopleRegister:
         nouns = design.nouns
         for entry in memento.names:
-            nouns.character_of(entry.person)
+            nouns.require_declared_character(entry.person)
         return cls(memento.world_id, nouns.all_characters(), {entry.person: entry.name for entry in memento.names})
 
     @property

@@ -87,7 +87,7 @@ class GroupMembership(AggregateRoot[GroupMembershipEvent]):
         nouns = design.nouns
         groups: dict[PersonId, tuple[GroupDeclaration, ...]] = {}
         for entry in memento.groups:
-            nouns.character_of(entry.person)
+            nouns.require_declared_character(entry.person)
             group = nouns.group_of(entry.group)
             if group.grouping.grouping_id != entry.grouping:
                 raise MementoDoesNotMatchDesignException(
