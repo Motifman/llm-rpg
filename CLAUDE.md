@@ -110,6 +110,8 @@ uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
 # live_api は実 endpoint を叩くプローブ。通常の pytest / CI / -m quality のどれでも選ばれず、-m live_api を明示したときだけ走る
 ```
 
+1 テストあたり 60 秒の上限があり (pytest-timeout、`pytest.ini` の `timeout`)、超えたテストは名前を出して落ちます。
+
 `make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。テスト駆動の
 進め方と「テストは仕様書」の書き方は後述の専用節を参照してください。
 
