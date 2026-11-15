@@ -3,7 +3,7 @@ from __future__ import annotations
 import heapq
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
@@ -47,6 +47,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design_review import (
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, DesignWarning
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import ItemNotUsableException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import (
     UndeclaredVerbException,
     WorldDesignFlawsException,
@@ -66,6 +67,11 @@ from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentNa
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.whereabouts.route import NoRoute, Route
 
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.trigger import Trigger
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+
 _WORLD_LOCATION = DesignLocation("world", "world", "")
 _ALWAYS = AllOfCondition(children=(), failure_text=NoText())
 
@@ -73,7 +79,8 @@ _ALWAYS = AllOfCondition(children=(), failure_text=NoText())
 @final
 @dataclass(frozen=True)
 class NotUsable:
-    pass
+    def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
+        raise ItemNotUsableException("the item has no declared use")
 
 
 def _declared_arguments(interaction: InteractionDeclaration) -> frozenset[ArgumentName]:

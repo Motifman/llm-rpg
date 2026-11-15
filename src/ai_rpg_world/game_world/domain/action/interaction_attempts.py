@@ -21,6 +21,7 @@ from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredI
 from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
@@ -34,12 +35,14 @@ from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import It
 from ai_rpg_world.game_world.domain.perception import Noise, NoTarget
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, Ticks
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 
 
 @final
@@ -123,6 +126,17 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     def _witnessed_target(self) -> PersonId | NoTarget:
         return NoTarget()
 
+    def unmet_precondition(self, design: WorldDesign, facts: WorldFacts) -> FailureReason | HiddenFailure | None:
+        return self._declared_now(design, facts).precondition.failure_reason(facts, self)
+
+    def take_effect(self, design: WorldDesign, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        declared = self._declared_now(design, facts)
+        declared.effect.apply(facts, world, self)
+        return facts.rules().duration_of(self.kind(), declared.duration)
+
+    def _declared_now(self, design: WorldDesign, facts: WorldFacts) -> InteractionDeclaration:
+        return self._declared(design, {})
+
 
 @final
 @dataclass(frozen=True)
@@ -162,6 +176,9 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
 
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return ()
+
+    def _declared_now(self, design: WorldDesign, facts: WorldFacts) -> InteractionDeclaration:
+        return self._declared(design, {self.item: facts.item(self.item).spec_id})
 
     def this_item(self) -> ItemInstanceId:
         return self.item

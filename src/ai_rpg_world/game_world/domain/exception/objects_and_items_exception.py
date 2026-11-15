@@ -59,3 +59,7 @@ class NotEnoughItemsOfSpecException(WorldRefusal):
 
 class NeverHiddenObjectUnrevealedException(GameWorldDomainException):
     error_code = "GAME_WORLD.NEVER_HIDDEN_OBJECT_UNREVEALED"
+
+
+class ItemNotUsableException(WorldRefusal):
+    error_code = "GAME_WORLD.ITEM_NOT_USABLE"

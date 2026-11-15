@@ -27,6 +27,7 @@ from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import NothingToHandOverException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     NoRouteToDestinationException,
@@ -340,6 +341,10 @@ class ItemUseAttempt(_OnOneItem):
 
     def exertion(self) -> Exertion:
         return UsesBody()
+
+    def take_effect(self, design: WorldDesign, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        design.use_of_item(facts.item(self.item).spec_id).apply(facts, world, self)
+        return facts.rules().duration_of(self._KIND, DefaultDuration())
 
 
 @final
