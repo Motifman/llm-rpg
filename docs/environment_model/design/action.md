@@ -19,7 +19,7 @@ class ActionAttempt(Protocol):
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool: ...   # その物体のその操作か。物体の操作だけが真を返す。二人で合わせる操作の帳簿が部分を決めるのに使う (D2173)
 
 
-Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | GroupDecisionUnresolved | WorldStageChanged | JointActionCompleted | WorldTimePassing | LookingAround | WorldConditionsSettling | EachPersonOf
+Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | GroupDecisionUnresolved | WorldStageChanged | JointActionCompleted | JointActionTimedOut | WorldTimePassing | LookingAround | WorldConditionsSettling | EachPersonOf
 # どのきっかけも person_as、this_item、acting_person、argument、fall_cause_for を持つ。GroupDecisionResult は CHOSEN_BY_GROUP だけを答え、ほかの行為でないきっかけは何も答えない
 # 行為でないきっかけの acting_person は NoActingPerson、fall_cause_for は WorldHappening()。EachPersonOf は person_as(EACH_PERSON) のほかは外のきっかけに任せる
 
@@ -32,7 +32,12 @@ class EachPersonOf:                         # ForEveryone などの中で、外�
 @final
 @dataclass(frozen=True)
 class JointActionCompleted:
-    joint: CompletedJointAction             # joint_id を答える Protocol。JointActionDeclaration が満たす
+    joint: SettledJointAction               # joint_id を答える Protocol。JointActionDeclaration が満たす
+
+@final
+@dataclass(frozen=True)
+class JointActionTimedOut:                  # 時間切れの効果のきっかけ。揃っていないので JointActionCompleted を流用しない
+    joint: SettledJointAction
 
 @final
 @dataclass(frozen=True)
