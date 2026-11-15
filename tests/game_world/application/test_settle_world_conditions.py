@@ -465,7 +465,7 @@ class TestSettleWorldConditionsEnding:
 
 
 class TestSettleWorldConditionsRoundLimit:
-    """SettleWorldConditions が、宣言の数 (出来事 + 反応) + 1 回を超えて回ったら、コードの誤りとして止まることを保証する。"""
+    """SettleWorldConditions が、宣言の数 (出来事 + 反応 + 二人で合わせる操作) + 1 回を超えて回ったら、コードの誤りとして止まることを保証する。"""
 
     def test_settling_that_never_ends_stops_and_leaves_no_change(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """帳簿が「同じ tick にもう一度起きてよい」と答え続ける誤りがあると、常に真の鐘の出来事で落ち着かせると WorldConditionsDidNotSettleError を投げ、鐘は鳴らず、断りとしても数えない。"""

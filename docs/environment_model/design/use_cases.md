@@ -25,7 +25,7 @@ class SettleWorldConditions:
         # 落ち着くまで繰り返す:
         #   1. まだこの tick に発火していない出来事、反応、二人で合わせる操作の条件を、すべて同じ世界の状態で確かめる
         #      (反応は真偽が変わったものだけ。二人で合わせる操作は ScenarioProgress.joint_action_settlement を見る。D2173)
-        #   2. 真になったものを宣言の順に発火する (出来事、反応の順)
+        #   2. 真になったものを宣言の順に発火する (出来事、反応、二人で合わせる操作の順)
         #   3. 1 つも発火しなければ終わる
         # → 終わりの判定 (きっかけは WorldConditionsSettling)。終わっていれば WorldEnding.end (WorldEndedEvent)
         # 物の状態や通路の決め直しも反応としてこの中に入る (別の段にしない)
@@ -38,7 +38,8 @@ class SettleWorldConditions:
 - 記録のたびに `HappeningFiredEvent` / `ReactionFiredEvent` が出る。断った理由 (`refusal`) が trace の材料になる。出来事のイベントには、効果を当てる前の世界で選んだ `AnnouncementTo` の相手 (`audience`) が載る。`SightAt` / `SoundFrom` の受け手は `DeliverPerception` が選ぶ
 - 断られた発火のイベントには相手を載せない。何も変わっていないので、知らせると起きていないことを伝えてしまう
 - 偶然を使う条件 (`requirements().uses_chance`) は、出来事・反応・終わりのどれも、時間を進めたあと (`AFTER_WORLD_TIME_PASSED`) だけ確かめる。コマンドのたびに確かめると、1 tick にくじを何度も引き、書いた確率より高くなる
-- 出来事は `ScenarioProgress` が 1 tick に 1 回までにする。反応には tick ごとの帳簿が無いので、1 回の `SettleWorldConditions` の中で同じ反応は 1 回まで (断られた回も数える)。自分の条件を崩す反応 (鐘が鳴ったら止める、止んだら鳴らす) でも止まる。回る回数は出来事と反応の宣言の数を超えない
+- 出来事は `ScenarioProgress` が 1 tick に 1 回までにする。反応には tick ごとの帳簿が無いので、1 回の `SettleWorldConditions` の中で同じ反応は 1 回まで (断られた回も数える)。自分の条件を崩す反応 (鐘が鳴ったら止める、止んだら鳴らす) でも止まる。回る回数は出来事と反応と二人で合わせる操作の宣言の数を超えない
+- 二人で合わせる操作は、帳簿が揃いか時間切れを返したものを発火する。当てる効果 (`on_complete` / `on_timeout`)、知らせ、きっかけ (`JointActionCompleted` / `JointActionTimedOut`) は `JointActionSettlement` が選ぶ。断られたら出来事と同じく巻き戻し、`ScenarioProgress.note_joint_action_settled` に理由を渡す。落ち着かせると帳簿が空になるので、1 回の落ち着かせに 1 回まで (D2173)
 - 反応を初めて確かめたとき (帳簿に真偽が無いとき) は、真偽を記録するだけで発火しない。世界の始まりには何も変わっていない
 - 終わりの判定のきっかけは `WorldConditionsSettling`。`WorldTimePassing` を流用すると、コマンドの後の判定が trace で「時間が進んだから終わった」と読めてしまう
 - `ForEveryoneEffect` は 1 人ずつを小さな範囲にし、断られた人の分だけを巻き戻す。1 人の荷が満杯なだけで、ほかの全員がもらえなくなるのを避ける。1 人ごとの断りは、いまはイベントに載せない
@@ -167,7 +168,8 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 2. ActionPrerequisiteCheck.cleared (行っているあいだは Busy。話すことだけはできる。通ったら暗がりの誰かに向けた相手をその場から選ぶ)
 3. 行為ごとの前提 (InteractionDeclaration.precondition など)
 4. 世界を変える (Effect.apply、または専用のモデルの集約)
-   最後に、体を使う行為なら PersonVitals.exert、PersonVitals.start_action (行っているあいだ)、LatestActions.note (PersonActedEvent)
+   最後に、体を使う行為なら PersonVitals.exert、PersonVitals.start_action (行っているあいだ)、LatestActions.note (PersonActedEvent)、
+   ScenarioProgress.note_joint_action_part_done (どの二人で合わせる操作のどの部分に当たるかは帳簿が決める。D2173)
 ──
 5. ドメインイベントを配る (ハンドラ、StimulusTranslator → DeliverPerception、trace)
 6. SettleWorldConditions
@@ -207,6 +209,7 @@ class StimulusTranslator:                         # ドメインイベントの�
         # 断られた行為は、本人には断られた理由の体の刺激 (Background)。見ていた人には、前提か世界を変える途中で断られ、作者が on_failure を書いたときだけ
         # 去った人には体が無いので、断られた理由の体の刺激は届かない。理由はコマンドへの返事にだけ出て、外側が「自分の行動の結果」として渡す
         # 出来事の発火は happening_id で宣言の notice を引く。世界の知らせの相手はイベントに載った相手。断られた発火は作らない。反応は知らせを持たないので作らない
+        # 二人で合わせる操作の揃い・時間切れは joint_id で宣言の complete_notice / timeout_notice を引く。相手と断られたときは出来事と同じ
 ```
 
 ```python
