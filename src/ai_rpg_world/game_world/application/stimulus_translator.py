@@ -98,6 +98,7 @@ from ai_rpg_world.game_world.domain.world_progress.world_stage import (
 )
 from ai_rpg_world.game_world.domain.world_records.joint_action_progress import (
     JointActionCompletedEvent,
+    JointActionSettlement,
     JointActionTimedOutEvent,
 )
 from ai_rpg_world.game_world.domain.world_records.latest_actions import (
@@ -136,6 +137,18 @@ def _happened(event: HappeningFiredEvent, design: WorldDesign) -> tuple[Stimulus
     return design.happening(event.happening_id).stimuli_when_fired(event.refusal, event.audience, event.at)
 
 
+def _joint_completed(event: JointActionCompletedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    return design.joint_action(event.joint_id).stimuli_when_settled(
+        JointActionSettlement.COMPLETED, event.refusal, event.audience, event.at
+    )
+
+
+def _joint_timed_out(event: JointActionTimedOutEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    return design.joint_action(event.joint_id).stimuli_when_settled(
+        JointActionSettlement.TIMED_OUT, event.refusal, event.audience, event.at
+    )
+
+
 def _ran_out(event: ItemRanOutEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
     text = design.nouns.item_spec_of(event.spec_id).lasts.ended_notice()
     return (event.where.read(ItemRanOutNotice(text, event.at)),)
@@ -147,6 +160,8 @@ _TRANSLATIONS: dict[type[DomainEvent], Callable[[Any, WorldDesign], tuple[Stimul
     PersonActedEvent: _acted,
     ActionAttemptFailedEvent: _failed,
     HappeningFiredEvent: _happened,
+    JointActionCompletedEvent: _joint_completed,
+    JointActionTimedOutEvent: _joint_timed_out,
 }
 
 NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
@@ -170,8 +185,6 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         ItemPutAwayEvent,
         ItemReceivedEvent,
         ItemStateChangedEvent,
-        JointActionCompletedEvent,
-        JointActionTimedOutEvent,
         ObjectRevealedEvent,
         ObjectStateChangedEvent,
         OccupantEnteredSectionEvent,
