@@ -141,8 +141,11 @@ class WorldForInteractions:
         return InteractWithPerson(self.carry_out, self.design)(InteractWithPersonCommand(attempt))
 
     def item_of(self, person: PersonId, spec: ItemSpecDeclaration) -> ItemInstanceId:
-        facts = self.read().facts()
-        return next(item for item in facts.inventory(person).items() if facts.item(item).spec_id == spec.item_spec_id)
+        session = self.read()
+        facts = session.facts()
+        found = next(item for item in facts.inventory(person).items() if facts.item(item).spec_id == spec.item_spec_id)
+        session.roll_back()
+        return found
 
     def read(self) -> WorldSession:
         return self.store.session()

@@ -62,10 +62,12 @@ refusal_texts:
     too_tired: 疲れ切っていて、体が言うことを聞かない。
     not_allowed_in_this_stage: 今はそれをするときではない。
     no_one_found_in_the_dark: 暗がりを探ったが、誰にも触れなかった。
+    not_carrying: それを持っていない。
   world_state:
     GAME_WORLD.GROUND_ITEM_NOT_FOUND: それはもう、そこには無かった。
     GAME_WORLD.ITEM_ALREADY_LEFT_WORLD: それはもう無くなっていた。
     GAME_WORLD.ITEM_NOT_CARRIED: それを持っていない。
+    GAME_WORLD.ITEM_NOT_USABLE: それは使いようがない。
     GAME_WORLD.INVENTORY_FULL: 荷がいっぱいで、これ以上は持てない。
     GAME_WORLD.NOT_ENOUGH_ITEMS_OF_SPEC: 足りるだけの数を持っていない。
     GAME_WORLD.PACK_IS_EMPTY: 荷には何も入っていない。

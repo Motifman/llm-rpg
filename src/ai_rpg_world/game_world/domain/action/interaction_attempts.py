@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     CopresenceRequirement,
     Exertion,
     WithObject,
+    WithCarriedItem,
     WithPerson,
 )
 from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredInteraction
@@ -175,7 +176,7 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
         return design.interaction_on_item(item_specs[self.item], self.interaction.interaction_id)
 
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
-        return ()
+        return (WithCarriedItem(self.item),)
 
     def _declared_now(self, design: WorldDesign, facts: WorldFacts) -> InteractionDeclaration:
         return self._declared(design, {self.item: facts.item(self.item).spec_id})
