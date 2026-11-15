@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.declaration.object_and_item.item_spec_declaration import Lasts
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
 from ai_rpg_world.game_world.domain.objects_and_items import CarriedBy, Item, ItemInstanceId, ItemRanOutEvent, LyingAt
+from ai_rpg_world.game_world.domain.objects_and_items.items_running_out import ItemsRunningOut
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, SpotId, Ticks, WorldTick
 from tests.game_world.domain.effect._builders import ALICE, WORLD, inventory, item_spec
 from tests.game_world.support.world_design_for_tests import spot
@@ -46,14 +47,14 @@ def _ran_out(world: WorldSession) -> list[tuple[ItemInstanceId, object, WorldTic
     return [(event.item, event.where, event.at) for event in world.commit() if isinstance(event, ItemRanOutEvent)]
 
 
-class TestCarriedByRunOutAgedItems:
-    """CarriedBy.run_out_aged_items が、持つ時間の過ぎた品物を荷から外し、切らして、世界から出すことを保証する。"""
+class TestItemsRunningOutCarriedBy:
+    """ItemsRunningOut.run_out_carried_by が、持つ時間の過ぎた品物を荷から外し、切らして、世界から出すことを保証する。"""
 
     def test_aged_item_leaves_the_pack_and_runs_out_in_the_name_of_the_carrier(self) -> None:
         """5 tick 持つランプを持ったアリスの荷で tick 5 に切らすと、ランプは荷から外れ、ItemRanOutEvent がアリスの名で出る。"""
         world = _alice_carrying(_lamp())
 
-        CarriedBy(ALICE).run_out_aged_items(world.aggregates(), WorldTick(5))
+        ItemsRunningOut(world.aggregates()).run_out_carried_by(ALICE, WorldTick(5))
 
         assert world.aggregates().inventory(ALICE).items() == ()
         assert _ran_out(world) == [(_LAMP_1, CarriedBy(ALICE), WorldTick(5))]
@@ -62,7 +63,7 @@ class TestCarriedByRunOutAgedItems:
         """切れたランプは世界から出て、引こうとすると AggregateNotInWorldException で断られる。"""
         world = _alice_carrying(_lamp())
 
-        CarriedBy(ALICE).run_out_aged_items(world.aggregates(), WorldTick(5))
+        ItemsRunningOut(world.aggregates()).run_out_carried_by(ALICE, WorldTick(5))
 
         with pytest.raises(AggregateNotInWorldException):
             world.aggregates().item(_LAMP_1)
@@ -71,7 +72,7 @@ class TestCarriedByRunOutAgedItems:
         """tick 4 ではランプの時間が残っているので、荷に残り、ItemRanOutEvent も出ない。"""
         world = _alice_carrying(_lamp())
 
-        CarriedBy(ALICE).run_out_aged_items(world.aggregates(), WorldTick(4))
+        ItemsRunningOut(world.aggregates()).run_out_carried_by(ALICE, WorldTick(4))
 
         assert world.aggregates().inventory(ALICE).items() == (_LAMP_1,)
         assert _ran_out(world) == []
@@ -80,14 +81,14 @@ class TestCarriedByRunOutAgedItems:
         """縄とランプを持つ荷で tick 5 に切らすと、ランプだけが切れ、持つ時間の無い縄は残る。"""
         world = _alice_carrying(_rope(), _lamp())
 
-        CarriedBy(ALICE).run_out_aged_items(world.aggregates(), WorldTick(5))
+        ItemsRunningOut(world.aggregates()).run_out_carried_by(ALICE, WorldTick(5))
 
         assert world.aggregates().inventory(ALICE).items() == (_ROPE_1,)
         assert [item for item, _, _ in _ran_out(world)] == [_LAMP_1]
 
 
-class TestLyingAtRunOutAgedItems:
-    """LyingAt.run_out_aged_items が、持つ時間の過ぎた品物を地面から外し、場所の名で切らすことを保証する。"""
+class TestItemsRunningOutLyingAt:
+    """ItemsRunningOut.run_out_lying_at が、持つ時間の過ぎた品物を地面から外し、場所の名で切らすことを保証する。"""
 
     def test_aged_item_leaves_the_ground_and_runs_out_in_the_name_of_the_spot(self) -> None:
         """広場の地面に置いたランプを tick 5 に切らすと、地面から外れ、ItemRanOutEvent が広場の名で出る。"""
@@ -95,7 +96,7 @@ class TestLyingAtRunOutAgedItems:
         world.aggregates().inventory(ALICE).give_up(_LAMP_1)
         world.aggregates().ground_items(_PLAZA).place(_LAMP_1)
 
-        LyingAt(_PLAZA).run_out_aged_items(world.aggregates(), WorldTick(5))
+        ItemsRunningOut(world.aggregates()).run_out_lying_at(_PLAZA, WorldTick(5))
 
         assert world.aggregates().ground_items(_PLAZA).items() == ()
         assert _ran_out(world) == [(_LAMP_1, LyingAt(_PLAZA), WorldTick(5))]
@@ -104,7 +105,7 @@ class TestLyingAtRunOutAgedItems:
         """アリスが持っているランプは、広場の地面を切らしても切れず、荷に残る。"""
         world = _alice_carrying(_lamp())
 
-        LyingAt(_PLAZA).run_out_aged_items(world.aggregates(), WorldTick(5))
+        ItemsRunningOut(world.aggregates()).run_out_lying_at(_PLAZA, WorldTick(5))
 
         assert world.aggregates().inventory(ALICE).items() == (_LAMP_1,)
         assert _ran_out(world) == []

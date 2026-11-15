@@ -5,7 +5,7 @@ from typing import final
 
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.world_store import WorldSession
-from ai_rpg_world.game_world.domain.objects_and_items import CarriedBy, LyingAt
+from ai_rpg_world.game_world.domain.objects_and_items.items_running_out import ItemsRunningOut
 
 
 @final
@@ -33,8 +33,9 @@ def _pass_one_tick(session: WorldSession) -> None:
     rules = facts.rules()
     for person in facts.people():
         world.vitals(person).pass_time(now, rules.death, rules.hunger)
+    items = ItemsRunningOut(world)
     for person in facts.people():
-        CarriedBy(person).run_out_aged_items(world, now)
+        items.run_out_carried_by(person, now)
     for spot in facts.nouns().all_spots():
-        LyingAt(spot.spot_id).run_out_aged_items(world, now)
+        items.run_out_lying_at(spot.spot_id, now)
     facts.weather_declaration().pass_time_in(world, now, facts.random())
