@@ -315,7 +315,7 @@ def _identifier_pattern(identifiers: Iterable[str]) -> re.Pattern[str] | None:
     return _compiled_identifier_pattern(frozenset(identifiers))
 
 
-# 1 手番に数百回、同じ ID の集合で組み直していて、fuzz の時間の 1 割を占めていた。
+# 1 手番に何度も同じ ID の集合で呼ばれるので、組み直さない。
 @functools.lru_cache(maxsize=8)
 def _compiled_identifier_pattern(identifiers: frozenset[str]) -> re.Pattern[str] | None:
     ids = sorted(identifiers, key=lambda name: (-len(name), name))
