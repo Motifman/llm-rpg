@@ -262,7 +262,7 @@ class Weather:                                    # 世界に 1 つ (天候を�
     def current(self) -> WeatherState: ...
 
 
-class ScenarioProgress(AggregateRoot[HappeningFiredEvent | ReactionFiredEvent]):   # 世界に 1 つ
+class ScenarioProgress(AggregateRoot[HappeningFiredEvent | ReactionFiredEvent | JointActionCompletedEvent | JointActionTimedOutEvent]):   # 世界に 1 つ
     def note_happening_fired(self, happening: HappeningDeclaration, now: WorldTick, audience: frozenset[PersonId], refusal: RefusalCode | NoRefusal) -> None: ...
         # HappeningFiredEvent を出す。断られた発火 (refusal が RefusalCode) は相手を空にして載せる
     def note_reaction_fired(self, reaction: ReactionDeclaration, truth: bool, now: WorldTick, refusal: RefusalCode | NoRefusal) -> None: ...
@@ -277,11 +277,16 @@ class ScenarioProgress(AggregateRoot[HappeningFiredEvent | ReactionFiredEvent]):
         # 例: 最初から閉じている扉の「閉じたら知らせる」反応は、tick 0 では知らせず、一度開いてまた閉じたときに初めて知らせる
     def last_fired_at(self, happening: HappeningId) -> WorldTick | NeverFired: ...
 
-    # 二人で合わせる操作の帳簿 (下の 3 つ) は、それを使うユースケースの Issue で JointActionProgress と一緒に作る
-    def note_joint_action_done(self, joint: JointActionDeclaration, part: tuple[ObjectId, InteractionId], by: PersonId, now: WorldTick) -> None: ...
-    def note_joint_action_settled(self, joint: JointActionDeclaration) -> None: ...   # 揃ったか、時間切れになった
-    def joint_action_progress(self, joint: JointActionDeclaration) -> JointActionProgress | NotStarted: ...
-        # JointActionProgress: どの部分を、誰が、いつ行ったか。distinct_people はこれで確かめる
+    # 二人で合わせる操作の帳簿 (D2173)。操作ごとに JointActionProgress (最初の一押しの tick と、部分ごとに最後に行った人) を持つ
+    def note_joint_action_part_done(self, attempt: ActionAttempt, joints: Iterable[JointActionDeclaration], now: WorldTick) -> None: ...
+        # どの宣言のどの部分に当たるかは帳簿が attempt.operates(物体, 操作) で決める。同じ部分は後の人で上書きし、窓の起点は動かさない
+        # 揃いか時間切れが落ち着いていない操作に書くと JointActionUnsettledException。イベントは出さない
+    def joint_action_settlement(self, joint: JointActionDeclaration, now: WorldTick) -> JointActionSettlement: ...
+        # 全部の部分が埋まり、distinct_people なら覚えている人が全員違えば COMPLETED。最初の一押し + window を過ぎたら TIMED_OUT。ほかは UNDECIDED
+        # 当てる効果は JointActionSettlement.effect_in(joint) が選ぶ (on_complete / on_timeout)
+    def note_joint_action_settled(self, joint: JointActionDeclaration, now: WorldTick, audience: frozenset[PersonId], refusal: RefusalCode | NoRefusal) -> None: ...
+        # JointActionCompletedEvent か JointActionTimedOutEvent を出し、帳簿を空に戻す。断られたら相手を空にして載せる
+        # 空に戻すので、1 回の落ち着かせで同じ操作は揃いか時間切れのどちらか 1 回まで。UNDECIDED のときは JointActionNotSettlingException
 
 
 class Monster: ...                                # 個体ごと。操作と振る舞いは monster.md
@@ -382,7 +387,7 @@ PersonActedEvent, ActionAttemptFailedEvent
 - `ItemHeldEvent` / `ItemPutAwayEvent` / `ItemGivenUpEvent` は持ち主と品物を持つ。`PersonInventory` は持ち主の場所を知らないので、場所は受けるハンドラが `Whereabouts` で引く。`ItemGivenUpEvent` は、手に持っていたかも持つ (手放したあとでは引けないため)
 - 状態が変わらない操作 (同じ値への `set`、現れている物の `reveal`、手にある物の `hold` など) は、断らず、イベントも出さない。断ると `CommandScope` ごと巻き戻り、同じ効果を当て直す出来事や反応が全体を止めるため
 - 行為の記録 (`LatestActions` の `note` / `note_failed_attempt`) は、状態が変わらなくてもイベントを出す。行為が起きたこと、断られたことそのものを知らせるため (知覚は `PersonActedEvent` / `ActionAttemptFailedEvent` から刺激を作る)
-- 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は見張りの外に置く。`ScenarioProgress` は発火の記録だけイベントを出し (知らせと trace の出口、#2145)、発火しなかった反応の真偽の記録では出さない。漏れはアーキテクチャのテストで見張る
+- 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は見張りの外に置く。`ScenarioProgress` は発火と二人で合わせる操作の揃い・時間切れの記録だけイベントを出し (知らせと trace の出口、#2145、D2173)、発火しなかった反応の真偽と、部分を行ったことの記録では出さない。漏れはアーキテクチャのテストで見張る
 - 空腹と疲れは、段階 (`HungerRule.levels` / `FatigueRule.levels`) が変わったときだけイベントにする
 - 場所に着いたこと (`OccupantEnteredSpotEvent`) は、来た場所 (`origin`) と着いた時刻 (`at`) を持つ。来た場所は最後に歩き切った区間の出発点。区間を歩き切る前に通路が閉じて引き返したときや移動をやめたときは、歩いていた区間の向こうの端になる。teleport では `Teleported`。arrival の文の `{origin}` を、確定したあとの世界から読まずに埋めるため (#2152)
 - 移動 (`Whereabouts.advance_travels`) は、着いたとき (`OccupantEnteredSpotEvent`) と止められたとき (`TravelBlockedEvent`) だけイベントにする。道の途中で残りの tick が減ること、途中の場所を通り過ぎることはイベントにしない。tick ごとに出すと、何も起きていない知らせがハンドラと観測に流れるため。見張りのテスト (`tests/architecture/test_world_aggregates_emit_events.py`) もこの例外を持つ

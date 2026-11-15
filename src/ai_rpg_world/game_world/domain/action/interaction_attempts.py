@@ -37,7 +37,7 @@ from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import It
 from ai_rpg_world.game_world.domain.perception import Noise, NoTarget
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, Ticks
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, ObjectId, PersonId, Ticks
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
@@ -111,6 +111,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self.kind(), self.interaction.interaction_id})
 
+    def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
+        return False
+
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.ACTOR:
             return self.actor
@@ -176,6 +179,9 @@ class ObjectInteractionAttempt(_InteractionAttempt):
 
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return (WithObject(self.obj.object_id),)
+
+    def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
+        return (self.obj.object_id, self.interaction.interaction_id) == (obj, interaction)
 
 
 @final

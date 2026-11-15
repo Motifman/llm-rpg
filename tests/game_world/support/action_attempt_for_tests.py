@@ -33,7 +33,7 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, SpotId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, ObjectId, PersonId, SpotId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
@@ -105,6 +105,9 @@ class ActionAttemptForTests(ActionAttempt):
 
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self.action_kind})
+
+    def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
+        return False
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
         return self

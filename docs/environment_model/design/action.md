@@ -16,6 +16,7 @@ class ActionAttempt(Protocol):
     def can_start_while_busy(self) -> bool: ...               # 前の行為を行っているあいだに始められるか。話すことだけが真
     def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool: ...   # 組み込みの行為は stage.allows(ActionKind)、作者の操作は stage.allows_interaction(InteractionId) に尋ねる。NoWorldStages はどの行為も許す
     def done_as(self) -> frozenset[ActionKind | InteractionId]: ...   # 最後に行った行為として記録する鍵。組み込みの行為は {kind}、作者の操作は {kind, interaction_id}
+    def operates(self, obj: ObjectId, interaction: InteractionId) -> bool: ...   # その物体のその操作か。物体の操作だけが真を返す。二人で合わせる操作の帳簿が部分を決めるのに使う (D2173)
 
 
 Trigger = ActionAttempt | HappeningFired | ReactionFired | GroupDecisionResult | GroupDecisionUnresolved | WorldStageChanged | JointActionCompleted | WorldTimePassing | LookingAround | WorldConditionsSettling | EachPersonOf

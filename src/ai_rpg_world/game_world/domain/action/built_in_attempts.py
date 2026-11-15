@@ -44,7 +44,15 @@ from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import It
 from ai_rpg_world.game_world.domain.perception import Noise, NoTarget
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PassageId, PersonId, SpotId, Ticks
+from ai_rpg_world.game_world.domain.value_object import (
+    InteractionId,
+    ItemSpecId,
+    ObjectId,
+    PassageId,
+    PersonId,
+    SpotId,
+    Ticks,
+)
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, NoRoute, Occupant, Route
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
@@ -77,6 +85,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
 
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
         return frozenset({self._KIND})
+
+    def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
+        return False
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
         return ()

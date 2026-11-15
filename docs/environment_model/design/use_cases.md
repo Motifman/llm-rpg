@@ -24,7 +24,7 @@ class SettleWorldConditions:
         # command.occasion は AFTER_WORLD_TIME_PASSED か AFTER_COMMAND
         # 落ち着くまで繰り返す:
         #   1. まだこの tick に発火していない出来事、反応、二人で合わせる操作の条件を、すべて同じ世界の状態で確かめる
-        #      (反応は真偽が変わったものだけ。二人で合わせる操作は LatestActions を見る)
+        #      (反応は真偽が変わったものだけ。二人で合わせる操作は ScenarioProgress.joint_action_settlement を見る。D2173)
         #   2. 真になったものを宣言の順に発火する (出来事、反応の順)
         #   3. 1 つも発火しなければ終わる
         # → 終わりの判定 (きっかけは WorldConditionsSettling)。終わっていれば WorldEnding.end (WorldEndedEvent)
