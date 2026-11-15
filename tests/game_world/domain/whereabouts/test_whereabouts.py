@@ -500,7 +500,9 @@ class TestWhereaboutsTogetherness:
 
     def test_sections_of_occupants_at_pairs_each_occupant_there_with_the_section_they_are_in(self) -> None:
         """sections_of_occupants_at は、その場所にいる人ごとに、籠の中なら籠を、外なら OpenArea を返す。ほかの場所の人と移動中の人は入らない。"""
-        whereabouts = _whereabouts((BOB, "plaza"), (ALICE, "plaza"), (CAROL, "plaza"))
+        whereabouts = _whereabouts(
+            (BOB, "plaza"), (ALICE, "plaza"), (CAROL, "plaza"), (DepartedPerson(PersonId("dave")), "well")
+        )
         whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
         whereabouts.start_travel(CAROL, Route(start=SpotId("plaza"), passages=(STREET,)))
 

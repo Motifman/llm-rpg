@@ -87,17 +87,21 @@ def _cave(lighting: Lighting) -> SpotDeclaration:
 
 
 class _World:
-    """洞窟に alice・bob・carol、物の宝箱がいる。洞窟と小屋が道でつながる。bob はロープを手に持つ。"""
+    """洞窟に alice・bob・carol がいて、宝箱と隠れた壁龕がある。小屋には棚と dave。洞窟と小屋が道でつながる。bob はロープを 2 本持ち、1 本を手に持つ。"""
 
     def __init__(self, lighting: Lighting = Lighting.BRIGHT, *, departed_persons_act: bool = False) -> None:
-        bob = replace(character("bob", "cave"), initial_items=(_ROPE.item_spec_id,), initial_held=(_ROPE.item_spec_id,))
+        bob = replace(
+            character("bob", "cave"),
+            initial_items=(_ROPE.item_spec_id, _ROPE.item_spec_id),
+            initial_held=(_ROPE.item_spec_id,),
+        )
         self.design = compose_world(
             nouns(
                 spots=[_cave(lighting), spot("hut")],
                 passages=[_CAVE_TO_HUT],
                 objects=[_CHEST, _HIDDEN_NICHE, _FAR_SHELF],
                 item_specs=[_ROPE],
-                characters=[character("alice", "cave"), bob, character("carol", "cave")],
+                characters=[character("alice", "cave"), bob, character("carol", "cave"), character("dave", "hut")],
             ),
             object_looks=[_CHEST_LOOKS],
             world_rules=replace(world_rules_for_tests(), departed_persons_act=departed_persons_act),
@@ -134,6 +138,12 @@ class _World:
         session.roll_back()
         return handle
 
+    def held_items_of(self, person: PersonId) -> tuple[ItemInstanceId, ...]:
+        session = self.store.session()
+        items = session.facts().inventory(person).held_items()
+        session.roll_back()
+        return items
+
     def items_of(self, person: PersonId) -> tuple[ItemInstanceId, ...]:
         session = self.store.session()
         items = session.facts().inventory(person).items()
@@ -167,7 +177,7 @@ class TestLookAround:
     """LookAround が、見渡す人のいる場所の SpotContents と明るさから VisibleSurroundings を組む挙動を保証する。"""
 
     def test_bright_spot_shows_other_people_objects_and_ground_items(self) -> None:
-        """明るい洞窟で alice が見渡すと、自分以外の bob と carol、宝箱、地面のロープ、bob が手に持つロープが出る。"""
+        """明るい洞窟で alice が見渡すと、自分以外の bob と carol、宝箱、地面のロープ、bob が手に持つロープ 1 本だけが出る。小屋の dave と、bob の荷の中のロープは出ない。"""
         world = _World(Lighting.BRIGHT)
         ground_rope = world.drops_a_rope_in_the_cave()
 
@@ -177,7 +187,7 @@ class TestLookAround:
         assert len(surroundings.people) == 2
         assert [seen.declaration.object_id for seen in surroundings.objects] == [_CHEST.object_id]
         assert surroundings.ground_items == (ground_rope,)
-        assert [seen.visible_items for seen in surroundings.people if seen.visible_items] == [world.items_of(_BOB)]
+        assert [seen.visible_items for seen in surroundings.people if seen.visible_items] == [world.held_items_of(_BOB)]
 
     def test_hidden_object_appears_only_after_it_is_revealed(self) -> None:
         """洞窟の隠れた壁龕は現れるまで場面に出ず、現した後に出る。小屋の棚は洞窟の場面に出ない。"""
@@ -238,7 +248,7 @@ class TestLookAround:
     def test_fallen_person_appears_among_bodies_with_everything_carried(self) -> None:
         """bob が倒れると、bob は場面の人ではなく倒れた体に出て、持ち物すべてが見える。"""
         world = _World(Lighting.BRIGHT)
-        rope = world.items_of(_BOB)[0]
+        rope = world.held_items_of(_BOB)[0]
         world.change(lambda s: s.aggregates().inventory(_BOB).put_away(rope))
         world.change(_falls(_BOB))
 
