@@ -773,6 +773,26 @@ class TestFormatDocumentExamples:
 
         assert "beast_north_attacks" in [happening.happening_id.value for happening in happenings]
 
+    def test_notice_naming_a_person_is_a_flaw_at_that_notice(self, tmp_path: Path) -> None:
+        """出来事 bell の世界の知らせの文に {each_person} を書くと、その知らせ (notice.announcement_to) を場所とし、理由にプレースホルダーの名前が出る DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace(
+            "happenings:\n",
+            "happenings:\n"
+            "  bell:\n"
+            "    condition: { tick_at_least: 3 }\n"
+            "    once: true\n"
+            "    effect: no_effect\n"
+            "    notice:\n"
+            '      announcement_to: { audience: { where: { all_of: [] } }, text: "{each_person}は鐘を聞いた。" }\n',
+        )
+
+        flaws = _flaws(tmp_path, text)
+
+        assert [
+            (flaw.location.declaration, flaw.location.name, flaw.location.field, "each_person" in flaw.reason)
+            for flaw in flaws
+        ] == [("happening", "bell", "notice.announcement_to", True)]
+
 
 class TestHappeningsReadingThemselves:
     """出来事が自分を読む条件を書けることを保証する。"""

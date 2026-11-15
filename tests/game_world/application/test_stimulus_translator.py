@@ -8,6 +8,7 @@ import pytest
 from ai_rpg_world.eventing import DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator, UntranslatedEventKindError
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
     GroundItemPickupAttempt,
@@ -18,6 +19,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     TravelAttempt,
     WaitAttempt,
 )
+from ai_rpg_world.game_world.domain.action.common_rule_refusal import Busy, CommonRuleRefusal
 from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     CarriedItemInteractionAttempt,
     ObjectInteractionAttempt,
@@ -25,28 +27,45 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     SomeoneInTheDark,
 )
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
+from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechContent, Whisper
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
+from ai_rpg_world.game_world.domain.condition.condition import HiddenFailure
+from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
+from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts
 from ai_rpg_world.game_world.domain.declaration.verb import (
+    AnnouncementTo,
+    HappeningDeclaration,
     ItemInteractionDeclaration,
+    NoFailureWitness,
+    NoNotice,
     NoticedOnWaking,
     ObjectInteractionDeclaration,
     PerceptionDeclaration,
+    SightAt,
     SightTextsDeclaration,
+    SoundFrom,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import HappeningNotice
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.exception.perception_exception import (
     PerceivedItemSpecNotGivenException,
     PerceptionTargetNotGivenException,
 )
+from ai_rpg_world.game_world.domain.exception.world_design_exception import UndeclaredVerbException
 from ai_rpg_world.game_world.domain.objects_and_items.item import ItemRanOutEvent
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import (
+    AnnouncementStimulus,
+    Background,
     BodilyStimulus,
+    Noise,
+    Notable,
+    NoTarget,
     NotNoticedLater,
     NotSeenInDim,
     NotSeenWithoutActor,
@@ -72,6 +91,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldId,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.whereabouts import (
     DepartedPerson,
     NotAtSpot,
@@ -81,8 +101,9 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     Teleported,
 )
 from ai_rpg_world.game_world.domain.world_progress.world_clock import WorldTickAdvancedEvent
-from ai_rpg_world.game_world.domain.world_records import PersonActedEvent
+from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent, HappeningFiredEvent, PersonActedEvent
 from tests.game_world.support.verb_declarations_for_tests import lever_pulled_quietly, pull_lever, seen_clearly_only
+from tests.game_world.support.verb_parts_for_tests import AlwaysHolds, ChangesNothing
 from tests.game_world.support.world_design_for_tests import (
     access_to,
     built_in_action_perceptions,
@@ -213,7 +234,7 @@ def _voice(clear: str) -> PerceptionDeclaration:
     )
 
 
-def _acts_design() -> WorldDesign:
+def _acts_design(failure_witness: bool = False) -> WorldDesign:
     perceptions = built_in_action_perceptions()
     tend = replace(
         _seen("{actor}が{target}を介抱している。"),
@@ -221,7 +242,10 @@ def _acts_design() -> WorldDesign:
     )
     by_kind = {
         **perceptions.by_kind,
-        ActionKind.PICK_UP: _seen("{actor}が{item}を拾った。"),
+        ActionKind.PICK_UP: replace(
+            _seen("{actor}が{item}を拾った。"),
+            on_failure=seen_clearly_only("{actor}が拾い損ねた。") if failure_witness else NoFailureWitness(),
+        ),
         ActionKind.TRAVEL: _seen("{actor}が{destination}へ去っていった。"),
         ActionKind.HAND_OVER: _seen("{actor}が{item}を{target}に渡した。", "{actor}があなたに{item}を渡した。"),
         ActionKind.TEND: tend,
@@ -443,3 +467,167 @@ class TestStimulusTranslatorDeclaredInteractions:
 
         with pytest.raises(PerceivedItemSpecNotGivenException):
             StimulusTranslator().stimuli_of(event, design)
+
+
+_REFUSED = TextWithUnassignedPeople("手がふさがっていて拾えない。").about({})
+
+
+def _failed(
+    reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal, at_spot: SpotId | NotAtSpot = SpotId("well")
+) -> ActionAttemptFailedEvent:
+    attempt = GroundItemPickupAttempt(_HAL, _PICKAXE, Openly())
+    return ActionAttemptFailedEvent(
+        **new_event_stamp(),
+        world_id=_WORLD,
+        refusal=ActionRefusal(attempt=attempt, reason=reason, text=_REFUSED),
+        at_spot=at_spot,
+        actor_as=PersonBody(_HAL),
+        item_specs=_SPECS,
+        at=_NOW,
+    )
+
+
+_WORLD_REFUSED = WorldStateRefusal(RefusalCode("PERSON_INVENTORY.HANDS_FULL"))
+
+
+class TestStimulusTranslatorFailedActs:
+    """StimulusTranslator が、断られた行為を、本人には断られた理由の体の刺激に、見ていた人には作者が書いたときだけ失敗の文の刺激にすることを保証する。"""
+
+    def test_refusal_by_a_common_rule_is_felt_only_by_the_actor(self) -> None:
+        """行っている最中 (Busy) で断られた拾う行為は、失敗の文を宣言していても、ハル本人の体の刺激だけになる。"""
+        [felt] = StimulusTranslator().stimuli_of(_failed(Busy()), _acts_design(failure_witness=True))
+
+        assert felt == BodilyStimulus(person=_HAL, text=_REFUSED, salience=Background(), at=_NOW)
+
+    def test_refusal_while_changing_the_world_is_seen_when_the_author_wrote_it(self) -> None:
+        """世界を変える途中で断られ、作者が失敗の文を書いていれば、本人の体の刺激に続いて「{actor}が拾い損ねた。」の見える刺激ができる。"""
+        felt, seen = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design(failure_witness=True))
+
+        assert isinstance(felt, BodilyStimulus) and isinstance(seen, SightStimulus)
+        assert (seen.where, seen.witness.clear.template.template, seen.target) == (
+            SpotId("well"),
+            "{actor}が拾い損ねた。",
+            NoTarget(),
+        )
+
+    def test_refusal_by_the_precondition_is_seen_when_the_author_wrote_it(self) -> None:
+        """行為ごとの前提で断られ、作者が失敗の文を書いていれば、見える刺激ができる。"""
+        reason = PreconditionRefusal(HiddenFailure(ConditionPath.root()))
+
+        stimuli = StimulusTranslator().stimuli_of(_failed(reason), _acts_design(failure_witness=True))
+
+        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus, SightStimulus]
+
+    def test_refusal_without_a_failure_text_is_felt_only_by_the_actor(self) -> None:
+        """作者が失敗の文を書いていなければ、世界を変える途中で断られても、本人の体の刺激だけになる。"""
+        stimuli = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design())
+
+        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus]
+
+    def test_refusal_at_no_spot_is_felt_only_by_the_actor(self) -> None:
+        """どの場所にもいない人が断られたときは、失敗の文があっても、本人の体の刺激だけになる。"""
+        event = _failed(_WORLD_REFUSED, at_spot=NotAtSpot())
+
+        stimuli = StimulusTranslator().stimuli_of(event, _acts_design(failure_witness=True))
+
+        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus]
+
+
+def _happening(name: str, notice: HappeningNotice | NoNotice) -> HappeningDeclaration:
+    return HappeningDeclaration(
+        happening_id=HappeningId(name), condition=AlwaysHolds(), effect=ChangesNothing(), once=True, notice=notice
+    )
+
+
+_RUMBLE = SoundDeclaration(
+    loudness=Loudness.LOUD,
+    clear=TextWithUnassignedPeople("坑道の奥で岩が崩れた。"),
+    muffled=TextWithUnassignedPeople("どこかで低い音がした。"),
+)
+
+
+def _happenings_design() -> WorldDesign:
+    well = spot("well")
+    return compose_world(
+        nouns(spots=(well,)),
+        happenings=(
+            _happening(
+                "lamp_flicker", SightAt(spot=well, texts=seen_clearly_only("井戸の灯が揺れた。"), salience=Background())
+            ),
+            _happening("cave_in", SoundFrom(spot=well, sound=_RUMBLE, salience=Notable())),
+            _happening(
+                "bell",
+                AnnouncementTo(
+                    audience=PeopleSelection(where=AlwaysHolds()),
+                    text=TextWithUnassignedPeople("招集の鐘が鳴った。"),
+                    salience=Notable(),
+                ),
+            ),
+            _happening("quiet", NoNotice()),
+        ),
+    )
+
+
+def _fired(name: str, refusal: RefusalCode | NoRefusal = NoRefusal()) -> HappeningFiredEvent:
+    return HappeningFiredEvent(
+        **new_event_stamp(),
+        world_id=_WORLD,
+        happening_id=HappeningId(name),
+        at=_NOW,
+        audience=frozenset({_HAL}) if name == "bell" else frozenset(),
+        refusal=refusal,
+    )
+
+
+class TestStimulusTranslatorHappenings:
+    """StimulusTranslator が、出来事の発火を、その出来事の宣言の知らせ (notice) の刺激に変えることを保証する。"""
+
+    def test_sight_notice_is_seen_at_its_spot_even_without_audience(self) -> None:
+        """SightAt の知らせは、知らせの相手がいなくても、井戸の見える刺激「井戸の灯が揺れた。」になる。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_fired("lamp_flicker"), _happenings_design())
+
+        assert isinstance(stimulus, SightStimulus)
+        assert (stimulus.where, stimulus.witness.clear.template.template, stimulus.involved, stimulus.salience) == (
+            SpotId("well"),
+            "井戸の灯が揺れた。",
+            (),
+            Background(),
+        )
+
+    def test_sound_notice_is_a_noise_from_its_spot(self) -> None:
+        """SoundFrom の知らせは、井戸で鳴った大きい物音「坑道の奥で岩が崩れた。」になる。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_fired("cave_in"), _happenings_design())
+
+        assert isinstance(stimulus, SoundStimulus)
+        assert (stimulus.origin, stimulus.loudness, stimulus.clear.template.template, stimulus.source) == (
+            SpotId("well"),
+            Loudness.LOUD,
+            "坑道の奥で岩が崩れた。",
+            Noise(),
+        )
+
+    def test_announcement_goes_to_the_audience_chosen_before_the_effect(self) -> None:
+        """AnnouncementTo の知らせは、イベントに載った相手 (ハル) への世界の知らせになる。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_fired("bell"), _happenings_design())
+
+        assert stimulus == AnnouncementStimulus(
+            audience=frozenset({_HAL}),
+            text=TextWithUnassignedPeople("招集の鐘が鳴った。").about({}),
+            salience=Notable(),
+            at=_NOW,
+        )
+
+    def test_refused_firing_makes_no_stimulus(self) -> None:
+        """効果を当てる途中で断られた発火は、知らせを宣言していても刺激を作らない。"""
+        event = _fired("cave_in", RefusalCode("WORLD_FLAGS.ALREADY_RAISED"))
+
+        assert StimulusTranslator().stimuli_of(event, _happenings_design()) == ()
+
+    def test_happening_without_notice_makes_no_stimulus(self) -> None:
+        """知らせを宣言していない出来事の発火は、刺激を作らない。"""
+        assert StimulusTranslator().stimuli_of(_fired("quiet"), _happenings_design()) == ()
+
+    def test_firing_of_an_undeclared_happening_is_refused(self) -> None:
+        """宣言に無い出来事の発火を渡すと、どの知らせかを引けないので UndeclaredVerbException を投げる。"""
+        with pytest.raises(UndeclaredVerbException):
+            StimulusTranslator().stimuli_of(_fired("unknown"), _happenings_design())

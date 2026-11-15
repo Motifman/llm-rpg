@@ -63,6 +63,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldStageId,
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
+from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.whereabouts.route import NoRoute, Route
 
 _WORLD_LOCATION = DesignLocation("world", "world", "")
@@ -457,6 +458,12 @@ class WorldDesign:
 
     def happenings(self) -> tuple[HappeningDeclaration, ...]:
         return self._happenings
+
+    def happening(self, happening: HappeningId) -> HappeningDeclaration:
+        for declared in self._happenings:
+            if declared.happening_id == happening:
+                return declared
+        raise UndeclaredVerbException(f"no happening {happening.value!r} is declared")
 
     def joint_actions(self) -> tuple[JointActionDeclaration, ...]:
         return self._joint_actions

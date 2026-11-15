@@ -33,6 +33,11 @@ class WitnessedAct:
             where, actor, self.names, at, target=self.target, manner=self.manner, source=self.source
         )
 
+    def failure_stimuli_at(self, where: SpotId | NotAtSpot, actor: Occupant, at: WorldTick) -> tuple[Stimulus, ...]:
+        if isinstance(where, NotAtSpot):
+            return ()
+        return self.perception.failure_seen_at(where, actor, self.names, at, target=self.target, manner=self.manner)
+
 
 def item_names(
     items: tuple[ItemInstanceId, ...], item_specs: Mapping[ItemInstanceId, ItemSpecId], design: WorldDesign
