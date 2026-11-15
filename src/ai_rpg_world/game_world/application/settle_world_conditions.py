@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from typing import final
 
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired, ReactionFired, WorldConditionsSettling
-from ai_rpg_world.game_world.domain.condition.condition import Condition
+from ai_rpg_world.game_world.domain.condition.settling_occasion import SettlingOccasion
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -17,15 +16,6 @@ from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 
 class WorldConditionsDidNotSettleError(RuntimeError):
     pass
-
-
-class SettlingOccasion(Enum):
-    AFTER_WORLD_TIME_PASSED = "AFTER_WORLD_TIME_PASSED"
-    AFTER_COMMAND = "AFTER_COMMAND"
-
-    def checks(self, condition: Condition) -> bool:
-        # コマンドのたびに偶然を確かめると 1 tick にくじを何度も引き、書いた確率より高くなる (#1978 の D2)
-        return self is SettlingOccasion.AFTER_WORLD_TIME_PASSED or not condition.requirements().uses_chance
 
 
 @final

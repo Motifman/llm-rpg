@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.perception import Perceived, Stimulus
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.people_reached_by_stimuli import PeopleReachedByStimuli
 from ai_rpg_world.game_world.domain.value_object import PersonId
 
 
@@ -43,32 +44,25 @@ def _perceive(session: WorldSession, command: DeliverPerceptionCommand) -> tuple
     facts = session.facts()
     senses = WorldPerceptionSenses(facts)
     perceivers = perceivers_in_world(facts)
-    delivery = _DeliveryInOneScope(session.aggregates())
+    handed_over = _PerceptionsHandedOver(session.aggregates())
+    reached = PeopleReachedByStimuli(handed_over)
     for stimulus in command.in_delivery_order():
         for perceiver in perceivers:
-            if delivery.has_reached(perceiver.person) and not stimulus.always_delivered:
-                continue
-            stimulus.perceived_in(perceiver, senses).hand_over(perceiver.person, delivery)
-    return delivery.perceived_so_far()
+            reached.deliver(stimulus, perceiver, senses)
+    return handed_over.perceived_so_far()
 
 
 @final
-class _DeliveryInOneScope:
+class _PerceptionsHandedOver:
     def __init__(self, aggregates: WorldAggregates) -> None:
         self._aggregates = aggregates
         self._perceived: list[Perceived] = []
-        self._reached: set[PersonId] = set()
-
-    def has_reached(self, person: PersonId) -> bool:
-        return person in self._reached
 
     def perceived(self, perceived: Perceived) -> None:
         self._perceived.append(perceived)
-        self._reached.add(perceived.perceiver)
 
     def noticed_later(self, perceiver: PersonId, notice: MissedNotice) -> None:
         self._aggregates.missed_notices(perceiver).keep(notice)
-        self._reached.add(perceiver)
 
     def perceived_so_far(self) -> tuple[Perceived, ...]:
         return tuple(self._perceived)

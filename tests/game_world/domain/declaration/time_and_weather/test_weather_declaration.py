@@ -19,8 +19,9 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
     NoNextWeatherDeclaredException,
     WeatherTransitionDuplicatedException,
 )
-from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability, Ticks, WorldTick
-from tests.game_world.support.world_in_memory import FractionsInOrder
+from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability, Ticks, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.world_progress import Weather
+from tests.game_world.support.world_in_memory import FractionsInOrder, world_in_memory
 
 
 def _transitions(*odds: NextWeatherOdds) -> WeatherTransitions:
@@ -235,4 +236,33 @@ class TestWeatherDeclarationWeatherAfter:
         after = _declaration(NoChange()).weather_after(WorldTick(3), WeatherState(WeatherType.RAIN), random)
 
         assert after == WeatherState(WeatherType.RAIN)
+        assert random.left() == 1
+
+
+_WORLD = WorldId("weather_world")
+
+
+class TestPassTimeIn:
+    """宣言の pass_time_in が、天候を宣言した世界でだけ天候の時間を進めることを保証する。"""
+
+    def test_declared_weather_changes_the_weather_of_the_world(self) -> None:
+        """1 tick ごとに晴れから雨へ移る宣言で tick 1 の時間を進めると、世界の天候が雨になり、くじを 1 回引く。"""
+        declaration = _declaration(
+            ChangesEvery(ticks=Ticks(1), transitions=_transitions(_odds(WeatherType.CLEAR, (WeatherType.RAIN, 1))))
+        )
+        random = FractionsInOrder((0.0,))
+        world = world_in_memory(world=_WORLD, weather=Weather.from_declaration(_WORLD, declaration))
+
+        declaration.pass_time_in(world.aggregates(), WorldTick(1), random)
+
+        assert world.aggregates().weather().current() == WeatherState(WeatherType.RAIN)
+        assert random.left() == 0
+
+    def test_no_weather_touches_neither_the_world_nor_the_random_source(self) -> None:
+        """天候の無い世界で NoWeather の時間を進めても、天候の集約を引かず (引くと断られる)、くじも引かない。"""
+        random = FractionsInOrder((0.0,))
+        world = world_in_memory(world=_WORLD)
+
+        NoWeather().pass_time_in(world.aggregates(), WorldTick(1), random)
+
         assert random.left() == 1

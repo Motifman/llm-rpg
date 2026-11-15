@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.changes_every import ChangesEvery, NoChange
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_state import WeatherState
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.value_object import DisplayName, Probability, WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 
 
 @final
@@ -29,6 +32,9 @@ class WeatherDeclaration:
 
     def weather_after(self, now: WorldTick, current: WeatherState, random: RandomSource) -> WeatherState:
         return WeatherState(self.changes.weather_at(now, current.type, random))
+
+    def pass_time_in(self, world: WorldAggregates, now: WorldTick, random: RandomSource) -> None:
+        world.weather().pass_time(now, self, random)
 
     def obscures_sight(self, state: WeatherState) -> bool:
         return state.type in self.obscuring
