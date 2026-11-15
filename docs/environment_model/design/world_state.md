@@ -388,6 +388,7 @@ GroupDecisionReachedEvent, GroupDecisionUnresolvedEvent
 PersonActedEvent, ActionAttemptFailedEvent
 ```
 
+- `TimeOfDayChangedEvent` は、時間帯の知らせの相手 (`audience`) を載せる。刺激に変える役は世界を読まないので、変わった時点で選んでおく (D2203)
 - 前後の値で反応するハンドラのために、状態の変化のイベントは変わる前と後の値を持つ (`ItemStateChangedEvent`、`WeatherChangedEvent`、`TimeOfDayChangedEvent`、`SpotAtmosphereChangedEvent`)
 - `ItemHeldEvent` / `ItemPutAwayEvent` / `ItemGivenUpEvent` は持ち主と品物を持つ。`PersonInventory` は持ち主の場所を知らないので、場所は受けるハンドラが `Whereabouts` で引く。`ItemGivenUpEvent` は、手に持っていたかも持つ (手放したあとでは引けないため)
 - 状態が変わらない操作 (同じ値への `set`、現れている物の `reveal`、手にある物の `hold` など) は、断らず、イベントも出さない。断ると `CommandScope` ごと巻き戻り、同じ効果を当て直す出来事や反応が全体を止めるため

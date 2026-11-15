@@ -84,11 +84,11 @@ precondition:
 | `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `being` |
 | `world_stages.<名前>` | `name`, `description`, `allowed_actions` (`all` か一覧), `when_entered`, `when_left` |
 | `group_decisions.<名前>` | `name`, `abstain_allowed`, `reveals_ballots`, `voters`, `choices`, `when_decided`, `when_undecided` |
-| `outcomes.<名前>` | `name`, `announcement` |
+| `outcomes.<名前>` | `name`, `announcement` (結末が決まった本人だけに届く。文の `{each_person}` が本人) |
 | `happenings.<名前>` | `condition`, `effect`, `once`, `notice` |
 | `reactions.<名前>` | `condition`, `when_becomes_true`, `when_becomes_false` |
 | `joint_actions.<名前>` | `required` (`{ object, interaction }` の一覧), `window`, `distinct_people`, `on_complete`, `on_timeout`, `complete_notice`, `timeout_notice` |
-| `time` (必須) | `day_night` (`null` か `{ ticks_per_day, starts_at, phases: { <段階>: { begins_at, dark, announcement } } }`), `weather` (`null` か `{ initial, changes, announce_changes, obscuring }`。`changes` は `null` か `{ ticks, transitions }`、`transitions` は `default` か `{ <今>: { <次>: 重み } }`)。天候と昼夜の無い世界でも `null` と書き、欄そのものが無ければ `DesignFlaw`。書き忘れを「無い」として通さないため、`defaults:` でも埋めない |
+| `time` (必須) | `day_night` (`null` か `{ ticks_per_day, starts_at, phases: { <段階>: { begins_at, dark, announcement, audience } } }`。`audience` は人の選び方 `{ where }` か `everyone_awake`。共通の部品の `defaults.day_phase` で `everyone_awake` にしてある), `weather` (`null` か `{ initial, changes, announce_changes, obscuring }`。`changes` は `null` か `{ ticks, transitions }`、`transitions` は `default` か `{ <今>: { <次>: 重み } }`)。天候と昼夜の無い世界でも `null` と書き、欄そのものが無ければ `DesignFlaw`。書き忘れを「無い」として通さないため、`defaults:` でも埋めない |
 | `rules` | `tend` (`null` か `{ revive_hp_rate }`), `fatigue`, `hunger`, `death`, `departed_persons_act`, `name_tags`, `hearing`, `stealth`, `action_durations`, `person_max_hp`, `pack_capacity`, `person_attack_damage` |
 
 値の書き方:
@@ -225,6 +225,31 @@ happenings:
         - for_everyone:
             people: { where: { not: { is_in_section: { who: each_person, section: cage } } } }
             effect: { set_outcome: { who: each_person, outcome: stranded } }
+```
+
+ハルには「ハルは昇降機で外へ出た。」、籠の外のゲンには「ゲンは坑道に取り残された。」だけが届く。籠が上がる様子をほかの人に伝えるなら、`lift_leaves` の `notice` に書く (D2203)。
+
+時間帯の知らせは、`audience` で届く相手を選ぶ。屋外かを問う条件は無いので、屋外の場所を並べて書く。移動中の人はどの場所にもいないので、並べた場所では選ばれない。空の様子を書いた知らせは屋外の場所にいる人に、鐘のように屋内でも聞こえる知らせは書かずに起きている全員へ届ける (D2203)。
+
+```yaml
+time:
+  day_night:
+    ticks_per_day: 48
+    starts_at: 0
+    phases:
+      morning:
+        begins_at: 12
+        dark: false
+        announcement: 空が白み、朝になった。
+        audience:                                 # v2 の屋外の場所すべて
+          where:
+            any_of:
+              - is_at_spot: { who: each_person, spot: north_shaft_head }
+              - is_at_spot: { who: each_person, spot: snow_pass }
+              - is_at_spot: { who: each_person, spot: village_square }
+              - is_at_spot: { who: each_person, spot: well }
+              - is_at_spot: { who: each_person, spot: south_adit_mouth }
+      dusk: { begins_at: 30, dark: false, announcement: 鐘が鳴り、夕刻を告げた。 }   # v2 には無い段階。audience は defaults の everyone_awake
 ```
 
 ## 例: 獣を出来事に置き換える

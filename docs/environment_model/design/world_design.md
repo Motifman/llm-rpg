@@ -218,7 +218,7 @@ class GroupDecisionDeclaration:
 class OutcomeDeclaration:
     outcome_id: OutcomeId
     name: DisplayName                               # 「救出」
-    announcement: TextWithUnassignedPeople # 「{person}は昇降機で外へ出た。」
+    announcement: TextWithUnassignedPeople # 「{each_person}は昇降機で外へ出た。」結末が決まった本人だけに、世界から外れていても、目立つ世界の知らせとして届ける。死んだ結末には知らせが無い (D2203)
 
 
 class DeclaredNouns:
@@ -501,6 +501,11 @@ class DayPhaseDeclaration:
     begins_at: TimeOfDay
     dark: bool                                  # 書かなければ夜だけ真
     announcement: TextWithUnassignedPeople | NoAnnouncement
+    audience: PeopleSelection | EveryoneAwake   # 知らせの届く相手。EveryoneAwake なら起きている全員。どちらでも倒れている人には届けず、ためもしない (D2203)
+
+@final
+@dataclass(frozen=True)
+class EveryoneAwake: ...                        # 倒れていない全員。死んで去った人として動く人と移動中の人を含み、結末が決まって世界から外れた人は含まない (D2203)
 
 @final
 @dataclass(frozen=True)

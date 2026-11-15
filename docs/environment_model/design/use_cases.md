@@ -7,6 +7,7 @@ class OpenWorld:
 class AdvanceWorldTick:
     def __call__(self, command: AdvanceWorldTickCommand) -> None:
         # 1. PassWorldTime                → ハンドラを全部済ませる
+        #    時間帯が変わったら、宣言の audience でその時点の相手を選び、TimeOfDayChangedEvent に載せる (D2203)
         # 2. SettleWorldConditions        → ハンドラを全部済ませる
         # 1 tick が現実の何秒かは実行の設定で決める
         ...
@@ -49,7 +50,7 @@ class DeliverPerception:
     def __call__(self, command: DeliverPerceptionCommand) -> None:
         # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
         # → Perceiver と LightingConditions / SoundReach を作り、刺激の perceived_by に聞く
-        # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、1 人には最初に知覚したものだけ
+        # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、本人の体・見える・聞こえるは 1 人に最初に知覚したものだけ。世界の知らせは数えずに届ける (D2203)
         # → Perceived は観測の出口へ
         # → NoticedLater は MissedNotices.keep
         # → 音の刺激は、計算した SoundReach を SoundsThisTick.note にも書く (モンスターが次の tick に聞く)
@@ -72,6 +73,7 @@ class DeliverNoticesOnWaking:                     # 介抱の確定のあと、�
         # 2. MissedNotices.perceived_on_waking (ためた順、目が覚めた時刻) を出口へ渡し、MissedNotices.clear
         # 3. DeliverSurroundings
         # 見渡した知らせが「目が覚めた」より先に記憶に入らないよう、この順に手順として置く
+        # 気を失ったまま結末が決まって世界から外れる人にも、2. を同じ順で渡す。結末の知らせもためた知らせに入っている。目覚めていないので 1. と 3. は渡さない (D2203)
         ...
 
 class ListAvailableActions:
