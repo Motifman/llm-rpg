@@ -445,6 +445,9 @@ class WorldDesign:
     def use_of_item(self, item_spec: ItemSpecId) -> ItemUseDeclaration | NotUsable:
         return self._item_uses.get(item_spec, NotUsable())
 
+    def is_usable(self, item_spec: ItemSpecId) -> bool:
+        return item_spec in self._item_uses
+
     def section_access(self, section: SpotSectionId) -> SectionAccessDeclaration:
         if section not in self._section_accesses:
             raise UndeclaredVerbException(f"section {section.value!r} has no access declared")
@@ -472,6 +475,9 @@ class WorldDesign:
         if interaction not in self._person_interactions:
             raise UndeclaredVerbException(f"no interaction {interaction.value!r} is declared on people")
         return self._person_interactions[interaction]
+
+    def person_interactions(self) -> tuple[InteractionDeclaration, ...]:
+        return tuple(self._person_interactions.values())
 
     def happenings(self) -> tuple[HappeningDeclaration, ...]:
         return self._happenings
