@@ -17,6 +17,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
 )
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechContent
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
+from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.game_world.domain.world_progress import Abstain, VoteFor
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
@@ -84,6 +85,10 @@ class WorldForSpeechAndBallots:
                 session.aggregates().group_decision(EXILE).start(frozenset({HARU, NATSU}), frozenset({HARU, NATSU}))
             )
         )
+
+    def pass_ticks_of(self, kind: ActionKind) -> None:
+        for _ in range(self.design.world_rules.action_durations[kind].value):
+            self.scope.run(lambda session: session.clock().advance(self.design.day_night))
 
     def read(self) -> WorldSession:
         return self.store.session()

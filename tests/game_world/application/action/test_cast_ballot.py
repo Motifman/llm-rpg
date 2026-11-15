@@ -3,8 +3,12 @@ from __future__ import annotations
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
 from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
-from ai_rpg_world.game_world.domain.exception.world_progress_exception import GroupDecisionNotOpenException
-from ai_rpg_world.game_world.domain.world_progress import BallotCastEvent, VoteFor
+from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
+    BallotAlreadyCastException,
+    GroupDecisionNotOpenException,
+)
+from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
+from ai_rpg_world.game_world.domain.world_progress import Abstain, BallotCastEvent, VoteFor
 from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent
 from tests.game_world.application.action.world_for_speech_and_ballot_tests import (
     HARU,
@@ -36,3 +40,17 @@ class TestCastBallot:
         assert isinstance(reply, ActionRefused)
         assert reply.refusal.reason == WorldStateRefusal(RefusalCode(GroupDecisionNotOpenException.error_code))
         assert [type(event) for event in world.events()] == [ActionAttemptFailedEvent]
+
+    def test_second_ballot_is_refused_and_keeps_the_first(self) -> None:
+        """投じた人が、投票の行っているあいだが過ぎてからもう一度投じると BALLOT_ALREADY_CAST で断られ、BallotCastEvent は最初の票の 1 つだけ。"""
+        world = WorldForSpeechAndBallots()
+        world.open_exile_vote()
+        world.vote(HARU, VoteFor(NATSU))
+        world.pass_ticks_of(ActionKind.CAST_BALLOT)
+
+        reply = world.vote(HARU, Abstain())
+
+        assert isinstance(reply, ActionRefused)
+        assert reply.refusal.reason == WorldStateRefusal(RefusalCode(BallotAlreadyCastException.error_code))
+        casts = [event for event in world.events() if isinstance(event, BallotCastEvent)]
+        assert [(cast.voter, cast.choice) for cast in casts] == [(HARU, VoteFor(NATSU))]
