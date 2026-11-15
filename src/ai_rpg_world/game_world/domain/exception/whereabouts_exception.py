@@ -33,6 +33,10 @@ class OccupantNotAtRouteStartException(WorldRefusal):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_AT_ROUTE_START"
 
 
+class OccupantNotStandingOnSpotException(GameWorldDomainException):
+    error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_STANDING_ON_SPOT"
+
+
 class OccupantNotTravellingException(GameWorldDomainException):
     error_code = "GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_TRAVELLING"
 

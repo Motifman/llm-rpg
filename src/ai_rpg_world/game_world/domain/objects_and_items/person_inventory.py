@@ -16,6 +16,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 )
 from ai_rpg_world.game_world.domain.exception.person_inventory_exception import (
     HeldItemsExceedHandsException,
+    ItemAlreadyHeldException,
     ItemNotHeldException,
     ItemNotPackedException,
     PackIsEmptyException,
@@ -209,7 +210,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None:
         self._require_carried(item)
         if self._is_held(item):
-            return
+            raise ItemAlreadyHeldException(f"{self._person_id.value} already holds {item.value}")
         while HANDS_OF_A_PERSON - self._hands_in_use() < hands_needed.value:
             self.put_away(self._held[0].item)
         self._packed.remove(item)
@@ -229,7 +230,7 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
     def put_away(self, item: ItemInstanceId) -> None:
         self._require_carried(item)
         if not self._is_held(item):
-            return
+            raise ItemNotHeldException(f"{self._person_id.value} does not hold {item.value}")
         self._held = [held for held in self._held if held.item != item]
         self._packed.append(item)
         self.add_event(ItemPutAwayEvent(**new_event_stamp(), person=self._person_id, item=item))

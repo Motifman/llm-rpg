@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 )
 from ai_rpg_world.game_world.domain.exception.person_inventory_exception import (
     HeldItemsExceedHandsException,
+    ItemAlreadyHeldException,
     ItemNotHeldException,
     ItemNotPackedException,
     PackIsEmptyException,
@@ -236,14 +237,15 @@ class TestPersonInventoryHoldAndPutAway:
         assert inventory.held_items() == (_LANTERN,)
         assert inventory.get_events() == []
 
-    def test_holding_an_item_already_in_hands_records_nothing(self) -> None:
-        """もう手に持っている品物を hold しても断らず、手もイベントも変わらない。"""
+    def test_holding_an_item_already_in_hands_is_refused(self) -> None:
+        """もう手に持っている品物を hold すると ItemAlreadyHeldException で断り、手もイベントも変わらない。"""
         inventory = _inventory(_LANTERN, _KNIFE)
         inventory.hold(_LANTERN, _ONE_HAND)
         inventory.hold(_KNIFE, _ONE_HAND)
         inventory.clear_events()
 
-        inventory.hold(_LANTERN, _ONE_HAND)
+        with pytest.raises(ItemAlreadyHeldException):
+            inventory.hold(_LANTERN, _ONE_HAND)
 
         assert inventory.held_items() == (_LANTERN, _KNIFE)
         assert inventory.get_events() == []
@@ -262,11 +264,12 @@ class TestPersonInventoryHoldAndPutAway:
         assert isinstance(event, ItemPutAwayEvent)
         assert (event.person, event.item) == (_ALICE, _LANTERN)
 
-    def test_putting_away_an_item_already_in_pack_records_nothing(self) -> None:
-        """荷にある品物を put_away しても断らず、イベントもたまらない。"""
+    def test_putting_away_an_item_already_in_pack_is_refused(self) -> None:
+        """荷にある品物を put_away すると ItemNotHeldException で断り、品物は荷に残り、イベントもたまらない。"""
         inventory = _inventory(_LANTERN)
 
-        inventory.put_away(_LANTERN)
+        with pytest.raises(ItemNotHeldException):
+            inventory.put_away(_LANTERN)
 
         assert inventory.packed_items() == (_LANTERN,)
         assert inventory.get_events() == []
