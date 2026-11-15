@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
+from ai_rpg_world.game_world.domain.action.action_refusal import PreconditionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.interaction_attempts import PersonInteractionAttempt, SomeoneInTheDark
 from ai_rpg_world.game_world.domain.value_object import PersonId
@@ -9,6 +10,8 @@ from tests.game_world.application.action.world_for_interaction_tests import (
     ALICE,
     BOB,
     CAROL,
+    PUSH_IN_THE_DARK,
+    TAKE_KEY_IN_THE_DARK,
     WorldForInteractions,
 )
 
@@ -28,6 +31,14 @@ def _acted_targets(world: WorldForInteractions) -> list[PersonId | SomeoneInTheD
         event.attempt.target
         for event in world.events_received
         if isinstance(event, PersonActedEvent) and isinstance(event.attempt, PersonInteractionAttempt)
+    ]
+
+
+def _failed_targets(world: WorldForInteractions) -> list[PersonId | SomeoneInTheDark]:
+    return [
+        event.refusal.attempt.target
+        for event in world.events_received
+        if isinstance(event, ActionAttemptFailedEvent) and isinstance(event.refusal.attempt, PersonInteractionAttempt)
     ]
 
 
@@ -87,3 +98,23 @@ class TestInteractWithSomeoneInTheDark:
         assert reply.refusal.reason == NoOneFoundInTheDark()
         assert any(isinstance(event, ActionAttemptFailedEvent) for event in world.events_received)
         assert _damaged(world, (ALICE, BOB, CAROL)) == []
+
+    def test_refused_by_precondition_failed_event_carries_chosen_target(self) -> None:
+        """暗がりの誰かへの操作が前提で断られたとき、ActionAttemptFailedEvent の試みの相手は選んだ bob になる。"""
+        world = WorldForInteractions()
+
+        reply = world.tap(ALICE, SomeoneInTheDark(), PUSH_IN_THE_DARK)
+
+        assert isinstance(reply, ActionRefused)
+        assert isinstance(reply.refusal.reason, PreconditionRefusal)
+        assert _failed_targets(world) == [BOB]
+
+    def test_refused_by_aggregate_failed_event_carries_chosen_target(self) -> None:
+        """暗がりの誰かの鍵を取る効果が集約に断られたとき、ActionAttemptFailedEvent の試みの相手は選んだ bob になる。"""
+        world = WorldForInteractions()
+
+        reply = world.tap(ALICE, SomeoneInTheDark(), TAKE_KEY_IN_THE_DARK)
+
+        assert isinstance(reply, ActionRefused)
+        assert isinstance(reply.refusal.reason, WorldStateRefusal)
+        assert _failed_targets(world) == [BOB]

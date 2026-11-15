@@ -104,6 +104,15 @@ TAP_SHOULDER: InteractionDeclaration = replace(
     reaches_unseen=True,
 )
 
+PUSH_IN_THE_DARK = replace(
+    TAP_SHOULDER,
+    interaction_id=InteractionId("push_in_the_dark"),
+    precondition=FlagIsRaisedCondition(GATE_CLOSED, TextWithUnassignedPeople(GATE_OPEN_TEXT)),
+)
+TAKE_KEY_IN_THE_DARK = replace(
+    TAP_SHOULDER, interaction_id=InteractionId("take_key_in_the_dark"), effect=TakeItemEffect(Target(), KEY, Count(1))
+)
+
 
 class WorldForInteractions:
     def __init__(self, *, bob_at: str = "dam", carol_at: str = "shore") -> None:
@@ -137,8 +146,13 @@ class WorldForInteractions:
     def use(self, actor: PersonId, item: ItemInstanceId) -> ActionReply:
         return UseItem(self.carry_out, self.design)(UseItemCommand(ItemUseAttempt(actor, item)))
 
-    def tap(self, actor: PersonId, target: PersonId | SomeoneInTheDark) -> ActionReply:
-        attempt = PersonInteractionAttempt(actor, target, TAP_SHOULDER, {}, Openly())
+    def tap(
+        self,
+        actor: PersonId,
+        target: PersonId | SomeoneInTheDark,
+        interaction: InteractionDeclaration = TAP_SHOULDER,
+    ) -> ActionReply:
+        attempt = PersonInteractionAttempt(actor, target, interaction, {}, Openly())
         return InteractWithPerson(self.carry_out, self.design)(InteractWithPersonCommand(attempt))
 
     def item_of(self, person: PersonId, spec: ItemSpecDeclaration) -> ItemInstanceId:
@@ -182,5 +196,5 @@ def _design(bob_at: str, carol_at: str) -> WorldDesign:
         ],
         item_interactions=[ItemInteractionDeclaration(item_spec=LAMP, interaction=RUB)],
         item_uses=[ItemUseDeclaration(item_spec=LAMP, effect=RaiseFlagEffect(LAMP_LIT))],
-        person_interactions=[TAP_SHOULDER],
+        person_interactions=[TAP_SHOULDER, PUSH_IN_THE_DARK, TAKE_KEY_IN_THE_DARK],
     )
