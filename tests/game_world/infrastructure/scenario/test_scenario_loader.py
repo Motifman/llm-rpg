@@ -308,6 +308,15 @@ class TestSurroundingsTexts:
 
         assert (texts.waking.template, texts.darkening.template) == ("はっと目を開けた。", "辺りが暗くなった。")
 
+    def test_scenario_joiner_joins_the_listed_people(self, tmp_path: Path) -> None:
+        """シナリオが joiner に「と」を書くと、場面に並ぶ人の穴が「と」でつながる。"""
+        text = _LIFT_LANDING + "surroundings_texts:\n  joiner: と\n"
+
+        texts = _load(tmp_path, text).design.surroundings_texts
+        listed = texts.people_here_about((PersonId("haru"), PersonId("natsu"))).template.template
+
+        assert listed == "ここには{person_1}と{person_2}がいる。"
+
     def test_missing_text_is_a_flaw_naming_the_field(self, tmp_path: Path) -> None:
         """共通の部品にもシナリオにも darkening が無いと、surroundings_texts.darkening の場所を付けた DesignFlaw になる。"""
         path = _scenario(tmp_path, _LIFT_LANDING)
