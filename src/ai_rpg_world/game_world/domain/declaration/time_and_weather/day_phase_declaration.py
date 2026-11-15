@@ -44,5 +44,11 @@ class DayPhaseDeclaration:
         if isinstance(self.announcement, NoAnnouncement):
             return ()
         return (
-            AnnouncementStimulus(audience=audience, text=self.announcement.about({}), salience=Background(), at=at),
+            AnnouncementStimulus(
+                audience=audience,
+                text=self.announcement.about({}),
+                salience=Background(),
+                at=at,
+                kept_while_fainted=False,
+            ),
         )

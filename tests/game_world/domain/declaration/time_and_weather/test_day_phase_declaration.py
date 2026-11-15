@@ -109,7 +109,11 @@ class TestDayPhaseAnnouncement:
         [stimulus] = _morning(EveryoneAwake()).stimuli_when_entered(frozenset({_HARU, _GEN}), _AT)
 
         assert stimulus == AnnouncementStimulus(
-            audience=frozenset({_HARU, _GEN}), text=_MORNING.about({}), salience=Background(), at=_AT
+            audience=frozenset({_HARU, _GEN}),
+            text=_MORNING.about({}),
+            salience=Background(),
+            at=_AT,
+            kept_while_fainted=False,
         )
 
     def test_phase_without_announcement_makes_no_stimulus(self) -> None:

@@ -808,7 +808,11 @@ class TestStimulusTranslatorTimeOfDay:
         [stimulus] = StimulusTranslator().stimuli_of(_phase_entered("morning", "predawn"), _time_of_day_design())
 
         assert stimulus == AnnouncementStimulus(
-            audience=frozenset({_HAL}), text=_DAWN.about({}), salience=Background(), at=_NOW
+            audience=frozenset({_HAL}),
+            text=_DAWN.about({}),
+            salience=Background(),
+            at=_NOW,
+            kept_while_fainted=False,
         )
 
     def test_entering_a_phase_without_announcement_makes_no_stimulus(self) -> None:

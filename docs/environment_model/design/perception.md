@@ -163,6 +163,7 @@ class AnnouncementStimulus:
     salience: Salience
     at: WorldTick
     reaches_who_left_the_world: bool = False   # 結末の知らせだけが真。世界から外れた人には、これが真の知らせだけが届く
+    kept_while_fainted: bool = True            # 時間帯の知らせだけが偽。倒れている相手には届けず、ためもしない
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome: ...
 ```

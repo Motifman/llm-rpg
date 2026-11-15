@@ -419,6 +419,28 @@ class TestPassWorldTimeDayPhase:
         assert stimuli
         assert world.read(lambda session: session.facts().missed_notices(_AKI).notices()) == ()
 
+    def test_person_fainting_in_the_tick_of_dawn_does_not_keep_the_morning(self) -> None:
+        """朝に入る tick に飢えで倒れたハルは、相手を選んだ時点では起きていて相手に載るが、朝の知らせをためない。"""
+        base = world_rules_for_tests()
+        starving = replace(
+            base,
+            hunger=replace(
+                base.hunger, per_tick=HungerAmount(1), limit=HungerAmount(1), starvation_damage=Damage(9999)
+            ),
+        )
+        world = _World(characters=(character("haru", "plaza"),), rules=starving, day_night=_DAWN_AT_TICK_1)
+        world.pass_ticks(1)
+        [entered] = world.events_of(TimeOfDayChangedEvent)
+        stimuli = StimulusTranslator().stimuli_of(entered, world.design)
+
+        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()))(
+            DeliverPerceptionCommand(from_actions=(), from_states=stimuli)
+        )
+
+        assert entered.audience == frozenset({_HARU})
+        assert world.read(lambda session: session.facts().vitals(_HARU).is_down())
+        assert world.read(lambda session: session.facts().missed_notices(_HARU).notices()) == ()
+
 
 class _NoOneListening:
     def receive(self, person: PersonId, observation: object) -> None:
