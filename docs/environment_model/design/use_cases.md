@@ -7,6 +7,7 @@ class OpenWorld:
 class AdvanceWorldTick:
     def __call__(self, command: AdvanceWorldTickCommand) -> None:
         # 1. PassWorldTime                → ハンドラを全部済ませる
+        #    時間帯が変わったら、宣言の audience でその時点の相手を選び、TimeOfDayChangedEvent に載せる (D2203)
         # 2. SettleWorldConditions        → ハンドラを全部済ませる
         # 1 tick が現実の何秒かは実行の設定で決める
         ...
@@ -72,6 +73,7 @@ class DeliverNoticesOnWaking:                     # 介抱の確定のあと、�
         # 2. MissedNotices.perceived_on_waking (ためた順、目が覚めた時刻) を出口へ渡し、MissedNotices.clear
         # 3. DeliverSurroundings
         # 見渡した知らせが「目が覚めた」より先に記憶に入らないよう、この順に手順として置く
+        # 気を失ったまま結末が決まって世界から外れる人にも、2. を同じ順で渡す。結末の知らせもためた知らせに入っている (D2203)
         ...
 
 class ListAvailableActions:

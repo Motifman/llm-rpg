@@ -218,11 +218,13 @@ SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 
 | 知らせ | 元のイベント | 相手 (`audience`) | 目立ち方 | 倒れている人 |
 |---|---|---|---|---|
-| 結末 (`OutcomeDeclaration.announcement`) | `PersonOutcomeDecidedEvent` | 結末が決まった本人だけ。文の `{each_person}` も本人 | `Notable` | `NoticedLater` でためて、目が覚めたときに届く |
-| 時間帯 (`DayPhaseDeclaration.announcement`) | `TimeOfDayChangedEvent` | 宣言の `audience` で選んだ人。`EveryoneAwake` なら起きている全員。どちらでも倒れている人は外す | `Background` | 相手に入れないので、届かず、ためもしない |
+| 結末 (`OutcomeDeclaration.announcement`) | `PersonOutcomeDecidedEvent` | 結末が決まった本人だけ。世界から外れていても届ける (居場所を問わない)。文の `{each_person}` も本人。死んだ結末 (`Died`) には出さない | `Notable` | `NoticedLater` でためて、目が覚めたとき、または気を失ったまま世界から外れるときに、たまった知らせと同じ順で届く |
+| 時間帯 (`DayPhaseDeclaration.announcement`) | `TimeOfDayChangedEvent` | 宣言の `audience` で選んだ人。`EveryoneAwake` なら起きている全員で、死んで去った人として動く人と移動中の人を含む。どちらでも倒れている人と、結末が決まって世界から外れた人は外す。`AdvanceWorldTick` が選んで `TimeOfDayChangedEvent` に載せる | `Background` | 相手に入れないので、届かず、ためもしない |
 
 - 例: 籠が上がってハルとサヨが外へ出たとき、坑道の奥のゲンには「ゲンは坑道に取り残された」だけが届き、ハルの結末は届かない。籠が上がる様子は、作者が出来事の知らせに書いて周りに伝える
 - 時間帯の知らせをためないのは、目が覚めたときに何時間も前の「夜になった」が届くと、いまの時刻と食い違うため。目が覚めたときの場面で分かれば足りる
+- 気を失ったまま結末が決まった人は、世界から外れて目覚めない。外れるときに、たまった知らせ (結末の知らせを含む) を、目が覚めたときと同じくためた順で渡す。結末が後で必ず本人に届くようにするため
+- 屋外の場所にいる人に限るときは、屋外の場所を並べて選ぶ (`is_at_spot` の `any_of`)。移動中の人はどの場所にもいないので選ばれない
 - 本人の体の刺激 (`BodilyStimulus`) にしないのは、倒れていても届いてしまい、結末を目が覚めたときに届ける決まりと食い違うため
 
 ## 知覚の結果
