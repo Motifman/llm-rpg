@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclar
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.declaration.rule_placement import RulePlacement
+from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
     NoDayNight,
@@ -108,6 +109,7 @@ class WorldDesign:
         world_rules: WorldRules,
         refusal_texts: RefusalTexts,
         built_in_action_perceptions: BuiltInActionPerceptions,
+        surroundings_texts: SurroundingsTexts,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -138,6 +140,7 @@ class WorldDesign:
         self._world_rules = world_rules
         self._refusal_texts = refusal_texts
         self._built_in_action_perceptions = built_in_action_perceptions
+        self._surroundings_texts = surroundings_texts
         self._weather = weather
         self._day_night = day_night
         self._initial_stage = initial_stage
@@ -165,6 +168,7 @@ class WorldDesign:
         world_rules: WorldRules,
         refusal_texts: RefusalTexts,
         built_in_action_perceptions: BuiltInActionPerceptions,
+        surroundings_texts: SurroundingsTexts,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -377,6 +381,7 @@ class WorldDesign:
             world_rules=world_rules,
             refusal_texts=refusal_texts,
             built_in_action_perceptions=built_in_action_perceptions,
+            surroundings_texts=surroundings_texts,
             weather=weather,
             day_night=day_night,
             initial_stage=initial_stage,
@@ -407,6 +412,10 @@ class WorldDesign:
     @property
     def built_in_action_perceptions(self) -> BuiltInActionPerceptions:
         return self._built_in_action_perceptions
+
+    @property
+    def surroundings_texts(self) -> SurroundingsTexts:
+        return self._surroundings_texts
 
     @property
     def weather(self) -> WeatherDeclaration | NoWeather:

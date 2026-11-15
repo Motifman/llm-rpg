@@ -637,6 +637,22 @@ class BuiltInPerceptionRow:                 # 組み込みの行為の知覚の�
 
 @final
 @dataclass(frozen=True)
+class SurroundingsTexts:                    # 行為ではなく、本人に直接届く場面と知らせの文。シナリオが世界全体で 1 つ書く (#2174)
+    people_here: TextWithUnassignedPeople   # 「ここには{people}がいる。」。{people} をちょうど 1 回だけ書き、ほかの穴は書けない
+    bodies_here: TextWithUnassignedPeople   # 「{people}が倒れている。」。倒れている人と死んだ人。穴の決まりは people_here と同じ
+    joiner: str                             # {people} に 2 人以上入るとき、人の穴どうしをつなぐ言葉 (共通の部品では「、」)。1 人のときは使わない。空でない 1 行
+    waking: TextWithUnassignedPeople        # 「目が覚めた。」。介抱されて起きた本人へ。穴は書けない
+    darkening: TextWithUnassignedPeople     # 「辺りが暗くなった。」。明るさが下がった場所の人へ。穴は書けない
+
+    def people_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople: ...
+    def bodies_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople: ...
+    # {people} を 1 人ずつの穴 ({person_1}、{person_2} ...) に広げ、渡した順に joiner でつなぐ。1 人も渡さなければ断る (人がいなければ文を出さない)
+    # 1 つの穴に入るのは 1 人で、名前は見る人の側で埋まる (perception.md)。item_joiner は呼び名の文字をつなぐが、joiner はまだ名前の決まっていない穴どうしをつなぐ
+    # 行為の知覚の表 (BuiltInActionPerceptions) に入れないのは、どの行も見る人と音を持つ「ある人の行為の見え方」で、場面と知らせはそのどちらも持たないため
+    # 明るさが上がったときの文は持たない。上がったときは場面を届け直す (perception.md)
+
+@final
+@dataclass(frozen=True)
 class RefusalTexts:                         # 作者の条件に付かない、断られた理由の文。シナリオが世界全体で 1 つ書く
     common_rules: Mapping[CommonRuleRefusalKind, TextWithUnassignedPeople]   # Busy、TooTired、NotTogether、OutOfReach など ([action.md](action.md))
     world_state: Mapping[RefusalCode, TextWithUnassignedPeople]              # 集約が断ったとき (籠が満員、荷が空)。error_code ごと
@@ -706,6 +722,7 @@ class WorldDesign:
         world_rules: WorldRules,
         refusal_texts: RefusalTexts,
         built_in_action_perceptions: BuiltInActionPerceptions,
+        surroundings_texts: SurroundingsTexts,              # 場面と知らせの文 (#2174)
         monster_perceptions: MonsterPerceptions,            # 種類ごとに書き換えなかったときの既定
         monster_health: MonsterHealthTexts,                 # 傷の具合の境と文
         monster_doing: MonsterDoingTexts,                   # 状態ごとの、いましていることの文
@@ -727,6 +744,8 @@ class WorldDesign:
     def refusal_texts(self) -> RefusalTexts: ...
     @property
     def built_in_action_perceptions(self) -> BuiltInActionPerceptions: ...
+    @property
+    def surroundings_texts(self) -> SurroundingsTexts: ...
     @property
     def weather(self) -> WeatherDeclaration | NoWeather: ...
     @property
@@ -805,7 +824,7 @@ infrastructure: YAML を読む (scenario_format.md)
 - `initially_raised` でもなく、どの `RaiseFlagEffect` にも出てこない旗を条件が見ていたら `DesignFlaw`。立てるだけで誰も見ない旗は `DesignWarning`
 - 締める出来事 (`CloseGroupDecisionEffect`) が 1 つも無い集団の決定は `DesignWarning`。猶予 (`DeathRule.grace`) が 0 なのに介抱がある世界は `DesignFlaw`
 - 作者が書かなかった知覚の文 (目撃の文、された人の文、音の文、起きてから気づく文) は、読み込む側が既定の文の表 (データ) から埋め、`DesignWarning` を残す。倒れていた本人が起きてから気づく文だけは、書かなければ気づかない (`NotNoticedLater`)。介抱の相手の文 (`NoticedOnWaking`) も同じで、書かなければ `NoTarget` になり、警告もしない (#2076)
-- 断りの文の表 (`RefusalTexts`) と、組み込みの行為の知覚の文 (`BuiltInActionPerceptions`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由や、世界で行える組み込みの行為が表に無ければ `DesignFlaw`
+- 断りの文の表 (`RefusalTexts`)、組み込みの行為の知覚の文 (`BuiltInActionPerceptions`)、場面と知らせの文 (`SurroundingsTexts`) の既定は、コードではなくデータ (共通のシナリオの部品) として 1 つ用意し、シナリオはそれを取り込んで必要な行だけ書き換える。起きうる理由や、世界で行える組み込みの行為が表に無ければ `DesignFlaw`
 - 理由が誰かに届く条件 (操作の前提、区画に入る条件、通路を通る条件) の根に `failure_text` が無ければ `DesignFlaw`。出来事・反応・終わり・見つかる物の条件には求めない
 - 効果と条件が読む引数の名前が、操作の宣言の `arguments` に無ければ `DesignFlaw`
 - `WorldStage`・昼夜・天候を宣言していない世界で、それを見る条件を書いていれば `DesignFlaw`。昼夜に宣言していない段階の名前を見る条件も同じ

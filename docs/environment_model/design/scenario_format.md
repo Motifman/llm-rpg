@@ -39,6 +39,7 @@ person_interactions: { ... }          # 殴る、盗むなど、人への操作
 ending: { ends_when: ... }
 refusal_texts: { ... }                # RefusalTexts。ふつうは includes から取り込み、行を書き換える
 built_in_action_perceptions: { ... }  # 組み込みの行為ごとの知覚 (行為は travel、hand_over などの snake_case)
+surroundings_texts: { ... }           # SurroundingsTexts。場面 (people_here、bodies_here、joiner) と、waking・darkening の知らせの文
 monster_perceptions: { ... }          # モンスターのしたこと (現れた、去った、襲った、逃げた、死んだ) の知覚の既定。ふつうは includes から取り込む
 monster_health: [ ... ]               # 傷の具合の境と文 ({ at_least, text } の並び)
 monster_doing: { ... }                # 状態ごとの、いましていることの文
@@ -132,11 +133,12 @@ perception_defaults:
 
 ## 共通の部品
 
-日本語の世界の共通の部品は `data/scenarios/common/ja_default.yaml`。`rules`、`refusal_texts`、`built_in_action_perceptions`、`perception_defaults`、`defaults` を書き、シナリオは `includes: [common/ja_default.yaml]` で取り込んで、変えたい行だけを書く。
+日本語の世界の共通の部品は `data/scenarios/common/ja_default.yaml`。`rules`、`refusal_texts`、`built_in_action_perceptions`、`surroundings_texts`、`perception_defaults`、`defaults` を書き、シナリオは `includes: [common/ja_default.yaml]` で取り込んで、変えたい行だけを書く。
 
 - `rules` の値は [world_design.md](world_design.md) の `WorldRules` に書いた既定。介抱 (`tend`) のある世界にしてあり、介抱の無い世界は `tend: null` と書く
 - `refusal_texts.world_state` には、遊んでいる最中に世界の状態が変わって起きうる集約の断り (拾おうとした品物がもう無い、籠が満員など) の `error_code` を載せる。宣言を作るときの検査や、実装の誤りでしか起きない `error_code` は載せない。断りの文の人のプレースホルダーは `{actor}` だけ
 - `built_in_action_perceptions` の文には、人のほかに、行為が扱う物・行き先・話した中身の呼び名を書ける。刺激に変える役が埋める (#2058)
+- `surroundings_texts` の `people_here`・`bodies_here` は `{people}` をちょうど 1 回だけ書く。`{people}` には場所にいる人が 1 人ずつの穴に分かれて `joiner` でつながって入る。`waking`・`darkening` には穴を書けない (#2174)
 
 | 行為 | 書ける呼び名 | 人 |
 |---|---|---|

@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRule
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
+from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
     DayNightDeclaration,
@@ -156,6 +157,19 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
             shout=read_row(shout),
             arrival=read_row(arrival),
             item_joiner=ItemNameJoiner(rows.required(_ITEM_JOINER).text()),
+        )
+    )
+
+
+def surroundings_texts(node: YamlNode) -> SurroundingsTexts:
+    fields = node.fields("people_here", "bodies_here", "joiner", "waking", "darkening")
+    return node.build(
+        lambda: SurroundingsTexts(
+            people_here=people_text(fields.required("people_here")),
+            bodies_here=people_text(fields.required("bodies_here")),
+            joiner=fields.required("joiner").text(),
+            waking=people_text(fields.required("waking")),
+            darkening=people_text(fields.required("darkening")),
         )
     )
 

@@ -75,6 +75,13 @@ built_in_action_perceptions:
   put_away: *quiet
   cast_ballot: *quiet
 
+surroundings_texts:
+  people_here: "ここには{people}がいる。"
+  bodies_here: "{people}が倒れている。"
+  joiner: 、
+  waking: 目が覚めた。
+  darkening: 辺りが暗くなった。
+
 perception_defaults:
   witness: { clear: "{actor}が何かをした。" }
   target: { clear: "{actor}があなたに何かをした。" }

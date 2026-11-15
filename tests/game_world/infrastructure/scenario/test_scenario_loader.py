@@ -297,6 +297,42 @@ class TestSpeechAndArrivalPerceptions:
         ]
 
 
+class TestSurroundingsTexts:
+    """場面と知らせの文 (surroundings_texts) が、共通の部品から読まれ、書き換えと欠けと穴の誤りが読み込みで扱われることを保証する。"""
+
+    def test_scenario_overrides_one_text_of_the_common_part(self, tmp_path: Path) -> None:
+        """シナリオが waking だけを書くと、その文に置き換わり、ほかの文は共通の部品のまま残る。"""
+        text = _LIFT_LANDING + "surroundings_texts:\n  waking: はっと目を開けた。\n"
+
+        texts = _load(tmp_path, text).design.surroundings_texts
+
+        assert (texts.waking.template, texts.darkening.template) == ("はっと目を開けた。", "辺りが暗くなった。")
+
+    def test_missing_text_is_a_flaw_naming_the_field(self, tmp_path: Path) -> None:
+        """共通の部品にもシナリオにも darkening が無いと、surroundings_texts.darkening の場所を付けた DesignFlaw になる。"""
+        path = _scenario(tmp_path, _LIFT_LANDING)
+        common = tmp_path / "common.yaml"
+        common.write_text(
+            common.read_text(encoding="utf-8").replace("  darkening: 辺りが暗くなった。\n", ""), encoding="utf-8"
+        )
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        assert [flaw.location for flaw in raised.value.flaws] == [
+            DesignLocation("world", "world", "surroundings_texts.darkening").in_file(ScenarioFile("common.yaml"))
+        ]
+
+    def test_wrong_hole_is_a_flaw(self, tmp_path: Path) -> None:
+        """people_here に {people} ではなく {actor} を書くと、surroundings_texts の DesignFlaw になり、理由に people_here が出る。"""
+        text = _LIFT_LANDING + 'surroundings_texts:\n  people_here: "{actor}がいる。"\n'
+
+        flaws = _flaws(tmp_path, text)
+
+        assert [flaw.location.field for flaw in flaws] == ["surroundings_texts"]
+        assert "people_here" in flaws[0].reason
+
+
 class TestBuiltInTargetTexts:
     """built_in_action_perceptions の相手が見る文 (target) を、相手のいる行為にだけ書けることを保証する。"""
 

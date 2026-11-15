@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.domain.perception import NoTarget
 from ai_rpg_world.game_world.domain.perception.salience import Background, Notable
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
-from ai_rpg_world.game_world.domain.value_object import Capacity, HitPoints
+from ai_rpg_world.game_world.domain.value_object import Capacity, HitPoints, PersonId
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_document import read_yaml_document
 
@@ -110,6 +110,7 @@ class TestCommonJaDefaultReads:
             "rules",
             "refusal_texts",
             "built_in_action_perceptions",
+            "surroundings_texts",
             "perception_defaults",
             "defaults",
         }
@@ -193,6 +194,25 @@ class TestBuiltInActionPerceptions:
         arrival = _load_smallest_scenario(tmp_path).design.built_in_action_perceptions.arrival
 
         assert "origin" in arrival.witness.clear.placeholders()
+
+
+class TestSurroundingsTexts:
+    """ja_default.yaml の場面と知らせの文が、読み込んだ設計図から既定の文として使えることを保証する。"""
+
+    def test_people_here_and_bodies_here_list_people_with_the_default_joiner(self, tmp_path: Path) -> None:
+        """既定の文で 2 人を並べると「ここには{person_1}、{person_2}がいる。」「{person_1}が倒れている。」の形になる。"""
+        texts = _load_smallest_scenario(tmp_path).design.surroundings_texts
+
+        listed = texts.people_here_about((PersonId("haru"), PersonId("natsu"))).template.template
+        bodies = texts.bodies_here_about((PersonId("natsu"),)).template.template
+
+        assert (listed, bodies) == ("ここには{person_1}、{person_2}がいる。", "{person_1}が倒れている。")
+
+    def test_waking_and_darkening_have_default_texts(self, tmp_path: Path) -> None:
+        """目覚めの文は「目が覚めた。」、暗くなった知らせの文は「辺りが暗くなった。」が既定になる。"""
+        texts = _load_smallest_scenario(tmp_path).design.surroundings_texts
+
+        assert (texts.waking.template, texts.darkening.template) == ("目が覚めた。", "辺りが暗くなった。")
 
 
 class TestPlaceholders:
