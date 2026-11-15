@@ -15,6 +15,7 @@ def _events(trace_path: Path, kind: str) -> list[dict]:
     return [e for e in map(json.loads, lines) if e["kind"] == kind]
 
 
+# 手数は最小まで下げてある。残る遅さの 7 割は古い世界の InMemoryDataStore.take_snapshot の deepcopy で、ステージ 8 で入口と一緒に消える (#2188)。
 @pytest.mark.timeout(30)
 def test_stub_run_writes_episodes_on_filled_range_and_on_leaving_before_the_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

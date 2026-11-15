@@ -264,6 +264,7 @@ class TestSnapshotTraceCarriesMemoryTurns:
         assert turns[0] == turns[1]
         assert any(turn > 0 for turn in turns[0].values())
 
+    # 手数は最小まで下げてある。残る遅さの 7 割は古い世界の InMemoryDataStore.take_snapshot の deepcopy で、ステージ 8 で入口と一緒に消える (#2188)。
     @pytest.mark.timeout(30)
     def test_resumed_run_after_the_range_fills_builds_prompts_without_failures(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
