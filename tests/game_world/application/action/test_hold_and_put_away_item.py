@@ -53,7 +53,7 @@ class TestHoldAndPutAwayItem:
         assert world.carried_by(ALICE) == (rope,)
 
     def test_holding_item_already_in_hands_refuses(self) -> None:
-        """何も変わらない持ち替えは断る。もう手に持っている縄を手に持とうとすると ITEM_ALREADY_HELD で断られ、縄は手に残る。"""
+        """手に持つことで何も変わらないときは断る。もう手に持っている縄を手に持とうとすると ITEM_ALREADY_HELD で断られ、縄は手に残る。"""
         world = WorldForItemActions(alice_carries=(ROPE.item_spec_id,))
         [rope] = world.carried_by(ALICE)
         HoldItem(world.carry_out)(HoldItemCommand(HoldItemAttempt(ALICE, rope)))
@@ -66,7 +66,7 @@ class TestHoldAndPutAwayItem:
         assert world.held_by(ALICE) == (rope,)
 
     def test_putting_away_item_already_in_pack_refuses(self) -> None:
-        """何も変わらない持ち替えは断る。荷にある縄をしまおうとすると ITEM_NOT_HELD で断られ、縄は荷に残る。"""
+        """しまうことで何も変わらないときは断る。荷にある縄をしまおうとすると ITEM_NOT_HELD で断られ、縄は荷に残る。"""
         world = WorldForItemActions(alice_carries=(ROPE.item_spec_id,))
         [rope] = world.carried_by(ALICE)
 

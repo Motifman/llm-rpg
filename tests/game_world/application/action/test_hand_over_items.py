@@ -60,7 +60,7 @@ class TestHandOverItems:
         assert world.carried_by(BOB) == ()
 
     def test_fallen_receiver_refuses_and_items_stay_with_giver(self) -> None:
-        """倒れている人は受け取れない。倒れた相手に渡そうとすると PERSON_NOT_ALIVE で断られ、品物は渡す側に残る。"""
+        """倒れている相手に渡そうとすると PERSON_NOT_ALIVE で断られ、品物は渡す側に残り、相手の荷には入らない。"""
         world = WorldForItemActions(alice_carries=TWO_ITEMS)
         items = world.carried_by(ALICE)
         world.fell(BOB)
