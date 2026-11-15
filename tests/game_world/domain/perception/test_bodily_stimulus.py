@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import Background, Notable
 from ai_rpg_world.game_world.domain.perception.bodily_stimulus import BodilyStimulus
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt
@@ -54,3 +55,15 @@ class TestBodilyStimulusPerceivedBy:
 
         assert isinstance(outcome, Perceived)
         assert outcome.calls_attention is False
+
+
+class TestBodilyStimulusOnWaking:
+    """BodilyStimulus.on_waking が、目が覚めたことを、宣言の文で本人の体の目立つ刺激にすることを保証する。"""
+
+    def test_waking_is_a_notable_stimulus_of_the_person_with_the_declared_text(self) -> None:
+        """alice が tick 9 に目覚めると、宣言の「目が覚めた。」を文に持つ、alice の体の目立つ刺激になる。"""
+        stimulus = BodilyStimulus.on_waking(ALICE, TextWithUnassignedPeople("目が覚めた。"), WorldTick(9))
+
+        assert stimulus == BodilyStimulus(
+            person=ALICE, text=TextWithUnassignedPeople("目が覚めた。").about({}), salience=Notable(), at=WorldTick(9)
+        )
