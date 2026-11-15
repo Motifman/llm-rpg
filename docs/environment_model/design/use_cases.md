@@ -181,7 +181,7 @@ class ActionSteps(Protocol[_Attempt]):
     def change_world(self, attempt: _Attempt, facts: WorldFacts, world: WorldAggregates) -> Ticks: ...
 ```
 
-- 体を使う行為だけ疲れ、行為の長さのあいだは体を使わない行為でも行っている (`PersonVitals.start_acting`)。去った人は疲れず、行っているあいだも持たない
+- 体を使う行為だけ疲れ、行為の長さのあいだは体を使わない行為でも行っている (`PersonVitals.start_acting`)。去った人は疲れず、行っているあいだも持たない。行っている最中に始めた行為 (話すこと) は、いまの行為の終わりを早めない
 - 集約が断ったとして返すのは、世界の断りの印 `WorldRefusal` のある例外だけ。印の無いドメイン例外は誤りとして投げ直し、run を止める (#2165、D2081)
 - 集約が断った理由の文は `RefusalTexts.world_state` から引き、表に無ければ `RefusalTexts.unlisted` を使う。例外の文面は返さない (品物の ID が入る)
 
