@@ -24,6 +24,11 @@ class AnnouncementStimulus:
     at: WorldTick
 
     @property
+    def counts_toward_one_per_person(self) -> bool:
+        # 世界の知らせは見聞きしたことの言い換えではなく別のことを伝えるので、ほかと重なっても届け、ほかも押し出さない。
+        return False
+
+    @property
     def always_delivered(self) -> bool:
         return False
 

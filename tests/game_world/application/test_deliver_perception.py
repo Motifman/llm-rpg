@@ -361,6 +361,7 @@ class _RefusedStimulus:
     """聞かれると、ドメインの決まりに反するとして断る刺激。"""
 
     always_delivered = True
+    counts_toward_one_per_person = True
 
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank(sense=Sense.ANNOUNCEMENT, stands_back=True)
