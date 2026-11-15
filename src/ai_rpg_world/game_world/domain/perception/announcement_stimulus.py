@@ -25,7 +25,7 @@ class AnnouncementStimulus:
 
     @property
     def counts_toward_one_per_person(self) -> bool:
-        # 世界の知らせは見聞きしたことの言い換えではなく別のことを伝えるので、ほかと重なっても届け、ほかも押し出さない。
+        # 世界の知らせは見聞きしたことの言い換えではなく、別のことを伝えるので、1 人に 1 つの数に入れない。
         return False
 
     @property
