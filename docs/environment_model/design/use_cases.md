@@ -62,13 +62,13 @@ class LookAround:
 
 class DeliverSurroundings:
     def __call__(self, command: DeliverSurroundingsCommand) -> None:
-        # LookAround → 人、倒れた体、モンスターを 1 つの観測にして出口へ
+        # LookAround → VisibleSurroundings.perceived_by で人、倒れた体、モンスターを 1 つの観測にして出口へ。誰もいなければ渡さない
         ...
 
 class DeliverNoticesOnWaking:                     # 介抱の確定のあと、別の確定の範囲で動く
     def __call__(self, command: DeliverNoticesOnWakingCommand) -> None:
         # 1. 起きたことの知らせ (本人の体の刺激) を DeliverPerception で配る
-        # 2. MissedNotices の知らせを古い順に出口へ渡し、MissedNotices.clear
+        # 2. MissedNotices.perceived_on_waking (ためた順、目が覚めた時刻) を出口へ渡し、MissedNotices.clear
         # 3. DeliverSurroundings
         # 見渡した知らせが「目が覚めた」より先に記憶に入らないよう、この順に手順として置く
         ...

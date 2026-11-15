@@ -219,7 +219,7 @@ SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 ```python
 PerceptionOutcome = Perceived | NotPerceived | NoticedLater
 
-PerceivedQuality = SeesClearly | SeesShapes | HearsClearly | HearsMuffled | HearsFaintly | Felt | Told   # SightQuality と HearingQuality の値をそのまま使う
+PerceivedQuality = SeesClearly | SeesShapes | HearsClearly | HearsMuffled | HearsFaintly | Felt | Told | NoticedOnWaking   # SightQuality と HearingQuality の値をそのまま使う。NoticedOnWaking は倒れている間にたまった知らせ (#2154)
 
 @final
 @dataclass(frozen=True)
@@ -395,6 +395,7 @@ class ContainedPassage:
 @dataclass(frozen=True)
 class VisibleSurroundings:
     spot: SpotDeclaration
+    sight: SightQuality
     shows_description: bool               # 真っ暗なら説明を出さず、音と気温だけ
     passages: tuple[PassageInState, ...]  # 真っ暗でも出す (手探りで分かる)
     sections: tuple[SpotSectionDeclaration, ...]
@@ -407,6 +408,9 @@ class VisibleSurroundings:
     def seen_with(cls, sight: SightQuality, contents: SpotContents) -> "VisibleSurroundings": ...
         # 現れていない物と通路 (hidden_until_revealed) は出さない。暗い・真っ暗では、暗くても見える物体 (seen_in_dark) だけ
         # 地面の品物と人の持ち物は SeesClearly のときだけ出す (暗いときは持ち物を出さない)。区画と通路は真っ暗でも出す (手探りで分かる)
+
+    def perceived_by(self, viewer: PersonId, texts: SurroundingsTexts, at: WorldTick) -> tuple[Perceived, ...]: ...
+        # 場面の人と倒れた体を、SurroundingsTexts.scene_as_seen の 1 つの文にした見える知覚。人も倒れた体もいなければ空 (#2154)
 ```
 
 - 見渡す (`LookAround`) と、見渡す人のいる場所の場面を返す。見渡す本人は場面の人に入れない。去った人 (`DepartedPerson`) は誰の場面にも出さない。倒れた体は、その場所の体 (`PersonBody`) のうち倒れた人と死んだ人。去った人が見渡すと、明るさに関わらず `SeesClearly` で見る。移動中の人、倒れている人、去った人として動かない世界の死んだ人には場面が無い (`NothingInView`) (#2154)
@@ -417,3 +421,5 @@ class VisibleSurroundings:
 - 話すことは、声の大きさ (`Whisper` / `OrdinaryVoice` / `Shout`) ごとの宣言 (`BuiltInActionPerceptions.speech`) で刺激を作る。音の大きさも、その宣言の `loudness` を使う (#2061)
 - 品物の時間が切れて消えたこと (`ItemRanOutEvent`) は、持っていた本人には本人の体の刺激、地面にあったときはその場所の見える刺激として、`Lasts.ended_text` で作る。暗くなったことは `DeliverDarkeningHandler` が別に届ける (#2068)
 - 着いたとき、起き上がったとき、その場所の明るさが上がったとき (灯した、夜が明けた、明かりを持った人が来た) は、場面の人、倒れた体、モンスターを 1 つの観測にして渡す (`DeliverSurroundings`)。明るさが上がったかは、出来事の前後の `LightingConditions` を比べて決める
+- 場面の観測は、いる側の文だけを people_here、bodies_here の順につなぐ。人も倒れた体もいなければ (真っ暗も含む) 観測を出さない。品質は見え方 (`SeesClearly` / `SeesShapes`) のまま、目立つ知らせにはしない (#2154)
+- 起き上がった人には、「目が覚めた」(`SurroundingsTexts.waking`、本人の体の刺激、目立つ) → たまった知らせ (ためた順、`NoticedOnWaking`、目立たない) → 場面 の順に渡す。たまった知らせも目が覚めた時刻の観測にする。Being の短期記憶は同じ環境の観測を時刻で安定に並べ直すので、倒れている間の時刻で渡すと「目が覚めた」より前に記憶に入るため。いつ起きたかは作者の `noticed_later` の文が表す (#2154)
