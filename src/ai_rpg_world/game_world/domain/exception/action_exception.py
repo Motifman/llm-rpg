@@ -48,8 +48,8 @@ class UnknownPersonInRefusalTextException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.UNKNOWN_PERSON_IN_REFUSAL_TEXT"
 
 
-class CommonRuleBrokenException(GameWorldDomainException):
-    error_code = "GAME_WORLD.ACTION.COMMON_RULE_BROKEN"
+class ActionRefusedException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.ACTION_REFUSED"
 
     def __init__(self, refusal: ActionRefusal) -> None:
         super().__init__(type(refusal.reason).__name__)

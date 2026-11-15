@@ -14,7 +14,7 @@ from ai_rpg_world.game_world.domain.condition.condition import FailureReason, Hi
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
-from ai_rpg_world.game_world.domain.exception.action_exception import CommonRuleBrokenException
+from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefusedException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.value_object import Ticks
 
@@ -26,12 +26,6 @@ class ActionSteps(Protocol[_StepsAttempt]):
     def unmet_precondition(self, attempt: _StepsAttempt, facts: WorldFacts) -> FailureReason | HiddenFailure | None: ...
 
     def change_world(self, attempt: _StepsAttempt, facts: WorldFacts, world: WorldAggregates) -> Ticks: ...
-
-
-class _Refused(Exception):
-    def __init__(self, refusal: ActionRefusal) -> None:
-        super().__init__(type(refusal.reason).__name__)
-        self.refusal = refusal
 
 
 @final
@@ -52,7 +46,7 @@ class CarryOutAction:
 
         try:
             self._scope.run(carry_out)
-        except (_Refused, CommonRuleBrokenException) as refused:
+        except ActionRefusedException as refused:
             return self._note_refusal(refused.refusal)
         except WorldRefusal as exception:
             code = RefusalCode.of(exception)
@@ -66,7 +60,7 @@ class CarryOutAction:
         failure = steps.unmet_precondition(attempt, facts)
         if failure is not None:
             text = self._texts.precondition_text(failure, attempt.actor)
-            raise _Refused(ActionRefusal(attempt=attempt, reason=PreconditionRefusal(failure), text=text))
+            raise ActionRefusedException(ActionRefusal(attempt=attempt, reason=PreconditionRefusal(failure), text=text))
         now = facts.now()
         situation = ActorSituation.of(attempt, facts)
         world = session.aggregates()

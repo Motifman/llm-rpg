@@ -38,7 +38,7 @@ from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechContent
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
-from ai_rpg_world.game_world.domain.exception.action_exception import CommonRuleBrokenException
+from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefusedException
 from ai_rpg_world.game_world.domain.objects_and_items import PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
@@ -351,11 +351,12 @@ def _tap_in_the_dark() -> PersonInteractionAttempt:
     return PersonInteractionAttempt(ALICE, SomeoneInTheDark(), _TAP, {}, Openly())
 
 
-def _world_of_three(fractions: tuple[float, ...] = ()) -> WorldSession:
+def _world_of_three(fractions: tuple[float, ...] = (), **overrides: object) -> WorldSession:
     world = _world(
         people=(ALICE, BOB, CAROL),
         vitals=tuple(PersonVitals.start(person, HitPoints(10, 10)) for person in (ALICE, BOB, CAROL)),
         fractions=fractions,
+        **overrides,
     )
     world.aggregates().whereabouts().place(PersonBody(CAROL), LANDING)
     return world
@@ -391,22 +392,33 @@ class TestCleared:
         assert _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS).target == CAROL
 
     def test_no_one_together_raises_no_one_found_in_the_dark(self) -> None:
-        """一緒にいる人が誰もいなければ、共通の規則 NoOneFoundInTheDark の断りを持つ CommonRuleBrokenException を投げる。"""
+        """一緒にいる人が誰もいなければ、共通の規則 NoOneFoundInTheDark の断りを持つ ActionRefusedException を投げる。"""
         world = _world()
         world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
 
-        with pytest.raises(CommonRuleBrokenException) as broken:
+        with pytest.raises(ActionRefusedException) as broken:
             _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS)
 
         assert broken.value.refusal.reason == NoOneFoundInTheDark()
 
+    def test_departed_actor_chooses_from_where_departed_person_is(self) -> None:
+        """departed_persons_act の世界で、体は乗り場に残り去った人が浜にいるとき、去った人の暗がりへの操作は浜にいる bob を選ぶ。"""
+        world = _world_of_three((0.0,), rules=replace(world_rules_for_tests(), departed_persons_act=True))
+        _make_dead(world, ALICE)
+        world.aggregates().whereabouts().place(DepartedPerson(ALICE), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
+        tap = InteractionForTests(InteractionId("tap"), reaches_unseen=True, actor_requirement=LivingOrDeparted())
+        attempt = PersonInteractionAttempt(ALICE, SomeoneInTheDark(), tap, {}, Openly())
+
+        assert _CHECK.cleared(attempt, world.facts(), TEXTS).target == BOB
+
     def test_broken_common_rule_raises_before_choosing(self) -> None:
-        """行っている最中の人の暗がりへの操作は、相手を選ぶ前に Busy の断りを持つ CommonRuleBrokenException を投げる。"""
+        """行っている最中の人の暗がりへの操作は、相手を選ぶ前に Busy の断りを持つ ActionRefusedException を投げる。"""
         world = _world()
         world.aggregates().vitals(ALICE).start_action(WorldTick(5))
         world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
 
-        with pytest.raises(CommonRuleBrokenException) as broken:
+        with pytest.raises(ActionRefusedException) as broken:
             _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS)
 
         assert broken.value.refusal.reason == Busy()

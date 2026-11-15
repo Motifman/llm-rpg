@@ -14,7 +14,7 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
 )
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
-from ai_rpg_world.game_world.domain.exception.action_exception import CommonRuleBrokenException
+from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefusedException
 from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, Occupant, PersonBody
 
 _Attempt = TypeVar("_Attempt", bound=ActionAttempt)
@@ -24,10 +24,10 @@ class ActionPrerequisiteCheck:
     def cleared(self, attempt: _Attempt, facts: WorldFacts, refusal_texts: RefusalTexts) -> _Attempt:
         refusal = self.refusal(attempt, facts, refusal_texts)
         if refusal is not None:
-            raise CommonRuleBrokenException(refusal)
+            raise ActionRefusedException(refusal)
         aimed = attempt.aimed_in(facts)
         if isinstance(aimed, NoOneFoundInTheDark):
-            raise CommonRuleBrokenException(
+            raise ActionRefusedException(
                 ActionRefusal(attempt=attempt, reason=aimed, text=refusal_texts.common_rule_text(aimed, attempt.actor))
             )
         return aimed
