@@ -98,6 +98,14 @@ class TestJointActionWindow:
 
         assert progress.joint_action_settlement(_LEVERS, WorldTick(7)) is JointActionSettlement.COMPLETED
 
+    def test_completion_within_the_window_stays_completed_after_it(self) -> None:
+        """ハル tick 5 左・ナツ tick 7 右で揃ったまま落ち着かせずに tick 8 に問うても、時間切れではなく揃いを返す。部分は窓の中でしか書けないため。"""
+        progress = ScenarioProgress.start(_WORLD)
+
+        _pushed(progress, (5, _HARU, _LEFT), (7, _NATSU, _RIGHT))
+
+        assert progress.joint_action_settlement(_LEVERS, WorldTick(8)) is JointActionSettlement.COMPLETED
+
     def test_one_lever_times_out_after_the_window(self) -> None:
         """ハルが tick 5 に左だけを押したとき、窓を過ぎた tick 8 に時間切れになる。"""
         progress = ScenarioProgress.start(_WORLD)
