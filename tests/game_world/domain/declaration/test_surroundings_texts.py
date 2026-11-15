@@ -71,6 +71,12 @@ class TestPeopleListing:
 
         assert _written(text) == "ここにはharu}{natsuがいる。"
 
+    def test_braces_written_as_letters_in_text_stay_letters(self) -> None:
+        """文に文字として書いた括弧 ({{ }}) は、人を並べたあとも穴にならず文字のまま残る。"""
+        text = _texts(people_here="{{見える人}}{people}がいる。").people_here_about((HARU,))
+
+        assert _written(text) == "{見える人}haruがいる。"
+
     def test_listing_no_one_is_refused(self) -> None:
         """人を 1 人も渡さないと NoPeopleToListException を投げる (人がいないなら文を出さない)。"""
         with pytest.raises(NoPeopleToListException):
