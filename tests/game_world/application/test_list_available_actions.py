@@ -516,13 +516,13 @@ _WATCH_TONIGHT = group_decision("watch_tonight")
 
 
 class _Village:
-    """広場にハル・ナツ・アキがいる。「誰を坑道に残すか」と「今夜の見張り」の 2 つの集団の決定が、この順に宣言されている。どちらも棄権を許す。"""
+    """広場にハルとナツが、坑道にアキがいる。ハルからアキは見えない。「誰を坑道に残すか」と「今夜の見張り」の 2 つの集団の決定が、この順に宣言されている。どちらも棄権を許す。"""
 
     def __init__(self) -> None:
         self.design = compose_world(
             nouns(
-                spots=[spot("square")],
-                characters=[character("haru", "square"), character("natsu", "square"), character("aki", "square")],
+                spots=[spot("square"), spot("mine")],
+                characters=[character("haru", "square"), character("natsu", "square"), character("aki", "mine")],
                 group_decisions=[_STAY_IN_MINE, _WATCH_TONIGHT],
             ),
             group_decision_rules=[everyone_votes_on(_STAY_IN_MINE), everyone_votes_on(_WATCH_TONIGHT)],
@@ -587,7 +587,7 @@ class TestListAvailableBallots:
     """ListAvailableActions が、開いている集団の決定の票を投票する人に並べ、GroupDecision と同じ判断でできる・できないに分ける挙動を保証する。"""
 
     def test_voter_lists_vote_for_every_choice_including_self_then_abstain(self) -> None:
-        """「誰を坑道に残すか」が開いていると、ハルの一覧には、ハル・ナツ・アキへの票と棄権が人の宣言の順にできるで並び、人への操作より後に置かれる。"""
+        """「誰を坑道に残すか」が開いていると、ハルの一覧には、ハル・ナツと、場面に見えないアキへの票と棄権が人の宣言の順にできるで並び、人への操作より後に置かれる。"""
         village = _Village()
         village.open(_STAY_IN_MINE)
 
