@@ -6,6 +6,8 @@ import ast
 import re
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TESTS_DIR = _REPO_ROOT / "tests"
 _JAPANESE_RE = re.compile(r"[ぁ-んァ-ン一-龥]")
@@ -21,6 +23,7 @@ def _test_functions() -> list[tuple[Path, ast.FunctionDef]]:
     return functions
 
 
+@pytest.mark.timeout(25)
 def test_function_names_are_english_only() -> None:
     """テスト関数名は英語の識別子だけにし、振る舞いの説明は日本語ドックストリングへ逃がす。"""
     violations = [
