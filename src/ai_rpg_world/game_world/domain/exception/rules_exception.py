@@ -39,3 +39,7 @@ class MissingActionDurationException(GameWorldDomainException):
 
 class ActionDurationNotApplicableException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION_DURATION_NOT_APPLICABLE"
+
+
+class TendingNotDeclaredException(GameWorldDomainException):
+    error_code = "GAME_WORLD.TENDING_NOT_DECLARED"

@@ -91,7 +91,7 @@ class UseItem:
     def __call__(self, command: UseItemCommand) -> ActionReply: ...
 
 class TendFallenPerson:
-    def __call__(self, command: TendFallenPersonCommand) -> None: ...
+    def __call__(self, command: TendFallenPersonCommand) -> ActionReply: ...   # WorldRules.tend.revive。倒れていなければ PersonVitals が断る
 
 class HandOverItems:
     def __call__(self, command: HandOverItemsCommand) -> ActionReply: ...
@@ -115,8 +115,9 @@ class PutAwayItem:
     def __call__(self, command: PutAwayItemCommand) -> ActionReply: ...
 
 class SearchSpot:
-    def __call__(self, command: SearchSpotCommand) -> None:
-        # SpotSearchProgress.record_search → 見つかる物の条件を確かめる → mark_found → when_found
+    def __call__(self, command: SearchSpotCommand) -> ActionReply:
+        # ドメインサービス SpotSearch: SpotSearchProgress.record_search → まだ見つけていない物の条件を確かめる → mark_found → when_found
+        # 道の途中なら、移動と同じ OccupantNotAtRouteStartException (「今は道の途中だ。」) で断る
         ...
 
 class AttackMonster:
