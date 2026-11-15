@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.perceived_quality import NoticedOnWaking
+from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 from ai_rpg_world.game_world.domain.world_records import MissedNotices
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
@@ -60,3 +62,35 @@ class TestMissedNoticesMemento:
         assert rebuilt.memento() == notices.memento()
         assert rebuilt.notices() == (lighter, bell)
         assert rebuilt.person == _BOB
+
+
+class TestMissedNoticesPerceivedOnWaking:
+    """MissedNotices.perceived_on_waking が、ためた知らせを、ためた順に目が覚めた時刻の知覚にすることを保証する。
+
+    倒れている間の時刻のまま渡すと、Being の短期記憶が時刻で並べ直して「目が覚めた」より前に入るので、目が覚めた時刻で渡す。
+    """
+
+    def test_notices_become_unremarkable_perceptions_at_the_time_of_waking(self) -> None:
+        """tick 3 と tick 5 にためた知らせは、ためた順に、tick 9 の目立たない NoticedOnWaking の知覚になる。"""
+        notices = MissedNotices.start(_BOB)
+        lighter = _notice("荷が軽くなっている。", 3)
+        bell = _notice("遠くで鐘が鳴った。", 5)
+        notices.keep(lighter)
+        notices.keep(bell)
+
+        perceived = notices.perceived_on_waking(WorldTick(9))
+
+        assert perceived == tuple(
+            Perceived(
+                perceiver=_BOB,
+                text=notice.text,
+                quality=NoticedOnWaking(),
+                happened_at=WorldTick(9),
+                calls_attention=False,
+            )
+            for notice in (lighter, bell)
+        )
+
+    def test_nothing_kept_is_nothing_perceived(self) -> None:
+        """何もためていなければ、知覚は無い。"""
+        assert MissedNotices.start(_BOB).perceived_on_waking(WorldTick(9)) == ()

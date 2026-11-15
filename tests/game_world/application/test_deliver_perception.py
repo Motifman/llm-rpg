@@ -129,6 +129,9 @@ class _World:
     def sets_out(self, person: PersonId, route: Route) -> None:
         self.scope.run(lambda session: session.aggregates().whereabouts().start_travel(PersonBody(person), route))
 
+    def teleports(self, person: PersonId, to: SpotDeclaration) -> None:
+        self.scope.run(lambda session: session.aggregates().whereabouts().teleport(PersonBody(person), to, _AT))
+
     def missed_notice_templates_of(self, person: PersonId) -> list[str]:
         session = self.store.session()
         templates = [notice.text.template for notice in session.facts().missed_notices(person).notices()]
@@ -221,6 +224,23 @@ class TestWhoPerceives:
         world.deliver(from_actions=(_sight(_DARK_ROOM),))
 
         assert world.received.templates_of(_FRANK) == ["何かが動いた"]
+
+
+class TestReceiversChosenAfterTheEffect:
+    """場所の見える刺激の受け手は、効果を当てて確定した後の世界から選ばれることを保証する (#1978 の 7e で確かめること)。
+
+    出来事の効果が人を動かすと、動かされる前にその場所にいた人には、その場所の知らせが届かない。
+    """
+
+    def test_person_pushed_out_of_the_spot_misses_its_sight(self) -> None:
+        """崩落で広場の alice だけが広間へ押し出された後に広場の崩落の見える刺激を配ると、広場に残った bob にだけ届き、alice には届かない。"""
+        world = _World()
+        world.teleports(_ALICE, _HALL)
+
+        world.deliver(from_actions=(_sight(_SQUARE, clear="天井が崩れ落ちた"),))
+
+        assert world.received.templates_of(_BOB) == ["天井が崩れ落ちた"]
+        assert world.received.templates_of(_ALICE) == []
 
 
 class TestOnePerPerson:

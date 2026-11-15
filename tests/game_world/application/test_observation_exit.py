@@ -21,7 +21,7 @@ from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception import Perceived
-from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, PerceivedQuality, Told
+from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, NoticedOnWaking, PerceivedQuality, Told
 from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId, WorldId, WorldTick
 
@@ -108,6 +108,7 @@ class TestObservationExit:
             (HearsFaintly(), SeenOrHeard()),
             (Felt(), OwnBodyState()),
             (Told(), EnvironmentNotice()),
+            (NoticedOnWaking(), EnvironmentNotice()),
         ],
     )
     def test_route_follows_how_it_was_perceived(self, quality: PerceivedQuality, route: object) -> None:

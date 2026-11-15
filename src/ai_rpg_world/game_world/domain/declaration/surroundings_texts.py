@@ -10,8 +10,8 @@ from ai_rpg_world.game_world.domain.exception.surroundings_texts_exception impor
     PeopleNotWrittenOnceException,
     PersonInSurroundingsNoticeException,
 )
-from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedPeople, Unidentified
+from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 
 _PEOPLE = "people"
 
@@ -42,24 +42,38 @@ class SurroundingsTexts:
                 f"SurroundingsTexts.joiner must be a non-blank single line, got {self.joiner!r}"
             )
 
-    def people_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople:
-        return self._listing(self.people_here, people)
-
-    def bodies_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople:
-        return self._listing(self.bodies_here, people)
-
-    def _listing(self, text: TextWithUnassignedPeople, people: tuple[PersonId, ...]) -> TextAboutPeople:
-        if not people:
+    def scene_as_seen(
+        self, *, people: tuple[PersonRef | Unidentified, ...], bodies: tuple[PersonRef | Unidentified, ...]
+    ) -> TextWithAssignedPeople:
+        if not people and not bodies:
             raise NoPeopleToListException("there is no one to list in the surroundings")
+        holes: dict[str, PersonRef | Unidentified] = {}
+        parts = [
+            self._listing(text, group, holes)
+            for text, group in ((self.people_here, people), (self.bodies_here, bodies))
+            if group
+        ]
+        return TextWithUnassignedPeople("".join(parts)).assign(holes)
+
+    def _listing(
+        self,
+        text: TextWithUnassignedPeople,
+        group: tuple[PersonRef | Unidentified, ...],
+        holes: dict[str, PersonRef | Unidentified],
+    ) -> str:
         # 1 つの穴には 1 人しか入らず、名前は見る人の側で埋まる。つなぐのは名前ではなく穴どうしになる。
-        holes = {f"person_{index}": person for index, person in enumerate(people, start=1)}
-        listed = TextWithUnassignedPeople.literal(self.joiner).template.join(f"{{{hole}}}" for hole in holes)
+        keys = []
+        for person in group:
+            key = f"person_{len(holes) + 1}"
+            holes[key] = person
+            keys.append(key)
+        listed = TextWithUnassignedPeople.literal(self.joiner).template.join(f"{{{key}}}" for key in keys)
         rebuilt: list[str] = []
         for literal, field_name, _, _ in Formatter().parse(text.template):
             rebuilt.append(TextWithUnassignedPeople.literal(literal).template)
             if field_name is not None:
                 rebuilt.append(listed)
-        return TextWithUnassignedPeople("".join(rebuilt)).about(holes)
+        return "".join(rebuilt)
 
 
 def _holes_in(text: TextWithUnassignedPeople) -> list[str]:

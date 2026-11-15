@@ -19,4 +19,10 @@ class Told:
     pass
 
 
-PerceivedQuality = SeesClearly | SeesShapes | HearsClearly | HearsMuffled | HearsFaintly | Felt | Told
+@final
+@dataclass(frozen=True)
+class NoticedOnWaking:
+    pass
+
+
+PerceivedQuality = SeesClearly | SeesShapes | HearsClearly | HearsMuffled | HearsFaintly | Felt | Told | NoticedOnWaking

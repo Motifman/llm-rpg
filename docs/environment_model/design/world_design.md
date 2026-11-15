@@ -644,9 +644,10 @@ class SurroundingsTexts:                    # 行為ではなく、本人に直�
     waking: TextWithUnassignedPeople        # 「目が覚めた。」。介抱されて起きた本人へ。穴は書けない
     darkening: TextWithUnassignedPeople     # 「辺りが暗くなった。」。明るさが下がった場所の人へ。穴は書けない
 
-    def people_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople: ...
-    def bodies_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople: ...
-    # {people} を 1 人ずつの穴 ({person_1}、{person_2} ...) に広げ、渡した順に joiner でつなぐ。1 人も渡さなければ断る (人がいなければ文を出さない)
+    def scene_as_seen(self, *, people: tuple[PersonRef | Unidentified, ...], bodies: tuple[PersonRef | Unidentified, ...]) -> TextWithAssignedPeople: ...
+    # {people} を 1 人ずつの穴 ({person_1}、{person_2} ...) に広げ、渡した順に joiner でつなぐ。穴の番号は people_here から bodies_here へ通しで付ける
+    # いる側の文だけを people_here、bodies_here の順につなぐ。どちらも 1 人も渡さなければ断る (誰もいなければ文を出さない)
+    # 受け取るのは場面 (VisibleSurroundings) の見え方を当てた後の人。誰を見分けられるかは場面の見え方の規則だけが決める (#2154)
     # 1 つの穴に入るのは 1 人で、名前は見る人の側で埋まる (perception.md)。item_joiner は呼び名の文字をつなぐが、joiner はまだ名前の決まっていない穴どうしをつなぐ
     # 行為の知覚の表 (BuiltInActionPerceptions) に入れないのは、どの行も見る人と音を持つ「ある人の行為の見え方」で、場面と知らせはそのどちらも持たないため
     # 明るさが上がったときの文は持たない。上がったときは場面を届け直す (perception.md)
