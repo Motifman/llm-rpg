@@ -78,7 +78,11 @@ from ai_rpg_world.game_world.domain.declaration.character.group_declaration impo
     NoSharedDescription,
 )
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectAppearance
-from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration, GroupDecisionDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress import (
+    FlagDeclaration,
+    GroupDecisionDeclaration,
+    OutcomeDeclaration,
+)
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.item_use_declaration import ItemUseDeclaration
@@ -93,6 +97,7 @@ from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregat
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.person import DeclaredOutcome
 from ai_rpg_world.game_world.domain.person.life_state import Dead, WorldHappening
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.tend_rule import NoTending, TendRule
@@ -104,6 +109,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     GroupId,
     GroupingId,
     InteractionId,
+    OutcomeId,
     PersonId,
     Rate,
     Ticks,
@@ -202,6 +208,18 @@ _GREET_BY_KEY: InteractionDeclaration = replace(
 def _mine(lighting: Lighting) -> SpotDeclaration:
     mine = spot("mine")
     return replace(mine, atmosphere=replace(mine.atmosphere, lighting=lighting))
+
+
+_RESCUED = OutcomeDeclaration(
+    outcome_id=OutcomeId("rescued"),
+    name=DisplayName("救出"),
+    announcement=TextWithUnassignedPeople("{each_person}は外へ出た。"),
+)
+
+
+def _rescue_alice(session: WorldSession) -> None:
+    session.aggregates().outcomes().decide(_ALICE, DeclaredOutcome(_RESCUED), WorldTick(0))
+    session.aggregates().whereabouts().remove(PersonBody(_ALICE))
 
 
 class _Mine:
@@ -325,6 +343,7 @@ def _design(
             passages=[_MINE_EXIT],
             objects=[_DOOR],
             item_specs=[_LAMP, _ROCK, _ROPE],
+            outcomes=[_RESCUED],
             groupings=[_WOLVES.grouping],
             groups=[_WOLVES],
             sections=[_CART],
@@ -498,6 +517,13 @@ class TestListAvailableActions:
 
         assert LeaveSectionAttempt(_ALICE, cart) in attempts
         assert EnterSectionAttempt(_ALICE, cart) not in attempts
+
+    def test_person_who_left_the_world_can_do_nothing(self) -> None:
+        """結末が「救出」に決まって世界から外れた alice には、明るい坑道にいたことに関わらず、できる行為が 1 つも無い。"""
+        mine = _Mine()
+        mine.scope.run(_rescue_alice)
+
+        assert _doable(mine.lists()) == []
 
     def test_busy_person_finds_every_action_not_now_with_the_common_rule_text(self) -> None:
         """行っている最中の alice には、一覧のどの行為もできないに分かれ、理由は共通の決まり Busy の断りの文。"""
