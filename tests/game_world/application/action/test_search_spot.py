@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from ai_rpg_world.game_world.application.action.action_reply import ActionDone
+from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
+from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
+from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import NotEnoughItemsOfSpecException
+from ai_rpg_world.game_world.domain.exception.whereabouts_exception import OccupantNotAtRouteStartException
 from ai_rpg_world.game_world.domain.objects_and_items.spot_search_progress import (
     DiscoverableFoundEvent,
     SpotSearchedEvent,
@@ -10,9 +14,11 @@ from ai_rpg_world.game_world.domain.value_object.discoverable_id import Discover
 from tests.game_world.application.action.world_for_search_and_tend_tests import (
     ALICE,
     BOB,
+    CAROL,
     CAVE,
     KEY,
     PEBBLE,
+    SHORE,
     WorldForSearchAndTend,
 )
 
@@ -82,3 +88,30 @@ class TestSearchSpot:
 
         assert world.count_of(ALICE, PEBBLE) == Count(1)
         assert world.count_of(BOB, PEBBLE) == Count(1)
+
+    def test_refused_when_found_effect_rolls_back_the_search(self) -> None:
+        """見つけたときに鍵を取る効果が、鍵を持たない carol で断られると、浜で調べた回数は 0 のままで、見つけた記録も残らない。"""
+        world = WorldForSearchAndTend()
+
+        reply = world.search(CAROL)
+
+        assert isinstance(reply, ActionRefused)
+        assert reply.refusal.reason == WorldStateRefusal(RefusalCode(NotEnoughItemsOfSpecException.error_code))
+        session = world.read()
+        assert session.facts().search_progress(SHORE).search_count(CAROL) == Count(0)
+        session.roll_back()
+        assert _found(world) == []
+
+    def test_person_on_the_way_is_refused_and_search_is_not_counted(self) -> None:
+        """浜へ向かう道の途中にいる alice が調べると OCCUPANT_NOT_AT_ROUTE_START で断られ、洞窟で調べた回数は増えない。"""
+        world = WorldForSearchAndTend()
+        world.travel_to_shore(ALICE)
+        world.pass_ticks(1)
+
+        reply = world.search(ALICE)
+
+        assert isinstance(reply, ActionRefused)
+        assert reply.refusal.reason == WorldStateRefusal(RefusalCode(OccupantNotAtRouteStartException.error_code))
+        session = world.read()
+        assert session.facts().search_progress(CAVE).search_count(ALICE) == Count(0)
+        session.roll_back()

@@ -20,6 +20,5 @@ class TendRule:
 
 @dataclass(frozen=True)
 class NoTending:
-    # 介抱の無い世界では外側が介抱の行為を作らないので、届いたら誤り
     def revive(self, vitals: PersonVitals, now: WorldTick) -> None:
         raise TendingNotDeclaredException(f"this world declares no tending, yet {vitals.person.value} was tended")

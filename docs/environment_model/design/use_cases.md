@@ -117,6 +117,7 @@ class PutAwayItem:
 class SearchSpot:
     def __call__(self, command: SearchSpotCommand) -> ActionReply:
         # ドメインサービス SpotSearch: SpotSearchProgress.record_search → まだ見つけていない物の条件を確かめる → mark_found → when_found
+        # 道の途中なら、移動と同じ OccupantNotAtRouteStartException (「今は道の途中だ。」) で断る
         ...
 
 class AttackMonster:

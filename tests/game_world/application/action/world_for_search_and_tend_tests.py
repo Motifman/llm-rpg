@@ -6,6 +6,7 @@ from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.application.action.action_reply import ActionReply
 from ai_rpg_world.game_world.application.action.carry_out_action import CarryOutAction
 from ai_rpg_world.game_world.application.action.search_spot import SearchSpot, SearchSpotCommand
+from ai_rpg_world.game_world.application.action.start_travel import StartTravel, StartTravelCommand
 from ai_rpg_world.game_world.application.action.tend_fallen_person import (
     TendFallenPerson,
     TendFallenPersonCommand,
@@ -14,7 +15,7 @@ from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
-from ai_rpg_world.game_world.domain.action.built_in_attempts import SpotSearchAttempt, TendAttempt
+from ai_rpg_world.game_world.domain.action.built_in_attempts import SpotSearchAttempt, TendAttempt, TravelAttempt
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.person_conditions import SearchCountAtLeastCondition
 from ai_rpg_world.game_world.domain.condition.subject import Actor
@@ -24,7 +25,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration im
     Finding,
 )
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
-from ai_rpg_world.game_world.domain.effect.item_effects import GiveItemEffect
+from ai_rpg_world.game_world.domain.effect.item_effects import GiveItemEffect, TakeItemEffect
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.rules.tend_rule import NoTending, TendRule
@@ -67,6 +68,17 @@ SHINY_PEBBLE = DiscoverableDeclaration(
     finding=Finding.ONCE_PER_PERSON,
 )
 
+SHORE = SpotId("shore")
+SUNKEN_KEYHOLE = DiscoverableDeclaration(
+    discoverable_id=DiscoverableId("sunken_keyhole"),
+    spot_id=SHORE,
+    found_text=TextWithUnassignedPeople("砂に埋もれた鍵穴に鍵を差した。"),
+    condition=AlwaysHolds(),
+    when_found=TakeItemEffect(Actor(), KEY, Count(1)),
+    finding=Finding.ONCE_IN_WORLD,
+)
+CAROL = PersonId("carol")
+
 
 class WorldForSearchAndTend:
     def __init__(self, *, tending: TendRule | NoTending = TendRule(revive_hp_rate=Rate(0.5))) -> None:
@@ -91,6 +103,10 @@ class WorldForSearchAndTend:
 
     def search(self, actor: PersonId) -> ActionReply:
         return SearchSpot(self.carry_out, self.design)(SearchSpotCommand(SpotSearchAttempt(actor)))
+
+    def travel_to_shore(self, actor: PersonId) -> ActionReply:
+        shore = self.design.nouns.spot_of(SHORE)
+        return StartTravel(self.carry_out, self.design)(StartTravelCommand(TravelAttempt(actor, shore)))
 
     def tend(self, actor: PersonId, target: PersonId) -> ActionReply:
         return TendFallenPerson(self.carry_out)(TendFallenPersonCommand(TendAttempt(actor, target)))
@@ -122,9 +138,9 @@ def _design(tending: TendRule | NoTending) -> WorldDesign:
             spots=[spot("cave"), spot("shore")],
             passages=[passage("tunnel", ("cave", "shore"))],
             item_specs=[KEY, PEBBLE],
-            characters=[character("alice", "cave"), character("bob", "cave")],
+            characters=[character("alice", "cave"), character("bob", "cave"), character("carol", "shore")],
         ),
-        discoverables=[OLD_KEY, SHINY_PEBBLE],
+        discoverables=[OLD_KEY, SHINY_PEBBLE, SUNKEN_KEYHOLE],
         world_rules=replace(world_rules_for_tests(), tend=tending),
         built_in_action_perceptions_=built_in_action_perceptions(),
     )
