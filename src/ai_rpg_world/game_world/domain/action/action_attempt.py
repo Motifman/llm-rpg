@@ -4,9 +4,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, final
 
+from typing_extensions import Self
+
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson
 from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
-from ai_rpg_world.game_world.domain.action.common_rule_refusal import NotTogether, OutOfReach
+from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
+    NoOneFoundInTheDark,
+    NotCarrying,
+    NotTogether,
+    OutOfReach,
+)
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
@@ -83,7 +90,18 @@ class WithGroundItem:
         return NotTogether()
 
 
-CopresenceRequirement = WithPerson | WithObject | WithGroundItem
+@final
+@dataclass(frozen=True)
+class WithCarriedItem:
+    item: ItemInstanceId
+
+    def refusal_for(self, actor: Occupant, facts: WorldFacts) -> NotCarrying | None:
+        if self.item in facts.inventory(actor.person).items():
+            return None
+        return NotCarrying()
+
+
+CopresenceRequirement = WithPerson | WithObject | WithGroundItem | WithCarriedItem
 
 
 @final
@@ -140,3 +158,5 @@ class ActionAttempt(Protocol):
     def done_as(self) -> frozenset[ActionKind | InteractionId]: ...
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct: ...
+
+    def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark: ...

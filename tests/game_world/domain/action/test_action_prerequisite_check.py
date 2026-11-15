@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt, LivingOrDeparted
 from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck
@@ -9,6 +11,7 @@ from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     GroundItemPickupAttempt,
     GroupDecisionBallotAttempt,
+    ItemUseAttempt,
     ListeningAttempt,
     SpeechAttempt,
     SpotSearchAttempt,
@@ -19,7 +22,9 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
     ActorCannotAct,
     Busy,
     CommonRuleRefusalKind,
+    NoOneFoundInTheDark,
     NotAllowedInThisStage,
+    NotCarrying,
     NotTogether,
     OutOfReach,
     TooTired,
@@ -27,17 +32,21 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
 from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     ObjectInteractionAttempt,
     PersonInteractionAttempt,
+    SomeoneInTheDark,
 )
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechContent
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
+from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefusedException
+from ai_rpg_world.game_world.domain.objects_and_items import PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person import DeclaredOutcome, PersonVitals, WorldHappening
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueLevel, FatigueLevelName, FatigueRule
 from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
     Damage,
     DescriptionText,
     DisplayName,
@@ -45,6 +54,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     GroupDecisionId,
     HitPoints,
     InteractionId,
+    ItemSpecId,
     OutcomeId,
     PersonId,
     WorldStageId,
@@ -315,3 +325,100 @@ class TestOrderOfRules:
         world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
 
         assert _reason(SpotSearchAttempt(ALICE), world) == NotAllowedInThisStage()
+
+
+class TestCarriedItem:
+    """ActionPrerequisiteCheck.refusal が、品物を使う行為を、行う人が品物を持っているときだけ通すことを保証する。"""
+
+    def test_item_not_in_actors_inventory_is_refused_as_not_carrying(self) -> None:
+        """使おうとした品物が行う人の荷に無ければ NotCarrying で断り、荷に入れば断らない。"""
+        world = _world(inventories=(PersonInventory.start(ALICE, Capacity(5)), PersonInventory.start(BOB, Capacity(5))))
+        lamp = ItemInstanceId("lamp_1")
+        world.aggregates().inventory(BOB).receive(lamp, ItemSpecId("lamp"))
+        attempt = ItemUseAttempt(ALICE, lamp)
+
+        assert _reason(attempt, world) == NotCarrying()
+        world.aggregates().inventory(BOB).give_up(lamp)
+        world.aggregates().inventory(ALICE).receive(lamp, ItemSpecId("lamp"))
+        assert _reason(attempt, world) is None
+
+
+CAROL = PersonId("carol")
+_TAP = InteractionForTests(InteractionId("tap"), reaches_unseen=True)
+
+
+def _tap_in_the_dark() -> PersonInteractionAttempt:
+    return PersonInteractionAttempt(ALICE, SomeoneInTheDark(), _TAP, {}, Openly())
+
+
+def _world_of_three(fractions: tuple[float, ...] = (), **overrides: object) -> WorldSession:
+    world = _world(
+        people=(ALICE, BOB, CAROL),
+        vitals=tuple(PersonVitals.start(person, HitPoints(10, 10)) for person in (ALICE, BOB, CAROL)),
+        fractions=fractions,
+        **overrides,
+    )
+    world.aggregates().whereabouts().place(PersonBody(CAROL), LANDING)
+    return world
+
+
+class TestCleared:
+    """ActionPrerequisiteCheck.cleared が、共通の前提を通った試みについて、暗がりの誰かに向けた相手をその場から 1 人選んだ試みを返すことを保証する。"""
+
+    def test_attempt_with_named_target_is_returned_as_it_is(self) -> None:
+        """相手を名指しした人への操作は、そのままの試みが返る。"""
+        world = _world()
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+
+        assert _CHECK.cleared(attempt, world.facts(), TEXTS) == attempt
+
+    def test_someone_in_the_dark_is_chosen_among_people_together_by_chance(self) -> None:
+        """bob と carol が一緒にいるとき、引いた割合が 0.0 なら世界の順で先の bob、0.6 なら後の carol が相手になる。"""
+        assert _CHECK.cleared(_tap_in_the_dark(), _world_of_three((0.0,)).facts(), TEXTS).target == BOB
+        assert _CHECK.cleared(_tap_in_the_dark(), _world_of_three((0.6,)).facts(), TEXTS).target == CAROL
+
+    def test_person_at_another_spot_is_not_chosen(self) -> None:
+        """carol が別の場所にいれば、引いた割合が 0.9 でも、一緒にいる bob だけが相手の候補になる。"""
+        world = _world_of_three((0.9,))
+        world.aggregates().whereabouts().teleport(PersonBody(CAROL), SHORE, _NOW)
+
+        assert _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS).target == BOB
+
+    def test_dead_person_is_not_chosen(self) -> None:
+        """一緒にいる bob が死んでいれば、引いた割合が 0.0 でも carol が相手になる。"""
+        world = _world_of_three((0.0,))
+        _make_dead(world, BOB)
+
+        assert _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS).target == CAROL
+
+    def test_no_one_together_raises_no_one_found_in_the_dark(self) -> None:
+        """一緒にいる人が誰もいなければ、共通の規則 NoOneFoundInTheDark の断りを持つ ActionRefusedException を投げる。"""
+        world = _world()
+        world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
+
+        with pytest.raises(ActionRefusedException) as broken:
+            _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS)
+
+        assert broken.value.refusal.reason == NoOneFoundInTheDark()
+
+    def test_departed_actor_chooses_from_where_departed_person_is(self) -> None:
+        """departed_persons_act の世界で、体は乗り場に残り去った人が浜にいるとき、去った人の暗がりへの操作は浜にいる bob を選ぶ。"""
+        world = _world_of_three((0.0,), rules=replace(world_rules_for_tests(), departed_persons_act=True))
+        _make_dead(world, ALICE)
+        world.aggregates().whereabouts().place(DepartedPerson(ALICE), SHORE)
+        world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
+        tap = InteractionForTests(InteractionId("tap"), reaches_unseen=True, actor_requirement=LivingOrDeparted())
+        attempt = PersonInteractionAttempt(ALICE, SomeoneInTheDark(), tap, {}, Openly())
+
+        assert _CHECK.cleared(attempt, world.facts(), TEXTS).target == BOB
+
+    def test_broken_common_rule_raises_before_choosing(self) -> None:
+        """行っている最中の人の暗がりへの操作は、相手を選ぶ前に Busy の断りを持つ ActionRefusedException を投げる。"""
+        world = _world()
+        world.aggregates().vitals(ALICE).start_action(WorldTick(5))
+        world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
+
+        with pytest.raises(ActionRefusedException) as broken:
+            _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS)
+
+        assert broken.value.refusal.reason == Busy()

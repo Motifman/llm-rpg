@@ -13,6 +13,7 @@ class CommonRuleRefusalKind(Enum):
     TOO_TIRED = "TOO_TIRED"
     NOT_ALLOWED_IN_THIS_STAGE = "NOT_ALLOWED_IN_THIS_STAGE"
     NO_ONE_FOUND_IN_THE_DARK = "NO_ONE_FOUND_IN_THE_DARK"
+    NOT_CARRYING = "NOT_CARRYING"
 
 
 @final
@@ -64,6 +65,20 @@ class NoOneFoundInTheDark:
         return CommonRuleRefusalKind.NO_ONE_FOUND_IN_THE_DARK
 
 
+@final
+@dataclass(frozen=True)
+class NotCarrying:
+    def kind(self) -> CommonRuleRefusalKind:
+        return CommonRuleRefusalKind.NOT_CARRYING
+
+
 CommonRuleRefusal = (
-    ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage | NoOneFoundInTheDark
+    ActorCannotAct
+    | Busy
+    | NotTogether
+    | OutOfReach
+    | TooTired
+    | NotAllowedInThisStage
+    | NoOneFoundInTheDark
+    | NotCarrying
 )
