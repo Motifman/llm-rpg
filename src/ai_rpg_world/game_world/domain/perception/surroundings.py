@@ -18,7 +18,7 @@ from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import It
 from ai_rpg_world.game_world.domain.people import PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
-from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived
+from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotId, SpotSectionId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageInState
@@ -258,17 +258,19 @@ class VisibleSurroundings:
             bodies=_present(body.seen_down_with(sight) for body in contents.bodies),
         )
 
-    def perceived_by(self, viewer: PersonId, texts: SurroundingsTexts, at: WorldTick) -> Perceived | NotPerceived:
+    def perceived_by(self, viewer: PersonId, texts: SurroundingsTexts, at: WorldTick) -> tuple[Perceived, ...]:
         if isinstance(self.sight, SeesNothing) or not (self.people or self.bodies):
-            return NotPerceived()
-        return Perceived(
-            perceiver=viewer,
-            text=texts.scene_as_seen(
-                people=tuple(seen.person for seen in self.people), bodies=tuple(seen.person for seen in self.bodies)
+            return ()
+        return (
+            Perceived(
+                perceiver=viewer,
+                text=texts.scene_as_seen(
+                    people=tuple(seen.person for seen in self.people), bodies=tuple(seen.person for seen in self.bodies)
+                ),
+                quality=self.sight,
+                happened_at=at,
+                calls_attention=False,
             ),
-            quality=self.sight,
-            happened_at=at,
-            calls_attention=False,
         )
 
 

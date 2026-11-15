@@ -5,7 +5,8 @@ from ai_rpg_world.game_world.domain.declaration.verb import NoLook
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
-from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived
+from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
+from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
 from ai_rpg_world.game_world.domain.perception.surroundings import SeenObject, SeenPerson, VisibleSurroundings
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotSectionId, WorldTick
 from tests.game_world.domain.perception._surroundings_builders import (
@@ -264,15 +265,17 @@ class TestSurroundingsPerceivedAsOneObservation:
 
         perceived = surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW)
 
-        assert perceived == Perceived(
-            perceiver=_VIEWER,
-            text=TextWithAssignedPeople(
-                "ここには{person_1}がいる。{person_2}が倒れている。",
-                {"person_1": miner.person, "person_2": fallen.person},
+        assert perceived == (
+            Perceived(
+                perceiver=_VIEWER,
+                text=TextWithAssignedPeople(
+                    "ここには{person_1}がいる。{person_2}が倒れている。",
+                    {"person_1": miner.person, "person_2": fallen.person},
+                ),
+                quality=SeesClearly(),
+                happened_at=_NOW,
+                calls_attention=False,
             ),
-            quality=SeesClearly(),
-            happened_at=_NOW,
-            calls_attention=False,
         )
 
     def test_dim_sight_lists_unidentified_people(self) -> None:
@@ -281,8 +284,7 @@ class TestSurroundingsPerceivedAsOneObservation:
 
         perceived = surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW)
 
-        assert isinstance(perceived, Perceived)
-        assert (perceived.text.people, perceived.quality) == ({"person_1": Unidentified()}, SeesShapes())
+        assert [(one.text.people, one.quality) for one in perceived] == [({"person_1": Unidentified()}, SeesShapes())]
 
     def test_no_people_and_no_bodies_is_not_perceived(self) -> None:
         """明るくても、人も倒れた体もいなければ、物や地面の品物があっても知覚にならない。"""
@@ -290,10 +292,14 @@ class TestSurroundingsPerceivedAsOneObservation:
             SeesClearly(), contents(objects=(thing("ore_cart"),), ground_items=(item("rusty_key"),))
         )
 
-        assert surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW) == NotPerceived()
+        assert surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW) == ()
 
     def test_people_in_pitch_dark_are_not_perceived(self) -> None:
         """真っ暗では、その場に人がいても知覚にならない。"""
         surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(people=(person(1),)))
 
-        assert surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW) == NotPerceived()
+        assert surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW) == ()
+
+    def test_nothing_in_view_is_not_perceived(self) -> None:
+        """場面が無い人 (移動中・倒れている人など) には知覚にならない。"""
+        assert NothingInView().perceived_by(_VIEWER, _surroundings_texts(), _NOW) == ()
