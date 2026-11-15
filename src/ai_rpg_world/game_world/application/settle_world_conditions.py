@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
+from ai_rpg_world.game_world.domain.world_records.joint_action_progress import JointActionSettlement
 
 
 class WorldConditionsDidNotSettleError(RuntimeError):
@@ -65,8 +66,8 @@ class _Settling:
             self._fire_happening(happening, now)
         for reaction, truth in reactions:
             self._fire_reaction(reaction, truth, now)
-        for joint in joints:
-            self._settle_joint_action(joint, now)
+        for joint, settlement in joints:
+            self._settle_joint_action(joint, settlement, now)
         return bool(happenings or reactions or joints)
 
     def _happenings_that_hold(self, now: WorldTick) -> list[HappeningDeclaration]:
@@ -94,11 +95,10 @@ class _Settling:
                 progress.note_reaction_truth(reaction, truth)
         return changed
 
-    def _joint_actions_settling(self, now: WorldTick) -> list[JointActionDeclaration]:
+    def _joint_actions_settling(self, now: WorldTick) -> list[tuple[JointActionDeclaration, JointActionSettlement]]:
         progress = self._session.scenario_progress()
-        return [
-            joint for joint in self._design.joint_actions() if progress.joint_action_settlement(joint, now).settles()
-        ]
+        settlements = [(joint, progress.joint_action_settlement(joint, now)) for joint in self._design.joint_actions()]
+        return [(joint, settlement) for joint, settlement in settlements if settlement.settles()]
 
     def _fire_happening(self, happening: HappeningDeclaration, now: WorldTick) -> None:
         trigger = HappeningFired(happening)
@@ -116,8 +116,9 @@ class _Settling:
         self._session.scenario_progress().note_reaction_fired(reaction, truth, now, refusal)
         self._fired_reactions.add(reaction.reaction_id)
 
-    def _settle_joint_action(self, joint: JointActionDeclaration, now: WorldTick) -> None:
-        settlement = self._session.scenario_progress().joint_action_settlement(joint, now)
+    def _settle_joint_action(
+        self, joint: JointActionDeclaration, settlement: JointActionSettlement, now: WorldTick
+    ) -> None:
         trigger = settlement.trigger_for(joint)
         audience = settlement.notice_in(joint).addressees(self._session.facts(), trigger)
         refusal = self._session.attempt_apart(
