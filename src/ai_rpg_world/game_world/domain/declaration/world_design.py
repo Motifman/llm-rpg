@@ -66,6 +66,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
+from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.whereabouts.route import NoRoute, Route
 
 if TYPE_CHECKING:
@@ -444,6 +445,9 @@ class WorldDesign:
     def use_of_item(self, item_spec: ItemSpecId) -> ItemUseDeclaration | NotUsable:
         return self._item_uses.get(item_spec, NotUsable())
 
+    def is_usable(self, item_spec: ItemSpecId) -> bool:
+        return item_spec in self._item_uses
+
     def section_access(self, section: SpotSectionId) -> SectionAccessDeclaration:
         if section not in self._section_accesses:
             raise UndeclaredVerbException(f"section {section.value!r} has no access declared")
@@ -472,6 +476,9 @@ class WorldDesign:
             raise UndeclaredVerbException(f"no interaction {interaction.value!r} is declared on people")
         return self._person_interactions[interaction]
 
+    def person_interactions(self) -> tuple[InteractionDeclaration, ...]:
+        return tuple(self._person_interactions.values())
+
     def happenings(self) -> tuple[HappeningDeclaration, ...]:
         return self._happenings
 
@@ -483,6 +490,12 @@ class WorldDesign:
 
     def joint_actions(self) -> tuple[JointActionDeclaration, ...]:
         return self._joint_actions
+
+    def joint_action(self, joint: JointActionId) -> JointActionDeclaration:
+        for declared in self._joint_actions:
+            if declared.joint_id == joint:
+                return declared
+        raise UndeclaredVerbException(f"no joint action {joint.value!r} is declared")
 
     def reactions(self) -> tuple[ReactionDeclaration, ...]:
         return self._reactions

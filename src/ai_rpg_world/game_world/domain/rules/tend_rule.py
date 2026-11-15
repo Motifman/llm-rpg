@@ -14,11 +14,17 @@ if TYPE_CHECKING:
 class TendRule:
     revive_hp_rate: Rate
 
+    def allows_tending(self) -> bool:
+        return True
+
     def revive(self, vitals: PersonVitals, now: WorldTick) -> None:
         vitals.revive(self.revive_hp_rate, now)
 
 
 @dataclass(frozen=True)
 class NoTending:
+    def allows_tending(self) -> bool:
+        return False
+
     def revive(self, vitals: PersonVitals, now: WorldTick) -> None:
         raise TendingNotDeclaredException(f"this world declares no tending, yet {vitals.person.value} was tended")

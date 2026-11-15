@@ -31,11 +31,11 @@ class LookAround:
 
     def _look(self, session: WorldSession, person: PersonId) -> VisibleSurroundings | NothingInView:
         facts = session.facts()
-        return VisibleSurroundings.seen_by(perceiver_of(facts, person), _SurroundingsOf(person, facts, self._design))
+        return VisibleSurroundings.seen_by(perceiver_of(facts, person), SurroundingsOf(person, facts, self._design))
 
 
 @final
-class _SurroundingsOf:
+class SurroundingsOf:
     def __init__(self, viewer: PersonId, facts: WorldFacts, design: WorldDesign) -> None:
         self._viewer = viewer
         self._facts = facts

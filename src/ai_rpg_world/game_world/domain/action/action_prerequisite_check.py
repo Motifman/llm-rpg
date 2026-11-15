@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import Protocol, TypeVar, final
 
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+from ai_rpg_world.game_world.domain.action.available_actions import AvailableAction, Doable, NotNow
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
     ActorCannotAct,
     Busy,
@@ -12,12 +13,26 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
     NotAllowedInThisStage,
     TooTired,
 )
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefusedException
 from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, Occupant, PersonBody
 
 _Attempt = TypeVar("_Attempt", bound=ActionAttempt)
+_CheckedAttempt = TypeVar("_CheckedAttempt", bound=ActionAttempt, contravariant=True)
+
+
+class ActionPrecondition(Protocol[_CheckedAttempt]):
+    def unmet_precondition(
+        self, attempt: _CheckedAttempt, facts: WorldFacts
+    ) -> FailureReason | HiddenFailure | None: ...
+
+
+@final
+class CommonRulesOnly:
+    def unmet_precondition(self, attempt: ActionAttempt, facts: WorldFacts) -> FailureReason | HiddenFailure | None:
+        return None
 
 
 class ActionPrerequisiteCheck:
@@ -31,6 +46,24 @@ class ActionPrerequisiteCheck:
                 ActionRefusal(attempt=attempt, reason=aimed, text=refusal_texts.common_rule_text(aimed, attempt.actor))
             )
         return aimed
+
+    def available(
+        self,
+        attempt: _Attempt,
+        precondition: ActionPrecondition[_Attempt],
+        facts: WorldFacts,
+        refusal_texts: RefusalTexts,
+    ) -> AvailableAction:
+        refusal = self.refusal(attempt, facts, refusal_texts)
+        if refusal is not None:
+            return AvailableAction(attempt=attempt, standing=NotNow(refusal.text))
+        failure = precondition.unmet_precondition(attempt, facts)
+        # 伏せた理由まで「できない」に分けると、一覧の出る / 出ないの差から伏せた所属が漏れる。
+        if isinstance(failure, FailureReason):
+            return AvailableAction(
+                attempt=attempt, standing=NotNow(refusal_texts.precondition_text(failure, attempt.actor))
+            )
+        return AvailableAction(attempt=attempt, standing=Doable())
 
     def refusal(self, attempt: ActionAttempt, facts: WorldFacts, refusal_texts: RefusalTexts) -> ActionRefusal | None:
         reason = self._broken_rule(attempt, facts)

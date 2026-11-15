@@ -8,10 +8,12 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import HappeningFired, ReactionFired, WorldConditionsSettling
 from ai_rpg_world.game_world.domain.condition.settling_occasion import SettlingOccasion
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
+from ai_rpg_world.game_world.domain.world_records.joint_action_progress import JointActionSettlement
 
 
 class WorldConditionsDidNotSettleError(RuntimeError):
@@ -44,9 +46,11 @@ class _Settling:
         self._fired_reactions: set[ReactionId] = set()
 
     def settle(self) -> None:
-        # 出来事は 1 tick に 1 回、反応は 1 回の落ち着かせに 1 回までなので、発火のある回は宣言の数を超えない。
+        # 出来事は 1 tick に 1 回、反応と二人で合わせる操作は 1 回の落ち着かせに 1 回までなので、発火のある回は宣言の数を超えない。
         # 超えたら帳簿か発火の記録の誤りで、上限が無いとイベントをためながら回り続ける
-        round_limit = len(self._design.happenings()) + len(self._design.reactions()) + 1
+        round_limit = (
+            len(self._design.happenings()) + len(self._design.reactions()) + len(self._design.joint_actions()) + 1
+        )
         for _ in range(round_limit):
             if not self._fire_what_holds():
                 self._end_if_over()
@@ -57,11 +61,14 @@ class _Settling:
         now = self._session.clock().now()
         happenings = self._happenings_that_hold(now)
         reactions = self._reactions_that_changed()
+        joints = self._joint_actions_settling(now)
         for happening in happenings:
             self._fire_happening(happening, now)
         for reaction, truth in reactions:
             self._fire_reaction(reaction, truth, now)
-        return bool(happenings or reactions)
+        for joint, settlement in joints:
+            self._settle_joint_action(joint, settlement, now)
+        return bool(happenings or reactions or joints)
 
     def _happenings_that_hold(self, now: WorldTick) -> list[HappeningDeclaration]:
         facts = self._session.facts()
@@ -88,6 +95,11 @@ class _Settling:
                 progress.note_reaction_truth(reaction, truth)
         return changed
 
+    def _joint_actions_settling(self, now: WorldTick) -> list[tuple[JointActionDeclaration, JointActionSettlement]]:
+        progress = self._session.scenario_progress()
+        settlements = [(joint, progress.joint_action_settlement(joint, now)) for joint in self._design.joint_actions()]
+        return [(joint, settlement) for joint, settlement in settlements if settlement.settles()]
+
     def _fire_happening(self, happening: HappeningDeclaration, now: WorldTick) -> None:
         trigger = HappeningFired(happening)
         audience = happening.notice.addressees(self._session.facts(), trigger)
@@ -103,6 +115,16 @@ class _Settling:
         )
         self._session.scenario_progress().note_reaction_fired(reaction, truth, now, refusal)
         self._fired_reactions.add(reaction.reaction_id)
+
+    def _settle_joint_action(
+        self, joint: JointActionDeclaration, settlement: JointActionSettlement, now: WorldTick
+    ) -> None:
+        trigger = settlement.trigger_for(joint)
+        audience = settlement.notice_in(joint).addressees(self._session.facts(), trigger)
+        refusal = self._session.attempt_apart(
+            lambda: settlement.effect_in(joint).apply(self._session.facts(), self._session.aggregates(), trigger)
+        )
+        self._session.scenario_progress().note_joint_action_settled(joint, now, audience, refusal)
 
     def _end_if_over(self) -> None:
         ending = self._session.ending()

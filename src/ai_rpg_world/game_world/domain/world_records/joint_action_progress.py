@@ -6,12 +6,14 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
+from ai_rpg_world.game_world.domain.action.trigger import JointActionCompleted, JointActionTimedOut
 from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.world_records_exception import JointActionNotSettlingException
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import HappeningNotice, NoNotice
     from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
     from ai_rpg_world.game_world.domain.effect.effect import Effect
 
@@ -30,6 +32,20 @@ class JointActionSettlement(Enum):
         if self is JointActionSettlement.TIMED_OUT:
             return joint.on_timeout
         raise JointActionNotSettlingException(f"{joint.joint_id.value} has nothing to apply while undecided")
+
+    def notice_in(self, joint: JointActionDeclaration) -> HappeningNotice | NoNotice:
+        if self is JointActionSettlement.COMPLETED:
+            return joint.complete_notice
+        if self is JointActionSettlement.TIMED_OUT:
+            return joint.timeout_notice
+        raise JointActionNotSettlingException(f"{joint.joint_id.value} has nothing to notify while undecided")
+
+    def trigger_for(self, joint: JointActionDeclaration) -> JointActionCompleted | JointActionTimedOut:
+        if self is JointActionSettlement.COMPLETED:
+            return JointActionCompleted(joint)
+        if self is JointActionSettlement.TIMED_OUT:
+            return JointActionTimedOut(joint)
+        raise JointActionNotSettlingException(f"{joint.joint_id.value} has no trigger while undecided")
 
 
 @final

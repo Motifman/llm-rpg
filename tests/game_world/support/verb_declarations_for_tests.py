@@ -3,7 +3,7 @@ from __future__ import annotations
 from ai_rpg_world.game_world.domain.action.action_attempt import LivingOnly, UsesBody
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration
 from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredInteraction
-from ai_rpg_world.game_world.domain.action.trigger import CompletedJointAction, FiredHappening, FiredReaction
+from ai_rpg_world.game_world.domain.action.trigger import FiredHappening, FiredReaction, SettledJointAction
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
@@ -110,5 +110,5 @@ def as_fired_reaction(declaration: ReactionDeclaration) -> FiredReaction:
     return declaration
 
 
-def as_completed_joint_action(declaration: JointActionDeclaration) -> CompletedJointAction:
+def as_settled_joint_action(declaration: JointActionDeclaration) -> SettledJointAction:
     return declaration
