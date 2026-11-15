@@ -54,10 +54,10 @@ class WorldPerceptionSenses:
 
 
 def perceivers_in_world(facts: WorldFacts) -> tuple[Perceiver, ...]:
-    return tuple(perceiver for person in facts.people() if (perceiver := perceiver_of(facts, person)) is not None)
+    return tuple(perceiver_of(facts, person) for person in facts.people())
 
 
-def perceiver_of(facts: WorldFacts, person: PersonId) -> Perceiver | None:
+def perceiver_of(facts: WorldFacts, person: PersonId) -> Perceiver:
     departed_persons_act = facts.rules().departed_persons_act
     vitals = facts.vitals(person)
     location = facts.whereabouts().location_of(vitals.occupant_in_world(departed_persons_act))

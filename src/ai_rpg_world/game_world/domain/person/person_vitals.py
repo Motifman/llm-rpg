@@ -245,14 +245,18 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
             return DepartedPerson(self._person)
         return PersonBody(self._person)
 
-    def perceiver_at(self, location: Location, departed_persons_act: bool, attentive: bool) -> Perceiver | None:
+    def perceiver_at(self, location: Location, departed_persons_act: bool, attentive: bool) -> Perceiver:
         # 知覚する人の型が person.life_state を読むので、モジュールの頭で import すると循環する。
-        from ai_rpg_world.game_world.domain.perception.perceiver import DepartedPerceiver, LivingPerceiver
+        from ai_rpg_world.game_world.domain.perception.perceiver import (
+            DeadPerceiver,
+            DepartedPerceiver,
+            LivingPerceiver,
+        )
 
         if isinstance(self._life_state, Dead):
             if departed_persons_act:
                 return DepartedPerceiver(person=self._person, location=location)
-            return None
+            return DeadPerceiver(person=self._person)
         return LivingPerceiver(person=self._person, life=self._life_state, location=location, attentive=attentive)
 
     def fatigue_reached_limit(self, rule: FatigueRule) -> bool:
