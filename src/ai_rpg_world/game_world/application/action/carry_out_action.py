@@ -6,11 +6,10 @@ from ai_rpg_world.game_world.application.action.action_reply import ActionDone, 
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
-from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck
-from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal, WorldStateRefusal
+from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrecondition, ActionPrerequisiteCheck
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
-from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
@@ -22,9 +21,7 @@ _Attempt = TypeVar("_Attempt", bound=ActionAttempt)
 _StepsAttempt = TypeVar("_StepsAttempt", bound=ActionAttempt, contravariant=True)
 
 
-class ActionSteps(Protocol[_StepsAttempt]):
-    def unmet_precondition(self, attempt: _StepsAttempt, facts: WorldFacts) -> FailureReason | HiddenFailure | None: ...
-
+class ActionSteps(ActionPrecondition[_StepsAttempt], Protocol[_StepsAttempt]):
     def change_world(self, attempt: _StepsAttempt, facts: WorldFacts, world: WorldAggregates) -> Ticks: ...
 
 
@@ -42,7 +39,7 @@ class CarryOutAction:
         def carry_out(session: WorldSession) -> None:
             nonlocal aimed
             facts = session.facts()
-            aimed = self._check.cleared(attempt, facts, self._texts)
+            aimed = self._check.cleared(attempt, steps, facts, self._texts)
             self._carry_out_aimed(aimed, steps, session, facts)
 
         try:
@@ -58,10 +55,6 @@ class CarryOutAction:
     def _carry_out_aimed(
         self, attempt: _Attempt, steps: ActionSteps[_Attempt], session: WorldSession, facts: WorldFacts
     ) -> None:
-        failure = steps.unmet_precondition(attempt, facts)
-        if failure is not None:
-            text = self._texts.precondition_text(failure, attempt.actor)
-            raise ActionRefusedException(ActionRefusal(attempt=attempt, reason=PreconditionRefusal(failure), text=text))
         now = facts.now()
         situation = ActorSituation.of(attempt, facts)
         world = session.aggregates()

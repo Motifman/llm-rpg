@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol, TypeVar, final
 
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
-from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal
 from ai_rpg_world.game_world.domain.action.available_actions import AvailableAction, Doable, NotNow
 from ai_rpg_world.game_world.domain.action.built_in_attempts import GroupDecisionBallotAttempt
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
@@ -38,7 +38,13 @@ class CommonRulesOnly:
 
 
 class ActionPrerequisiteCheck:
-    def cleared(self, attempt: _Attempt, facts: WorldFacts, refusal_texts: RefusalTexts) -> _Attempt:
+    def cleared(
+        self,
+        attempt: _Attempt,
+        precondition: ActionPrecondition[_Attempt],
+        facts: WorldFacts,
+        refusal_texts: RefusalTexts,
+    ) -> _Attempt:
         refusal = self.refusal(attempt, facts, refusal_texts)
         if refusal is not None:
             raise ActionRefusedException(refusal)
@@ -47,6 +53,10 @@ class ActionPrerequisiteCheck:
             raise ActionRefusedException(
                 ActionRefusal(attempt=attempt, reason=aimed, text=refusal_texts.common_rule_text(aimed, attempt.actor))
             )
+        failure = precondition.unmet_precondition(aimed, facts)
+        if failure is not None:
+            text = refusal_texts.precondition_text(failure, aimed.actor)
+            raise ActionRefusedException(ActionRefusal(attempt=aimed, reason=PreconditionRefusal(failure), text=text))
         return aimed
 
     def available(
