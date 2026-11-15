@@ -172,6 +172,7 @@ Bounded Context として境界を守れているのは Being だけです。経
 - 新しく足す型と、この節に沿って作り直す型は、ドメインの言葉で名前を付ける。このリポジトリで別の意味を持つ語 (Event はドメインイベントと trace が使っている。Entry、Record も同じ) と重ねない。名前は、それだけを見て何の役割の何かが分かるようにする。ほかの場所で単独で出てきても、呼び出されている形で出てきても、意味が通るようにする。処理の段階や番号 (phase_a など) で名前を付けない。既存の名前は、作り直すついででなければ改名しない
 - 新しく足す、またはこの節に沿って作り直す application 層 (`being/application` を含む) のユースケースは、ドメインでしていることを動詞句で名前にする (例: `AddEpisodesToMemory`。`FoodSpoilageStageService` を `SpoilAgedFood` に改める予定)。ユースケースは application 層で 1 つの操作を受け持つクラスで、ドメインサービス・リポジトリは含まない。ハンドラの名前は次の節に従う。ユースケースの名前に Service・Manager・Keeper・StageService のような中身を言わない語を付けない。保存の言葉 (save、load) は、保存先 (リポジトリ、snapshot のファイル) への読み書きにだけ使う
 - 新しい集約・値オブジェクトを足す PR では、自己レビューでこの節を見る
+- `game_world/application` に、ドメインの型の isinstance・match、None の分岐、知覚の値の組み立て、値を取り出しての比較が入ると、`tests/architecture/test_game_world_application_keeps_rules_in_domain.py` が落ちる。ドメインに問うて分岐する手順は見ないので、レビューで見る
 
 ### コマンド・ユースケース・ドメインイベント・ハンドラ
 
