@@ -25,7 +25,7 @@ from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import WhereItemWas
-from ai_rpg_world.game_world.domain.value_object import ItemSpecId, StateKeyId, Ticks, WorldTick
+from ai_rpg_world.game_world.domain.value_object import HandsNeeded, ItemSpecId, StateKeyId, Ticks, WorldTick
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
@@ -130,6 +130,9 @@ class Item(AggregateRoot[ItemEvent]):
     @property
     def spec_id(self) -> ItemSpecId:
         return self._spec.item_spec_id
+
+    def hands_needed(self) -> HandsNeeded:
+        return self._spec.hands_needed
 
     def memento(self) -> ItemMemento:
         return ItemMemento(
