@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.perception.perceived_quality import NoticedOnWaking
+from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
+from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
 
 @final
@@ -43,3 +45,16 @@ class MissedNotices:
 
     def notices(self) -> tuple[MissedNotice, ...]:
         return tuple(self._notices)
+
+    def perceived_on_waking(self, woke_at: WorldTick) -> tuple[Perceived, ...]:
+        # 倒れている間の時刻で渡すと、Being が時刻で並べ直して「目が覚めた」より前に記憶に入る。
+        return tuple(
+            Perceived(
+                perceiver=self._person,
+                text=notice.text,
+                quality=NoticedOnWaking(),
+                happened_at=woke_at,
+                calls_attention=False,
+            )
+            for notice in self._notices
+        )
