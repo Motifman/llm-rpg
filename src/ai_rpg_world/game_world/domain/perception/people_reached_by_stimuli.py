@@ -13,9 +13,13 @@ from ai_rpg_world.game_world.domain.value_object import PersonId
 @final
 class PeopleReachedByStimuli:
     def __init__(self, recipient: PerceptionRecipient) -> None:
+        self._recipient = recipient
         self._reached = _ReachedPeople(recipient)
 
     def deliver(self, stimulus: Stimulus, perceiver: Perceiver, senses: PerceptionSenses) -> None:
+        if not stimulus.counts_toward_one_per_person:
+            stimulus.perceived_in(perceiver, senses).hand_over(perceiver.person, self._recipient)
+            return
         if self._reached.has_reached(perceiver.person) and not stimulus.always_delivered:
             return
         stimulus.perceived_in(perceiver, senses).hand_over(perceiver.person, self._reached)

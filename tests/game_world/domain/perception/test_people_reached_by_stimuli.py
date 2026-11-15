@@ -68,20 +68,22 @@ def _call(text: str) -> AnnouncementStimulus:
     return AnnouncementStimulus(audience=frozenset({ALICE, BOB}), text=about(text), salience=Notable(), at=_AT)
 
 
-def _fall_seen(*, always_delivered: bool) -> SightStimulus:
+def _fall_seen(
+    *, always_delivered: bool = False, noticed_later: NotNoticedLater | str = NotNoticedLater()
+) -> SightStimulus:
     return SightStimulus(
         where=SQUARE,
         witness=SightTexts(
             clear=about("{actor}が倒れた", actor=BOB),
             dim=about("{actor}が倒れた", actor=BOB),
             unseen_actor=NotSeenWithoutActor(),
-            noticed_later=NotNoticedLater(),
+            noticed_later=noticed_later if isinstance(noticed_later, NotNoticedLater) else about(noticed_later),
         ),
         target=NoTarget(),
         seen_in_dark=False,
         manner=Openly(),
         actor_departed=False,
-        involved=(BOB,),
+        involved=(ALICE, BOB),
         salience=Notable(),
         always_delivered=always_delivered,
         at=_AT,
@@ -89,65 +91,90 @@ def _fall_seen(*, always_delivered: bool) -> SightStimulus:
 
 
 class TestPeopleReachedByStimuli:
-    """PeopleReachedByStimuli.deliver が、1 人に届ける刺激を最初の 1 つに絞り、always_delivered の刺激だけは重ねて届けることを保証する。"""
+    """PeopleReachedByStimuli.deliver が、同じものを別の感覚で知る刺激を 1 人に最初の 1 つに絞り、always_delivered の刺激と世界の知らせは重ねて届けることを保証する。"""
 
     def test_second_stimulus_does_not_reach_someone_already_reached(self) -> None:
-        """アリスに足の痛みが届いたあとの知らせは、アリスには届かない。"""
+        """アリスに足の痛みが届いたあとの「ボブが倒れた」の目撃は、アリスには届かない。"""
+        recipient = _Recipient()
+        reached = PeopleReachedByStimuli(recipient)
+
+        reached.deliver(_ache(ALICE, "足が痛む"), awake(ALICE), _BrightSenses())
+        reached.deliver(_fall_seen(), awake(ALICE), _BrightSenses())
+
+        assert recipient.perceived_texts == [(ALICE, "足が痛む")]
+
+    def test_stimulus_not_perceived_leaves_the_person_unreached(self) -> None:
+        """ボブの足の痛みはアリスに知覚されないので、アリスは届いていない人のままで、続く目撃は届く。"""
+        recipient = _Recipient()
+        reached = PeopleReachedByStimuli(recipient)
+
+        reached.deliver(_ache(BOB, "足が痛む"), awake(ALICE), _BrightSenses())
+        reached.deliver(_fall_seen(), awake(ALICE), _BrightSenses())
+
+        assert recipient.perceived_texts == [(ALICE, "{actor}が倒れた")]
+
+    def test_reaching_one_person_does_not_stop_another(self) -> None:
+        """アリスに目撃が届いても、ボブには同じ目撃が届く。届いた記録は人ごと。"""
+        recipient = _Recipient()
+        reached = PeopleReachedByStimuli(recipient)
+
+        reached.deliver(_ache(ALICE, "足が痛む"), awake(ALICE), _BrightSenses())
+        reached.deliver(_fall_seen(), awake(BOB), _BrightSenses())
+
+        assert recipient.perceived_texts == [(ALICE, "足が痛む"), (BOB, "{actor}が倒れた")]
+
+    def test_always_delivered_stimulus_reaches_someone_already_reached(self) -> None:
+        """アリスに足の痛みが届いたあとでも、always_delivered の「ボブが倒れた」は重ねて届く。"""
+        recipient = _Recipient()
+        reached = PeopleReachedByStimuli(recipient)
+
+        reached.deliver(_ache(ALICE, "足が痛む"), awake(ALICE), _BrightSenses())
+        reached.deliver(_fall_seen(always_delivered=True), awake(ALICE), _BrightSenses())
+
+        assert recipient.perceived_texts == [(ALICE, "足が痛む"), (ALICE, "{actor}が倒れた")]
+
+    def test_announcement_reaches_someone_already_reached(self) -> None:
+        """アリスに足の痛みが届いたあとでも、世界の知らせ「鐘が鳴った」は重ねて届く。"""
         recipient = _Recipient()
         reached = PeopleReachedByStimuli(recipient)
 
         reached.deliver(_ache(ALICE, "足が痛む"), awake(ALICE), _BrightSenses())
         reached.deliver(_call("鐘が鳴った"), awake(ALICE), _BrightSenses())
 
-        assert recipient.perceived_texts == [(ALICE, "足が痛む")]
+        assert recipient.perceived_texts == [(ALICE, "足が痛む"), (ALICE, "鐘が鳴った")]
 
-    def test_stimulus_not_perceived_leaves_the_person_unreached(self) -> None:
-        """ボブの足の痛みはアリスに知覚されないので、アリスは届いていない人のままで、続く知らせは届く。"""
-        recipient = _Recipient()
-        reached = PeopleReachedByStimuli(recipient)
-
-        reached.deliver(_ache(BOB, "足が痛む"), awake(ALICE), _BrightSenses())
-        reached.deliver(_call("鐘が鳴った"), awake(ALICE), _BrightSenses())
-
-        assert recipient.perceived_texts == [(ALICE, "鐘が鳴った")]
-
-    def test_reaching_one_person_does_not_stop_another(self) -> None:
-        """アリスに知らせが届いても、ボブには同じ知らせが届く。届いた記録は人ごと。"""
+    def test_announcement_does_not_count_as_reaching(self) -> None:
+        """世界の知らせ「鐘が鳴った」が届いたあとのアリスにも、always_delivered でない「ボブが倒れた」の目撃が届く。"""
         recipient = _Recipient()
         reached = PeopleReachedByStimuli(recipient)
 
         reached.deliver(_call("鐘が鳴った"), awake(ALICE), _BrightSenses())
-        reached.deliver(_call("鐘が鳴った"), awake(BOB), _BrightSenses())
-
-        assert recipient.perceived_texts == [(ALICE, "鐘が鳴った"), (BOB, "鐘が鳴った")]
-
-    def test_always_delivered_stimulus_reaches_someone_already_reached(self) -> None:
-        """アリスに知らせが届いたあとでも、always_delivered の「ボブが倒れた」は重ねて届く。"""
-        recipient = _Recipient()
-        reached = PeopleReachedByStimuli(recipient)
-
-        reached.deliver(_call("鐘が鳴った"), awake(ALICE), _BrightSenses())
-        reached.deliver(_fall_seen(always_delivered=True), awake(ALICE), _BrightSenses())
+        reached.deliver(_fall_seen(), awake(ALICE), _BrightSenses())
 
         assert recipient.perceived_texts == [(ALICE, "鐘が鳴った"), (ALICE, "{actor}が倒れた")]
 
-    def test_ordinary_sight_does_not_reach_someone_already_reached(self) -> None:
-        """always_delivered でない同じ「ボブが倒れた」は、知らせが届いたあとのアリスには届かない。"""
+    def test_notice_kept_for_later_counts_as_reaching(self) -> None:
+        """倒れているアリスが目撃を起きてから知る形で受けると、届いた扱いになり、次の目撃はためない。"""
         recipient = _Recipient()
         reached = PeopleReachedByStimuli(recipient)
 
-        reached.deliver(_call("鐘が鳴った"), awake(ALICE), _BrightSenses())
-        reached.deliver(_fall_seen(always_delivered=False), awake(ALICE), _BrightSenses())
+        reached.deliver(_fall_seen(noticed_later="誰かが倒れる音がした"), fallen(ALICE), _BrightSenses())
+        reached.deliver(_fall_seen(noticed_later="何かが崩れる音がした"), fallen(ALICE), _BrightSenses())
 
-        assert recipient.perceived_texts == [(ALICE, "鐘が鳴った")]
+        assert [(person, notice.text.template) for person, notice in recipient.notices] == [
+            (ALICE, "誰かが倒れる音がした")
+        ]
 
-    def test_notice_kept_for_later_counts_as_reaching(self) -> None:
-        """倒れているアリスが最初の知らせを起きてから知る形で受けると、届いた扱いになり、次の知らせは渡さない。"""
+    def test_fallen_person_keeps_every_announcement(self) -> None:
+        """倒れているアリスには、世界の知らせ「鐘が鳴った」と「門が開いた」が、どちらも起きてから知る形でたまる。"""
         recipient = _Recipient()
         reached = PeopleReachedByStimuli(recipient)
 
         reached.deliver(_call("鐘が鳴った"), fallen(ALICE), _BrightSenses())
         reached.deliver(_call("門が開いた"), fallen(ALICE), _BrightSenses())
 
-        assert [(person, notice.text.template) for person, notice in recipient.notices] == [(ALICE, "鐘が鳴った")]
+        assert [(person, notice.text.template) for person, notice in recipient.notices] == [
+            (ALICE, "鐘が鳴った"),
+            (ALICE, "門が開いた"),
+        ]
         assert recipient.perceived_texts == []

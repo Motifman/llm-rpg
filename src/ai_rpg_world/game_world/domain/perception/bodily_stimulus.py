@@ -30,6 +30,10 @@ class BodilyStimulus:
         return cls(person=person, text=waking.about({}), salience=Notable(), at=at)
 
     @property
+    def counts_toward_one_per_person(self) -> bool:
+        return True
+
+    @property
     def always_delivered(self) -> bool:
         return False
 

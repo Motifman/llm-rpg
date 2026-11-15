@@ -81,6 +81,10 @@ class SightStimulus:
     def __post_init__(self) -> None:
         self.target.require_among(self.involved)
 
+    @property
+    def counts_toward_one_per_person(self) -> bool:
+        return True
+
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.SIGHT, self.salience)
 

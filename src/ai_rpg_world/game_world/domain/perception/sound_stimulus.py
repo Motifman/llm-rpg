@@ -80,6 +80,10 @@ class SoundStimulus:
     at: WorldTick
 
     @property
+    def counts_toward_one_per_person(self) -> bool:
+        return True
+
+    @property
     def always_delivered(self) -> bool:
         return False
 
