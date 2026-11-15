@@ -501,7 +501,7 @@ class DayPhaseDeclaration:
     begins_at: TimeOfDay
     dark: bool                                  # 書かなければ夜だけ真
     announcement: TextWithUnassignedPeople | NoAnnouncement
-    audience: PeopleSelection | EveryoneAwake   # 知らせの届く相手。書かなければ起きている全員。倒れている人には届けず、ためもしない (D2203)
+    audience: PeopleSelection | EveryoneAwake   # 知らせの届く相手。EveryoneAwake なら起きている全員。どちらでも倒れている人には届けず、ためもしない (D2203)
 
 @final
 @dataclass(frozen=True)

@@ -229,7 +229,7 @@ happenings:
 
 ハルには「ハルは昇降機で外へ出た。」、籠の外のゲンには「ゲンは坑道に取り残された。」だけが届く。籠が上がる様子をほかの人に伝えるなら、`lift_leaves` の `notice` に書く (D2203)。
 
-時間帯の知らせは、`audience` で届く相手を選ぶ。空の様子を書いた知らせは屋外の場所にいる人に、鐘のように屋内でも聞こえる知らせは書かずに全員へ届ける (D2203)。
+時間帯の知らせは、`audience` で届く相手を選ぶ。空の様子を書いた知らせは屋外の場所にいる人に、鐘のように屋内でも聞こえる知らせは書かずに起きている全員へ届ける (D2203)。
 
 ```yaml
 time:
@@ -241,8 +241,15 @@ time:
         begins_at: 12
         dark: false
         announcement: 空が白み、朝になった。
-        audience: { where: { any_of: [ { is_at_spot: { who: each_person, spot: well } }, { is_at_spot: { who: each_person, spot: snow_pass } } ] } }
-      dusk: { begins_at: 30, dark: false, announcement: 鐘が鳴り、夕刻を告げた。 }   # audience は defaults の everyone_awake
+        audience:                                 # v2 の屋外の場所すべて
+          where:
+            any_of:
+              - is_at_spot: { who: each_person, spot: north_shaft_head }
+              - is_at_spot: { who: each_person, spot: snow_pass }
+              - is_at_spot: { who: each_person, spot: village_square }
+              - is_at_spot: { who: each_person, spot: well }
+              - is_at_spot: { who: each_person, spot: south_adit_mouth }
+      dusk: { begins_at: 30, dark: false, announcement: 鐘が鳴り、夕刻を告げた。 }   # v2 には無い段階。audience は defaults の everyone_awake
 ```
 
 ## 例: 獣を出来事に置き換える
