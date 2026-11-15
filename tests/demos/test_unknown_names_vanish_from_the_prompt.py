@@ -69,6 +69,7 @@ def _unidentified_turns(results: list[FuzzResult]) -> list[str]:
 class TestUnknownNamesVanish:
     """名前を知らない相手の名前が、手番の人に送るプロンプトのどこにも出ないことを保証する。"""
 
+    @pytest.mark.timeout(45)
     def test_no_turn_shows_the_name_of_someone_not_yet_named(self, scenario: Path) -> None:
         """全員が同じ場所から始めてでたらめに行動しても、手番の人が名前を知らない相手の名前は、本文にもツールの定義にも出ない。見た目は出ている。"""
         results = _run(scenario)

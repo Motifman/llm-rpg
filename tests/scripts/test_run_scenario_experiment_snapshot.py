@@ -264,6 +264,7 @@ class TestSnapshotTraceCarriesMemoryTurns:
         assert turns[0] == turns[1]
         assert any(turn > 0 for turn in turns[0].values())
 
+    @pytest.mark.timeout(30)
     def test_resumed_run_after_the_range_fills_builds_prompts_without_failures(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
