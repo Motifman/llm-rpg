@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 _REPO = Path(__file__).resolve().parents[2]
 
 
@@ -13,6 +15,7 @@ def _events(trace_path: Path, kind: str) -> list[dict]:
     return [e for e in map(json.loads, lines) if e["kind"] == kind]
 
 
+@pytest.mark.timeout(90)
 def test_stub_run_writes_episodes_on_filled_range_and_on_leaving_before_the_snapshot(tmp_path: Path) -> None:
     """スタブの run で、範囲が埋まったときと環境を離れるときの両方でエピソードを書き、書いたエピソードの数だけ snapshot に入る。今の短期記憶を畳むときには書かない。"""
     from scripts.run_scenario_experiment import main

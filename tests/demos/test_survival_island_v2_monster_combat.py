@@ -53,6 +53,7 @@ class TestInitialSpawn:
         runtime._simulation_service.tick()
         assert _count_monsters(runtime) >= 2  # feral_dog + giant_crab
 
+    @pytest.mark.timeout(40)
     def test_advances_all_four(self, runtime) -> None:
         """48 tick / day, night phase は 0.66 から (= tick 32 以降)。
         33 tick 進めれば wolf / snake も spawn して計 4 体になる。"""

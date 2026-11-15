@@ -530,6 +530,7 @@ def test_initial_handoff_attempts_later_recipients_before_reporting_committed_fa
     assert len(set(delivered)) == len(delivered) == 2
 
 
+@pytest.mark.timeout(25)
 def test_more_than_one_batch_of_failed_notifications_does_not_starve_later_success(h):
     """先頭101件が失敗しても、一度100件までの再送を継続して102件目へ到達し、末尾から再試行へ戻る。"""
     queued = h.create(None)
