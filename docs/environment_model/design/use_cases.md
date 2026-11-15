@@ -50,7 +50,7 @@ class DeliverPerception:
     def __call__(self, command: DeliverPerceptionCommand) -> None:
         # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
         # → Perceiver と LightingConditions / SoundReach を作り、刺激の perceived_by に聞く
-        # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、1 人には最初に知覚したものだけ
+        # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、本人の体・見える・聞こえるは 1 人に最初に知覚したものだけ。世界の知らせは数えずに届ける (D2203)
         # → Perceived は観測の出口へ
         # → NoticedLater は MissedNotices.keep
         # → 音の刺激は、計算した SoundReach を SoundsThisTick.note にも書く (モンスターが次の tick に聞く)
