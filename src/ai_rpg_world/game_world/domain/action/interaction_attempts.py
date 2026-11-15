@@ -75,6 +75,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     @abstractmethod
     def kind(self) -> ActionKind: ...
 
+    @abstractmethod
+    def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]: ...
+
     def __post_init__(self) -> None:
         self.manner.require_allowed_by(self.interaction)
         self._require_declared_arguments()
