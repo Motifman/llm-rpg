@@ -30,6 +30,7 @@ from ai_rpg_world.game_world.domain.action.action_prerequisite_check import (
     CommonRulesOnly,
 )
 from ai_rpg_world.game_world.domain.action.available_actions import AvailableAction, AvailableActions
+from ai_rpg_world.game_world.domain.action.built_in_attempts import GroupDecisionBallotAttempt
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -91,6 +92,7 @@ class ListAvailableActions:
                 *judge(candidates.object_interactions(), self._interact_with_object),
                 *judge(candidates.carried_item_interactions(), self._interact_with_carried_item),
                 *judge(candidates.person_interactions(), self._interact_with_person),
+                *judge.ballots(candidates.ballots()),
                 # 相手を選ぶとくじが進むので選ばない。相手の決まらない前提は確かめようがない。
                 *judge(candidates.interactions_in_the_dark(), CommonRulesOnly()),
             )
@@ -108,3 +110,6 @@ class _Judge:
         self, attempts: tuple[_Attempt, ...], precondition: ActionPrecondition[_Attempt]
     ) -> tuple[AvailableAction, ...]:
         return tuple(self._check.available(attempt, precondition, self._facts, self._texts) for attempt in attempts)
+
+    def ballots(self, attempts: tuple[GroupDecisionBallotAttempt, ...]) -> tuple[AvailableAction, ...]:
+        return tuple(self._check.available_ballot(attempt, self._facts, self._texts) for attempt in attempts)

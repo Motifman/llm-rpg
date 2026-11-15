@@ -56,9 +56,11 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration
     from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
     from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
+    from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
     from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
     from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
     from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
+    from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
     from ai_rpg_world.game_world.domain.world_records import NeverDone, NeverFired
 
 
@@ -235,6 +237,10 @@ class WorldFlagsReading(Protocol):
 
 class GroupDecisionReading(Protocol):
     def is_open(self) -> bool: ...
+
+    def ballot_choices_for(self, voter: PersonId, people: tuple[PersonId, ...]) -> tuple[VoteFor | Abstain, ...]: ...
+
+    def ballot_refusal(self, voter: PersonId, choice: VoteFor | Abstain) -> WorldRefusal | None: ...
 
 
 class PeopleRegisterReading(Protocol):

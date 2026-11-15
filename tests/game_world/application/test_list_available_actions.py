@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused, ActionReply
 from ai_rpg_world.game_world.application.action.carry_out_action import CarryOutAction
+from ai_rpg_world.game_world.application.action.cast_ballot import CastBallot, CastBallotCommand
 from ai_rpg_world.game_world.application.action.drop_item import DropItem, DropItemCommand
 from ai_rpg_world.game_world.application.action.enter_section import EnterSection, EnterSectionCommand
 from ai_rpg_world.game_world.application.action.hand_over_items import HandOverItems, HandOverItemsCommand
@@ -38,11 +39,13 @@ from ai_rpg_world.game_world.application.list_available_actions import (
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
+from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, TextArgument
 from ai_rpg_world.game_world.domain.action.available_actions import AvailableAction, Doable, NotNow
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
     GroundItemPickupAttempt,
+    GroupDecisionBallotAttempt,
     HoldItemAttempt,
     ItemDropAttempt,
     ItemHandOverAttempt,
@@ -75,7 +78,7 @@ from ai_rpg_world.game_world.domain.declaration.character.group_declaration impo
     NoSharedDescription,
 )
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectAppearance
-from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
+from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration, GroupDecisionDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.item_use_declaration import ItemUseDeclaration
@@ -90,7 +93,8 @@ from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregat
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
+from ai_rpg_world.game_world.domain.person.life_state import Dead, WorldHappening
+from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.tend_rule import NoTending, TendRule
 from ai_rpg_world.game_world.domain.value_object import (
     Damage,
@@ -108,15 +112,22 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
+from ai_rpg_world.game_world.domain.world_progress import Abstain, VoteFor
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
-from tests.game_world.support.verb_declarations_for_tests import lever_pulled_quietly, pull_lever, seen_clearly_only
+from tests.game_world.support.verb_declarations_for_tests import (
+    everyone_votes_on,
+    lever_pulled_quietly,
+    pull_lever,
+    seen_clearly_only,
+)
 from tests.game_world.support.verb_parts_for_tests import ChangesNothing
 from tests.game_world.support.world_design_for_tests import (
     access_to,
     built_in_action_perceptions,
     character,
     compose_world,
+    group_decision,
     item_spec,
     nouns,
     obj,
@@ -497,3 +508,162 @@ class TestListAvailableActions:
 
         assert _doable(actions) == []
         assert {_reason_of(actions, action.attempt) for action in actions} == {"BUSY のためできない。"}
+
+
+_HARU, _NATSU, _AKI = PersonId("haru"), PersonId("natsu"), PersonId("aki")
+_STAY_IN_MINE = group_decision("stay_in_mine")
+_WATCH_TONIGHT = group_decision("watch_tonight")
+
+
+class _Village:
+    """広場にハル・ナツ・アキがいる。「誰を坑道に残すか」と「今夜の見張り」の 2 つの集団の決定が、この順に宣言されている。どちらも棄権を許す。"""
+
+    def __init__(self) -> None:
+        self.design = compose_world(
+            nouns(
+                spots=[spot("square")],
+                characters=[character("haru", "square"), character("natsu", "square"), character("aki", "square")],
+                group_decisions=[_STAY_IN_MINE, _WATCH_TONIGHT],
+            ),
+            group_decision_rules=[everyone_votes_on(_STAY_IN_MINE), everyone_votes_on(_WATCH_TONIGHT)],
+            person_interactions=(_WAVE,),
+            built_in_action_perceptions_=built_in_action_perceptions(),
+        )
+        self.store = SqliteWorldStore.create(
+            ":memory:",
+            world_id=_WORLD,
+            scenario="list_available_actions_village",
+            scenario_hash="list_available_actions_village",
+            design=self.design,
+            random=SeedableRandomSource(0),
+        )
+        OpenWorld(self.store)(OpenWorldCommand(world_id=_WORLD, design=self.design))
+        self.scope = CommandScope(self.store, CommittedEventsDistributor())
+        self.carry_out = CarryOutAction(self.scope, self.design)
+
+    def open(
+        self, decision: GroupDecisionDeclaration, voters: frozenset[PersonId] = frozenset({_HARU, _NATSU, _AKI})
+    ) -> None:
+        self.scope.run(
+            lambda session: (
+                session.aggregates().group_decision(decision).start(voters, frozenset({_HARU, _NATSU, _AKI}))
+            )
+        )
+
+    def withdraw_dead(self, decision: GroupDecisionDeclaration, person: PersonId) -> None:
+        self.scope.run(
+            lambda session: session.aggregates().group_decision(decision).withdraw_person(person, Dead(died_at=_NOW))
+        )
+
+    def lists(self, person: PersonId = _HARU) -> tuple[AvailableAction, ...]:
+        return ListAvailableActions(self.scope, self.design)(ListAvailableActionsCommand(person)).actions
+
+    def votes(self, attempt: GroupDecisionBallotAttempt) -> ActionReply:
+        return CastBallot(self.carry_out)(CastBallotCommand(attempt))
+
+    def votes_and_waits_it_out(self, attempt: GroupDecisionBallotAttempt) -> None:
+        self.votes(attempt)
+        for _ in range(self.design.world_rules.action_durations[ActionKind.CAST_BALLOT].value):
+            self.scope.run(lambda session: session.clock().advance(self.design.day_night))
+
+
+def _ballots(actions: tuple[AvailableAction, ...]) -> list[AvailableAction]:
+    return [action for action in actions if isinstance(action.attempt, GroupDecisionBallotAttempt)]
+
+
+def _ballot(decision: GroupDecisionDeclaration, choice: VoteFor | Abstain) -> GroupDecisionBallotAttempt:
+    return GroupDecisionBallotAttempt(_HARU, decision, choice)
+
+
+_EVERY_BALLOT_OF_HARU = [
+    _ballot(_STAY_IN_MINE, VoteFor(_HARU)),
+    _ballot(_STAY_IN_MINE, VoteFor(_NATSU)),
+    _ballot(_STAY_IN_MINE, VoteFor(_AKI)),
+    _ballot(_STAY_IN_MINE, Abstain()),
+]
+
+
+class TestListAvailableBallots:
+    """ListAvailableActions が、開いている集団の決定の票を投票する人に並べ、GroupDecision と同じ判断でできる・できないに分ける挙動を保証する。"""
+
+    def test_voter_lists_vote_for_every_choice_including_self_then_abstain(self) -> None:
+        """「誰を坑道に残すか」が開いていると、ハルの一覧には、ハル・ナツ・アキへの票と棄権が人の宣言の順にできるで並び、人への操作より後に置かれる。"""
+        village = _Village()
+        village.open(_STAY_IN_MINE)
+
+        actions = village.lists()
+
+        assert [action.attempt for action in _ballots(actions)] == _EVERY_BALLOT_OF_HARU
+        assert all(isinstance(action.standing, Doable) for action in _ballots(actions))
+        kinds = [type(action.attempt) for action in actions]
+        assert kinds.index(GroupDecisionBallotAttempt) > max(
+            index for index, kind in enumerate(kinds) if kind is PersonInteractionAttempt
+        )
+
+    def test_every_doable_ballot_goes_through_when_tried(self) -> None:
+        """2 つの決定が開いているとき、ハルのできるに分けた票は、1 つずつ新しい村で試すと、どれも断られずに通る。"""
+        doable = [a for a in _doable(_opened_both().lists()) if isinstance(a, GroupDecisionBallotAttempt)]
+
+        replies = [(attempt, _opened_both().votes(attempt)) for attempt in doable]
+
+        assert [(attempt, reply) for attempt, reply in replies if not isinstance(reply, ActionDone)] == []
+        assert len(replies) == 8
+
+    def test_person_not_voting_finds_no_ballot(self) -> None:
+        """投票する人がハルとナツだけの決定では、アキの一覧に票は 1 つも出ない。"""
+        village = _Village()
+        village.open(_STAY_IN_MINE, voters=frozenset({_HARU, _NATSU}))
+
+        assert _ballots(village.lists(_AKI)) == []
+
+    def test_voter_who_has_cast_finds_every_ballot_not_now_and_is_refused_with_the_same_text(self) -> None:
+        """ナツに投票したハルの一覧には、4 つの票がすべてできないで並ぶ。試すと、一覧の理由と同じ文で断られる。"""
+        village = _Village()
+        village.open(_STAY_IN_MINE)
+        village.votes_and_waits_it_out(_ballot(_STAY_IN_MINE, VoteFor(_NATSU)))
+
+        actions = village.lists()
+        reply = village.votes(_ballot(_STAY_IN_MINE, Abstain()))
+
+        assert _not_now(tuple(_ballots(actions))) == _EVERY_BALLOT_OF_HARU
+        assert isinstance(reply, ActionRefused)
+        assert isinstance(reply.refusal.reason, WorldStateRefusal)
+        assert {_reason_of(actions, attempt) for attempt in _EVERY_BALLOT_OF_HARU} == {
+            reply.refusal.text.template.template
+        }
+
+    def test_dead_choice_vanishes_and_the_returned_voter_may_vote_again(self) -> None:
+        """アキに投票したあとでアキが死ぬと、ハルの一覧からアキへの票が消え、戻った票でハル・ナツへの票と棄権ができるで並ぶ。"""
+        village = _Village()
+        village.open(_STAY_IN_MINE)
+        village.votes_and_waits_it_out(_ballot(_STAY_IN_MINE, VoteFor(_AKI)))
+        village.withdraw_dead(_STAY_IN_MINE, _AKI)
+
+        actions = village.lists()
+
+        assert [a.attempt for a in _ballots(actions) if isinstance(a.standing, Doable)] == [
+            _ballot(_STAY_IN_MINE, VoteFor(_HARU)),
+            _ballot(_STAY_IN_MINE, VoteFor(_NATSU)),
+            _ballot(_STAY_IN_MINE, Abstain()),
+        ]
+        assert _not_now(tuple(_ballots(actions))) == []
+
+    def test_ballots_of_several_open_decisions_follow_declaration_order(self) -> None:
+        """今夜の見張りを先に開いても、ハルの一覧は宣言の順に「誰を坑道に残すか」の票 4 つ、次に「今夜の見張り」の票 4 つと並ぶ。"""
+        village = _Village()
+        village.open(_WATCH_TONIGHT)
+        village.open(_STAY_IN_MINE)
+
+        attempts = [action.attempt for action in _ballots(village.lists())]
+
+        assert attempts == [
+            *_EVERY_BALLOT_OF_HARU,
+            *(_ballot(_WATCH_TONIGHT, ballot.choice) for ballot in _EVERY_BALLOT_OF_HARU),
+        ]
+
+
+def _opened_both() -> _Village:
+    village = _Village()
+    village.open(_STAY_IN_MINE)
+    village.open(_WATCH_TONIGHT)
+    return village

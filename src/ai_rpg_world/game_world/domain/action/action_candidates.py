@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
     GroundItemPickupAttempt,
+    GroupDecisionBallotAttempt,
     HoldItemAttempt,
     ItemDropAttempt,
     ItemHandOverAttempt,
@@ -141,6 +142,14 @@ class ActionCandidates:
             PersonInteractionAttempt(self._actor, person, interaction, {}, Openly())
             for person in (*self._in_view.awake, *self._in_view.down)
             for interaction in _without_words(self._design.person_interactions())
+        )
+
+    def ballots(self) -> tuple[GroupDecisionBallotAttempt, ...]:
+        people = self._facts.people()
+        return tuple(
+            GroupDecisionBallotAttempt(self._actor, decision, choice)
+            for decision in self._design.nouns.all_group_decisions()
+            for choice in self._facts.group_decision(decision).ballot_choices_for(self._actor, people)
         )
 
     def interactions_in_the_dark(self) -> tuple[PersonInteractionAttempt, ...]:

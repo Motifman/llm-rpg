@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+    from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
     from ai_rpg_world.game_world.domain.people import NameInText
 
 
@@ -445,6 +446,9 @@ class GroupDecisionBallotAttempt(_BuiltInAttempt):
 
     def exertion(self) -> Exertion:
         return DoesNotUseBody()
+
+    def refusal_by_decision(self, facts: WorldFacts) -> WorldRefusal | None:
+        return facts.group_decision(self.decision).ballot_refusal(self.actor, self.choice)
 
     def cast(self, facts: WorldFacts, world: WorldAggregates) -> Ticks:
         world.group_decision(self.decision).cast(self.actor, self.choice)

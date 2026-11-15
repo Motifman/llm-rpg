@@ -322,6 +322,10 @@ class GroupDecision:                              # 集団の決定の宣言ご�
         # どちらも票の内訳を持つ。reveals_ballots なら、変換役が投票する人の全員への世界の知らせにする
 
     def is_open(self) -> bool: ...
+    def ballot_choices_for(self, voter: PersonId, people: tuple[PersonId, ...]) -> tuple[VoteFor | Abstain, ...]: ...
+        # 開いていて voter が投票する人なら、people の順に選ばれうる人への票、abstain_allowed なら最後に棄権。それ以外は空
+    def ballot_refusal(self, voter: PersonId, choice: VoteFor | Abstain) -> WorldRefusal | None: ...
+        # cast が断るときに投げる例外。cast と一覧 (action.md) が同じ判断を使う
 
 
 class MissedNotices:                              # 人ごと。倒れている間にためる帳簿で、イベントを出さない (AggregateRoot を継承しない)
