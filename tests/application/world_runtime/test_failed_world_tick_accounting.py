@@ -22,14 +22,12 @@ def test_failed_tick_updates_runtime_clock_and_tick_limit() -> None:
     """後段失敗でも消費したtickを残量表示と終了判定へ反映する。"""
     runtime = create_world_runtime(_REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json")
     runtime._time_provider.advance_tick(79)
-    runtime._tick = 79
     runtime._simulation_service._scenario_event_stage = _FailingStage()
 
     with pytest.raises(SystemErrorException, match="later stage failed"):
         runtime.advance_tick()
 
     assert runtime.current_tick() == 80
-    assert runtime._tick == 80
     assert runtime._compute_tick_budget_remaining() == 0
     assert runtime.check_game_end().is_ended is True
 

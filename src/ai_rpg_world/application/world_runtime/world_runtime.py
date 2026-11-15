@@ -569,7 +569,6 @@ class WorldRuntime:
     _public_sns_projection: Any = field(default=None, repr=False)
     _public_sns_screens: PublicSnsScreenStore = field(default_factory=PublicSnsScreenStore, repr=False)
     _execution_turns: dict[int, int] = field(default_factory=dict, repr=False)
-    _tick: int = 0
     # #375 後続: 食料腐敗の日次集約バッファ (code-review HIGH 指摘)。
     # hasattr ベースの遅延初期化だと IDE/mypy / pickle で扱いにくいので
     # dataclass field として明示宣言する。
@@ -835,12 +834,7 @@ class WorldRuntime:
         )
 
     def advance_tick(self) -> int:
-        try:
-            tick = self._simulation_service.tick()
-        finally:
-            # world tick は stage 失敗時も消費される。残り時間表示と終了判定が
-            # time provider から分裂しないよう、成功・失敗の両経路で同期する。
-            self._tick = self._time_provider.get_current_tick().value
+        tick = self._simulation_service.tick()
         # #356 後続: 日が変わったら腐敗バッファを flush して 1 件にまとめる。
         # buffer は _append_food_spoiled_batch_observation で積まれる。
         # tick が 0 base なので day = tick // ticks_per_day。
@@ -1483,7 +1477,7 @@ class WorldRuntime:
             limits.append(int(lc.tick_limit))
         if not limits:
             return None
-        return max(0, min(limits) - self._tick)
+        return max(0, min(limits) - self.current_tick())
 
     def _build_minimal_player_state_dto(
         self,
@@ -3566,7 +3560,7 @@ class WorldRuntime:
         player_ids = self.get_player_ids()
         from ai_rpg_world.domain.common.value_object import WorldTick
 
-        tick = WorldTick(self._tick)
+        tick = WorldTick(self.current_tick())
         player_states = self._collect_player_states(player_ids)
         player_outcomes = self._collect_player_outcomes(player_ids)
         satisfied: list[str] = []
@@ -3661,7 +3655,7 @@ class WorldRuntime:
         player_ids = self.get_player_ids()
         from ai_rpg_world.domain.common.value_object import WorldTick
 
-        tick = WorldTick(self._tick)
+        tick = WorldTick(self.current_tick())
         # 陣営条件 (SURVIVING_PLAYERS_WITH_STATE_AT_MOST) の判定材料。
         # 役割は PlayerStatusAggregate.state、生死は outcome registry が持つ。
         # 渡さないと評価器が例外を投げる (黙って未成立にしない)。
