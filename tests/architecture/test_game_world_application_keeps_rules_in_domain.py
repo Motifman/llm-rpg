@@ -106,12 +106,6 @@ _ALLOWED_LEAKS: tuple[_AllowedLeak, ...] = (
     _AllowedLeak("observation_exit.py", TYPE_SWITCH, "case Unidentified():", _EXIT_TO_BEING_CONTRACT),
     _AllowedLeak("observation_exit.py", TYPE_SWITCH, "case DisplayName():", _EXIT_TO_BEING_CONTRACT),
     _AllowedLeak("observation_exit.py", TYPE_SWITCH, "case NoVisibleName():", _EXIT_TO_BEING_CONTRACT),
-    _AllowedLeak(
-        "action/carry_out_action.py",
-        NONE_BRANCH,
-        "if failure is not None:",
-        "全行為の ActionSteps.unmet_precondition が欠けを None で返す。前提の確かめで None を見て分けない形に #2200 で直す",
-    ),
 )
 
 

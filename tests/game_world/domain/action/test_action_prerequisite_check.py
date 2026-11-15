@@ -6,8 +6,8 @@ import pytest
 
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt, LivingOrDeparted
-from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck
-from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck, CommonRulesOnly
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     GroundItemPickupAttempt,
     GroupDecisionBallotAttempt,
@@ -36,6 +36,9 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
 )
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, SpeechContent
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefusedException
@@ -370,26 +373,31 @@ class TestCleared:
         world = _world()
         attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
 
-        assert _CHECK.cleared(attempt, world.facts(), TEXTS) == attempt
+        assert _CHECK.cleared(attempt, CommonRulesOnly(), world.facts(), TEXTS) == attempt
 
     def test_someone_in_the_dark_is_chosen_among_people_together_by_chance(self) -> None:
         """bob と carol が一緒にいるとき、引いた割合が 0.0 なら世界の順で先の bob、0.6 なら後の carol が相手になる。"""
-        assert _CHECK.cleared(_tap_in_the_dark(), _world_of_three((0.0,)).facts(), TEXTS).target == BOB
-        assert _CHECK.cleared(_tap_in_the_dark(), _world_of_three((0.6,)).facts(), TEXTS).target == CAROL
+        assert (
+            _CHECK.cleared(_tap_in_the_dark(), CommonRulesOnly(), _world_of_three((0.0,)).facts(), TEXTS).target == BOB
+        )
+        assert (
+            _CHECK.cleared(_tap_in_the_dark(), CommonRulesOnly(), _world_of_three((0.6,)).facts(), TEXTS).target
+            == CAROL
+        )
 
     def test_person_at_another_spot_is_not_chosen(self) -> None:
         """carol が別の場所にいれば、引いた割合が 0.9 でも、一緒にいる bob だけが相手の候補になる。"""
         world = _world_of_three((0.9,))
         world.aggregates().whereabouts().teleport(PersonBody(CAROL), SHORE, _NOW)
 
-        assert _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS).target == BOB
+        assert _CHECK.cleared(_tap_in_the_dark(), CommonRulesOnly(), world.facts(), TEXTS).target == BOB
 
     def test_dead_person_is_not_chosen(self) -> None:
         """一緒にいる bob が死んでいれば、引いた割合が 0.0 でも carol が相手になる。"""
         world = _world_of_three((0.0,))
         _make_dead(world, BOB)
 
-        assert _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS).target == CAROL
+        assert _CHECK.cleared(_tap_in_the_dark(), CommonRulesOnly(), world.facts(), TEXTS).target == CAROL
 
     def test_no_one_together_raises_no_one_found_in_the_dark(self) -> None:
         """一緒にいる人が誰もいなければ、共通の規則 NoOneFoundInTheDark の断りを持つ ActionRefusedException を投げる。"""
@@ -397,7 +405,7 @@ class TestCleared:
         world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
 
         with pytest.raises(ActionRefusedException) as broken:
-            _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS)
+            _CHECK.cleared(_tap_in_the_dark(), CommonRulesOnly(), world.facts(), TEXTS)
 
         assert broken.value.refusal.reason == NoOneFoundInTheDark()
 
@@ -410,7 +418,7 @@ class TestCleared:
         tap = InteractionForTests(InteractionId("tap"), reaches_unseen=True, actor_requirement=LivingOrDeparted())
         attempt = PersonInteractionAttempt(ALICE, SomeoneInTheDark(), tap, {}, Openly())
 
-        assert _CHECK.cleared(attempt, world.facts(), TEXTS).target == BOB
+        assert _CHECK.cleared(attempt, CommonRulesOnly(), world.facts(), TEXTS).target == BOB
 
     def test_broken_common_rule_raises_before_choosing(self) -> None:
         """行っている最中の人の暗がりへの操作は、相手を選ぶ前に Busy の断りを持つ ActionRefusedException を投げる。"""
@@ -419,6 +427,75 @@ class TestCleared:
         world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
 
         with pytest.raises(ActionRefusedException) as broken:
-            _CHECK.cleared(_tap_in_the_dark(), world.facts(), TEXTS)
+            _CHECK.cleared(_tap_in_the_dark(), CommonRulesOnly(), world.facts(), TEXTS)
 
         assert broken.value.refusal.reason == Busy()
+
+
+class _PreconditionForTests:
+    def __init__(self, failure: FailureReason | HiddenFailure | None) -> None:
+        self._failure = failure
+        self.asked: list[ActionAttempt] = []
+
+    def unmet_precondition(self, attempt: ActionAttempt, facts: WorldFacts) -> FailureReason | HiddenFailure | None:
+        self.asked.append(attempt)
+        return self._failure
+
+
+class TestClearedPrecondition:
+    """ActionPrerequisiteCheck.cleared が、共通の前提を通って相手を選んだ試みについて行為ごとの前提を確かめ、欠けていれば前提の断りを投げることを保証する。"""
+
+    def test_met_precondition_returns_attempt(self) -> None:
+        """行為ごとの前提が欠けていなければ、試みがそのまま返る。"""
+        world = _world()
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+
+        assert _CHECK.cleared(attempt, _PreconditionForTests(None), world.facts(), TEXTS) == attempt
+
+    def test_failure_with_text_raises_precondition_refusal_with_that_text(self) -> None:
+        """前提が理由の文つきで欠けると、その FailureReason を持つ PreconditionRefusal と、理由の文そのままの断りを持つ ActionRefusedException を投げる。"""
+        world = _world()
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+        text = TextAboutPeople(TextWithUnassignedPeople("{actor}はつるはしを持っていない。"), {"actor": ALICE})
+        failure = FailureReason(ConditionPath.root(), text)
+
+        with pytest.raises(ActionRefusedException) as refused:
+            _CHECK.cleared(attempt, _PreconditionForTests(failure), world.facts(), TEXTS)
+
+        assert refused.value.refusal == ActionRefusal(attempt=attempt, reason=PreconditionRefusal(failure), text=text)
+
+    def test_hidden_failure_raises_precondition_refusal_with_hidden_text(self) -> None:
+        """前提が伏せた理由で欠けると、その HiddenFailure を持つ PreconditionRefusal と、伏せた理由の共通の文「今はできない。」の断りを投げる。"""
+        world = _world()
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+        failure = HiddenFailure(ConditionPath.root())
+
+        with pytest.raises(ActionRefusedException) as refused:
+            _CHECK.cleared(attempt, _PreconditionForTests(failure), world.facts(), TEXTS)
+
+        assert refused.value.refusal == ActionRefusal(
+            attempt=attempt,
+            reason=PreconditionRefusal(failure),
+            text=TextAboutPeople(TextWithUnassignedPeople("今はできない。"), {}),
+        )
+
+    def test_precondition_is_checked_on_attempt_with_chosen_target(self) -> None:
+        """暗がりの誰かへの操作は、選んだ相手 bob に向けた試みについて前提を確かめる。"""
+        world = _world_of_three((0.0,))
+        precondition = _PreconditionForTests(None)
+
+        _CHECK.cleared(_tap_in_the_dark(), precondition, world.facts(), TEXTS)
+
+        assert precondition.asked == [PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())]
+
+    def test_broken_common_rule_refuses_without_asking_precondition(self) -> None:
+        """共通の決まり Busy に当たると、行為ごとの前提を確かめずに Busy の断りを投げる。"""
+        world = _world()
+        world.aggregates().vitals(ALICE).start_action(WorldTick(5))
+        precondition = _PreconditionForTests(HiddenFailure(ConditionPath.root()))
+
+        with pytest.raises(ActionRefusedException) as refused:
+            _CHECK.cleared(PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly()), precondition, world.facts(), TEXTS)
+
+        assert refused.value.refusal.reason == Busy()
+        assert precondition.asked == []
