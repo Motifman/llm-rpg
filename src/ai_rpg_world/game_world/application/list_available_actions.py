@@ -91,7 +91,7 @@ class ListAvailableActions:
                 *judge(candidates.object_interactions(), self._interact_with_object),
                 *judge(candidates.carried_item_interactions(), self._interact_with_carried_item),
                 *judge(candidates.person_interactions(), self._interact_with_person),
-                # 相手が決まるのは試したときなので、相手に頼る行為ごとの前提はここでは確かめられない。
+                # 相手を選ぶとくじが進むので選ばない。相手の決まらない前提は確かめようがない。
                 *judge(candidates.interactions_in_the_dark(), CommonRulesOnly()),
             )
         )

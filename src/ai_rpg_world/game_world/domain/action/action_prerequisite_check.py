@@ -58,6 +58,7 @@ class ActionPrerequisiteCheck:
         if refusal is not None:
             return AvailableAction(attempt=attempt, standing=NotNow(refusal.text))
         failure = precondition.unmet_precondition(attempt, facts)
+        # 伏せた理由まで「できない」に分けると、一覧の出る / 出ないの差から伏せた所属が漏れる。
         if isinstance(failure, FailureReason):
             return AvailableAction(
                 attempt=attempt, standing=NotNow(refusal_texts.precondition_text(failure, attempt.actor))
