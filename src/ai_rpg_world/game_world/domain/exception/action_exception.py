@@ -1,4 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 
 
 class UndeclaredNounException(GameWorldDomainException):
@@ -39,3 +46,11 @@ class MissingCommonRuleRefusalTextException(GameWorldDomainException):
 
 class UnknownPersonInRefusalTextException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.UNKNOWN_PERSON_IN_REFUSAL_TEXT"
+
+
+class CommonRuleBrokenException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.COMMON_RULE_BROKEN"
+
+    def __init__(self, refusal: ActionRefusal) -> None:
+        super().__init__(type(refusal.reason).__name__)
+        self.refusal = refusal

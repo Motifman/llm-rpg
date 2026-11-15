@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, final
 
-from typing_extensions import assert_never
+from typing_extensions import Self, assert_never
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
 from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, TextArgumentValue
@@ -14,10 +14,11 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActorRequirement,
     CopresenceRequirement,
     Exertion,
-    WithObject,
     WithCarriedItem,
+    WithObject,
     WithPerson,
 )
+from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredInteraction
 from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
@@ -38,10 +39,11 @@ from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, Ticks
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
+from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
 if TYPE_CHECKING:
-    from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 
@@ -49,7 +51,19 @@ if TYPE_CHECKING:
 @final
 @dataclass(frozen=True)
 class SomeoneInTheDark:
-    pass
+    def chosen_near(self, actor: PersonId, facts: WorldFacts) -> PersonId | NoOneFoundInTheDark:
+        whereabouts = facts.whereabouts()
+        here = facts.vitals(actor).occupant_in_world(facts.rules().departed_persons_act)
+        candidates = [
+            person
+            for person in facts.people()
+            if person != actor
+            and not facts.vitals(person).is_dead()
+            and whereabouts.are_together(here, PersonBody(person))
+        ]
+        if not candidates:
+            return NoOneFoundInTheDark()
+        return candidates[int(facts.random().next_fraction() * len(candidates))]
 
 
 class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
@@ -126,6 +140,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
 
     def _witnessed_target(self) -> PersonId | NoTarget:
         return NoTarget()
+
+    def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
+        return self
 
     def unmet_precondition(self, design: WorldDesign, facts: WorldFacts) -> FailureReason | HiddenFailure | None:
         return self._declared_now(design, facts).precondition.failure_reason(facts, self)
@@ -206,6 +223,14 @@ class PersonInteractionAttempt(_InteractionAttempt):
 
     def kind(self) -> ActionKind:
         return ActionKind.INTERACT_WITH_PERSON
+
+    def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
+        if isinstance(self.target, PersonId):
+            return self
+        chosen = self.target.chosen_near(self.actor, facts)
+        if isinstance(chosen, NoOneFoundInTheDark):
+            return chosen
+        return replace(self, target=chosen)
 
     def _declared(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> InteractionDeclaration:
         return design.person_interaction(self.interaction.interaction_id)

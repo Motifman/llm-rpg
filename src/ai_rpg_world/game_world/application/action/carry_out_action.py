@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.condition.condition import FailureReason, Hi
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+from ai_rpg_world.game_world.domain.exception.action_exception import CommonRuleBrokenException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.value_object import Ticks
 
@@ -41,21 +42,27 @@ class CarryOutAction:
         self._check = ActionPrerequisiteCheck()
 
     def __call__(self, attempt: _Attempt, steps: ActionSteps[_Attempt]) -> ActionReply:
+        aimed = attempt
+
+        def carry_out(session: WorldSession) -> None:
+            nonlocal aimed
+            facts = session.facts()
+            aimed = self._check.cleared(attempt, facts, self._texts)
+            self._carry_out_aimed(aimed, steps, session, facts)
+
         try:
-            self._scope.run(lambda session: self._carry_out(attempt, steps, session))
-        except _Refused as refused:
+            self._scope.run(carry_out)
+        except (_Refused, CommonRuleBrokenException) as refused:
             return self._note_refusal(refused.refusal)
         except WorldRefusal as exception:
             code = RefusalCode.of(exception)
-            text = self._texts.world_state_text(code, attempt.actor)
-            return self._note_refusal(ActionRefusal(attempt=attempt, reason=WorldStateRefusal(code), text=text))
+            text = self._texts.world_state_text(code, aimed.actor)
+            return self._note_refusal(ActionRefusal(attempt=aimed, reason=WorldStateRefusal(code), text=text))
         return ActionDone()
 
-    def _carry_out(self, attempt: _Attempt, steps: ActionSteps[_Attempt], session: WorldSession) -> None:
-        facts = session.facts()
-        refusal = self._check.refusal(attempt, facts, self._texts)
-        if refusal is not None:
-            raise _Refused(refusal)
+    def _carry_out_aimed(
+        self, attempt: _Attempt, steps: ActionSteps[_Attempt], session: WorldSession, facts: WorldFacts
+    ) -> None:
         failure = steps.unmet_precondition(attempt, facts)
         if failure is not None:
             text = self._texts.precondition_text(failure, attempt.actor)

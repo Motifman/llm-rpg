@@ -47,6 +47,7 @@ from ai_rpg_world.game_world.domain.effect.flag_effects import RaiseFlagEffect
 from ai_rpg_world.game_world.domain.effect.item_effects import TakeItemEffect
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     Damage,
@@ -105,8 +106,8 @@ TAP_SHOULDER: InteractionDeclaration = replace(
 
 
 class WorldForInteractions:
-    def __init__(self, *, carol_at: str = "shore") -> None:
-        self.design = _design(carol_at)
+    def __init__(self, *, bob_at: str = "dam", carol_at: str = "shore") -> None:
+        self.design = _design(bob_at, carol_at)
         self.store = SqliteWorldStore.create(
             ":memory:",
             world_id=WORLD,
@@ -147,11 +148,21 @@ class WorldForInteractions:
         session.roll_back()
         return found
 
+    def let_die(self, person: PersonId) -> None:
+        def die(session: WorldSession) -> None:
+            facts = session.facts()
+            vitals = session.aggregates().vitals(person)
+            vitals.take_damage(Damage(1000), facts.now(), WorldHappening())
+            rules = facts.rules()
+            vitals.pass_time(facts.now() + rules.death.grace, rules.death, rules.hunger)
+
+        self.scope.run(die)
+
     def read(self) -> WorldSession:
         return self.store.session()
 
 
-def _design(carol_at: str) -> WorldDesign:
+def _design(bob_at: str, carol_at: str) -> WorldDesign:
     return compose_world(
         nouns(
             flags=[GATE_CLOSED, POWERED, LAMP_RUBBED, LAMP_LIT],
@@ -161,7 +172,7 @@ def _design(carol_at: str) -> WorldDesign:
             item_specs=[LAMP, ROCK, KEY],
             characters=[
                 replace(character("alice", "dam"), initial_items=(LAMP.item_spec_id, ROCK.item_spec_id)),
-                replace(character("bob", "dam"), initial_items=(LAMP.item_spec_id,)),
+                replace(character("bob", bob_at), initial_items=(LAMP.item_spec_id,)),
                 character("carol", carol_at),
             ],
         ),
