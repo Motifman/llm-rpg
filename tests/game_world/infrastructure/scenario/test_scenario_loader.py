@@ -14,7 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import NoticedOnWaking, Obj
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, ScenarioFile
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
-from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople, Unidentified
 from ai_rpg_world.game_world.domain.perception import NoTarget
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import (
@@ -313,7 +313,7 @@ class TestSurroundingsTexts:
         text = _LIFT_LANDING + "surroundings_texts:\n  joiner: と\n"
 
         texts = _load(tmp_path, text).design.surroundings_texts
-        listed = texts.people_here_about((PersonId("haru"), PersonId("natsu"))).template.template
+        listed = texts.people_here_as_seen((Unidentified(), Unidentified())).template
 
         assert listed == "ここには{person_1}と{person_2}がいる。"
 

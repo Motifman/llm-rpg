@@ -10,8 +10,8 @@ from ai_rpg_world.game_world.domain.exception.surroundings_texts_exception impor
     PeopleNotWrittenOnceException,
     PersonInSurroundingsNoticeException,
 )
-from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedPeople, Unidentified
+from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 
 _PEOPLE = "people"
 
@@ -42,13 +42,15 @@ class SurroundingsTexts:
                 f"SurroundingsTexts.joiner must be a non-blank single line, got {self.joiner!r}"
             )
 
-    def people_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople:
+    def people_here_as_seen(self, people: tuple[PersonRef | Unidentified, ...]) -> TextWithAssignedPeople:
         return self._listing(self.people_here, people)
 
-    def bodies_here_about(self, people: tuple[PersonId, ...]) -> TextAboutPeople:
+    def bodies_here_as_seen(self, people: tuple[PersonRef | Unidentified, ...]) -> TextWithAssignedPeople:
         return self._listing(self.bodies_here, people)
 
-    def _listing(self, text: TextWithUnassignedPeople, people: tuple[PersonId, ...]) -> TextAboutPeople:
+    def _listing(
+        self, text: TextWithUnassignedPeople, people: tuple[PersonRef | Unidentified, ...]
+    ) -> TextWithAssignedPeople:
         if not people:
             raise NoPeopleToListException("there is no one to list in the surroundings")
         # 1 つの穴には 1 人しか入らず、名前は見る人の側で埋まる。つなぐのは名前ではなく穴どうしになる。
@@ -59,7 +61,7 @@ class SurroundingsTexts:
             rebuilt.append(TextWithUnassignedPeople.literal(literal).template)
             if field_name is not None:
                 rebuilt.append(listed)
-        return TextWithUnassignedPeople("".join(rebuilt)).about(holes)
+        return TextWithUnassignedPeople("".join(rebuilt)).assign(holes)
 
 
 def _holes_in(text: TextWithUnassignedPeople) -> list[str]:

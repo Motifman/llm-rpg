@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain import exception as game_world_exception
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.game_world_exception import GameWorldDomainException, WorldRefusal
+from ai_rpg_world.game_world.domain.people import Unidentified
 from ai_rpg_world.game_world.domain.people._person_placeholders import person_placeholders_in
 from ai_rpg_world.game_world.domain.perception import NoTarget
 from ai_rpg_world.game_world.domain.perception.salience import Background, Notable
@@ -203,8 +204,8 @@ class TestSurroundingsTexts:
         """既定の文で 2 人を並べると「ここには{person_1}、{person_2}がいる。」「{person_1}が倒れている。」の形になる。"""
         texts = _load_smallest_scenario(tmp_path).design.surroundings_texts
 
-        listed = texts.people_here_about((PersonId("haru"), PersonId("natsu"))).template.template
-        bodies = texts.bodies_here_about((PersonId("natsu"),)).template.template
+        listed = texts.people_here_as_seen((Unidentified(), Unidentified())).template
+        bodies = texts.bodies_here_as_seen((Unidentified(),)).template
 
         assert (listed, bodies) == ("ここには{person_1}、{person_2}がいる。", "{person_1}が倒れている。")
 
