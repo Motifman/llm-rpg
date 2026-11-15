@@ -313,7 +313,7 @@ class TestSurroundingsTexts:
         text = _LIFT_LANDING + "surroundings_texts:\n  joiner: と\n"
 
         texts = _load(tmp_path, text).design.surroundings_texts
-        listed = texts.people_here_as_seen((Unidentified(), Unidentified())).template
+        listed = texts.scene_as_seen(people=(Unidentified(), Unidentified()), bodies=()).template
 
         assert listed == "ここには{person_1}と{person_2}がいる。"
 

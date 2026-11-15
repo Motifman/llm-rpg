@@ -204,8 +204,8 @@ class TestSurroundingsTexts:
         """既定の文で 2 人を並べると「ここには{person_1}、{person_2}がいる。」「{person_1}が倒れている。」の形になる。"""
         texts = _load_smallest_scenario(tmp_path).design.surroundings_texts
 
-        listed = texts.people_here_as_seen((Unidentified(), Unidentified())).template
-        bodies = texts.bodies_here_as_seen((Unidentified(),)).template
+        listed = texts.scene_as_seen(people=(Unidentified(), Unidentified()), bodies=()).template
+        bodies = texts.scene_as_seen(people=(), bodies=(Unidentified(),)).template
 
         assert (listed, bodies) == ("ここには{person_1}、{person_2}がいる。", "{person_1}が倒れている。")
 

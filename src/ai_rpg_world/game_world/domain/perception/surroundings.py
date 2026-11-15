@@ -18,13 +18,15 @@ from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import It
 from ai_rpg_world.game_world.domain.people import PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotId, SpotSectionId
+from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotId, SpotSectionId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageInState
 
 if TYPE_CHECKING:
     # 実行時に import すると循環する。
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 
@@ -225,6 +227,7 @@ class SurroundingsSenses(Protocol):
 @dataclass(frozen=True)
 class VisibleSurroundings:
     spot: SpotDeclaration
+    sight: SightQuality
     shows_description: bool
     passages: tuple[PassageInState, ...]
     sections: tuple[SpotSectionDeclaration, ...]
@@ -245,6 +248,7 @@ class VisibleSurroundings:
         rule = _RULES[sight]
         return cls(
             spot=contents.spot,
+            sight=sight,
             shows_description=rule.shows_description,
             passages=tuple(contained.passage for contained in contents.passages if contained.is_seen()),
             sections=contents.sections,
@@ -252,6 +256,19 @@ class VisibleSurroundings:
             ground_items=contents.ground_items if rule.shows_items else (),
             people=_present(person.seen_awake_with(sight) for person in contents.people),
             bodies=_present(body.seen_down_with(sight) for body in contents.bodies),
+        )
+
+    def perceived_by(self, viewer: PersonId, texts: SurroundingsTexts, at: WorldTick) -> Perceived | NotPerceived:
+        if isinstance(self.sight, SeesNothing) or not (self.people or self.bodies):
+            return NotPerceived()
+        return Perceived(
+            perceiver=viewer,
+            text=texts.scene_as_seen(
+                people=tuple(seen.person for seen in self.people), bodies=tuple(seen.person for seen in self.bodies)
+            ),
+            quality=self.sight,
+            happened_at=at,
+            calls_attention=False,
         )
 
 
