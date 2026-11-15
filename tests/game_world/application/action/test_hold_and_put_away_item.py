@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from ai_rpg_world.game_world.application.action.action_reply import ActionDone
+from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
 from ai_rpg_world.game_world.application.action.hold_item import HoldItem, HoldItemCommand
 from ai_rpg_world.game_world.application.action.put_away_item import PutAwayItem, PutAwayItemCommand
+from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.built_in_attempts import HoldItemAttempt, PutAwayItemAttempt
+from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.domain.exception.person_inventory_exception import (
+    ItemAlreadyHeldException,
+    ItemNotHeldException,
+)
 from tests.game_world.application.action.world_for_item_actions import ALICE, PICKAXE, ROPE, WorldForItemActions
 
 
@@ -45,3 +51,28 @@ class TestHoldAndPutAwayItem:
         assert reply == ActionDone()
         assert world.held_by(ALICE) == ()
         assert world.carried_by(ALICE) == (rope,)
+
+    def test_holding_item_already_in_hands_refuses(self) -> None:
+        """何も変わらない持ち替えは断る。もう手に持っている縄を手に持とうとすると ITEM_ALREADY_HELD で断られ、縄は手に残る。"""
+        world = WorldForItemActions(alice_carries=(ROPE.item_spec_id,))
+        [rope] = world.carried_by(ALICE)
+        HoldItem(world.carry_out)(HoldItemCommand(HoldItemAttempt(ALICE, rope)))
+        world.pass_ticks(1)
+
+        reply = HoldItem(world.carry_out)(HoldItemCommand(HoldItemAttempt(ALICE, rope)))
+
+        assert isinstance(reply, ActionRefused)
+        assert reply.refusal.reason == WorldStateRefusal(RefusalCode(ItemAlreadyHeldException.error_code))
+        assert world.held_by(ALICE) == (rope,)
+
+    def test_putting_away_item_already_in_pack_refuses(self) -> None:
+        """何も変わらない持ち替えは断る。荷にある縄をしまおうとすると ITEM_NOT_HELD で断られ、縄は荷に残る。"""
+        world = WorldForItemActions(alice_carries=(ROPE.item_spec_id,))
+        [rope] = world.carried_by(ALICE)
+
+        reply = PutAwayItem(world.carry_out)(PutAwayItemCommand(PutAwayItemAttempt(ALICE, rope)))
+
+        assert isinstance(reply, ActionRefused)
+        assert reply.refusal.reason == WorldStateRefusal(RefusalCode(ItemNotHeldException.error_code))
+        assert world.carried_by(ALICE) == (rope,)
+        assert world.held_by(ALICE) == ()

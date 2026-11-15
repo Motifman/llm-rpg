@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.game_world.domain.exception.person_exception import PersonNotAliveException
 from ai_rpg_world.game_world.domain.objects_and_items.ground_items import GroundItems
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import PersonId
@@ -28,6 +29,8 @@ class ItemsChangingPlace:
         self._world.inventory(person).hold(item, self._world.item(item).hands_needed())
 
     def hand_over(self, giver: PersonId, receiver: PersonId, items: tuple[ItemInstanceId, ...]) -> None:
+        if not self._world.vitals(receiver).can_act():
+            raise PersonNotAliveException(f"{receiver.value} cannot receive items while not alive")
         for item in items:
             self._world.inventory(giver).give_up(item)
             self._world.inventory(receiver).receive(item, self._world.item(item).spec_id)

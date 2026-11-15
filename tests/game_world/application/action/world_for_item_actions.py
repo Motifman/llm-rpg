@@ -11,7 +11,8 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.value_object import Capacity, HandsNeeded, ItemSpecId, PersonId, WorldId
+from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
+from ai_rpg_world.game_world.domain.value_object import Capacity, Damage, HandsNeeded, ItemSpecId, PersonId, WorldId
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.world_design_for_tests import character, compose_world, item_spec, nouns, passage, spot
@@ -53,6 +54,13 @@ class WorldForItemActions:
     def pass_ticks(self, count: int) -> None:
         for _ in range(count):
             self.scope.run(lambda session: session.clock().advance(self.design.day_night))
+
+    def fell(self, person: PersonId) -> None:
+        self.scope.run(
+            lambda session: (
+                session.aggregates().vitals(person).take_damage(Damage(999), session.facts().now(), WorldHappening())
+            )
+        )
 
     def carried_by(self, person: PersonId) -> tuple[ItemInstanceId, ...]:
         return self._read(lambda facts: facts.inventory(person).items())

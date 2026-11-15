@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import NotTogethe
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import InventoryFullException
+from ai_rpg_world.game_world.domain.exception.person_exception import PersonNotAliveException
 from tests.game_world.application.action.world_for_item_actions import (
     ALICE,
     BOB,
@@ -55,5 +56,18 @@ class TestHandOverItems:
 
         assert isinstance(reply, ActionRefused)
         assert reply.refusal.reason == WorldStateRefusal(RefusalCode(InventoryFullException.error_code))
+        assert world.carried_by(ALICE) == items
+        assert world.carried_by(BOB) == ()
+
+    def test_fallen_receiver_refuses_and_items_stay_with_giver(self) -> None:
+        """倒れている人は受け取れない。倒れた相手に渡そうとすると PERSON_NOT_ALIVE で断られ、品物は渡す側に残る。"""
+        world = WorldForItemActions(alice_carries=TWO_ITEMS)
+        items = world.carried_by(ALICE)
+        world.fell(BOB)
+
+        reply = HandOverItems(world.carry_out)(HandOverItemsCommand(ItemHandOverAttempt(ALICE, BOB, items, Openly())))
+
+        assert isinstance(reply, ActionRefused)
+        assert reply.refusal.reason == WorldStateRefusal(RefusalCode(PersonNotAliveException.error_code))
         assert world.carried_by(ALICE) == items
         assert world.carried_by(BOB) == ()
