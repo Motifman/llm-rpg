@@ -46,6 +46,7 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     BlankSpeechContentException,
     BlankWaitReasonException,
+    HandOverToSelfException,
     NothingToHandOverException,
 )
 from ai_rpg_world.game_world.domain.exception.trigger_exception import (
@@ -349,6 +350,11 @@ class TestHandOver:
         """渡す品物が 1 つも無いと NothingToHandOverException を投げる。"""
         with pytest.raises(NothingToHandOverException):
             ItemHandOverAttempt(ALICE, BOB, (), Openly())
+
+    def test_handing_over_to_oneself_raises(self) -> None:
+        """自分には渡せない。渡す相手を行う人自身にすると、作るときに HandOverToSelfException を投げる。"""
+        with pytest.raises(HandOverToSelfException):
+            ItemHandOverAttempt(ALICE, ALICE, (LAMP,), Openly())
 
 
 class TestTextsOfAttempts:

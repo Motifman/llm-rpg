@@ -72,6 +72,7 @@ refusal_texts:
     GAME_WORLD.NOT_ENOUGH_ITEMS_OF_SPEC: 足りるだけの数を持っていない。
     GAME_WORLD.PACK_IS_EMPTY: 荷には何も入っていない。
     GAME_WORLD.ITEM_NOT_HELD: それを手に持っていない。
+    GAME_WORLD.ITEM_ALREADY_HELD: もう手に持っている。
     GAME_WORLD.ITEM_NOT_PACKED: それは荷にしまっていない。
     GAME_WORLD.NOT_ENOUGH_STOCK: もう残っていない。
     GAME_WORLD.NOT_ENOUGH_COUNT: もう数が足りない。

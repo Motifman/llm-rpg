@@ -32,7 +32,10 @@ from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDec
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
-from ai_rpg_world.game_world.domain.exception.action_exception import NothingToHandOverException
+from ai_rpg_world.game_world.domain.exception.action_exception import (
+    HandOverToSelfException,
+    NothingToHandOverException,
+)
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     NoRouteToDestinationException,
     OccupantNotAtRouteStartException,
@@ -271,6 +274,8 @@ class ItemHandOverAttempt(_BuiltInAttempt):
     def __post_init__(self) -> None:
         if not self.items:
             raise NothingToHandOverException(f"{self.actor.value} hands nothing over to {self.to.value}")
+        if self.actor == self.to:
+            raise HandOverToSelfException(f"{self.actor.value} hands items over to themselves")
 
     def exertion(self) -> Exertion:
         return UsesBody()

@@ -24,6 +24,10 @@ class NothingToHandOverException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.NOTHING_TO_HAND_OVER"
 
 
+class HandOverToSelfException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.HAND_OVER_TO_SELF"
+
+
 class StealthNotAllowedException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.STEALTH_NOT_ALLOWED"
 
