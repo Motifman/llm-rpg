@@ -168,9 +168,7 @@ class _Resolver:
     def domain_types(self, node: ast.expr) -> list[type]:
         candidates = node.elts if isinstance(node, ast.Tuple) else [node]
         resolved = [self.resolve(candidate) for candidate in candidates]
-        return [
-            obj for obj in resolved if isinstance(obj, type) and obj.__module__.startswith(_DOMAIN_PACKAGE + ".")
-        ]
+        return [obj for obj in resolved if isinstance(obj, type) and obj.__module__.startswith(_DOMAIN_PACKAGE + ".")]
 
 
 def _is_none(node: ast.expr) -> bool:
@@ -331,7 +329,9 @@ def test_leak_on_the_allowed_list_does_not_fail(tmp_path: Path) -> None:
 
 def test_failure_message_names_file_shape_and_how_to_fix(tmp_path: Path) -> None:
     """落ちたときの文面に、ファイルと行、形、直し方の手がかりが出る。"""
-    (tmp_path / "module.py").write_text(_NO_WEATHER + "def f(w):\n    return isinstance(w, NoWeather)\n", encoding="utf-8")
+    (tmp_path / "module.py").write_text(
+        _NO_WEATHER + "def f(w):\n    return isinstance(w, NoWeather)\n", encoding="utf-8"
+    )
 
     message = _report(_all_leaks(tmp_path))
 
