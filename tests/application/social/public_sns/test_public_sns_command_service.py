@@ -530,13 +530,12 @@ def test_initial_handoff_attempts_later_recipients_before_reporting_committed_fa
     assert len(set(delivered)) == len(delivered) == 2
 
 
-@pytest.mark.timeout(25)
 def test_more_than_one_batch_of_failed_notifications_does_not_starve_later_success(h):
-    """先頭101件が失敗しても、一度100件までの再送を継続して102件目へ到達し、末尾から再試行へ戻る。"""
+    """1回3件ずつ再送するとき、先頭4件が失敗し続けても、次の再送は続きから選んで5件目へ届け、末尾まで行ったら先頭の失敗分へ戻る。"""
     queued = h.create(None)
-    for index in range(101):
+    for index in range(4):
         queued.publish(2, f"@user1 停止中の宛先 {index}")
-    queued.publish(3, "@user4 百件を超えた後続")
+    queued.publish(3, "@user4 一回分を超えた後続")
     unavailable = {1}
     attempts = []
     delivered = []
@@ -549,18 +548,18 @@ def test_more_than_one_batch_of_failed_notifications_does_not_starve_later_succe
 
     service = h.create(deliver)
     with pytest.raises(RuntimeError):
-        service.retry_pending_notifications()
-    assert len(attempts) == 100
+        service.retry_pending_notifications(limit=3)
+    assert len(attempts) == 3
     with pytest.raises(RuntimeError):
-        service.retry_pending_notifications()
-    assert len(attempts) == 102
+        service.retry_pending_notifications(limit=3)
+    assert len(attempts) == 5
     assert len(delivered) == 1
     # 末尾から先頭へ戻り、後で復旧した宛先も失わない。
     unavailable.clear()
-    assert service.retry_pending_notifications() == 100
-    assert service.retry_pending_notifications() == 1
-    assert service.retry_pending_notifications() == 0
-    assert len(set(delivered)) == len(delivered) == 102
+    assert service.retry_pending_notifications(limit=3) == 3
+    assert service.retry_pending_notifications(limit=3) == 1
+    assert service.retry_pending_notifications(limit=3) == 0
+    assert len(set(delivered)) == len(delivered) == 5
 
 
 def test_recreated_retry_service_starts_at_head_without_losing_pending_notifications(h):

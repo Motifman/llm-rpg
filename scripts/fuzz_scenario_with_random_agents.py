@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
 import os
@@ -311,7 +312,13 @@ def leak_shape(line: str) -> str:
 
 
 def _identifier_pattern(identifiers: Iterable[str]) -> re.Pattern[str] | None:
-    ids = sorted(identifiers, key=len, reverse=True)
+    return _compiled_identifier_pattern(frozenset(identifiers))
+
+
+# 1 手番に何度も同じ ID の集合で呼ばれるので、組み直さない。
+@functools.lru_cache(maxsize=8)
+def _compiled_identifier_pattern(identifiers: frozenset[str]) -> re.Pattern[str] | None:
+    ids = sorted(identifiers, key=lambda name: (-len(name), name))
     if not ids:
         return None
     return re.compile(r"(?<![A-Za-z0-9_])(?:" + "|".join(map(re.escape, ids)) + r")(?![A-Za-z0-9_])")

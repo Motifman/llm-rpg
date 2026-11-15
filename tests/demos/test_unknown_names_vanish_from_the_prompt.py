@@ -53,10 +53,6 @@ def scenario(request: pytest.FixtureRequest, tmp_path: Path) -> Path:
     return _everyone_starts_together(tmp_path, _REPO / source, spot)
 
 
-def _run(scenario: Path) -> list[FuzzResult]:
-    return [run_random_agents(scenario, seed=seed, max_world_ticks=_TICKS) for seed in _SEEDS]
-
-
 def _stranger_findings(results: list[FuzzResult]) -> list[str]:
     return [f"seed={r.seed} tick={f.tick} {f.detail}" for r in results for f in r.findings if f.kind == "stranger_name"]
 
@@ -69,14 +65,15 @@ def _unidentified_turns(results: list[FuzzResult]) -> list[str]:
 class TestUnknownNamesVanish:
     """名前を知らない相手の名前が、手番の人に送るプロンプトのどこにも出ないことを保証する。"""
 
-    @pytest.mark.timeout(45)
-    def test_no_turn_shows_the_name_of_someone_not_yet_named(self, scenario: Path) -> None:
+    # seed を 1 つのテストにまとめると CI で 20 秒を超える。分けて並列に回し、探索する量は減らさない。
+    @pytest.mark.parametrize("seed", _SEEDS)
+    def test_no_turn_shows_the_name_of_someone_not_yet_named(self, scenario: Path, seed: int) -> None:
         """全員が同じ場所から始めてでたらめに行動しても、手番の人が名前を知らない相手の名前は、本文にもツールの定義にも出ない。見た目は出ている。"""
-        results = _run(scenario)
+        results = [run_random_agents(scenario, seed=seed, max_world_ticks=_TICKS)]
 
         assert _unidentified_turns(results) == []
         assert _stranger_findings(results) == []
-        assert sum(r.strangers_seen for r in results) > 0
+        assert results[0].strangers_seen > 0
 
     def test_check_catches_names_shown_in_the_list(self, scenario: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """正の対照: 同じ場所の人の一覧 (と、それを鍵にする対象の候補) の呼び方を実名に戻すと、stranger_name の所見が出る。出なければ、上の試験は何も見ていない。"""
