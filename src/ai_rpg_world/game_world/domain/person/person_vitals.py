@@ -214,6 +214,9 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         if self.is_dead():
             return
         exertion.tire(self, rule)
+        # 行っている最中に始めた行為は、いまの行為の終わりを早めない
+        if isinstance(self._busy_until, WorldTick) and until < self._busy_until:
+            return
         self.start_action(until)
 
     def is_busy(self, now: WorldTick) -> bool:

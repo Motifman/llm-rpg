@@ -604,6 +604,17 @@ class TestBusy:
 class TestStartActing:
     """start_acting が、行為を始めた人を体の使い方に応じて疲れさせ、行っているあいだを始め、去った人には何もしないことを保証する。"""
 
+    def test_acting_while_busy_does_not_end_the_ongoing_action_early(self) -> None:
+        """tick 7 まで行っている人が tick 2 までの行為を始めても、終わりは tick 7 のままで、PersonBecameBusyEvent は出ない。"""
+        vitals = _vitals()
+        vitals.start_action(WorldTick(7))
+        vitals.clear_events()
+
+        vitals.start_acting(DoesNotUseBody(), WorldTick(2), _fatigue())
+
+        assert vitals.is_busy(WorldTick(6))
+        assert not [event for event in vitals.get_events() if isinstance(event, PersonBecameBusyEvent)]
+
     def test_action_using_body_tires_and_makes_busy(self) -> None:
         """UsesBody の行為は疲れを per_exertion だけ増やし、渡した tick まで行っているあいだにする。"""
         vitals = _vitals()

@@ -445,3 +445,7 @@ class GroupDecisionBallotAttempt(_BuiltInAttempt):
 
     def exertion(self) -> Exertion:
         return DoesNotUseBody()
+
+    def cast(self, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        world.group_decision(self.decision).cast(self.actor, self.choice)
+        return facts.rules().duration_of(self.kind(), DefaultDuration())
