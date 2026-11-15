@@ -94,7 +94,8 @@ class PersonVitals:                                 # 人ごと。体力 (HP) �
     def satisfy_hunger(self, amount: HungerAmount, rule: HungerRule) -> None: ...   # 段階が変わったら HungerLevelChangedEvent
     def exert(self, rule: FatigueRule) -> None: ...      # 段階が変わったら FatigueLevelChangedEvent
     def rest(self, amount: FatigueAmount, rule: FatigueRule) -> None: ...   # 段階が変わったら FatigueLevelChangedEvent
-    def start_action(self, until: WorldTick) -> None: ...   # 行っているあいだは、話す以外の行為を断る (Busy)。話すことは呼ばない。PersonBecameBusyEvent
+    def start_action(self, until: WorldTick) -> None: ...   # 行っているあいだは、話す以外の行為を断る (Busy)。PersonBecameBusyEvent
+    def start_acting(self, exertion: Exertion, until: WorldTick, rule: FatigueRule) -> None: ...   # 疲れさせ、start_action。行っている最中に始めた行為 (話すこと) は、いまの行為の終わりを早めない
     def is_busy(self, now: WorldTick) -> bool: ...
     def hp(self) -> HitPoints: ...
     def hunger(self) -> HungerAmount: ...
