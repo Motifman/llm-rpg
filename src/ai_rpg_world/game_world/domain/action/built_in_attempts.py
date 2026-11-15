@@ -26,8 +26,8 @@ from ai_rpg_world.game_world.domain.condition.condition import FailureReason, Hi
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
-from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import NothingToHandOverException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     NoRouteToDestinationException,

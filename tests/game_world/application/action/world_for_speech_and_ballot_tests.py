@@ -80,9 +80,9 @@ class WorldForSpeechAndBallots:
 
     def open_exile_vote(self) -> None:
         self.scope.run(
-            lambda session: session.aggregates()
-            .group_decision(EXILE)
-            .start(frozenset({HARU, NATSU}), frozenset({HARU, NATSU}))
+            lambda session: (
+                session.aggregates().group_decision(EXILE).start(frozenset({HARU, NATSU}), frozenset({HARU, NATSU}))
+            )
         )
 
     def read(self) -> WorldSession:
