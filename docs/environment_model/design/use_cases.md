@@ -136,7 +136,8 @@ class CastBallot:
 class DecideDeathOutcomeHandler(EventHandler[PersonDiedEvent]): ...   # 結末を Died にする
 class PlaceDepartedPersonHandler(EventHandler[PersonDiedEvent]): ...   # departed_persons_act の世界だけ。体は残し、去った人を体のある場所に置く
 class ApplyWorldStageChangeHandler(EventHandler[WorldStageChangedEvent]): ...   # 出る段階の when_left、入る段階の when_entered
-class ApplyGroupDecisionResultHandler(EventHandler[GroupDecisionReachedEvent | GroupDecisionUnresolvedEvent]): ...
+class ApplyGroupDecisionReachedHandler(EventHandler[GroupDecisionReachedEvent]): ...   # when_decided
+class ApplyGroupDecisionUnresolvedHandler(EventHandler[GroupDecisionUnresolvedEvent]): ...   # when_undecided
 class DeliverNoticesOnWakingHandler(EventHandler[PersonRevivedEvent]): ...   # DeliverNoticesOnWaking を呼ぶ
 class DeliverSurroundingsOnArrivalHandler(EventHandler[OccupantEnteredSpotEvent]): ...   # 着いた本人について DeliverSurroundings を呼ぶ
 class DeliverDarkeningHandler(EventHandler[ItemStateChangedEvent | ItemPutAwayEvent | ItemGivenUpEvent | TimeOfDayChangedEvent | WeatherChangedEvent | SpotAtmosphereChangedEvent]): ...

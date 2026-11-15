@@ -11,7 +11,6 @@ from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldC
 from ai_rpg_world.game_world.application.settle_world_conditions import (
     SettleWorldConditions,
     SettleWorldConditionsCommand,
-    SettlingOccasion,
     WorldConditionsDidNotSettleError,
 )
 from ai_rpg_world.game_world.application.world_store import WorldSession
@@ -22,6 +21,7 @@ from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import NotCondition
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.condition.settling_occasion import SettlingOccasion
 from ai_rpg_world.game_world.domain.condition.subject import EachPerson, NamedPerson
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.ending_declaration import EndingDeclaration
