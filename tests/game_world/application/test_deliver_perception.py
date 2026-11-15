@@ -232,15 +232,15 @@ class TestReceiversChosenAfterTheEffect:
     出来事の効果が人を動かすと、動かされる前にその場所にいた人には、その場所の知らせが届かない。
     """
 
-    def test_people_pushed_out_of_the_spot_miss_its_sight(self) -> None:
-        """崩落で広場の alice と bob が広間へ押し出された後に広場の崩落の見える刺激を配ると、誰にも届かない。"""
+    def test_person_pushed_out_of_the_spot_misses_its_sight(self) -> None:
+        """崩落で広場の alice だけが広間へ押し出された後に広場の崩落の見える刺激を配ると、広場に残った bob にだけ届き、alice には届かない。"""
         world = _World()
         world.teleports(_ALICE, _HALL)
-        world.teleports(_BOB, _HALL)
 
         world.deliver(from_actions=(_sight(_SQUARE, clear="天井が崩れ落ちた"),))
 
-        assert world.received.by_person == {}
+        assert world.received.templates_of(_BOB) == ["天井が崩れ落ちた"]
+        assert world.received.templates_of(_ALICE) == []
 
 
 class TestOnePerPerson:
