@@ -206,11 +206,22 @@ SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 | 見える | 明るさで決まる | 自分が関わるものは `NoticedLater`、ほかは `NotPerceived` | 見える | `NotPerceived` |
 | 聞こえる | 音の届き方で決まる | 同上 | 聞こえる | `NotPerceived` |
 | 本人の体 | 感じる | 感じる (気を失っていても痛みや寒さは体に残る。#1974 の 6.) | 体が無いので無い | `NotPerceived` |
-| 世界の知らせ | 届く | `NoticedLater` (知らせの文をそのままためる) | 届く | `NotPerceived` |
+| 世界の知らせ | 届く | `NoticedLater` (知らせの文をそのままためる)。時間帯の知らせは相手から外れる | 届く | `NotPerceived` |
 
 - 去った人は、同じ場所の見える刺激を、明るさとこっそりに関わらず `SeesClearly` で clear の文で見る。音は、その場所に届いていれば `HearsClearly` で聞く。ただし宛先でないささやきは、生きている人と同じくかすか。去った人も行為ができるので、生きている人どうしの秘密が筒抜けにならないようにする
 - 倒れている人は、見える刺激なら同じ場所にいること、音なら届くことだけで `NoticedLater` を受ける。明るさとこっそりの確率は見ない。文は、相手なら `target` の、ほかは `witness` の `noticed_later` で、`NotNoticedLater` なら `NotPerceived`
 - 去った人の行為を生きている人が見るときは、明るさの規則はふだんどおりで、文は `unseen_actor`。`SeesShapes` なら `unidentified()` で当てる
+
+作者が書く結末と時間帯の知らせは、どちらも世界の知らせ (`AnnouncementStimulus`) にする (D2203)。
+
+| 知らせ | 元のイベント | 相手 (`audience`) | 目立ち方 | 倒れている人 |
+|---|---|---|---|---|
+| 結末 (`OutcomeDeclaration.announcement`) | `PersonOutcomeDecidedEvent` | 結末が決まった本人だけ。文の `{each_person}` も本人 | `Notable` | `NoticedLater` でためて、目が覚めたときに届く |
+| 時間帯 (`DayPhaseDeclaration.announcement`) | `TimeOfDayChangedEvent` | 宣言の `audience` で選んだ人。`EveryoneAwake` なら全員。どちらも倒れている人は外す | `Background` | 相手に入れないので、届かず、ためもしない |
+
+- 例: 籠が上がってハルとサヨが外へ出たとき、坑道の奥のゲンには「ゲンは坑道に取り残された」だけが届き、ハルの結末は届かない。籠が上がる様子は、作者が出来事の知らせに書いて周りに伝える
+- 時間帯の知らせをためないのは、目が覚めたときに何時間も前の「夜になった」が届くと、いまの時刻と食い違うため。目が覚めたときの場面で分かれば足りる
+- 本人の体の刺激 (`BodilyStimulus`) にしないのは、倒れていても届いてしまい、結末を目が覚めたときに届ける決まりと食い違うため
 
 移動中の人はどの場所にもいない。見える刺激には気づかず、区間の両端の場所で起きた「大きい」「とても大きい」音だけを隣の場所の音として聞く。聞こえ方は、その音の大きさを `loss_per_passage` 1 つぶん弱めて決める。
 
