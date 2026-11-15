@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Protocol
 
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
@@ -41,12 +42,13 @@ from ai_rpg_world.game_world.domain.value_object import (
     PassageId,
     PersonId,
     SpotId,
+    SpotSectionId,
     Ticks,
     WorldStageId,
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
-from ai_rpg_world.game_world.domain.whereabouts import Location, NotAtSpot, Occupant, PassageInState
+from ai_rpg_world.game_world.domain.whereabouts import Location, NotAtSpot, Occupant, OpenArea, PassageInState
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.subject import Anyone
@@ -62,6 +64,8 @@ if TYPE_CHECKING:
 
 class WhereaboutsReading(Protocol):
     def location_of(self, occupant: Occupant) -> Location: ...
+
+    def sections_of_occupants_at(self, spot: SpotDeclaration) -> Mapping[Occupant, SpotSectionId | OpenArea]: ...
 
     def spot_of(self, occupant: Occupant) -> SpotId | NotAtSpot: ...
 
@@ -88,6 +92,12 @@ class PassageStatesReading(Protocol):
     ) -> tuple[PassageId, ...]: ...
 
     def in_state(self, passage: PassageDeclaration) -> PassageInState: ...
+
+    def touching(
+        self, spot: SpotDeclaration, declared: tuple[PassageDeclaration, ...]
+    ) -> tuple[PassageInState, ...]: ...
+
+    def is_revealed(self, passage: PassageDeclaration) -> bool: ...
 
     def sound_carrying(self, declared: tuple[PassageDeclaration, ...]) -> tuple[PassageInState, ...]: ...
 

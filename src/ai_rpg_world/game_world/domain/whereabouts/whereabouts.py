@@ -18,7 +18,15 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantNotTravellingException,
     SectionFullException,
 )
-from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, Ticks, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import (
+    PassageId,
+    PersonId,
+    SpotId,
+    SpotSectionId,
+    Ticks,
+    WorldId,
+    WorldTick,
+)
 from ai_rpg_world.game_world.domain.whereabouts.location import (
     AtSpot,
     Location,
@@ -199,6 +207,13 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
 
     def occupants_at(self, spot: SpotDeclaration) -> tuple[Occupant, ...]:
         return tuple(occupant for occupant in self._locations if self._spot_of(occupant) == spot.spot_id)
+
+    def sections_of_occupants_at(self, spot: SpotDeclaration) -> Mapping[Occupant, SpotSectionId | OpenArea]:
+        return {
+            occupant: location.section
+            for occupant, location in self._locations.items()
+            if isinstance(location, AtSpot) and location.spot == spot.spot_id
+        }
 
     def spot_of(self, occupant: Occupant) -> SpotId | NotAtSpot:
         spot = self._spot_of(occupant)

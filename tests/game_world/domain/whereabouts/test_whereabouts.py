@@ -498,6 +498,14 @@ class TestWhereaboutsTogetherness:
 
         assert whereabouts.occupants_at(PLAZA) == (BOB, ALICE)
 
+    def test_sections_of_occupants_at_pairs_each_occupant_there_with_the_section_they_are_in(self) -> None:
+        """sections_of_occupants_at は、その場所にいる人ごとに、籠の中なら籠を、外なら OpenArea を返す。ほかの場所の人と移動中の人は入らない。"""
+        whereabouts = _whereabouts((BOB, "plaza"), (ALICE, "plaza"), (CAROL, "plaza"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+        whereabouts.start_travel(CAROL, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        assert whereabouts.sections_of_occupants_at(PLAZA) == {BOB: OpenArea(), ALICE: LIFT.section_id}
+
     def test_occupants_in_and_out_of_a_section_of_the_same_spot_are_together(self) -> None:
         """籠の中の人と籠の外の人は、同じ場所にいるので一緒にいる。"""
         whereabouts = _whereabouts((ALICE, "plaza"), (BOB, "plaza"))
