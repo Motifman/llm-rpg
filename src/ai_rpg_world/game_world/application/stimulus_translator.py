@@ -237,9 +237,8 @@ class StimulusTranslator:
         kind = type(event)
         if kind in NOT_PERCEIVED_EVENT_KINDS:
             return ()
-        translate = _TRANSLATIONS.get(kind)
-        if translate is None:
+        if kind not in _TRANSLATIONS:
             raise UntranslatedEventKindError(
                 f"{kind.__name__} is neither translated into stimuli nor listed as not perceived"
             )
-        return translate(event, design)
+        return _TRANSLATIONS[kind](event, design)
