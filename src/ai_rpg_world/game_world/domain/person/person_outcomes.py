@@ -13,22 +13,44 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
     PersonListedTwiceException,
     PersonNotInWorldException,
 )
-from ai_rpg_world.game_world.domain.value_object import OutcomeId, PersonId, WorldId
+from ai_rpg_world.game_world.domain.value_object import OutcomeId, PersonId, WorldId, WorldTick
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+    from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
+    from ai_rpg_world.game_world.domain.perception.stimulus import Stimulus
+    from ai_rpg_world.game_world.domain.world_records.missed_notices import MissedNotices
 
 
 @final
 @dataclass(frozen=True)
 class Died:
-    pass
+    def announced_to(self, person: PersonId, at: WorldTick) -> tuple[Stimulus, ...]:
+        # 死んだ結末には作者の文が無いので、結末の知らせを出さない (D2203)。
+        return ()
+
+    def notices_on_leaving(self, missed: MissedNotices, at: WorldTick) -> tuple[Perceived, ...]:
+        # 死んだ人は世界から外れないので、たまった知らせを外れるときに渡さない。
+        return ()
+
+    def forget_notices_on_leaving(self, missed: MissedNotices) -> None:
+        pass
 
 
 @final
 @dataclass(frozen=True)
 class DeclaredOutcome:
     outcome: OutcomeDeclaration
+
+    def announced_to(self, person: PersonId, at: WorldTick) -> tuple[Stimulus, ...]:
+        return (self.outcome.announcement_to(person, at),)
+
+    def notices_on_leaving(self, missed: MissedNotices, at: WorldTick) -> tuple[Perceived, ...]:
+        # 気を失ったまま外れた人は目覚めないので、目が覚めたときと同じ順で、外れるときに渡す (D2203)。
+        return missed.perceived_on_waking(at)
+
+    def forget_notices_on_leaving(self, missed: MissedNotices) -> None:
+        missed.clear()
 
 
 Outcome = Died | DeclaredOutcome
@@ -59,6 +81,7 @@ class PersonOutcomeDecidedEvent(DomainEvent):
     world: WorldId
     person: PersonId
     outcome: Outcome
+    at: WorldTick
 
 
 class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
@@ -106,7 +129,7 @@ class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
             ),
         )
 
-    def decide(self, person: PersonId, outcome: Outcome) -> None:
+    def decide(self, person: PersonId, outcome: Outcome, at: WorldTick) -> None:
         current = self.outcome_of(person)
         if not isinstance(current, Undecided):
             raise OutcomeAlreadyDecidedException(f"{person.value} already has the outcome {current}")
@@ -117,6 +140,7 @@ class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
                 world=self._world,
                 person=person,
                 outcome=outcome,
+                at=at,
             )
         )
 

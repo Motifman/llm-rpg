@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     LastsIndefinitely,
     LitWhen,
 )
+from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
@@ -28,9 +29,10 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_name 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, PersonInventory
-from ai_rpg_world.game_world.domain.people import NoVisibleName
+from ai_rpg_world.game_world.domain.people import NoVisibleName, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import DeadPerceiver, DepartedPerceiver, LivingPerceiver
-from ai_rpg_world.game_world.domain.person import Alive, PersonVitals
+from ai_rpg_world.game_world.domain.perception.perceiver import PersonWhoLeftTheWorld
+from ai_rpg_world.game_world.domain.person import Alive, DeclaredOutcome, Down, PersonVitals
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.sound import Loudness, NotReached, SoundLevel
 from ai_rpg_world.game_world.domain.value_object import (
@@ -40,6 +42,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     DisplayName,
     HitPoints,
     ItemSpecId,
+    OutcomeId,
     PersonId,
     StateKeyId,
     Ticks,
@@ -218,6 +221,41 @@ class TestPerceiversInWorld:
         world = _with_dead_alice(departed_persons_act=False)
 
         assert perceivers_in_world(world.facts()) == (DeadPerceiver(person=_ALICE),)
+
+    def test_person_who_left_the_world_by_an_outcome_perceives_without_a_place(self) -> None:
+        """結末が「救出」に決まって体が世界から外れた人は、居場所を引かずに PersonWhoLeftTheWorld になる。"""
+        world = _placed(
+            world_in_memory(world=_WORLD, people=(_ALICE,), spots=(_SQUARE,), vitals=(_vitals(_ALICE),)),
+            _ALICE,
+            _SQUARE,
+        )
+        _leave_by_rescue(world, _ALICE)
+
+        assert perceivers_in_world(world.facts()) == (PersonWhoLeftTheWorld(person=_ALICE, life=Alive()),)
+
+    def test_person_who_fainted_and_left_the_world_perceives_as_fainted(self) -> None:
+        """気を失ったまま結末が決まって外れた人は、倒れたままの PersonWhoLeftTheWorld になる。"""
+        fainted = _vitals(_ALICE)
+        fainted.take_damage(Damage(10), WorldTick(0), WorldHappening())
+        world = _placed(
+            world_in_memory(world=_WORLD, people=(_ALICE,), spots=(_SQUARE,), vitals=(fainted,)), _ALICE, _SQUARE
+        )
+        _leave_by_rescue(world, _ALICE)
+
+        [perceiver] = perceivers_in_world(world.facts())
+
+        assert isinstance(perceiver, PersonWhoLeftTheWorld)
+        assert isinstance(perceiver.life, Down)
+
+
+def _leave_by_rescue(world: WorldSession, person: PersonId) -> None:
+    rescued = OutcomeDeclaration(
+        outcome_id=OutcomeId("rescued"),
+        name=DisplayName("救出"),
+        announcement=TextWithUnassignedPeople("{each_person}は昇降機で外へ出た。"),
+    )
+    world.aggregates().outcomes().decide(person, DeclaredOutcome(rescued), WorldTick(1))
+    world.aggregates().whereabouts().remove(PersonBody(person))
 
 
 def _with_dead_alice(departed_persons_act: bool) -> WorldSession:

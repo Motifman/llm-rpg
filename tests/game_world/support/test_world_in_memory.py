@@ -278,7 +278,7 @@ class TestFactsSeeWhatAggregatesChanged:
         """alice の結末だけを死に決めると、facts の outcomes は alice に死、bob に Undecided を答え、全員は決まっていない。"""
         world = _world()
 
-        world.aggregates().outcomes().decide(_ALICE, Died())
+        world.aggregates().outcomes().decide(_ALICE, Died(), WorldTick(0))
 
         assert world.facts().outcomes().outcome_of(_ALICE) == Died()
         assert world.facts().outcomes().outcome_of(_BOB) == Undecided()

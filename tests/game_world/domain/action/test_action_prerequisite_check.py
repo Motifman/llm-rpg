@@ -273,7 +273,7 @@ class TestActorCannotAct:
     def test_person_whose_outcome_is_decided_cannot_act(self) -> None:
         """生きていても結末が決まった人は、ActorCannotAct で断る。"""
         world = _world()
-        world.aggregates().outcomes().decide(ALICE, DeclaredOutcome(OutcomeId("rescued")))
+        world.aggregates().outcomes().decide(ALICE, DeclaredOutcome(OutcomeId("rescued")), WorldTick(0))
 
         assert _reason(_speak(), world) == ActorCannotAct()
 

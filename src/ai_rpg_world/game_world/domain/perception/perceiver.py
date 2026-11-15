@@ -44,6 +44,9 @@ class LivingPerceiver:
             return Aware()
         return AwareOnWaking() if involved else Unaware()
 
+    def takes_announcement(self, reaches_who_left_the_world: bool) -> bool:
+        return True
+
     def feels_body_of(self, person: PersonId) -> bool:
         return self.person == person
 
@@ -79,6 +82,9 @@ class DepartedPerceiver:
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
         return Aware()
 
+    def takes_announcement(self, reaches_who_left_the_world: bool) -> bool:
+        return True
+
     def feels_body_of(self, person: PersonId) -> bool:
         return False
 
@@ -110,6 +116,45 @@ class DeadPerceiver:
 
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
         return Unaware()
+
+    def takes_announcement(self, reaches_who_left_the_world: bool) -> bool:
+        return True
+
+    def feels_body_of(self, person: PersonId) -> bool:
+        return False
+
+    def is_at(self, spot: SpotId) -> bool:
+        return False
+
+    def sight_in(self, lighting: Lighting) -> SightQuality:
+        return SeesNothing()
+
+    def sees_departed_people(self) -> bool:
+        return False
+
+    def spot_in_view(self) -> SpotId | NothingInView:
+        return NothingInView()
+
+    def notices_stealthy_act(self, chance: Probability, attentive_bonus: Probability, random: RandomSource) -> bool:
+        return False
+
+    def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
+        return HearsNothing()
+
+
+@final
+@dataclass(frozen=True)
+class PersonWhoLeftTheWorld:
+    person: PersonId
+    life: Alive | Down
+
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
+        if isinstance(self.life, Alive):
+            return Aware()
+        return AwareOnWaking() if involved else Unaware()
+
+    def takes_announcement(self, reaches_who_left_the_world: bool) -> bool:
+        return reaches_who_left_the_world
 
     def feels_body_of(self, person: PersonId) -> bool:
         return False
@@ -143,4 +188,4 @@ def _spot_in_view(location: Location) -> SpotId | NothingInView:
             assert_never(location)
 
 
-Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver
+Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver | PersonWhoLeftTheWorld

@@ -17,6 +17,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ObjectAppearance,
     ObjectStateKeyDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.object_looks_declaration import (
     NoLook,
@@ -25,15 +26,18 @@ from ai_rpg_world.game_world.domain.declaration.verb.object_looks_declaration im
 )
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.people import Unidentified
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople, Unidentified
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.surroundings import VisibleSurroundings
+from ai_rpg_world.game_world.domain.person import DeclaredOutcome
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
 from ai_rpg_world.game_world.domain.value_object import (
     Damage,
     DescriptionText,
+    DisplayName,
     ObjectId,
+    OutcomeId,
     PersonId,
     StateKeyId,
     Ticks,
@@ -79,6 +83,11 @@ _CHEST_LOOKS = ObjectLooksDeclaration(
     ),
 )
 _CAVE_TO_HUT = passage("cave_hut", ("cave", "hut"))
+_RESCUED = OutcomeDeclaration(
+    outcome_id=OutcomeId("rescued"),
+    name=DisplayName("救出"),
+    announcement=TextWithUnassignedPeople("{each_person}は外へ出た。"),
+)
 
 
 def _cave(lighting: Lighting) -> SpotDeclaration:
@@ -102,6 +111,7 @@ class _World:
                 objects=[_CHEST, _HIDDEN_NICHE, _FAR_SHELF],
                 item_specs=[_ROPE],
                 characters=[character("alice", "cave"), bob, character("carol", "cave"), character("dave", "hut")],
+                outcomes=[_RESCUED],
             ),
             object_looks=[_CHEST_LOOKS],
             world_rules=replace(world_rules_for_tests(), departed_persons_act=departed_persons_act),
@@ -160,6 +170,14 @@ def _dies(person: PersonId) -> Callable[[WorldSession], None]:
         _falls(person)(session)
         session.aggregates().vitals(person).pass_time(_NOW, DeathRule(grace=Ticks(0)), session.facts().rules().hunger)
         session.aggregates().whereabouts().place_departed(person, departed_persons_act=True)
+
+    return work
+
+
+def _rescued(person: PersonId) -> Callable[[WorldSession], None]:
+    def work(session: WorldSession) -> None:
+        session.aggregates().outcomes().decide(person, DeclaredOutcome(_RESCUED), _NOW)
+        session.aggregates().whereabouts().remove(PersonBody(person))
 
     return work
 
@@ -306,3 +324,19 @@ class TestLookAround:
         )
 
         assert world.looks_around(_CAROL) == NothingInView()
+
+    def test_person_who_left_the_world_has_nothing_in_view(self) -> None:
+        """結末が「救出」に決まって世界から外れた carol が見渡すと、明るい洞窟にいたことに関わらず場面は無い。"""
+        world = _World(Lighting.BRIGHT)
+        world.change(_rescued(_CAROL))
+
+        assert world.looks_around(_CAROL) == NothingInView()
+
+    def test_person_who_left_the_world_does_not_appear_in_the_view(self) -> None:
+        """世界から外れた carol は、同じ洞窟の alice の場面に、人としても倒れた体としても出ない。"""
+        world = _World(Lighting.BRIGHT)
+        world.change(_rescued(_CAROL))
+
+        surroundings = _seen(world.looks_around(_ALICE))
+
+        assert (len(surroundings.people), len(surroundings.bodies)) == (1, 0)

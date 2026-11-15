@@ -308,7 +308,7 @@ class TestOutcomesAndPeople:
     def test_outcome_is(self) -> None:
         """結末が死に決まった alice は、死の条件で真。まだ決まっていない bob を相手にすると偽。"""
         a_world = _world()
-        a_world.aggregates().outcomes().decide(ALICE, Died())
+        a_world.aggregates().outcomes().decide(ALICE, Died(), WorldTick(0))
         condition = OutcomeIsCondition(who=Target(), outcome=Died(), failure_text=NoText())
 
         assert condition.holds(a_world.facts(), ActionAttemptForTests(actor_id=BOB, target=ALICE))
@@ -318,11 +318,11 @@ class TestOutcomesAndPeople:
         """3 人のうち 2 人だけ決まっていれば偽、3 人とも決まれば真。"""
         a_world = _world()
         condition = AllOutcomesDecidedCondition(failure_text=NoText())
-        a_world.aggregates().outcomes().decide(ALICE, Died())
-        a_world.aggregates().outcomes().decide(BOB, Died())
+        a_world.aggregates().outcomes().decide(ALICE, Died(), WorldTick(0))
+        a_world.aggregates().outcomes().decide(BOB, Died(), WorldTick(0))
         assert not condition.holds(a_world.facts(), _BY_ALICE)
 
-        a_world.aggregates().outcomes().decide(CAROL, Died())
+        a_world.aggregates().outcomes().decide(CAROL, Died(), WorldTick(0))
 
         assert condition.holds(a_world.facts(), _BY_ALICE)
 

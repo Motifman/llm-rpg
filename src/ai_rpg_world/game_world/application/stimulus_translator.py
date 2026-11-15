@@ -149,6 +149,10 @@ def _joint_timed_out(event: JointActionTimedOutEvent, design: WorldDesign) -> tu
     )
 
 
+def _outcome_decided(event: PersonOutcomeDecidedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    return event.outcome.announced_to(event.person, event.at)
+
+
 def _ran_out(event: ItemRanOutEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
     text = design.nouns.item_spec_of(event.spec_id).lasts.ended_notice()
     return (event.where.read(ItemRanOutNotice(text, event.at)),)
@@ -162,6 +166,7 @@ _TRANSLATIONS: dict[type[DomainEvent], Callable[[Any, WorldDesign], tuple[Stimul
     HappeningFiredEvent: _happened,
     JointActionCompletedEvent: _joint_completed,
     JointActionTimedOutEvent: _joint_timed_out,
+    PersonOutcomeDecidedEvent: _outcome_decided,
 }
 
 NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
@@ -204,7 +209,6 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         PersonJoinedGroupEvent,
         PersonLeftGroupEvent,
         PersonNamedEvent,
-        PersonOutcomeDecidedEvent,
         PersonRevivedEvent,
         ReactionFiredEvent,
         SpotAtmosphereChangedEvent,

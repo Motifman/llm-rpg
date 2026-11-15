@@ -22,7 +22,7 @@ from ai_rpg_world.game_world.domain.person import (
     PersonOutcomesMemento,
     Undecided,
 )
-from ai_rpg_world.game_world.domain.value_object import DisplayName, OutcomeId, PersonId, WorldId
+from ai_rpg_world.game_world.domain.value_object import DisplayName, OutcomeId, PersonId, WorldId, WorldTick
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
@@ -72,7 +72,7 @@ class TestDecide:
         """宣言した結末を決めると outcome_of がそれを返し、PersonOutcomeDecidedEvent をためる。"""
         outcomes = _outcomes()
 
-        outcomes.decide(_BOB, _ESCAPED)
+        outcomes.decide(_BOB, _ESCAPED, WorldTick(0))
 
         assert outcomes.outcome_of(_BOB) == _ESCAPED
         assert outcomes.undecided_people() == (_ALICE, _CAROL)
@@ -84,18 +84,18 @@ class TestDecide:
         """宣言しなくても、死 (Died) を結末として決められる。"""
         outcomes = _outcomes()
 
-        outcomes.decide(_ALICE, Died())
+        outcomes.decide(_ALICE, Died(), WorldTick(0))
 
         assert outcomes.outcome_of(_ALICE) == Died()
 
     def test_deciding_twice_raises_domain_exception_and_keeps_the_first(self) -> None:
         """一度決まった結末をもう一度決めると OutcomeAlreadyDecidedException を投げ、最初の結末のままでイベントもためない。"""
         outcomes = _outcomes()
-        outcomes.decide(_ALICE, Died())
+        outcomes.decide(_ALICE, Died(), WorldTick(0))
         outcomes.clear_events()
 
         with pytest.raises(OutcomeAlreadyDecidedException):
-            outcomes.decide(_ALICE, _ESCAPED)
+            outcomes.decide(_ALICE, _ESCAPED, WorldTick(0))
 
         assert outcomes.outcome_of(_ALICE) == Died()
         assert outcomes.get_events() == []
@@ -105,7 +105,7 @@ class TestDecide:
         outcomes = _outcomes()
 
         for person in (_ALICE, _BOB, _CAROL):
-            outcomes.decide(person, Died())
+            outcomes.decide(person, Died(), WorldTick(0))
 
         assert outcomes.all_decided()
         assert outcomes.undecided_people() == ()
@@ -113,7 +113,7 @@ class TestDecide:
     def test_deciding_for_a_person_not_in_the_world_raises_domain_exception(self) -> None:
         """世界にいない人の結末を決めると PersonNotInWorldException を投げる。"""
         with pytest.raises(PersonNotInWorldException):
-            _outcomes().decide(PersonId("dave"), Died())
+            _outcomes().decide(PersonId("dave"), Died(), WorldTick(0))
 
     def test_asking_about_a_person_not_in_the_world_raises_domain_exception(self) -> None:
         """世界にいない人の結末を聞くと PersonNotInWorldException を投げる。"""
@@ -136,8 +136,8 @@ class TestPersonOutcomesMemento:
     def test_rebuilt_outcomes_answer_like_the_original(self) -> None:
         """alice が死に、bob が脱出したあと作り直すと、memento も各人の結末も元と同じで、未決は carol だけ。"""
         outcomes = _outcomes()
-        outcomes.decide(_ALICE, Died())
-        outcomes.decide(_BOB, _ESCAPED)
+        outcomes.decide(_ALICE, Died(), WorldTick(0))
+        outcomes.decide(_BOB, _ESCAPED, WorldTick(0))
 
         rebuilt = rebuilt_from_memento(outcomes, _DESIGN.nouns)
 
@@ -157,16 +157,16 @@ class TestPersonOutcomesMemento:
     def test_rebuilt_outcomes_still_refuse_deciding_twice(self) -> None:
         """alice が死んだあと作り直してから alice の結末を決めると、OutcomeAlreadyDecidedException を投げる。"""
         outcomes = _outcomes()
-        outcomes.decide(_ALICE, Died())
+        outcomes.decide(_ALICE, Died(), WorldTick(0))
         rebuilt = rebuilt_from_memento(outcomes, _DESIGN.nouns)
 
         with pytest.raises(OutcomeAlreadyDecidedException):
-            rebuilt.decide(_ALICE, _ESCAPED)
+            rebuilt.decide(_ALICE, _ESCAPED, WorldTick(0))
 
     def test_rebuilding_records_no_event(self) -> None:
         """結末を決めたあとの memento から作り直しても、作り直したものはイベントをためていない。"""
         outcomes = _outcomes()
-        outcomes.decide(_ALICE, Died())
+        outcomes.decide(_ALICE, Died(), WorldTick(0))
 
         assert rebuilt_from_memento(outcomes, _DESIGN.nouns).get_events() == []
 
