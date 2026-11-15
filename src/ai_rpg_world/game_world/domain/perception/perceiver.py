@@ -8,7 +8,7 @@ from typing_extensions import assert_never
 from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.exception.perception_exception import DeadPersonCannotPerceiveAsLivingException
 from ai_rpg_world.game_world.domain.lighting.lighting import Lighting
-from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SightQuality
+from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SightQuality
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.surroundings_awareness import (
     Aware,
@@ -103,6 +103,36 @@ class DepartedPerceiver:
         return HearsClearly()
 
 
+@final
+@dataclass(frozen=True)
+class DeadPerceiver:
+    person: PersonId
+
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
+        return Unaware()
+
+    def feels_body_of(self, person: PersonId) -> bool:
+        return False
+
+    def is_at(self, spot: SpotId) -> bool:
+        return False
+
+    def sight_in(self, lighting: Lighting) -> SightQuality:
+        return SeesNothing()
+
+    def sees_departed_people(self) -> bool:
+        return False
+
+    def spot_in_view(self) -> SpotId | NothingInView:
+        return NothingInView()
+
+    def notices_stealthy_act(self, chance: Probability, attentive_bonus: Probability, random: RandomSource) -> bool:
+        return False
+
+    def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
+        return HearsNothing()
+
+
 def _spot_in_view(location: Location) -> SpotId | NothingInView:
     match location:
         case AtSpot(spot=spot):
@@ -113,4 +143,4 @@ def _spot_in_view(location: Location) -> SpotId | NothingInView:
             assert_never(location)
 
 
-Perceiver = LivingPerceiver | DepartedPerceiver
+Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver

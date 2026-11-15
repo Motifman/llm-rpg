@@ -7,7 +7,12 @@ from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNotic
 from ai_rpg_world.game_world.domain.perception.not_seen_in_dim import NotSeenInDim
 from ai_rpg_world.game_world.domain.perception.not_seen_without_actor import NotSeenWithoutActor
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, PerceivedQuality, Told
-from ai_rpg_world.game_world.domain.perception.perceiver import DepartedPerceiver, LivingPerceiver, Perceiver
+from ai_rpg_world.game_world.domain.perception.perceiver import (
+    DeadPerceiver,
+    DepartedPerceiver,
+    LivingPerceiver,
+    Perceiver,
+)
 from ai_rpg_world.game_world.domain.perception.perception_outcome import (
     NoticedLater,
     NotPerceived,
@@ -37,6 +42,7 @@ __all__ = [
     "AwareOnWaking",
     "Background",
     "BodilyStimulus",
+    "DeadPerceiver",
     "DepartedPerceiver",
     "Felt",
     "ItemRanOutNotice",

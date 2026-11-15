@@ -16,7 +16,7 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
     PersonStartsFallenException,
     StatusEffectKindRepeatedException,
 )
-from ai_rpg_world.game_world.domain.perception import DepartedPerceiver, LivingPerceiver
+from ai_rpg_world.game_world.domain.perception import DeadPerceiver, DepartedPerceiver, LivingPerceiver
 from ai_rpg_world.game_world.domain.person import (
     Alive,
     Dead,
@@ -968,9 +968,9 @@ class TestPerceiverAt:
         assert perceiver == DepartedPerceiver(person=_ALICE, location=_IN_THE_SQUARE)
 
     def test_dead_person_perceives_nothing_when_departed_persons_do_not_act(self) -> None:
-        """死んだ人は、去った人として動かない世界では None になり、何も知覚しない。"""
+        """死んだ人は、去った人として動かない世界では、居場所を持たない DeadPerceiver になる。"""
         vitals = _dead()
 
         perceiver = vitals.perceiver_at(_IN_THE_SQUARE, departed_persons_act=False, attentive=False)
 
-        assert perceiver is None
+        assert perceiver == DeadPerceiver(person=_ALICE)

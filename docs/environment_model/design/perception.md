@@ -169,7 +169,7 @@ class AnnouncementStimulus:
 ## 知覚する人
 
 ```python
-Perceiver = LivingPerceiver | DepartedPerceiver
+Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver
 
 @final
 @dataclass(frozen=True)
@@ -189,10 +189,17 @@ class DepartedPerceiver:                  # 死んで、去った人として動
 
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...
 
+@final
+@dataclass(frozen=True)
+class DeadPerceiver:                      # 死んで、去った人としても動かない人
+    person: PersonId
+
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...   # いつも Unaware
+
 SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 ```
 
-死んだ人が去った人として行為をしない世界 (`departed_persons_act` が偽) の人には、`DeliverPerception` が知覚する人を作らない。何も知覚しない。
+死んだ人が去った人として行為をしない世界 (`departed_persons_act` が偽) の死んだ人は `DeadPerceiver` になり、何も知覚しない。どの場所にもおらず、体も感じず、周りに気づかないので、どの刺激も `NotPerceived` になり、見渡しても `NothingInView`。
 
 | 刺激 | `LivingPerceiver` (`Alive`) | `LivingPerceiver` (`Down`) | `DepartedPerceiver` |
 |---|---|---|---|

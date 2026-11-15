@@ -29,7 +29,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type im
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, PersonInventory
 from ai_rpg_world.game_world.domain.people import NoVisibleName
-from ai_rpg_world.game_world.domain.perception import DepartedPerceiver, LivingPerceiver
+from ai_rpg_world.game_world.domain.perception import DeadPerceiver, DepartedPerceiver, LivingPerceiver
 from ai_rpg_world.game_world.domain.person import Alive, PersonVitals
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.sound import Loudness, NotReached, SoundLevel
@@ -214,10 +214,10 @@ class TestPerceiversInWorld:
         )
 
     def test_dead_person_perceives_nothing_when_departed_persons_do_not_act(self) -> None:
-        """去った人として動かない世界で死んだ人は、知覚する人にならない。"""
+        """去った人として動かない世界で死んだ人は、何も知覚しない DeadPerceiver になる。"""
         world = _with_dead_alice(departed_persons_act=False)
 
-        assert perceivers_in_world(world.facts()) == ()
+        assert perceivers_in_world(world.facts()) == (DeadPerceiver(person=_ALICE),)
 
 
 def _with_dead_alice(departed_persons_act: bool) -> WorldSession:
