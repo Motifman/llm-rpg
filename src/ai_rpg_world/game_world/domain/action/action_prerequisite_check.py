@@ -5,6 +5,7 @@ from typing import Protocol, TypeVar, final
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.action.available_actions import AvailableAction, Doable, NotNow
+from ai_rpg_world.game_world.domain.action.built_in_attempts import GroupDecisionBallotAttempt
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
     ActorCannotAct,
     Busy,
@@ -13,6 +14,7 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import (
     NotAllowedInThisStage,
     TooTired,
 )
+from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
@@ -63,6 +65,19 @@ class ActionPrerequisiteCheck:
             return AvailableAction(
                 attempt=attempt, standing=NotNow(refusal_texts.precondition_text(failure, attempt.actor))
             )
+        return AvailableAction(attempt=attempt, standing=Doable())
+
+    def available_ballot(
+        self, attempt: GroupDecisionBallotAttempt, facts: WorldFacts, refusal_texts: RefusalTexts
+    ) -> AvailableAction:
+        refusal = self.refusal(attempt, facts, refusal_texts)
+        if refusal is not None:
+            return AvailableAction(attempt=attempt, standing=NotNow(refusal.text))
+        # 前提だけで分けると投票済みの票が「できる」に出て、試すと集約に断られる。
+        turned_down = attempt.refusal_by_decision(facts)
+        if turned_down is not None:
+            text = refusal_texts.world_state_text(RefusalCode.of(turned_down), attempt.actor)
+            return AvailableAction(attempt=attempt, standing=NotNow(text))
         return AvailableAction(attempt=attempt, standing=Doable())
 
     def refusal(self, attempt: ActionAttempt, facts: WorldFacts, refusal_texts: RefusalTexts) -> ActionRefusal | None:

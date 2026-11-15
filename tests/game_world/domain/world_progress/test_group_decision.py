@@ -533,6 +533,66 @@ class TestGroupDecisionClose:
         assert decision.get_events() == events_after_tally
 
 
+class TestGroupDecisionBallotChoices:
+    """GroupDecision.ballot_choices_for が、投票する人に受け付ける票を人の並びの順に答え、ballot_refusal が cast と同じ判断で断る理由を答えることを保証する。"""
+
+    _PEOPLE = (_DAVE, _CAROL, _BOB, _ALICE)
+
+    def test_voter_gets_vote_for_every_choice_in_people_order_then_abstain(self) -> None:
+        """開いた決定の投票する人 alice には、渡した人の並び (dave, carol, bob, alice) のうち選ばれうる人への票が自分も含めてこの順に並び、最後に棄権が付く。"""
+        decision = _started(choices=frozenset({_ALICE, _BOB, _CAROL}))
+
+        choices = decision.ballot_choices_for(_ALICE, self._PEOPLE)
+
+        assert choices == (VoteFor(_CAROL), VoteFor(_BOB), VoteFor(_ALICE), Abstain())
+
+    def test_abstain_is_not_offered_when_not_allowed(self) -> None:
+        """棄権を許さない決定では、alice の票に棄権は付かない。"""
+        decision = _started(abstain_allowed=False)
+
+        choices = decision.ballot_choices_for(_ALICE, self._PEOPLE)
+
+        assert Abstain() not in choices
+
+    def test_non_voter_gets_no_choices(self) -> None:
+        """投票する人に入っていない dave には、何の票も答えない。"""
+        decision = _started()
+
+        assert decision.ballot_choices_for(_DAVE, self._PEOPLE) == ()
+
+    def test_closed_decision_gives_no_choices(self) -> None:
+        """始まっていない決定では、alice にも何の票も答えない。"""
+        assert _decision().ballot_choices_for(_ALICE, self._PEOPLE) == ()
+
+    def test_withdrawn_choice_is_no_longer_offered(self) -> None:
+        """死んで選ばれうる人から外れた carol への票は、alice に答えない。"""
+        decision = _started()
+        decision.withdraw_person(_CAROL, Dead(died_at=WorldTick(0)))
+
+        choices = decision.ballot_choices_for(_ALICE, self._PEOPLE)
+
+        assert VoteFor(_CAROL) not in choices
+
+    def test_refusal_of_acceptable_ballot_is_none(self) -> None:
+        """まだ入れていない alice の bob への票には、断る理由が無い。"""
+        assert _started().ballot_refusal(_ALICE, VoteFor(_BOB)) is None
+
+    def test_refusal_of_second_ballot_is_the_exception_cast_raises(self) -> None:
+        """一度入れた alice の二度目の票には、cast が投げるのと同じ BallotAlreadyCastException を答え、決定は変わらない。"""
+        decision = _started()
+        decision.cast(_ALICE, VoteFor(_BOB))
+        decision.clear_events()
+
+        refusal = decision.ballot_refusal(_ALICE, Abstain())
+
+        assert isinstance(refusal, BallotAlreadyCastException)
+        assert decision.get_events() == []
+
+    def test_refusal_on_closed_decision_is_not_open(self) -> None:
+        """始まっていない決定への票には、GroupDecisionNotOpenException を答える。"""
+        assert isinstance(_decision().ballot_refusal(_ALICE, Abstain()), GroupDecisionNotOpenException)
+
+
 class TestGroupDecisionIdentity:
     """GroupDecision が、集団の決定の宣言の ID を自分の ID として持つことを保証する。"""
 

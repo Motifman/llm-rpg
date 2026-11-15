@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration
+from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     AbstainNotAllowedException,
     BallotAlreadyCastException,
@@ -180,8 +181,10 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         )
 
     def cast(self, voter: PersonId, choice: VoteFor | Abstain) -> None:
-        self._require_open()
-        self._accept(voter, choice)
+        refusal = self.ballot_refusal(voter, choice)
+        if refusal is not None:
+            raise refusal
+        self._ballots[voter] = choice
         self.add_event(BallotCastEvent(**new_event_stamp(), decision_id=self._decision_id, voter=voter, choice=choice))
         self._tally_if_everyone_cast()
 
@@ -222,6 +225,17 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
     def is_open(self) -> bool:
         return self._open
 
+    def ballot_choices_for(self, voter: PersonId, people: tuple[PersonId, ...]) -> tuple[VoteFor | Abstain, ...]:
+        if not self._open or voter not in self._voters:
+            return ()
+        abstain = (Abstain(),) if self._abstain_allowed else ()
+        return (*(VoteFor(person) for person in people if person in self._choices), *abstain)
+
+    def ballot_refusal(self, voter: PersonId, choice: VoteFor | Abstain) -> WorldRefusal | None:
+        if not self._open:
+            return GroupDecisionNotOpenException(f"{self._decision_id} is not open")
+        return self._unacceptable(voter, choice)
+
     def _tally_if_everyone_cast(self) -> None:
         if self._voters <= self._ballots.keys():
             self._tally()
@@ -245,27 +259,22 @@ class GroupDecision(AggregateRoot[GroupDecisionEvent]):
         )
 
     def _accept(self, voter: PersonId, choice: VoteFor | Abstain) -> None:
-        self._require_voter(voter)
-        if voter in self._ballots:
-            raise BallotAlreadyCastException(f"{voter} has already cast in {self._decision_id}")
-        if isinstance(choice, Abstain) and not self._abstain_allowed:
-            raise AbstainNotAllowedException(f"{self._decision_id} does not allow abstaining")
-        if isinstance(choice, VoteFor):
-            self._require_choice(choice.person)
+        refusal = self._unacceptable(voter, choice)
+        if refusal is not None:
+            raise refusal
         self._ballots[voter] = choice
+
+    def _unacceptable(self, voter: PersonId, choice: VoteFor | Abstain) -> WorldRefusal | None:
+        if voter not in self._voters:
+            return VoterNotInDecisionException(f"{voter} is not a voter in {self._decision_id}")
+        if voter in self._ballots:
+            return BallotAlreadyCastException(f"{voter} has already cast in {self._decision_id}")
+        if isinstance(choice, Abstain) and not self._abstain_allowed:
+            return AbstainNotAllowedException(f"{self._decision_id} does not allow abstaining")
+        if isinstance(choice, VoteFor) and choice.person not in self._choices:
+            return ChoiceNotInDecisionException(f"{choice.person} is not a choice in {self._decision_id}")
+        return None
 
     def _require_voters(self, voters: frozenset[PersonId]) -> None:
         if not voters:
             raise NoVotersGivenException(f"{self._decision_id} needs at least one voter")
-
-    def _require_open(self) -> None:
-        if not self._open:
-            raise GroupDecisionNotOpenException(f"{self._decision_id} is not open")
-
-    def _require_voter(self, voter: PersonId) -> None:
-        if voter not in self._voters:
-            raise VoterNotInDecisionException(f"{voter} is not a voter in {self._decision_id}")
-
-    def _require_choice(self, choice: PersonId) -> None:
-        if choice not in self._choices:
-            raise ChoiceNotInDecisionException(f"{choice} is not a choice in {self._decision_id}")
