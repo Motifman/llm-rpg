@@ -6,7 +6,6 @@ from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldC
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.built_in_attempts import ItemHandOverAttempt, TravelAttempt
-from ai_rpg_world.game_world.domain.action.delivery import Delivery
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.value_object import ItemSpecId, PersonId, SpotId, WorldId
@@ -78,7 +77,7 @@ class TestActorSituationOf:
         """2 つの品物を渡す試みは、品物ごとに種類を持つ。"""
         session = _opened_world()
         rope, lamp = session.facts().inventory(_ALICE).items()
-        attempt = ItemHandOverAttempt(_ALICE, (Delivery(rope, _BOB), Delivery(lamp, _BOB)), Openly())
+        attempt = ItemHandOverAttempt(_ALICE, _BOB, (rope, lamp), Openly())
 
         situation = ActorSituation.of(attempt, session.facts())
 

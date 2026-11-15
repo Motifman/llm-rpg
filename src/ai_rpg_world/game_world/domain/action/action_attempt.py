@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, final
 
@@ -12,13 +13,15 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
-from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId
+from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, ObjectId, PersonId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Occupant, PersonBody
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
     from ai_rpg_world.game_world.domain.condition.aggregate_readings import PersonVitalsReading
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.person import PersonVitals
     from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 
@@ -135,3 +138,5 @@ class ActionAttempt(Protocol):
     def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool: ...
 
     def done_as(self) -> frozenset[ActionKind | InteractionId]: ...
+
+    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct: ...

@@ -29,6 +29,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     EndingDeclaration,
     PerceptionDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
@@ -122,6 +123,9 @@ def refusal_texts(node: YamlNode) -> RefusalTexts:
     )
 
 
+_ITEM_JOINER = "item_joiner"
+
+
 def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -> BuiltInActionPerceptions:
     speech_and_arrival = (
         BuiltInPerceptionRow.whisper(),
@@ -130,7 +134,7 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
         BuiltInPerceptionRow.arrival(),
     )
     entries = node.entries()
-    rows = node.fields(*(name for name, _ in entries))
+    rows = node.fields(*(name for name, _ in entries), _ITEM_JOINER)
 
     def read(written: YamlNode, row: BuiltInPerceptionRow) -> PerceptionDeclaration:
         return perceptions.perception(written, has_target=row.has_target, target_is_down=row.target_is_down)
@@ -141,7 +145,7 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
     by_kind = {
         YamlNode(name, written.path).enum(ActionKind): written
         for name, written in entries
-        if name not in {row.name for row in speech_and_arrival}
+        if name not in {row.name for row in speech_and_arrival} | {_ITEM_JOINER}
     }
     whisper, ordinary_voice, shout, arrival = speech_and_arrival
     return node.build(
@@ -151,6 +155,7 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
             ordinary_voice=read_row(ordinary_voice),
             shout=read_row(shout),
             arrival=read_row(arrival),
+            item_joiner=ItemNameJoiner(rows.required(_ITEM_JOINER).text()),
         )
     )
 

@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.declaration.verb import NoticedOnWaking, ObjectLook
+from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, ScenarioFile
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -273,6 +274,27 @@ class TestSpeechAndArrivalPerceptions:
 
         assert [flaw.location.field for flaw in flaws] == ["built_in_action_perceptions"]
         assert "arrival" in flaws[0].reason
+
+    def test_item_joiner_is_read_from_the_common_part(self, tmp_path: Path) -> None:
+        """取り込んだ共通の部品の item_joiner が、品物の呼び名をつなぐ言葉になる。"""
+        perceptions = _load(tmp_path).design.built_in_action_perceptions
+
+        assert perceptions.item_joiner == ItemNameJoiner("と")
+
+    def test_missing_item_joiner_is_a_flaw(self, tmp_path: Path) -> None:
+        """共通の部品にもシナリオにも item_joiner が無いと、その欄の場所を付けた DesignFlaw になる。"""
+        path = _scenario(tmp_path, _LIFT_LANDING)
+        common = tmp_path / "common.yaml"
+        common.write_text(common.read_text(encoding="utf-8").replace("  item_joiner: と\n", ""), encoding="utf-8")
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        assert [flaw.location for flaw in raised.value.flaws] == [
+            DesignLocation("world", "world", "built_in_action_perceptions.item_joiner").in_file(
+                ScenarioFile("common.yaml")
+            )
+        ]
 
 
 class TestBuiltInTargetTexts:

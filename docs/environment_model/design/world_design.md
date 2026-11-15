@@ -604,6 +604,7 @@ class BuiltInActionPerceptions:             # どの世界にもある行為 (�
     ordinary_voice: PerceptionDeclaration
     shout: PerceptionDeclaration
     arrival: PerceptionDeclaration          # 着いた場所にいた人へ。行為ではなく OccupantEnteredSpotEvent から作り、着いた本人には届けない (#2061)
+    item_joiner: ItemNameJoiner             # 渡す行為で品物が 2 つ以上のとき、{item} の呼び名をつなぐ言葉 (共通の部品では「と」)。1 つのときは使わない。書かなければ読み込みで止める。つなぐ言葉をコードに持たないため (#2152)
 
     def speech(self, reach: Whisper | OrdinaryVoice | Shout) -> PerceptionDeclaration: ...
     def rows(self) -> tuple[tuple[BuiltInPerceptionRow, PerceptionDeclaration], ...]: ...

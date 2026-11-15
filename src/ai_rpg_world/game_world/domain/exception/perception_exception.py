@@ -11,3 +11,7 @@ class TargetNotInvolvedException(GameWorldDomainException):
 
 class PerceptionTargetNotGivenException(GameWorldDomainException):
     error_code = "GAME_WORLD.PERCEPTION.TARGET_NOT_GIVEN"
+
+
+class PerceivedItemSpecNotGivenException(GameWorldDomainException):
+    error_code = "GAME_WORLD.PERCEPTION.ITEM_SPEC_NOT_GIVEN"

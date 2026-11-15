@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     NoticedOnWaking,
     PerceptionDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.verb.sound_declaration import SoundDeclaration
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
     AnnouncementInBuiltInActionPerceptionException,
@@ -78,6 +79,7 @@ def _perceptions(
         ordinary_voice=ordinary_voice or _seen_as("{actor}が何か話している。"),
         shout=shout or _seen_as("{actor}が叫んだ。"),
         arrival=arrival or _seen_as("{actor}がやって来た。"),
+        item_joiner=ItemNameJoiner("と"),
     )
 
 

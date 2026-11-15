@@ -57,6 +57,7 @@ refusal_texts:
   unlisted: うまくいかなかった。
 
 built_in_action_perceptions:
+  item_joiner: と
   travel: &quiet { witness: { clear: "{actor}が動いた。" }, sound: null }
   whisper: *quiet
   speak: *quiet
