@@ -9,6 +9,10 @@ class ItemNotHeldException(WorldRefusal):
     error_code = "GAME_WORLD.ITEM_NOT_HELD"
 
 
+class ItemAlreadyHeldException(WorldRefusal):
+    error_code = "GAME_WORLD.ITEM_ALREADY_HELD"
+
+
 class ItemNotPackedException(WorldRefusal):
     error_code = "GAME_WORLD.ITEM_NOT_PACKED"
 
