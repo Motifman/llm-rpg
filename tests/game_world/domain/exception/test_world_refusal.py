@@ -17,6 +17,7 @@ _WORLD_REFUSALS = frozenset(
         "NotEnoughItemsOfSpecException",
         "NotEnoughCountException",
         "PackIsEmptyException",
+        "ItemAlreadyHeldException",
         "ItemNotHeldException",
         "ItemNotPackedException",
         "InsufficientGoldException",

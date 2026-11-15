@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantNotAtSectionSpotException,
     OccupantNotInSectionException,
     OccupantNotPlacedException,
+    OccupantNotStandingOnSpotException,
     OccupantNotTravellingException,
     SectionFullException,
 )
@@ -203,6 +204,12 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
     def spot_of(self, occupant: Occupant) -> SpotId | NotAtSpot:
         spot = self._spot_of(occupant)
         return NotAtSpot() if spot is None else spot
+
+    def spot_standing_on(self, occupant: Occupant) -> SpotId:
+        spot = self._spot_of(occupant)
+        if spot is None:
+            raise OccupantNotStandingOnSpotException(f"{occupant} is not standing on any spot")
+        return spot
 
     def are_together(self, actor: Occupant, target: Occupant) -> bool:
         here = self._spot_of(actor)
