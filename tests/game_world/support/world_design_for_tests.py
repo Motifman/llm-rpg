@@ -39,6 +39,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     SpotSectionDeclaration,
     Temperature,
 )
+from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
     NoDayNight,
@@ -263,6 +264,16 @@ def built_in_action_perceptions(without: Iterable[ActionKind] = ()) -> BuiltInAc
     )
 
 
+def surroundings_texts() -> SurroundingsTexts:
+    return SurroundingsTexts(
+        people_here=TextWithUnassignedPeople("ここには{people}がいる。"),
+        bodies_here=TextWithUnassignedPeople("{people}が倒れている。"),
+        joiner="、",
+        waking=TextWithUnassignedPeople("目が覚めた。"),
+        darkening=TextWithUnassignedPeople("辺りが暗くなった。"),
+    )
+
+
 def introduction() -> WorldIntroduction:
     return WorldIntroduction(
         text=DescriptionText("山あいの廃坑の村で目を覚ました。"),
@@ -316,6 +327,7 @@ def compose_world(
             if built_in_action_perceptions_ is not None
             else built_in_action_perceptions(without=(ActionKind.TEND,))
         ),
+        surroundings_texts=surroundings_texts(),
         weather=weather,
         day_night=day_night,
         initial_stage=initial_stage,

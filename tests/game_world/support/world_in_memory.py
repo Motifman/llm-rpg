@@ -38,6 +38,7 @@ from tests.game_world.support.world_design_for_tests import (
     introduction,
     refusal_texts,
     spot,
+    surroundings_texts,
 )
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
@@ -163,6 +164,7 @@ def _design(
         world_rules=rules if rules is not None else world_rules_for_tests(),
         refusal_texts=refusal_texts(),
         built_in_action_perceptions=built_in_action_perceptions(without=(ActionKind.TEND,)),
+        surroundings_texts=surroundings_texts(),
         weather=(
             NoWeather()
             if isinstance(weather, NoWeather)
