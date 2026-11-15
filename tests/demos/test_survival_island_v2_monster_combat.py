@@ -14,6 +14,7 @@ initial_placements (4 体) が宣言されている。本テストは:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -53,13 +54,23 @@ class TestInitialSpawn:
         runtime._simulation_service.tick()
         assert _count_monsters(runtime) >= 2  # feral_dog + giant_crab
 
-    @pytest.mark.timeout(40)
-    def test_advances_all_four(self, runtime) -> None:
-        """48 tick / day, night phase は 0.66 から (= tick 32 以降)。
-        33 tick 進めれば wolf / snake も spawn して計 4 体になる。"""
+    def test_advances_all_four(self, tmp_path: Path) -> None:
+        """日の 30 tick 目 (夕暮れ) から始めると、1 tick 後は条件無しの野犬と大型カニの 2 体で、
+        夜 (日の 32 tick 目) に入った 2 tick 後に夜だけの wolf / snake も出て計 4 体になる。"""
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
+        raw = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
+        raw["environment"]["day_night"]["starting_tick_in_day"] = 30
+        scenario = tmp_path / SCENARIO_PATH.name
+        scenario.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        runtime = create_world_runtime(scenario)
         sim = runtime._simulation_service
-        for _ in range(33):
-            sim.tick()
+
+        sim.tick()
+        before_night = _count_monsters(runtime)
+        sim.tick()
+
+        assert before_night == 2
         assert _count_monsters(runtime) == 4
 
 
