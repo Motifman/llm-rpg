@@ -96,7 +96,9 @@ class _Settling:
 
     def _joint_actions_settling(self, now: WorldTick) -> list[JointActionDeclaration]:
         progress = self._session.scenario_progress()
-        return [joint for joint in self._design.joint_actions() if progress.joint_action_settlement(joint, now).settles()]
+        return [
+            joint for joint in self._design.joint_actions() if progress.joint_action_settlement(joint, now).settles()
+        ]
 
     def _fire_happening(self, happening: HappeningDeclaration, now: WorldTick) -> None:
         trigger = HappeningFired(happening)

@@ -10,8 +10,8 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
 from ai_rpg_world.game_world.domain.action.trigger import JointActionCompleted, JointActionTimedOut
-from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.action.wait_reason import WaitReason
+from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import AnnouncementTo, NoNotice
 from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect

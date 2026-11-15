@@ -21,7 +21,9 @@ def levers_at(spot: str) -> tuple[ObjectDeclaration, ObjectDeclaration]:
     return obj("left_lever", spot), obj("right_lever", spot)
 
 
-def pushing(levers: tuple[ObjectDeclaration, ...], precondition: Condition = AlwaysHolds()) -> list[ObjectInteractionDeclaration]:
+def pushing(
+    levers: tuple[ObjectDeclaration, ...], precondition: Condition = AlwaysHolds()
+) -> list[ObjectInteractionDeclaration]:
     push = replace(pull_lever(()), interaction_id=PUSH, precondition=precondition)
     return [ObjectInteractionDeclaration(obj=lever, interaction=push) for lever in levers]
 

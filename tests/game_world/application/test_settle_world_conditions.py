@@ -7,7 +7,10 @@ import pytest
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.application.action.action_reply import ActionReply
 from ai_rpg_world.game_world.application.action.carry_out_action import CarryOutAction
-from ai_rpg_world.game_world.application.action.interact_with_object import InteractWithObject, InteractWithObjectCommand
+from ai_rpg_world.game_world.application.action.interact_with_object import (
+    InteractWithObject,
+    InteractWithObjectCommand,
+)
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
@@ -130,7 +133,9 @@ class _SettledWorld:
                 characters=[character("alice", "cave"), bob],
                 item_specs=[_ROPE],
             ),
-            object_interactions=pushing(_LEVERS, precondition=NotCondition(_raised(_DOOR), TextWithUnassignedPeople("扉が開いている。"))),
+            object_interactions=pushing(
+                _LEVERS, precondition=NotCondition(_raised(_DOOR), TextWithUnassignedPeople("扉が開いている。"))
+            ),
             happenings=(*happenings, *never_firing),
             reactions=reactions,
             joint_actions=joint_actions,
@@ -192,7 +197,9 @@ class _SettledWorld:
         return [event for event in self.events if isinstance(event, ReactionFiredEvent)]
 
     def settled_joint_actions(self) -> list[JointActionCompletedEvent | JointActionTimedOutEvent]:
-        return [event for event in self.events if isinstance(event, (JointActionCompletedEvent, JointActionTimedOutEvent))]
+        return [
+            event for event in self.events if isinstance(event, (JointActionCompletedEvent, JointActionTimedOutEvent))
+        ]
 
 
 class TestSettleWorldConditionsHappenings:
@@ -527,6 +534,18 @@ class TestSettleWorldConditionsJointActions:
         assert [type(event) for event in world.settled_joint_actions()] == [JointActionTimedOutEvent]
         assert (world.read(_BELL), world.read(_ROCK_MOVED)) == (True, False)
 
+    def test_timeout_is_told_to_the_audience_of_its_own_notice(self) -> None:
+        """揃いの知らせが無く時間切れの知らせが全員宛てなら、時間切れのイベントの相手は alice と bob になる。"""
+        world = _SettledWorld(joint_actions=(both_levers(_LEVERS, timeout_notice=_everyone_hears("梃子が戻った")),))
+        world.push(_ALICE, _LEFT)
+        for _ in range(3):
+            world.pass_time()
+
+        world.settle(_AFTER_TIME)
+
+        [timed_out] = world.settled_joint_actions()
+        assert timed_out.audience == frozenset({_ALICE, _BOB})
+
     def test_refused_completion_leaves_no_change_and_is_noted_with_its_reason(self) -> None:
         """岩を動かしてから荷が満杯の bob に縄を渡す揃いの効果は、岩も bob の荷も変えず、断った理由を載せ、相手の無い揃いとして記録される。"""
         world = _SettledWorld(
@@ -534,7 +553,10 @@ class TestSettleWorldConditionsJointActions:
                 both_levers(
                     _LEVERS,
                     on_complete=SequenceEffect(
-                        (RaiseFlagEffect(_ROCK_MOVED), GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1)))
+                        (
+                            RaiseFlagEffect(_ROCK_MOVED),
+                            GiveItemEffect(NamedPerson(_BOB_WITH_FULL_PACK), _ROPE, Count(1)),
+                        )
                     ),
                     complete_notice=_everyone_hears("岩が動いた"),
                 ),

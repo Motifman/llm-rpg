@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
-
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import HappeningNotice, NoNotice
 from ai_rpg_world.game_world.domain.effect.effect import Effect
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import (
