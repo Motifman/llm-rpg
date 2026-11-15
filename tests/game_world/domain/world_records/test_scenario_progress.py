@@ -181,6 +181,7 @@ class TestScenarioProgressMementoRefusesRepeatedKey:
                     {HappeningLastFiredAt(ship, WorldTick(3)), HappeningLastFiredAt(ship, WorldTick(5))}
                 ),
                 reaction_truths=frozenset(),
+                joint_actions=frozenset(),
             )
 
     def test_same_reaction_with_both_truths_is_refused(self) -> None:
@@ -192,6 +193,7 @@ class TestScenarioProgressMementoRefusesRepeatedKey:
                 world_id=_WORLD,
                 last_fired=frozenset(),
                 reaction_truths=frozenset({ReactionLastTruth(door, True), ReactionLastTruth(door, False)}),
+                joint_actions=frozenset(),
             )
 
 

@@ -1,3 +1,10 @@
+from ai_rpg_world.game_world.domain.world_records.joint_action_progress import (
+    JointActionCompletedEvent,
+    JointActionPartDoneBy,
+    JointActionProgress,
+    JointActionSettlement,
+    JointActionTimedOutEvent,
+)
 from ai_rpg_world.game_world.domain.world_records.latest_actions import (
     ActionAttemptFailedEvent,
     ActionLastDoneAt,
@@ -33,6 +40,11 @@ __all__ = [
     "FlagPosition",
     "HappeningFiredEvent",
     "HappeningLastFiredAt",
+    "JointActionCompletedEvent",
+    "JointActionPartDoneBy",
+    "JointActionProgress",
+    "JointActionSettlement",
+    "JointActionTimedOutEvent",
     "LatestActions",
     "LatestActionsEvent",
     "LatestActionsMemento",
