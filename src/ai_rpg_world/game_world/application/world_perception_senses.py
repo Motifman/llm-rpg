@@ -54,13 +54,12 @@ class WorldPerceptionSenses:
 
 
 def perceivers_in_world(facts: WorldFacts) -> tuple[Perceiver, ...]:
+    return tuple(perceiver for person in facts.people() if (perceiver := perceiver_of(facts, person)) is not None)
+
+
+def perceiver_of(facts: WorldFacts, person: PersonId) -> Perceiver | None:
     departed_persons_act = facts.rules().departed_persons_act
-    perceivers: list[Perceiver] = []
-    for person in facts.people():
-        vitals = facts.vitals(person)
-        location = facts.whereabouts().location_of(vitals.occupant_in_world(departed_persons_act))
-        # 耳を澄ましているかを世界の状態に持たないので、誰も耳を澄ましていないものとして知覚する。
-        perceiver = vitals.perceiver_at(location, departed_persons_act, attentive=False)
-        if perceiver is not None:
-            perceivers.append(perceiver)
-    return tuple(perceivers)
+    vitals = facts.vitals(person)
+    location = facts.whereabouts().location_of(vitals.occupant_in_world(departed_persons_act))
+    # 耳を澄ましているかを世界の状態に持たないので、誰も耳を澄ましていないものとして知覚する。
+    return vitals.perceiver_at(location, departed_persons_act, attentive=False)

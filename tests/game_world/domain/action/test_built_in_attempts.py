@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     LivingOnly,
     LivingOrDeparted,
     UsesBody,
+    WithCarriedItem,
     WithGroundItem,
     WithPerson,
 )
@@ -45,6 +46,7 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     BlankSpeechContentException,
     BlankWaitReasonException,
+    HandOverToSelfException,
     NothingToHandOverException,
 )
 from ai_rpg_world.game_world.domain.exception.trigger_exception import (
@@ -122,7 +124,7 @@ _TABLE = [
     ),
     _Row(ItemDropAttempt(ALICE, LAMP, Openly()), ActionKind.DROP, UsesBody(), False, (), False),
     _Row(SpotSearchAttempt(ALICE), ActionKind.SEARCH, UsesBody(), False, (), False),
-    _Row(ItemUseAttempt(ALICE, LAMP), ActionKind.USE_ITEM, UsesBody(), False, (), False),
+    _Row(ItemUseAttempt(ALICE, LAMP), ActionKind.USE_ITEM, UsesBody(), False, (WithCarriedItem(LAMP),), False),
     _Row(
         EnterSectionAttempt(ALICE, SectionAccessForTests(CAGE, UsesBody())),
         ActionKind.ENTER_SECTION,
@@ -348,6 +350,11 @@ class TestHandOver:
         """渡す品物が 1 つも無いと NothingToHandOverException を投げる。"""
         with pytest.raises(NothingToHandOverException):
             ItemHandOverAttempt(ALICE, BOB, (), Openly())
+
+    def test_handing_over_to_oneself_raises(self) -> None:
+        """自分には渡せない。渡す相手を行う人自身にすると、作るときに HandOverToSelfException を投げる。"""
+        with pytest.raises(HandOverToSelfException):
+            ItemHandOverAttempt(ALICE, ALICE, (LAMP,), Openly())
 
 
 class TestTextsOfAttempts:

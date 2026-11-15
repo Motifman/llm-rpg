@@ -224,6 +224,39 @@ class TestPassageStatesSoundCarrying:
         assert states.sound_carrying((CELLAR_DOOR, SECRET)) == ()
 
 
+class TestPassageStatesTouching:
+    """touching と is_revealed が、場面に置く道 (その場所に端がある、無くなっていない道) と現れているかを答えることを保証する。"""
+
+    def test_touching_lists_passages_with_an_end_at_the_spot_including_both_ends_of_one_way(self) -> None:
+        """hall に端がある道は、閉じた扉・両方向の道・片道を、今の状態を添えて宣言の順に返す。片道の着く側 (beach) にも返す。"""
+        states = _states()
+        declared = (CELLAR_DOOR, STREET, SECRET, SLIDE)
+
+        assert states.touching(spot("hall"), declared) == (
+            PassageInState(passage=CELLAR_DOOR, state=CELLAR_DOOR.initial_state),
+            PassageInState(passage=STREET, state=STREET.initial_state),
+            PassageInState(passage=SLIDE, state=SLIDE.initial_state),
+        )
+        assert states.touching(spot("beach"), declared) == (PassageInState(passage=SLIDE, state=SLIDE.initial_state),)
+
+    def test_touching_keeps_hidden_passages_and_skips_removed_ones(self) -> None:
+        """cellar では、無くなった扉を返さず、現れる前の隠し道は返す。"""
+        states = _states()
+        states.remove(CELLAR_DOOR)
+
+        assert states.touching(spot("cellar"), (CELLAR_DOOR, STREET, SECRET, SLIDE)) == (
+            PassageInState(passage=SECRET, state=SECRET.initial_state),
+        )
+
+    def test_is_revealed_is_false_only_until_a_hidden_passage_is_revealed(self) -> None:
+        """隠し道は現すまで現れておらず、現したあとと、隠されていない道は現れている。"""
+        states = _states()
+        hidden_before = states.is_revealed(SECRET)
+        states.reveal(SECRET)
+
+        assert (hidden_before, states.is_revealed(SECRET), states.is_revealed(STREET)) == (False, True, True)
+
+
 class TestPassageInState:
     """in_state が今の状態名を添えた PassageInState を返し、PassageInState が宣言に無い状態名を断ることを保証する。"""
 

@@ -52,6 +52,7 @@ refusal_texts:
     too_tired: 疲れて動けない。
     not_allowed_in_this_stage: 今はできない。
     no_one_found_in_the_dark: 暗くて誰も見つからない。
+    not_carrying: それを持っていない。
   world_state: {}
   hidden: 今はできない。
   unlisted: うまくいかなかった。

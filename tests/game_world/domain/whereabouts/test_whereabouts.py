@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     OccupantNotAtSectionSpotException,
     OccupantNotInSectionException,
     OccupantNotPlacedException,
+    OccupantNotStandingOnSpotException,
     OccupantNotTravellingException,
     SectionFullException,
     TicksLeftOutsidePassageException,
@@ -498,6 +499,16 @@ class TestWhereaboutsTogetherness:
 
         assert whereabouts.occupants_at(PLAZA) == (BOB, ALICE)
 
+    def test_sections_of_occupants_at_pairs_each_occupant_there_with_the_section_they_are_in(self) -> None:
+        """sections_of_occupants_at は、その場所にいる人ごとに、籠の中なら籠を、外なら OpenArea を返す。ほかの場所の人と移動中の人は入らない。"""
+        whereabouts = _whereabouts(
+            (BOB, "plaza"), (ALICE, "plaza"), (CAROL, "plaza"), (DepartedPerson(PersonId("dave")), "well")
+        )
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+        whereabouts.start_travel(CAROL, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        assert whereabouts.sections_of_occupants_at(PLAZA) == {BOB: OpenArea(), ALICE: LIFT.section_id}
+
     def test_occupants_in_and_out_of_a_section_of_the_same_spot_are_together(self) -> None:
         """籠の中の人と籠の外の人は、同じ場所にいるので一緒にいる。"""
         whereabouts = _whereabouts((ALICE, "plaza"), (BOB, "plaza"))
@@ -549,6 +560,25 @@ class TestWhereaboutsSpotOf:
     def test_occupant_not_placed_is_not_at_any_spot(self) -> None:
         """世界に置かれていない人の spot_of は、例外を投げずに NotAtSpot。"""
         assert _whereabouts((ALICE, "plaza")).spot_of(BOB) == NotAtSpot()
+
+
+class TestWhereaboutsSpotStandingOn:
+    """spot_standing_on が、場所に立っている人の SpotId を答え、立っていなければ断りではない誤りとして投げることを保証する。"""
+
+    def test_occupant_in_section_stands_on_the_spot_of_the_section(self) -> None:
+        """区画の中にいる人の spot_standing_on は、区画のある場所の SpotId。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.enter_section(ALICE, LIFT, NOBODY_DOWN)
+
+        assert whereabouts.spot_standing_on(ALICE) == SpotId("plaza")
+
+    def test_travelling_occupant_raises_not_standing_on_spot(self) -> None:
+        """移動中の人の spot_standing_on は OccupantNotStandingOnSpotException を投げる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
+
+        with pytest.raises(OccupantNotStandingOnSpotException):
+            whereabouts.spot_standing_on(ALICE)
 
 
 class TestWhereaboutsCanReach:
