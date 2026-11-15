@@ -38,6 +38,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherState,
     WeatherType,
 )
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ObjectState, PersonInventory
@@ -307,7 +308,7 @@ class TestFactsSeeWhatAggregatesChanged:
             world_stage=WorldStage.from_initial_stage(_WORLD, _DAY, WorldTick(0)), stage_declarations=(_DAY, _NIGHT)
         )
         for _ in range(2):
-            world.clock().advance(NoDayNight())
+            world.clock().advance(NoDayNight(), world.facts())
 
         world.aggregates().world_stage().enter(_NIGHT, world.facts().now())
 
@@ -464,8 +465,8 @@ class TestClockPeopleAndNouns:
         """時計を 2 回進めると、now と clock の now は tick 2。"""
         world = _world()
 
-        world.clock().advance(NoDayNight())
-        world.clock().advance(NoDayNight())
+        world.clock().advance(NoDayNight(), world.facts())
+        world.clock().advance(NoDayNight(), world.facts())
 
         assert world.facts().now() == WorldTick(2)
         assert world.facts().clock().now() == WorldTick(2)
@@ -477,13 +478,17 @@ class TestClockPeopleAndNouns:
             starts_at=TimeOfDay(6),
             phases=(
                 DayPhaseDeclaration(
-                    name=DayPhaseName("昼"), begins_at=TimeOfDay(6), dark=False, announcement=NoAnnouncement()
+                    name=DayPhaseName("昼"),
+                    begins_at=TimeOfDay(6),
+                    dark=False,
+                    announcement=NoAnnouncement(),
+                    audience=EveryoneAwake(),
                 ),
             ),
         )
         world = _world(day_night=day_night)
 
-        world.clock().advance(day_night)
+        world.clock().advance(day_night, world.facts())
 
         assert world.facts().day_night() == day_night
         assert world.facts().clock().time_of_day(day_night) == TimeOfDay(7)

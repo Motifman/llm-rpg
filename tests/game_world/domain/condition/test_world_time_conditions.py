@@ -24,6 +24,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherState,
     WeatherType,
 )
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.time_of_day import TimeOfDay
 from ai_rpg_world.game_world.domain.exception.condition_exception import (
     NotDeclaredInThisWorldException,
@@ -62,15 +63,19 @@ _DAY_NIGHT = DayNightDeclaration(
     ticks_per_day=Ticks(4),
     starts_at=TimeOfDay(0),
     phases=(
-        DayPhaseDeclaration(name=_MORNING, begins_at=TimeOfDay(0), dark=False, announcement=NoAnnouncement()),
-        DayPhaseDeclaration(name=_NIGHT, begins_at=TimeOfDay(2), dark=True, announcement=NoAnnouncement()),
+        DayPhaseDeclaration(
+            name=_MORNING, begins_at=TimeOfDay(0), dark=False, announcement=NoAnnouncement(), audience=EveryoneAwake()
+        ),
+        DayPhaseDeclaration(
+            name=_NIGHT, begins_at=TimeOfDay(2), dark=True, announcement=NoAnnouncement(), audience=EveryoneAwake()
+        ),
     ),
 )
 
 
 def _advanced(a_world: WorldSession, ticks: int) -> WorldSession:
     for _ in range(ticks):
-        a_world.clock().advance(a_world.facts().day_night())
+        a_world.clock().advance(a_world.facts().day_night(), a_world.facts())
     return a_world
 
 

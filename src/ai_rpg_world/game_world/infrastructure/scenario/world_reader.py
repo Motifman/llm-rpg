@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
+from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
@@ -24,6 +25,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherType,
     WeightedWeather,
 )
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.verb import (
     BuiltInActionPerceptions,
     BuiltInPerceptionRow,
@@ -83,6 +85,7 @@ _SIGHT_QUALITIES: dict[str, SightQuality] = {
     "sees_nothing": SeesNothing(),
 }
 _DEFAULT_TRANSITIONS = "default"
+_EVERYONE_AWAKE = "everyone_awake"
 
 _Key = TypeVar("_Key")
 _Value = TypeVar("_Value")
@@ -189,7 +192,9 @@ def ending(node: YamlNode, conditions: ConditionReader) -> EndingDeclaration:
     )
 
 
-def day_night(node: YamlNode, defaults: ScenarioDefaults) -> DayNightDeclaration | NoDayNight:
+def day_night(
+    node: YamlNode, defaults: ScenarioDefaults, conditions: ConditionReader
+) -> DayNightDeclaration | NoDayNight:
     if node.is_null():
         return NoDayNight()
     fields = node.fields("ticks_per_day", "starts_at", "phases")
@@ -198,7 +203,7 @@ def day_night(node: YamlNode, defaults: ScenarioDefaults) -> DayNightDeclaration
             ticks_per_day=ticks(fields.required("ticks_per_day")),
             starts_at=_time_of_day(fields.required("starts_at")),
             phases=tuple(
-                _day_phase(name, defaults.fill("day_phase", phase))
+                _day_phase(name, defaults.fill("day_phase", phase), conditions)
                 for name, phase in fields.required("phases").entries()
             ),
         )
@@ -305,8 +310,8 @@ def _by_enum(node: YamlNode, enum_type: type[_Enum], read: Callable[[YamlNode], 
     return {YamlNode(name, value.path).enum(enum_type): read(value) for name, value in node.entries()}
 
 
-def _day_phase(name: str, node: YamlNode) -> DayPhaseDeclaration:
-    fields = node.fields("begins_at", "dark", "announcement")
+def _day_phase(name: str, node: YamlNode, conditions: ConditionReader) -> DayPhaseDeclaration:
+    fields = node.fields("begins_at", "dark", "announcement", "audience")
     announcement = fields.required("announcement")
     return node.build(
         lambda: DayPhaseDeclaration(
@@ -314,8 +319,17 @@ def _day_phase(name: str, node: YamlNode) -> DayPhaseDeclaration:
             begins_at=_time_of_day(fields.required("begins_at")),
             dark=fields.required("dark").boolean(),
             announcement=NoAnnouncement() if announcement.is_null() else people_text(announcement),
+            audience=_day_phase_audience(fields.required("audience"), conditions),
         )
     )
+
+
+def _day_phase_audience(node: YamlNode, conditions: ConditionReader) -> PeopleSelection | EveryoneAwake:
+    if node.value == _EVERYONE_AWAKE:
+        return EveryoneAwake()
+    if not node.is_mapping():
+        raise node.unreadable(f"expected {_EVERYONE_AWAKE} or a people selection {{ where }}, got {node.value!r}")
+    return conditions.people(node)
 
 
 def _changes_every(node: YamlNode) -> ChangesEvery:

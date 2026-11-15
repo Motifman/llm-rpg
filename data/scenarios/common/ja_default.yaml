@@ -213,3 +213,4 @@ defaults:
   sight_at: { salience: notable }
   sound_from: { salience: notable }
   announcement_to: { salience: notable }
+  day_phase: { audience: everyone_awake }

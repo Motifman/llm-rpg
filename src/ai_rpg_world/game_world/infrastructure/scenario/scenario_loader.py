@@ -154,7 +154,9 @@ class _ScenarioLoading:
         day_night = (
             None
             if time_fields is None
-            else collector.attempt(lambda: world_reader.day_night(time_fields.required("day_night"), self._defaults))
+            else collector.attempt(
+                lambda: world_reader.day_night(time_fields.required("day_night"), self._defaults, self._conditions)
+            )
         )
         weather = (
             None

@@ -24,6 +24,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.changes_every import NoChange
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_name import DayPhaseName
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.lighting import Lighting, LightingConditions
 from ai_rpg_world.game_world.domain.objects_and_items import Item, ItemInstanceId, PersonInventory
@@ -78,7 +79,13 @@ _NIGHT_FROM_THE_START = DayNightDeclaration(
     ticks_per_day=Ticks(4),
     starts_at=TimeOfDay(0),
     phases=(
-        DayPhaseDeclaration(name=DayPhaseName("夜"), begins_at=TimeOfDay(0), dark=True, announcement=NoAnnouncement()),
+        DayPhaseDeclaration(
+            name=DayPhaseName("夜"),
+            begins_at=TimeOfDay(0),
+            dark=True,
+            announcement=NoAnnouncement(),
+            audience=EveryoneAwake(),
+        ),
     ),
 )
 

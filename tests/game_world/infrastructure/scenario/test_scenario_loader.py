@@ -9,7 +9,10 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRule
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice
 from ai_rpg_world.game_world.domain.condition.condition import NoText
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight, NoWeather
+from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.condition.person_conditions import IsAtSpotCondition
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayPhaseName, NoDayNight, NoWeather
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.verb import NoticedOnWaking, ObjectLook
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, ScenarioFile
@@ -928,3 +931,61 @@ class TestObjectLooks:
 
         assert len(flaws) == 1
         assert "no_such_flag" in flaws[0].reason
+
+
+_DAY_NIGHT = """time:
+  day_night:
+    ticks_per_day: 48
+    starts_at: 0
+    phases:
+      predawn: { begins_at: 0, dark: true, announcement: 夜明け前の、いちばん冷える時刻になった。 }
+      morning:
+        begins_at: 12
+        dark: false
+        announcement: 空が白み、朝になった。
+        audience: AUDIENCE
+  weather: null
+"""
+
+
+def _with_morning_audience(audience: str) -> str:
+    return _LIFT_LANDING.replace(
+        "time:\n  day_night: null\n  weather: null\n", _DAY_NIGHT.replace("AUDIENCE", audience)
+    )
+
+
+class TestDayPhaseAudience:
+    """時間帯の知らせの届く相手 (audience) を、人の選び方か everyone_awake で読み、書かなければ共通の部品の既定で起きている全員にすることを保証する。"""
+
+    def test_phase_without_audience_reaches_everyone_awake(self, tmp_path: Path) -> None:
+        """audience を書かない夜明け前は、共通の部品の既定で、起きている全員 (EveryoneAwake) に届く。"""
+        design = _load(tmp_path, _with_morning_audience("everyone_awake")).design
+
+        assert design.day_night.phase_named(DayPhaseName("predawn")).audience == EveryoneAwake()
+
+    def test_written_audience_is_read_as_a_people_selection(self, tmp_path: Path) -> None:
+        """朝の audience に乗り場にいる人の選び方を書くと、その条件で人を選ぶ PeopleSelection として読む。"""
+        written = "{ where: { is_at_spot: { who: each_person, spot: lift_landing } } }"
+        design = _load(tmp_path, _with_morning_audience(written)).design
+
+        audience = design.day_night.phase_named(DayPhaseName("morning")).audience
+        assert isinstance(audience, PeopleSelection)
+        assert isinstance(audience.where, IsAtSpotCondition)
+
+    @pytest.mark.parametrize(
+        "written",
+        ["everyone", "{ where: { is_at_spot: { who: each_person, spot: nowhere } } }", "{ whom: { all_of: [] } }"],
+        ids=["知らない言葉", "宣言に無い場所", "知らない欄"],
+    )
+    def test_mistaken_audience_stops_loading(self, tmp_path: Path, written: str) -> None:
+        """朝の audience に、everyone_awake でも人の選び方でもないものや、宣言に無い場所を書くと、読み込みで DesignFlaw になって止まる。"""
+        flaws = _flaws(tmp_path, _with_morning_audience(written))
+
+        assert flaws
+        assert all("phases.morning.audience" in str(flaw) for flaw in flaws)
+
+    def test_audience_referring_to_an_actor_stops_loading(self, tmp_path: Path) -> None:
+        """朝の audience で行った人 (actor) を選ぶと、行った人のいない時間帯なので、time.day_night.phases.morning.audience の DesignFlaw になる。"""
+        flaws = _flaws(tmp_path, _with_morning_audience("{ where: { is_down: { who: actor } } }"))
+
+        assert [flaw.location for flaw in flaws] == [_mine("world", "world", "time.day_night.phases.morning.audience")]

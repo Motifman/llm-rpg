@@ -13,6 +13,10 @@ class DayPhaseNameDuplicatedException(GameWorldDomainException):
     error_code = "GAME_WORLD.DAY_PHASE_NAME_DUPLICATED"
 
 
+class UndeclaredDayPhaseException(GameWorldDomainException):
+    error_code = "GAME_WORLD.UNDECLARED_DAY_PHASE"
+
+
 class TimeOfDayBeyondDayException(GameWorldDomainException):
     error_code = "GAME_WORLD.TIME_OF_DAY_BEYOND_DAY"
 

@@ -228,7 +228,7 @@ SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 | 知らせ | 元のイベント | 相手 (`audience`) | 目立ち方 | 倒れている人 |
 |---|---|---|---|---|
 | 結末 (`OutcomeDeclaration.announcement`) | `PersonOutcomeDecidedEvent` | 結末が決まった本人だけ。世界から外れていても届ける (居場所を問わない)。文の `{each_person}` も本人。死んだ結末 (`Died`) には出さない | `Notable` | `NoticedLater` でためて、目が覚めたとき、または気を失ったまま世界から外れるときに、たまった知らせと同じ順で届く |
-| 時間帯 (`DayPhaseDeclaration.announcement`) | `TimeOfDayChangedEvent` | 宣言の `audience` で選んだ人。`EveryoneAwake` なら起きている全員で、死んで去った人として動く人と移動中の人を含む。どちらでも倒れている人と、結末が決まって世界から外れた人は外す。`AdvanceWorldTick` が選んで `TimeOfDayChangedEvent` に載せる | `Background` | 相手に入れないので、届かず、ためもしない |
+| 時間帯 (`DayPhaseDeclaration.announcement`) | `TimeOfDayChangedEvent` | 宣言の `audience` で選んだ人。`EveryoneAwake` なら起きている全員で、死んで去った人として動く人と移動中の人を含む。どちらでも倒れている人と、結末が決まって世界から外れた人は外す。`PassWorldTime` が時計を進めるときに選んで `TimeOfDayChangedEvent` に載せる | `Background` | 相手に入れないので、届かず、ためもしない |
 
 - 例: 籠が上がってハルとサヨが外へ出たとき、坑道の奥のゲンには「ゲンは坑道に取り残された」だけが届き、ハルの結末は届かない。籠が上がる様子は、作者が出来事の知らせに書いて周りに伝える。結末の知らせは数えないので、同じ発火の籠の音を聞いたゲンにも両方届く
 - 時間帯が変わって明るさも変わったときは、明るさの知らせ (`DeliverDarkeningHandler`、`DeliverSurroundingsOnBrighteningHandler`) と作者の時間帯の文の両方が届く。作者の文が明るさに触れるとは限らないため。重なりが気になれば、作者が文を直す

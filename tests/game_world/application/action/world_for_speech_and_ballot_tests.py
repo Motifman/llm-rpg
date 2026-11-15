@@ -88,7 +88,7 @@ class WorldForSpeechAndBallots:
 
     def pass_ticks_of(self, kind: ActionKind) -> None:
         for _ in range(self.design.world_rules.action_durations[kind].value):
-            self.scope.run(lambda session: session.clock().advance(self.design.day_night))
+            self.scope.run(lambda session: session.clock().advance(self.design.day_night, session.facts()))
 
     def read(self) -> WorldSession:
         return self.store.session()

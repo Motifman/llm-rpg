@@ -67,8 +67,8 @@ class TestEnterWorldStageEffect:
     def test_enters_stage_now(self) -> None:
         """tick 2 に夜へ移すと、世界の段階は夜で、入った tick は 2。"""
         world = _world()
-        world.clock().advance(NoDayNight())
-        world.clock().advance(NoDayNight())
+        world.clock().advance(NoDayNight(), world.facts())
+        world.clock().advance(NoDayNight(), world.facts())
 
         EnterWorldStageEffect(_NIGHT).apply(world.facts(), world.aggregates(), _DUSK)
 
