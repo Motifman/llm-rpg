@@ -152,6 +152,16 @@ class PassageStates(AggregateRoot[PassageStatesEvent]):
             if self._presence_of(passage) is PassagePresence.PRESENT and _leaves(passage, spot)
         )
 
+    def touching(self, spot: SpotDeclaration, declared: tuple[PassageDeclaration, ...]) -> tuple[PassageInState, ...]:
+        return tuple(
+            PassageInState(passage=passage, state=self._states[passage.passage_id])
+            for passage in declared
+            if self._presence_of(passage) is not PassagePresence.REMOVED and spot.spot_id in passage.ends
+        )
+
+    def is_revealed(self, passage: PassageDeclaration) -> bool:
+        return self._presence_of(passage) is PassagePresence.PRESENT
+
     def sound_carrying(self, declared: tuple[PassageDeclaration, ...]) -> tuple[PassageInState, ...]:
         return tuple(
             PassageInState(passage=passage, state=self._states[passage.passage_id])
