@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
@@ -7,8 +9,10 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import WaitAttempt
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
+from ai_rpg_world.game_world.domain.action.trigger import JointActionCompleted, JointActionTimedOut
 from ai_rpg_world.game_world.domain.action.wait_reason import WaitReason
-from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import NoNotice
+from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import AnnouncementTo, NoNotice
 from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
@@ -16,6 +20,8 @@ from ai_rpg_world.game_world.domain.exception.world_records_exception import (
     JointActionNotSettlingException,
     JointActionUnsettledException,
 )
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.perception import Notable
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId, Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.world_records import (
@@ -30,6 +36,7 @@ from ai_rpg_world.game_world.domain.world_records import (
 from tests.game_world.domain.whereabouts._builders import thing
 from tests.game_world.support.declarations_for_tests import InteractionForTests
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
+from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
 
 _WORLD = WorldId("mine")
 _HARU = PersonId("haru")
@@ -38,6 +45,10 @@ _PUSH = InteractionId("push")
 _LEFT = ObjectId("left_lever")
 _RIGHT = ObjectId("right_lever")
 _PACK_FULL = RefusalCode("PERSON_INVENTORY.PACK_FULL")
+
+
+def _notice_of(text: str) -> AnnouncementTo:
+    return AnnouncementTo(PeopleSelection(where=AlwaysHolds()), TextWithUnassignedPeople(text), Notable())
 
 
 def _levers(*, distinct_people: bool = True, joint_id: str = "levers") -> JointActionDeclaration:
@@ -279,6 +290,31 @@ class TestJointActionSettled:
 
         assert completed is _LEVERS.on_complete
         assert timed_out is _LEVERS.on_timeout
+
+    def test_settlement_names_the_notice_to_send(self) -> None:
+        """揃いは complete_notice、時間切れは timeout_notice の知らせを返す。"""
+        levers = replace(_LEVERS, complete_notice=_notice_of("岩が動いた"), timeout_notice=_notice_of("梃子が戻った"))
+
+        completed = JointActionSettlement.COMPLETED.notice_in(levers)
+        timed_out = JointActionSettlement.TIMED_OUT.notice_in(levers)
+
+        assert completed is levers.complete_notice
+        assert timed_out is levers.timeout_notice
+
+    def test_settlement_names_the_trigger_to_apply_with(self) -> None:
+        """揃いは JointActionCompleted、時間切れは JointActionTimedOut のきっかけで、どちらも宣言を包む。"""
+        completed = JointActionSettlement.COMPLETED.trigger_for(_LEVERS)
+        timed_out = JointActionSettlement.TIMED_OUT.trigger_for(_LEVERS)
+
+        assert completed == JointActionCompleted(_LEVERS)
+        assert timed_out == JointActionTimedOut(_LEVERS)
+
+    def test_undecided_names_nothing_to_send_or_apply_with(self) -> None:
+        """揃いも時間切れもしていないときに知らせやきっかけを問うと、JointActionNotSettlingException を投げる。"""
+        with pytest.raises(JointActionNotSettlingException):
+            JointActionSettlement.UNDECIDED.notice_in(_LEVERS)
+        with pytest.raises(JointActionNotSettlingException):
+            JointActionSettlement.UNDECIDED.trigger_for(_LEVERS)
 
 
 class TestJointActionMemento:

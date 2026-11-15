@@ -28,7 +28,7 @@ class FiredReaction(Protocol):
     def reaction_id(self) -> ReactionId: ...
 
 
-class CompletedJointAction(Protocol):
+class SettledJointAction(Protocol):
     @property
     def joint_id(self) -> JointActionId: ...
 
@@ -56,7 +56,13 @@ class ReactionFired(_NotAnAction):
 @final
 @dataclass(frozen=True)
 class JointActionCompleted(_NotAnAction):
-    joint: CompletedJointAction
+    joint: SettledJointAction
+
+
+@final
+@dataclass(frozen=True)
+class JointActionTimedOut(_NotAnAction):
+    joint: SettledJointAction
 
 
 @final
@@ -135,6 +141,7 @@ Trigger = (
     | GroupDecisionUnresolved
     | WorldStageChanged
     | JointActionCompleted
+    | JointActionTimedOut
     | WorldTimePassing
     | LookingAround
     | WorldConditionsSettling

@@ -33,6 +33,7 @@ class CarryOutAction:
     def __init__(self, scope: CommandScope, design: WorldDesign) -> None:
         self._scope = scope
         self._texts = design.refusal_texts
+        self._joint_actions = design.joint_actions()
         self._check = ActionPrerequisiteCheck()
 
     def __call__(self, attempt: _Attempt, steps: ActionSteps[_Attempt]) -> ActionReply:
@@ -67,6 +68,7 @@ class CarryOutAction:
         busy_for = steps.change_world(attempt, facts, world)
         world.vitals(attempt.actor).start_acting(attempt.exertion(), now + busy_for, facts.rules().fatigue)
         session.latest_actions().note(attempt, situation, now)
+        session.scenario_progress().note_joint_action_part_done(attempt, self._joint_actions, now)
 
     def _note_refusal(self, refusal: ActionRefusal) -> ActionRefused:
         self._scope.run(lambda session: self._note_failed_attempt(refusal, session))

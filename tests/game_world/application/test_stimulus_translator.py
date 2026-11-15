@@ -101,7 +101,14 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     Teleported,
 )
 from ai_rpg_world.game_world.domain.world_progress.world_clock import WorldTickAdvancedEvent
-from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent, HappeningFiredEvent, PersonActedEvent
+from ai_rpg_world.game_world.domain.world_records import (
+    ActionAttemptFailedEvent,
+    HappeningFiredEvent,
+    JointActionCompletedEvent,
+    JointActionTimedOutEvent,
+    PersonActedEvent,
+)
+from tests.game_world.support.joint_actions_for_tests import both_levers, levers_at, pushing
 from tests.game_world.support.verb_declarations_for_tests import lever_pulled_quietly, pull_lever, seen_clearly_only
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds, ChangesNothing
 from tests.game_world.support.world_design_for_tests import (
@@ -631,3 +638,81 @@ class TestStimulusTranslatorHappenings:
         """宣言に無い出来事の発火を渡すと、どの知らせかを引けないので UndeclaredVerbException を投げる。"""
         with pytest.raises(UndeclaredVerbException):
             StimulusTranslator().stimuli_of(_fired("unknown"), _happenings_design())
+
+
+_LEVERS = levers_at("shaft")
+_BOTH_LEVERS = both_levers(
+    _LEVERS,
+    complete_notice=AnnouncementTo(
+        audience=PeopleSelection(where=AlwaysHolds()),
+        text=TextWithUnassignedPeople("岩が動いた。"),
+        salience=Notable(),
+    ),
+    timeout_notice=SoundFrom(spot=spot("shaft"), sound=_RUMBLE, salience=Notable()),
+)
+
+
+def _joint_actions_design() -> WorldDesign:
+    return compose_world(
+        nouns(spots=(spot("shaft"),), objects=_LEVERS),
+        object_interactions=pushing(_LEVERS),
+        joint_actions=(_BOTH_LEVERS,),
+    )
+
+
+def _completed(refusal: RefusalCode | NoRefusal = NoRefusal()) -> JointActionCompletedEvent:
+    return JointActionCompletedEvent(
+        **new_event_stamp(),
+        world_id=_WORLD,
+        joint_id=_BOTH_LEVERS.joint_id,
+        at=_NOW,
+        parts_done=frozenset(),
+        audience=frozenset({_HAL}),
+        refusal=refusal,
+    )
+
+
+def _timed_out(refusal: RefusalCode | NoRefusal = NoRefusal()) -> JointActionTimedOutEvent:
+    return JointActionTimedOutEvent(
+        **new_event_stamp(),
+        world_id=_WORLD,
+        joint_id=_BOTH_LEVERS.joint_id,
+        at=_NOW,
+        parts_done=frozenset(),
+        audience=frozenset(),
+        refusal=refusal,
+    )
+
+
+class TestStimulusTranslatorJointActions:
+    """StimulusTranslator が、二人で合わせる操作の揃い・時間切れを、宣言の complete_notice / timeout_notice の刺激に変えることを保証する。"""
+
+    def test_completion_becomes_the_complete_notice_to_its_audience(self) -> None:
+        """両方の梃子が揃うと、complete_notice の「岩が動いた。」が、イベントに載った相手 (ハル) への世界の知らせになる。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_completed(), _joint_actions_design())
+
+        assert stimulus == AnnouncementStimulus(
+            audience=frozenset({_HAL}),
+            text=TextWithUnassignedPeople("岩が動いた。").about({}),
+            salience=Notable(),
+            at=_NOW,
+        )
+
+    def test_timeout_becomes_the_timeout_notice(self) -> None:
+        """窓を過ぎると、timeout_notice の坑道で鳴る物音「坑道の奥で岩が崩れた。」になる。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_timed_out(), _joint_actions_design())
+
+        assert isinstance(stimulus, SoundStimulus)
+        assert (stimulus.origin, stimulus.clear.template.template) == (SpotId("shaft"), "坑道の奥で岩が崩れた。")
+
+    def test_refused_completion_makes_no_stimulus(self) -> None:
+        """効果を当てる途中で断られた揃いは、知らせを宣言していても刺激を作らない。"""
+        event = _completed(RefusalCode("GAME_WORLD.INVENTORY_FULL"))
+
+        assert StimulusTranslator().stimuli_of(event, _joint_actions_design()) == ()
+
+    def test_refused_timeout_makes_no_stimulus(self) -> None:
+        """効果を当てる途中で断られた時間切れは、知らせを宣言していても刺激を作らない。"""
+        event = _timed_out(RefusalCode("GAME_WORLD.INVENTORY_FULL"))
+
+        assert StimulusTranslator().stimuli_of(event, _joint_actions_design()) == ()

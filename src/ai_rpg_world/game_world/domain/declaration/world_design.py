@@ -66,6 +66,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
+from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.whereabouts.route import NoRoute, Route
 
 if TYPE_CHECKING:
@@ -483,6 +484,12 @@ class WorldDesign:
 
     def joint_actions(self) -> tuple[JointActionDeclaration, ...]:
         return self._joint_actions
+
+    def joint_action(self, joint: JointActionId) -> JointActionDeclaration:
+        for declared in self._joint_actions:
+            if declared.joint_id == joint:
+                return declared
+        raise UndeclaredVerbException(f"no joint action {joint.value!r} is declared")
 
     def reactions(self) -> tuple[ReactionDeclaration, ...]:
         return self._reactions
