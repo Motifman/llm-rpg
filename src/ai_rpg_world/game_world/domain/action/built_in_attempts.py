@@ -27,17 +27,19 @@ from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import NothingToHandOverException
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     NoRouteToDestinationException,
     OccupantNotAtRouteStartException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.objects_and_items.spot_search import SpotSearch
 from ai_rpg_world.game_world.domain.perception import Noise, NoTarget
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PassageId, PersonId, SpotId, Ticks
-from ai_rpg_world.game_world.domain.whereabouts import AtSpot, NoRoute, Occupant, Route
+from ai_rpg_world.game_world.domain.whereabouts import AtSpot, NoRoute, Occupant, PersonBody, Route
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
 if TYPE_CHECKING:
@@ -239,6 +241,10 @@ class TendAttempt(_BuiltInAttempt):
     def exertion(self) -> Exertion:
         return UsesBody()
 
+    def tend(self, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        facts.rules().tend.revive(world.vitals(self.target), facts.now())
+        return facts.rules().duration_of(self._KIND, DefaultDuration())
+
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return (WithPerson(self.target),)
 
@@ -329,6 +335,13 @@ class SpotSearchAttempt(_BuiltInAttempt):
 
     def exertion(self) -> Exertion:
         return UsesBody()
+
+    def search(self, design: WorldDesign, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        location = facts.whereabouts().location_of(PersonBody(self.actor))
+        if not isinstance(location, AtSpot):
+            raise OccupantNotAtRouteStartException(f"{self.actor.value} is on the way and cannot search")
+        SpotSearch(location.spot, design.discoverables_at(location.spot)).search_by(self.actor, facts, world, self)
+        return facts.rules().duration_of(self._KIND, DefaultDuration())
 
 
 @final
