@@ -10,6 +10,7 @@ application 層は集約と宣言を順に呼ぶだけにする (CLAUDE.md「ド
 
 見ないもの: in / not in (帳簿やキャッシュの引き当て)、ドメインに問うて分岐する手順 (`if item.has_run_out(now):`)。
 後者は複数の集約を順に呼ぶ手順と構文で見分けられないので、レビューの観点で補う。
+名前は import 文だけから追うので、別名の代入 (`N = Notable`)、ワイルドカード import、`type(x) is 型` は追わない。
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import ast
 import importlib
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -113,6 +115,10 @@ _ALLOWED_LEAKS: tuple[_AllowedLeak, ...] = (
 )
 
 
+def _is_within(module: str, package: str) -> bool:
+    return module == package or module.startswith(package + ".")
+
+
 def _resolve_from(node: ast.ImportFrom, package: str) -> str:
     if node.level == 0:
         return node.module or ""
@@ -145,9 +151,18 @@ def _imported_names(tree: ast.Module, package: str) -> dict[str, str]:
 def _load(qualified: str) -> Any:
     try:
         return importlib.import_module(qualified)
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as missing:
+        # 名前がモジュールでなく属性のときだけ親から引く。依存の欠けなど別の原因は隠さない
+        if missing.name != qualified:
+            raise
         module, _, attribute = qualified.rpartition(".")
         return getattr(importlib.import_module(module), attribute)
+
+
+def _attribute_of(owner: Any, attribute: str) -> Any:
+    if isinstance(owner, ModuleType) and not hasattr(owner, attribute):
+        return _load(f"{owner.__name__}.{attribute}")
+    return getattr(owner, attribute, None)
 
 
 class _Resolver:
@@ -157,12 +172,12 @@ class _Resolver:
     def resolve(self, node: ast.expr) -> Any:
         if isinstance(node, ast.Name):
             qualified = self._imported.get(node.id)
-            if qualified is None or not qualified.startswith("ai_rpg_world."):
+            if qualified is None or not _is_within(qualified, "ai_rpg_world"):
                 return None
             return _load(qualified)
         if isinstance(node, ast.Attribute):
             owner = self.resolve(node.value)
-            return getattr(owner, node.attr, None) if owner is not None else None
+            return _attribute_of(owner, node.attr) if owner is not None else None
         return None
 
     def domain_types(self, node: ast.expr) -> list[type]:
@@ -272,6 +287,11 @@ _REACHED = "from ai_rpg_world.game_world.domain.world_progress.group_decision im
         ("from ai_rpg_world.game_world.domain.perception import Notable\nNotable()\n", PERCEPTION_VALUE),
         ("from ai_rpg_world.game_world.domain.lighting import SeesClearly\nSeesClearly()\n", PERCEPTION_VALUE),
         ("from ai_rpg_world.game_world.domain import perception\nperception.Felt()\n", PERCEPTION_VALUE),
+        (
+            "import ai_rpg_world.game_world.domain.lighting.sight_quality\n"
+            "ai_rpg_world.game_world.domain.lighting.sight_quality.SeesShapes()\n",
+            PERCEPTION_VALUE,
+        ),
         (
             "from ai_rpg_world.game_world.domain.perception.bodily_stimulus import BodilyStimulus as B\n"
             "def f(p, t, at):\n    return B(person=p, text=t, salience=None, at=at)\n",
