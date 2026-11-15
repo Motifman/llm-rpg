@@ -18,6 +18,7 @@ from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickA
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import WeatherState, WeatherType
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import NoNotice
+from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.people.person_handle import PersonHandle
@@ -29,11 +30,14 @@ from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
     InteractionId,
+    ObjectId,
     PersonId,
+    Ticks,
     WorldId,
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
+from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 from ai_rpg_world.game_world.domain.world_progress import (
     Weather,
@@ -44,6 +48,7 @@ from ai_rpg_world.game_world.domain.world_progress import (
 from ai_rpg_world.game_world.domain.world_records import (
     ActionLastDoneAt,
     HappeningLastFiredAt,
+    JointActionProgress,
     LatestActions,
     LatestActionsMemento,
     MissedNotices,
@@ -65,6 +70,7 @@ _WORLD = WorldId("island")
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
 _PULL_LEVER = InteractionId("pull_lever")
+_PUSH = InteractionId("push")
 _SEEN_ALICE = PersonRef(PersonHandle(1), DescriptionText("赤い外套の人"), DisplayName("アリス"))
 _SEEN_STRANGER = PersonRef(PersonHandle(2), DescriptionText("背の高い人"), NoVisibleName())
 
@@ -142,6 +148,21 @@ def _scenario_progress() -> ScenarioProgressMemento:
     progress.note_happening_fired(_happening("ship_arrives"), WorldTick(8), frozenset(), NoRefusal())
     progress.note_reaction_truth(_reaction("door_closed"), True)
     progress.note_reaction_truth(_reaction("lamp_lit"), False)
+    levers = JointActionDeclaration(
+        joint_id=JointActionId("levers"),
+        required=((ObjectId("left_lever"), _PUSH), (ObjectId("right_lever"), _PUSH)),
+        window=Ticks(2),
+        distinct_people=True,
+        on_complete=NoEffect(),
+        on_timeout=NoEffect(),
+        complete_notice=NoNotice(),
+        timeout_notice=NoNotice(),
+    )
+    for who, lever, at in ((_ALICE, "left_lever", 5), (_BOB, "right_lever", 6)):
+        attempt = ObjectInteractionAttempt(
+            actor=who, obj=thing(lever, "shaft"), interaction=InteractionForTests(_PUSH), arguments={}, manner=Openly()
+        )
+        progress.note_joint_action_part_done(attempt, (levers,), WorldTick(at))
     return progress.memento()
 
 
@@ -184,6 +205,8 @@ _NESTED_OBJECTS = [
     ("missed_notices", ("notices", 0, "text", "people", "target", "person_ref"), "visible_name"),
     ("scenario_progress", ("last_fired", 0), "at"),
     ("scenario_progress", ("reaction_truths", 0), "truth"),
+    ("scenario_progress", ("joint_actions", 0), "started_at"),
+    ("scenario_progress", ("joint_actions", 0, "parts_done", 0), "person"),
 ]
 _NESTED_IDS = [f"{kind}:{key}" for kind, _, key in _NESTED_OBJECTS]
 
@@ -267,6 +290,7 @@ class TestRoundTrip:
                         HappeningLastFiredAt(HappeningId(f"happening_{n}"), WorldTick(n)) for n in range(8)
                     ),
                     reaction_truths=frozenset(),
+                    joint_actions=frozenset(),
                 ),
                 "last_fired",
                 lambda item: item["happening"],
@@ -278,12 +302,30 @@ class TestRoundTrip:
                     reaction_truths=frozenset(
                         ReactionLastTruth(ReactionId(f"reaction_{n}"), n % 2 == 0) for n in range(8)
                     ),
+                    joint_actions=frozenset(),
                 ),
                 "reaction_truths",
                 lambda item: item["reaction"],
             ),
+            (
+                ScenarioProgressMemento(
+                    _WORLD,
+                    last_fired=frozenset(),
+                    reaction_truths=frozenset(),
+                    joint_actions=frozenset(
+                        JointActionProgress(JointActionId(f"joint_{n}"), WorldTick(n), frozenset()) for n in range(8)
+                    ),
+                ),
+                "joint_actions",
+                lambda item: item["joint"],
+            ),
         ],
-        ids=["latest_actions", "scenario_progress_last_fired", "scenario_progress_reaction_truths"],
+        ids=[
+            "latest_actions",
+            "scenario_progress_last_fired",
+            "scenario_progress_reaction_truths",
+            "scenario_progress_joint_actions",
+        ],
     )
     def test_sets_are_written_in_key_order(self, memento: object, listed: str, sort_key: Callable[[Any], Any]) -> None:
         """8 件の集合は、集合の走査順に依らず、持ち主のキーの昇順に並べて書く。同じ memento がいつも同じ JSON の文字列になる。"""

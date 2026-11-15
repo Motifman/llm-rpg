@@ -96,6 +96,10 @@ from ai_rpg_world.game_world.domain.world_progress.world_ending import (
 from ai_rpg_world.game_world.domain.world_progress.world_stage import (
     WorldStageChangedEvent,
 )
+from ai_rpg_world.game_world.domain.world_records.joint_action_progress import (
+    JointActionCompletedEvent,
+    JointActionTimedOutEvent,
+)
 from ai_rpg_world.game_world.domain.world_records.latest_actions import (
     ActionAttemptFailedEvent,
     PersonActedEvent,
@@ -166,6 +170,8 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         ItemPutAwayEvent,
         ItemReceivedEvent,
         ItemStateChangedEvent,
+        JointActionCompletedEvent,
+        JointActionTimedOutEvent,
         ObjectRevealedEvent,
         ObjectStateChangedEvent,
         OccupantEnteredSectionEvent,

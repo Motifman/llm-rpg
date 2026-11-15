@@ -446,7 +446,7 @@ class JointActionDeclaration:               # 二人で合わせる操作 (2 つ
     joint_id: JointActionId
     required: tuple[tuple[ObjectId, InteractionId], ...]   # どの物体のどの操作か
     window: Ticks                           # 最初の操作の tick + window + 1 の tick に揃っていなければ時間切れ
-    distinct_people: bool
+    distinct_people: bool                   # 部分ごとに最後に行った人が全員違うときだけ揃う。押し直しても窓は延ばさない (D2173)
     on_complete: Effect
     on_timeout: Effect                      # 最初の操作から window を過ぎた tick に 1 回だけ
     complete_notice: HappeningNotice | NoNotice

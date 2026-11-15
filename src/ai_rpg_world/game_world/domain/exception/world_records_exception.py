@@ -15,3 +15,11 @@ class OnceInWorldFoundByManyException(GameWorldDomainException):
 
 class LatestActionsDisagreeWithAnyoneException(GameWorldDomainException):
     error_code = "GAME_WORLD.LATEST_ACTIONS_DISAGREE_WITH_ANYONE"
+
+
+class JointActionUnsettledException(GameWorldDomainException):
+    error_code = "GAME_WORLD.JOINT_ACTION_UNSETTLED"
+
+
+class JointActionNotSettlingException(GameWorldDomainException):
+    error_code = "GAME_WORLD.JOINT_ACTION_NOT_SETTLING"
