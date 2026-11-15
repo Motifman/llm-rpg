@@ -114,7 +114,7 @@ uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
 
 - 新しいテストは上限の中で終わる形にする。run を丸ごと回さず、確かめたい部品を呼ぶ
 - どうしても遅いテストだけ、`@pytest.mark.timeout(秒)` で個別の上限を付ける。値は CI で測った所要時間のおよそ 2 倍にし、なぜ遅くてよいかを PR の該当行のレビューコメントに書く。速くできるなら Issue にする
-- `-m live_api` のテストは実 endpoint の応答を待つので、`tests/conftest.py` が一律に 120 秒の上限を付ける。`-m quality` は 15 秒の上限のまま回る
+- `-m live_api` のテストは実 endpoint の応答を待つので、`tests/conftest.py` が、個別の上限の無いものに 120 秒の上限を付ける。`-m quality` は 15 秒の上限のまま回る
 
 `make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。テスト駆動の
 進め方と「テストは仕様書」の書き方は後述の専用節を参照してください。
