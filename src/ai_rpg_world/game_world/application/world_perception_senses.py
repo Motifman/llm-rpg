@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.lighting import Lighting, LightingConditions
 from ai_rpg_world.game_world.domain.people import PeopleSeenBy
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.perception import Perceiver
+from ai_rpg_world.game_world.domain.perception.perceiver_in_world import perceiver_in_world
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.sound import HearingValues, Loudness, SoundNetwork, SoundReach
 from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId
@@ -58,8 +59,5 @@ def perceivers_in_world(facts: WorldFacts) -> tuple[Perceiver, ...]:
 
 
 def perceiver_of(facts: WorldFacts, person: PersonId) -> Perceiver:
-    departed_persons_act = facts.rules().departed_persons_act
-    vitals = facts.vitals(person)
-    location = facts.whereabouts().location_of(vitals.occupant_in_world(departed_persons_act))
     # 耳を澄ましているかを世界の状態に持たないので、誰も耳を澄ましていないものとして知覚する。
-    return vitals.perceiver_at(location, departed_persons_act, attentive=False)
+    return perceiver_in_world(facts, person, attentive=False)

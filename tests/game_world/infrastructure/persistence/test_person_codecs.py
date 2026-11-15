@@ -72,7 +72,7 @@ def _vitals() -> PersonVitalsMemento:
 
 def _outcomes() -> PersonOutcomesMemento:
     outcomes = PersonOutcomes.start(_WORLD, (_CAROL, _ALICE, _BOB))
-    outcomes.decide(_ALICE, Died())
+    outcomes.decide(_ALICE, Died(), WorldTick(0))
     outcomes.decide(
         _CAROL,
         DeclaredOutcome(
@@ -82,6 +82,7 @@ def _outcomes() -> PersonOutcomesMemento:
                 announcement=TextWithUnassignedPeople("{actor}は島を出た。"),
             )
         ),
+        WorldTick(0),
     )
     return outcomes.memento()
 

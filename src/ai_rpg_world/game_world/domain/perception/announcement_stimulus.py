@@ -22,6 +22,7 @@ class AnnouncementStimulus:
     text: TextAboutPeople
     salience: Salience
     at: WorldTick
+    reaches_who_left_the_world: bool = False
 
     @property
     def counts_toward_one_per_person(self) -> bool:
@@ -39,7 +40,7 @@ class AnnouncementStimulus:
         return self.perceived_by(perceiver, senses.view_for(perceiver.person))
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome:
-        if perceiver.person not in self.audience:
+        if perceiver.person not in self.audience or not perceiver.takes_announcement(self.reaches_who_left_the_world):
             return NotPerceived()
         # 知らせは選ばれた本人に宛てたものなので、倒れていれば起きてから知る。
         return perceiver.notices_surroundings(involved=True).outcome(

@@ -162,6 +162,7 @@ class AnnouncementStimulus:
     text: TextAboutPeople
     salience: Salience
     at: WorldTick
+    reaches_who_left_the_world: bool = False   # 結末の知らせだけが真。世界から外れた人には、これが真の知らせだけが届く
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome: ...
 ```
@@ -169,7 +170,7 @@ class AnnouncementStimulus:
 ## 知覚する人
 
 ```python
-Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver
+Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver | PersonWhoLeftTheWorld
 
 @final
 @dataclass(frozen=True)
@@ -196,17 +197,25 @@ class DeadPerceiver:                      # 死んで、去った人としても
 
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...   # いつも Unaware
 
+@final
+@dataclass(frozen=True)
+class PersonWhoLeftTheWorld:              # 作者の結末が決まって、世界から外れた人。居場所が無い
+    person: PersonId
+    life: Alive | Down
+
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...   # LivingPerceiver と同じく、倒れていれば AwareOnWaking
+
 SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 ```
 
 死んだ人が去った人として行為をしない世界 (`departed_persons_act` が偽) の死んだ人は `DeadPerceiver` になり、何も知覚しない。どの場所にもおらず、体も感じず、周りに気づかないので、どの刺激も `NotPerceived` になり、見渡しても `NothingInView`。
 
-| 刺激 | `LivingPerceiver` (`Alive`) | `LivingPerceiver` (`Down`) | `DepartedPerceiver` | `DeadPerceiver` |
-|---|---|---|---|---|
-| 見える | 明るさで決まる | 自分が関わるものは `NoticedLater`、ほかは `NotPerceived` | 見える | `NotPerceived` |
-| 聞こえる | 音の届き方で決まる | 同上 | 聞こえる | `NotPerceived` |
-| 本人の体 | 感じる | 感じる (気を失っていても痛みや寒さは体に残る。#1974 の 6.) | 体が無いので無い | `NotPerceived` |
-| 世界の知らせ | 届く | `NoticedLater` (知らせの文をそのままためる)。時間帯の知らせは、倒れている人を相手から外すので届かない | 届く | `NotPerceived` |
+| 刺激 | `LivingPerceiver` (`Alive`) | `LivingPerceiver` (`Down`) | `DepartedPerceiver` | `DeadPerceiver` | `PersonWhoLeftTheWorld` |
+|---|---|---|---|---|---|
+| 見える | 明るさで決まる | 自分が関わるものは `NoticedLater`、ほかは `NotPerceived` | 見える | `NotPerceived` | `NotPerceived` |
+| 聞こえる | 音の届き方で決まる | 同上 | 聞こえる | `NotPerceived` | `NotPerceived` |
+| 本人の体 | 感じる | 感じる (気を失っていても痛みや寒さは体に残る。#1974 の 6.) | 体が無いので無い | `NotPerceived` | `NotPerceived` |
+| 世界の知らせ | 届く | `NoticedLater` (知らせの文をそのままためる)。時間帯の知らせは、倒れている人を相手から外すので届かない | 届く | `NotPerceived` | 結末の知らせ (`reaches_who_left_the_world`) だけ届く。倒れていれば `NoticedLater` |
 
 - 去った人は、同じ場所の見える刺激を、明るさとこっそりに関わらず `SeesClearly` で clear の文で見る。音は、その場所に届いていれば `HearsClearly` で聞く。ただし宛先でないささやきは、生きている人と同じくかすか。去った人も行為ができるので、生きている人どうしの秘密が筒抜けにならないようにする
 - 倒れている人は、見える刺激なら同じ場所にいること、音なら届くことだけで `NoticedLater` を受ける。明るさとこっそりの確率は見ない。文は、相手なら `target` の、ほかは `witness` の `noticed_later` で、`NotNoticedLater` なら `NotPerceived`

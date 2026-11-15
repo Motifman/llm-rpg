@@ -16,4 +16,4 @@ class DecideDeathOutcomeHandler(EventHandler[PersonDiedEvent]):
         self._decide_death_outcome = decide_death_outcome
 
     def handle(self, event: PersonDiedEvent) -> None:
-        self._decide_death_outcome(DecideDeathOutcomeCommand(event.person))
+        self._decide_death_outcome(DecideDeathOutcomeCommand(person=event.person, at=event.died_at))

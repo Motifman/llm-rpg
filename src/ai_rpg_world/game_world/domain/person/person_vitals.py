@@ -262,6 +262,13 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
             return DeadPerceiver(person=self._person)
         return LivingPerceiver(person=self._person, life=self._life_state, location=location, attentive=attentive)
 
+    def perceiver_after_leaving(self) -> Perceiver:
+        from ai_rpg_world.game_world.domain.perception.perceiver import DeadPerceiver, PersonWhoLeftTheWorld
+
+        if isinstance(self._life_state, Dead):
+            return DeadPerceiver(person=self._person)
+        return PersonWhoLeftTheWorld(person=self._person, life=self._life_state)
+
     def fatigue_reached_limit(self, rule: FatigueRule) -> bool:
         return self._fatigue >= rule.limit
 

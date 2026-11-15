@@ -50,7 +50,7 @@ class SetOutcomeEffect:
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         person = self.who.person_in(trigger)
-        world.outcomes().decide(person, DeclaredOutcome(self.outcome))
+        world.outcomes().decide(person, DeclaredOutcome(self.outcome), facts.now())
         world.whereabouts().remove(PersonBody(person))
 
     def requirements(self) -> Requirements:

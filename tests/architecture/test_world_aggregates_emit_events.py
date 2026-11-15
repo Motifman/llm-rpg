@@ -525,7 +525,9 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
         _vitals(), lambda v: v.start_acting(UsesBody(), WorldTick(3), _fatigue_rule())
     ),
     "PeopleRegister.name": lambda: _with(_people_register(), lambda r: r.name(_ALICE, DisplayName("ミナ"))),
-    "PersonOutcomes.decide": lambda: _with(PersonOutcomes.start(_WORLD, (_ALICE,)), lambda o: o.decide(_ALICE, Died())),
+    "PersonOutcomes.decide": lambda: _with(
+        PersonOutcomes.start(_WORLD, (_ALICE,)), lambda o: o.decide(_ALICE, Died(), WorldTick(0))
+    ),
     "GroupMembership.join": lambda: _with(GroupMembership.start(_WORLD, {}), lambda g: g.join(_ALICE, _RED)),
     "GroupMembership.leave": lambda: _with(
         GroupMembership.start(_WORLD, {_ALICE: (_RED,)}), lambda g: g.leave(_ALICE, _RED)

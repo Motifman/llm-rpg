@@ -34,6 +34,7 @@ from ai_rpg_world.game_world.domain.condition.condition import HiddenFailure
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts
+from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb import (
     AnnouncementTo,
     HappeningDeclaration,
@@ -75,6 +76,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SoundStimulus,
     Voice,
 )
+from ai_rpg_world.game_world.domain.person import DeclaredOutcome, Died, Outcome, PersonOutcomeDecidedEvent
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.tend_rule import TendRule
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
@@ -84,6 +86,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     InteractionId,
     ItemSpecId,
     ObjectId,
+    OutcomeId,
     PersonId,
     Rate,
     SpotId,
@@ -716,3 +719,34 @@ class TestStimulusTranslatorJointActions:
         event = _timed_out(RefusalCode("GAME_WORLD.INVENTORY_FULL"))
 
         assert StimulusTranslator().stimuli_of(event, _joint_actions_design()) == ()
+
+
+_RESCUED = OutcomeDeclaration(
+    outcome_id=OutcomeId("rescued"),
+    name=DisplayName("救出"),
+    announcement=TextWithUnassignedPeople("{each_person}は昇降機で外へ出た。"),
+)
+
+
+def _outcome_decided(outcome: Outcome) -> PersonOutcomeDecidedEvent:
+    return PersonOutcomeDecidedEvent(**new_event_stamp(), world=_WORLD, person=_HAL, outcome=outcome, at=_NOW)
+
+
+class TestStimulusTranslatorOutcomes:
+    """StimulusTranslator が、結末が決まったことを、本人だけに宛てた結末の知らせに変えることを保証する。"""
+
+    def test_declared_outcome_becomes_a_notable_announcement_to_the_person_alone(self) -> None:
+        """ハルの結末が「救出」に決まると、ハルだけに宛てた目立つ世界の知らせ「ハルは昇降機で外へ出た。」になり、世界から外れたハルにも届く。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_outcome_decided(DeclaredOutcome(_RESCUED)), _design())
+
+        assert stimulus == AnnouncementStimulus(
+            audience=frozenset({_HAL}),
+            text=TextWithUnassignedPeople("{each_person}は昇降機で外へ出た。").about({"each_person": _HAL}),
+            salience=Notable(),
+            at=_NOW,
+            reaches_who_left_the_world=True,
+        )
+
+    def test_death_makes_no_announcement(self) -> None:
+        """ハルの結末が死んだこと (Died) に決まっても、作者の文が無いので刺激を作らない。"""
+        assert StimulusTranslator().stimuli_of(_outcome_decided(Died()), _design()) == ()
