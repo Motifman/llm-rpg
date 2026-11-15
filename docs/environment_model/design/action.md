@@ -122,16 +122,16 @@ Manner = Openly | Stealthily
 | 拾う (PICK_UP) | ○ | × | 地面の品物 | × | ○ |
 | 置く (DROP) | ○ | × | — | × | ○ |
 | 探す (SEARCH) | ○ | × | — | × | × |
-| 品物を使う (USE_ITEM) | ○ | × | — | × | × |
+| 品物を使う (USE_ITEM) | ○ | × | 持っている品物 | × | × |
 | 区画に入る・出る | 区画の出入りの宣言 | × | — | × | × |
 | 持ち替え (HOLD / PUT_AWAY) | × | × | — | × | × |
 | 投票 (CAST_BALLOT) | × | × | — | × | × |
-| 物・品物・人への操作 | 操作の宣言 | × | 物 / — / 相手 | 操作の宣言 | 操作の宣言 |
+| 物・品物・人への操作 | 操作の宣言 | × | 物 / 持っている品物 / 相手 | 操作の宣言 | 操作の宣言 |
 
 - 去った人にできるのは、移動・耳を澄ます・待つだけ (幽霊は観戦者に近い)
 - 持ち替えは、疲れ切っていても持ち替えられるよう体を使わない扱い
 - 形の誤り (こっそり行えない行為に `Stealthily`、`reaches_unseen` でない操作に `SomeoneInTheDark`) は、行為を作るときにドメイン例外で断る。ツールの呼び方の誤りとして返す
-- `SomeoneInTheDark` の相手は、行うときに世界がその場から選ぶ。暗さは知覚 (ステージ 5) の明るさで決まるので、共通の前提では確かめない。選べる人がいなければ、行為を行うユースケース (ステージ 7) が `NoOneFoundInTheDark` として断る
+- `SomeoneInTheDark` の相手は、行うときに世界がその場から選ぶ。暗さは知覚 (ステージ 5) の明るさで決まるので、共通の前提では確かめない。共通の前提を通ったあとに 1 回だけ、行う人と同じ場所にいる死んでいないほかの人 (倒れている人も入る。暗がりで触れうる) から `facts.random()` で選び (`ActionPrerequisiteCheck.cleared` → `ActionAttempt.aimed_in`)、以後の前提・効果・`PersonActedEvent`・`ActionAttemptFailedEvent` は相手の決まった試みを持つ。選べる人がいなければ共通の規則 `NoOneFoundInTheDark` として断る (#2148)
 
 ## 行為の型
 
@@ -187,10 +187,11 @@ class ActionRefusal:
     reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal
     text: TextAboutPeople                   # 見る人ごとの呼び方への置き換えは、行った人に届けるところで行う
 
-CommonRuleRefusal = ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage | NoOneFoundInTheDark
+CommonRuleRefusal = ActorCannotAct | Busy | NotTogether | OutOfReach | TooTired | NotAllowedInThisStage | NoOneFoundInTheDark | NotCarrying
 # Busy: 前の行為を行っているあいだ (話すことだけはできる)
 # ActorCannotAct: 倒れている、結末が決まった、去った人に許されない行為 (ActorRequirement)
 # OutOfReach: 区画の中からしか届かない物に、外から触ろうとした
+# NotCarrying: 品物を使う・品物への操作で、その品物を持っていない
 
 @final
 @dataclass(frozen=True)

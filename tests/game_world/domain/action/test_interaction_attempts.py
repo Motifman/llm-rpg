@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     LivingOnly,
     LivingOrDeparted,
     UsesBody,
+    WithCarriedItem,
     WithObject,
     WithPerson,
 )
@@ -155,13 +156,13 @@ class TestPropertiesReadFromTheDeclaration:
 
         assert attempt.copresence_requirements() == (WithObject(ObjectId("lever")),)
 
-    def test_carried_item_interaction_requires_no_one_nearby(self) -> None:
-        """持っている品物への操作は、何の近くにいる必要も答えない。"""
+    def test_carried_item_interaction_requires_carrying_the_item(self) -> None:
+        """持っている品物への操作は、その品物を持っている必要 (WithCarriedItem) だけを答える。"""
         attempt = CarriedItemInteractionAttempt(
             ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), {}, Openly()
         )
 
-        assert attempt.copresence_requirements() == ()
+        assert attempt.copresence_requirements() == (WithCarriedItem(NOTEBOOK),)
 
     def test_person_interaction_requires_being_with_the_target(self) -> None:
         """人への操作は、相手と同じ場所にいる必要 (WithPerson) を答え、person_as(TARGET) に相手を答える。"""

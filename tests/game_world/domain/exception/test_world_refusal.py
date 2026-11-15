@@ -12,6 +12,7 @@ _WORLD_REFUSALS = frozenset(
         "GroundItemNotFoundException",
         "ItemAlreadyLeftWorldException",
         "ItemNotCarriedException",
+        "ItemNotUsableException",
         "InventoryFullException",
         "NotEnoughStockException",
         "NotEnoughItemsOfSpecException",

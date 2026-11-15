@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     LivingOnly,
     LivingOrDeparted,
     UsesBody,
+    WithCarriedItem,
     WithGroundItem,
     WithPerson,
 )
@@ -123,7 +124,7 @@ _TABLE = [
     ),
     _Row(ItemDropAttempt(ALICE, LAMP, Openly()), ActionKind.DROP, UsesBody(), False, (), False),
     _Row(SpotSearchAttempt(ALICE), ActionKind.SEARCH, UsesBody(), False, (), False),
-    _Row(ItemUseAttempt(ALICE, LAMP), ActionKind.USE_ITEM, UsesBody(), False, (), False),
+    _Row(ItemUseAttempt(ALICE, LAMP), ActionKind.USE_ITEM, UsesBody(), False, (WithCarriedItem(LAMP),), False),
     _Row(
         EnterSectionAttempt(ALICE, SectionAccessForTests(CAGE, UsesBody())),
         ActionKind.ENTER_SECTION,

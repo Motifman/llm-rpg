@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import final
+from typing import TYPE_CHECKING, Protocol, final
 
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, SpotSectionDeclaration
@@ -13,12 +13,20 @@ from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     ThingFromAnotherSpotException,
     UnrevealedThingNotDeclaredHiddenException,
 )
-from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes, SightQuality
+from ai_rpg_world.game_world.domain.lighting import Lighting, SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PersonRef, Unidentified
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, SpotSectionId
+from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
+from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotId, SpotSectionId
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageInState
+
+if TYPE_CHECKING:
+    # 実行時に import すると循環する。
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+    from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 
 
 @final
@@ -167,6 +175,51 @@ class SpotContents:
         if elsewhere:
             raise ThingFromAnotherSpotException(f"SpotContents of {here.value} contains {', '.join(elsewhere)}")
 
+    @classmethod
+    def around(
+        cls, viewer: PersonId, spot: SpotDeclaration, facts: WorldFacts, design: WorldDesign, view: PeopleAsSeen
+    ) -> SpotContents:
+        people: list[PresentPerson] = []
+        bodies: list[PresentPerson] = []
+        for occupant, section in facts.whereabouts().sections_of_occupants_at(spot).items():
+            if occupant.is_departed() or occupant.person == viewer:
+                continue
+            inventory = facts.inventory(occupant.person)
+            present = PresentPerson(
+                person=view.ref_of(occupant.person),
+                section=section,
+                held_items=inventory.held_items(),
+                all_items=inventory.items(),
+            )
+            (people if facts.vitals(occupant.person).can_act() else bodies).append(present)
+        passages = facts.passages()
+        return cls(
+            spot=spot,
+            passages=tuple(
+                ContainedPassage(passage=touching, revealed=passages.is_revealed(touching.passage))
+                for touching in passages.touching(spot, facts.nouns().all_passages())
+            ),
+            sections=facts.nouns().sections_at(spot.spot_id),
+            objects=tuple(
+                ContainedObject(
+                    declaration=declared,
+                    revealed=facts.object_state(declared.object_id).is_revealed(),
+                    look=design.looks_of(declared.object_id).look_now(facts),
+                )
+                for declared in facts.nouns().all_objects()
+                if declared.spot_id == spot.spot_id
+            ),
+            ground_items=facts.ground_items(spot.spot_id).items(),
+            people=tuple(people),
+            bodies=tuple(bodies),
+        )
+
+
+class SurroundingsSenses(Protocol):
+    def lighting_at(self, spot: SpotId) -> Lighting: ...
+
+    def contents_at(self, spot: SpotId) -> SpotContents: ...
+
 
 @final
 @dataclass(frozen=True)
@@ -179,6 +232,13 @@ class VisibleSurroundings:
     ground_items: tuple[ItemInstanceId, ...]
     people: tuple[SeenPerson, ...]
     bodies: tuple[SeenPerson, ...]
+
+    @classmethod
+    def seen_by(cls, perceiver: Perceiver, senses: SurroundingsSenses) -> VisibleSurroundings | NothingInView:
+        spot = perceiver.spot_in_view()
+        if isinstance(spot, NothingInView):
+            return spot
+        return cls.seen_with(perceiver.sight_in(senses.lighting_at(spot)), senses.contents_at(spot))
 
     @classmethod
     def seen_with(cls, sight: SightQuality, contents: SpotContents) -> VisibleSurroundings:

@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, final
 
+from typing_extensions import Self
+
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
 from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActorRequirement,
@@ -13,9 +15,11 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     LivingOnly,
     LivingOrDeparted,
     UsesBody,
+    WithCarriedItem,
     WithGroundItem,
     WithPerson,
 )
+from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.declared_section_access import DeclaredSectionAccess
 from ai_rpg_world.game_world.domain.action.manner import Manner, Openly
 from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechReach
@@ -27,6 +31,7 @@ from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     HandOverToSelfException,
     NothingToHandOverException,
@@ -109,6 +114,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
 
     def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
         return design.built_in_action_perceptions.of_kind(self._KIND)
+
+    def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
+        return self
 
     def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
         return {}
@@ -356,6 +364,13 @@ class ItemUseAttempt(_OnOneItem):
 
     def exertion(self) -> Exertion:
         return UsesBody()
+
+    def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
+        return (WithCarriedItem(self.item),)
+
+    def take_effect(self, design: WorldDesign, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        design.use_of_item(facts.item(self.item).spec_id).apply(facts, world, self)
+        return facts.rules().duration_of(self._KIND, DefaultDuration())
 
 
 @final

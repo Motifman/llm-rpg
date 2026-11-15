@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import final
 
+from typing_extensions import Self
+
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
 from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import (
@@ -16,8 +18,10 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     UsesBody,
 )
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
+from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -104,6 +108,9 @@ class ActionAttemptForTests(ActionAttempt):
 
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
         return False
+
+    def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
+        return self
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
         raise NotImplementedError(f"{self!r} is not witnessed in tests that use it")
