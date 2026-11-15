@@ -191,10 +191,15 @@ class ScenarioProgress(AggregateRoot[ScenarioProgressEvent]):
     def note_joint_action_part_done(
         self, attempt: ActionAttempt, joints: Iterable[JointActionDeclaration], now: WorldTick
     ) -> None:
-        for joint in joints:
-            for part in joint.required:
-                if attempt.operates(*part):
-                    self._note_part_done(joint, part, attempt.actor, now)
+        parts_done = [(joint, part) for joint in joints for part in joint.required if attempt.operates(*part)]
+        for joint, _ in parts_done:
+            # 揃いか時間切れを落ち着かせる前に書くと、効果を当てないまま次の試みに混ざる
+            if self.joint_action_settlement(joint, now).settles():
+                raise JointActionUnsettledException(
+                    f"{joint.joint_id.value} has to be settled before another part is done at tick {now.value}"
+                )
+        for joint, part in parts_done:
+            self._note_part_done(joint, part, attempt.actor, now)
 
     def _note_part_done(
         self, joint: JointActionDeclaration, part: tuple[ObjectId, InteractionId], by: PersonId, now: WorldTick
@@ -203,11 +208,6 @@ class ScenarioProgress(AggregateRoot[ScenarioProgressEvent]):
         if held is None:
             self._joint_actions[joint.joint_id] = JointActionProgress.begin(joint.joint_id, part, by, now)
             return
-        # 揃いか時間切れを落ち着かせる前に書くと、効果を当てないまま次の試みに混ざる
-        if held.settlement(joint, now).settles():
-            raise JointActionUnsettledException(
-                f"{joint.joint_id.value} has to be settled before another part is done at tick {now.value}"
-            )
         self._joint_actions[joint.joint_id] = held.with_part_done(part, by)
 
     def joint_action_settlement(self, joint: JointActionDeclaration, now: WorldTick) -> JointActionSettlement:

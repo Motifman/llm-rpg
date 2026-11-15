@@ -99,7 +99,7 @@ class TestJointActionWindow:
         assert progress.joint_action_settlement(_LEVERS, WorldTick(7)) is JointActionSettlement.COMPLETED
 
     def test_completion_within_the_window_stays_completed_after_it(self) -> None:
-        """ハル tick 5 左・ナツ tick 7 右で揃ったまま落ち着かせずに tick 8 に問うても、時間切れではなく揃いを返す。部分は窓の中でしか書けないため。"""
+        """ハル tick 5 左・ナツ tick 7 右で揃ったまま落ち着かせずに tick 8 に問われても、時間切れではなく揃いを返す。部分は窓の中でしか書けないため。"""
         progress = ScenarioProgress.start(_WORLD)
 
         _pushed(progress, (5, _HARU, _LEFT), (7, _NATSU, _RIGHT))
@@ -204,6 +204,18 @@ class TestJointActionPartsChosenByTheLedger:
         progress.note_joint_action_part_done(_push(_HARU, _LEFT), (_LEVERS, other), WorldTick(5))
 
         assert {held.joint for held in progress.memento().joint_actions} == {_LEVERS.joint_id, other.joint_id}
+
+    def test_refused_push_writes_to_no_declaration(self) -> None:
+        """左の梃子を部分に持つ宣言 2 つのうち、後ろの 1 つだけが時間切れのまま落ち着いていないとき、ナツの左の一押しは JointActionUnsettledException を投げ、前の宣言にも書かれない。"""
+        progress = ScenarioProgress.start(_WORLD)
+        other = _levers(joint_id="other_levers")
+        progress.note_joint_action_part_done(_push(_HARU, _RIGHT), (other,), WorldTick(5))
+        before = progress.memento()
+
+        with pytest.raises(JointActionUnsettledException):
+            progress.note_joint_action_part_done(_push(_NATSU, _LEFT), (_LEVERS, other), WorldTick(8))
+
+        assert progress.memento() == before
 
 
 class TestJointActionSettled:
