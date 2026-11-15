@@ -22,7 +22,7 @@ from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception import Perceived
-from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, Told
+from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, NoticedOnWaking, Told
 from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, WorldId, WorldTick
 
@@ -34,6 +34,7 @@ _ROUTES: Final[dict[type, Route]] = {
     HearsFaintly: SeenOrHeard(),
     Felt: OwnBodyState(),
     Told: EnvironmentNotice(),
+    NoticedOnWaking: EnvironmentNotice(),
 }
 
 
