@@ -60,7 +60,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
-from tests.game_world.support.verb_declarations_for_tests import pull_lever
+from tests.game_world.support.verb_declarations_for_tests import lever_pulled_quietly, pull_lever, seen_clearly_only
 from tests.game_world.support.world_design_for_tests import (
     character,
     compose_world,
@@ -101,6 +101,11 @@ TAP_SHOULDER: InteractionDeclaration = replace(
     pull_lever(()),
     interaction_id=InteractionId("tap_shoulder"),
     effect=DamageEffect(Target(), Damage(1)),
+    perceived_as=replace(
+        lever_pulled_quietly(),
+        witness=seen_clearly_only("{actor}が{target}の肩を叩いた。"),
+        target=seen_clearly_only("{actor}に肩を叩かれた。"),
+    ),
     reaches_unseen=True,
 )
 

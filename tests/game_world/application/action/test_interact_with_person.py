@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
+from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator
 from ai_rpg_world.game_world.domain.action.action_refusal import PreconditionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.interaction_attempts import PersonInteractionAttempt, SomeoneInTheDark
+from ai_rpg_world.game_world.domain.perception import NoTarget, SightStimulus
 from ai_rpg_world.game_world.domain.value_object import PersonId
 from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent, PersonActedEvent
 from tests.game_world.application.action.world_for_interaction_tests import (
@@ -67,6 +69,18 @@ class TestInteractWithSomeoneInTheDark:
         assert reply == ActionDone()
         assert _damaged(world, (ALICE, BOB, CAROL)) == [BOB]
         assert _acted_targets(world) == [BOB]
+
+    def test_event_of_chosen_target_is_translated_into_target_stimulus(self) -> None:
+        """相手への文を宣言した操作を暗がりの誰かに行うと、PersonActedEvent から選んだ bob に向けた見える刺激が作れる。"""
+        world = WorldForInteractions()
+        world.tap(ALICE, SomeoneInTheDark())
+        acted = [event for event in world.events_received if isinstance(event, PersonActedEvent)]
+
+        stimuli = StimulusTranslator().stimuli_of(acted[0], world.design)
+
+        sights = [stimulus for stimulus in stimuli if isinstance(stimulus, SightStimulus)]
+        assert [sight.involved for sight in sights] == [(ALICE, BOB)]
+        assert not isinstance(sights[0].target, NoTarget)
 
     def test_one_of_several_people_together_is_chosen(self) -> None:
         """bob と carol が一緒にいるとき、相手はそのどちらか 1 人に決まり、傷つくのもイベントの相手もその人だけになる。"""
