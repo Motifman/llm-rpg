@@ -264,43 +264,33 @@ class TestSnapshotTraceCarriesMemoryTurns:
         assert turns[0] == turns[1]
         assert any(turn > 0 for turn in turns[0].values())
 
-    def test_resumed_run_after_the_range_fills_builds_prompts_without_failures(self, tmp_path: Path) -> None:
-        """Being の短期記憶の範囲が埋まったあとで保存し、続きから再開しても、戻した短期記憶からプロンプトを組み、手番は 1 つも失敗しない。"""
+    def test_resumed_run_after_the_range_fills_builds_prompts_without_failures(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Being の短期記憶の範囲が埋まったあとで保存し、続きから再開しても、戻した短期記憶 (書かれたいきさつを含む) からプロンプトを組み、手番は 1 つも失敗しない。
+
+        本番の手数 (20 手で埋まる) のままだと smoke_stub で 84 tick 回すことになり遅いので、
+        短期記憶のモジュールの手数の定数を 2 / 1 / 4 に下げて 12 tick で埋める。
+        差し替えが効かなくなったら 1 回目の run で範囲が埋まらず、range_filled の assert で落ちる。
+        """
         from scripts.run_scenario_experiment import main
 
+        import ai_rpg_world.being.domain.short_term_memory as short_term_memory
+
+        monkeypatch.setattr(short_term_memory, "RECENT_TURNS", 2)
+        monkeypatch.setattr(short_term_memory, "FOLD_TURNS", 1)
+        monkeypatch.setattr(short_term_memory, "FORCED_FOLD_TURNS", 4)
         common = ["--profile", "smoke_stub", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
         snapshots = tmp_path / "snapshots"
-        # smoke_stub は 4 人が 4 tick に 1 回ずつ手番を持つ。84 tick で 1 人 21 手になり、20 手目で畳む。
-        assert (
-            main(
-                [
-                    *common,
-                    "--max-world-ticks",
-                    "84",
-                    "--out",
-                    str(tmp_path / "first"),
-                    "--snapshot-save-dir",
-                    str(snapshots),
-                ]
-            )
-            == 0
-        )
-        # 上限は世界の tick の通し番号なので、続きから 12 tick 回す。
-        assert (
-            main(
-                [
-                    *common,
-                    "--max-world-ticks",
-                    "96",
-                    "--out",
-                    str(tmp_path / "second"),
-                    "--snapshot-load-dir",
-                    str(snapshots),
-                ]
-            )
-            == 0
-        )
+        # smoke_stub は 4 人が 4 tick に 1 回ずつ手番を持つ。12 tick で 1 人 3 手になり、2 手目で埋まる。
+        first = ["--max-world-ticks", "12", "--out", str(tmp_path / "first"), "--snapshot-save-dir", str(snapshots)]
+        assert main([*common, *first]) == 0
+        # 上限は世界の tick の通し番号なので、続きから 4 tick (1 人 1 手) 回す。
+        second = ["--max-world-ticks", "16", "--out", str(tmp_path / "second"), "--snapshot-load-dir", str(snapshots)]
+        assert main([*common, *second]) == 0
 
         assert self._events(tmp_path / "first" / "trace.jsonl", "being_short_term_memory_range_filled") != []
-        assert self._events(tmp_path / "second" / "trace.jsonl", "prompt_section_breakdown") != []
+        prompts = self._events(tmp_path / "second" / "trace.jsonl", "prompt_section_breakdown")
+        assert prompts != []
+        assert all(p["payload"]["backstory_chars"] > 0 for p in prompts)
         assert self._events(tmp_path / "second" / "trace.jsonl", "world_tick_unit_failed") == []
