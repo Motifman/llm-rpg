@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from ai_rpg_world.being.contract import Observation, ObservedTime, SeenOrHeard, TextWithPeople
+from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.deliver_surroundings import DeliverSurroundings, DeliverSurroundingsCommand
 from ai_rpg_world.game_world.application.look_around import LookAround
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
+from ai_rpg_world.game_world.application.perception.handlers.deliver_surroundings_on_arrival_handler import (
+    DeliverSurroundingsOnArrivalHandler,
+)
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
-from ai_rpg_world.game_world.domain.value_object import Damage, PersonId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import Damage, PersonId, SpotId, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import OccupantEnteredSpotEvent, PersonBody
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, passage, spot
@@ -53,12 +58,12 @@ class _World:
         OpenWorld(store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self._scope = CommandScope(store, CommittedEventsDistributor())
         self.received = _ObservationsReceived()
-        self._deliver = DeliverSurroundings(
+        self.deliver = DeliverSurroundings(
             LookAround(self._scope, design), design, ObservationExit(_WORLD, self.received)
         )
 
     def delivers_surroundings_to(self, person: PersonId) -> None:
-        self._deliver(DeliverSurroundingsCommand(person=person, at=_AT))
+        self.deliver(DeliverSurroundingsCommand(person=person, at=_AT))
 
     def falls(self, person: PersonId) -> None:
         self._scope.run(
@@ -101,3 +106,24 @@ class TestDeliverSurroundings:
         world.delivers_surroundings_to(_CAROL)
 
         assert world.received.by_person == {}
+
+
+class TestDeliverSurroundingsOnArrivalHandler:
+    """DeliverSurroundingsOnArrivalHandler が、場所に着いた本人にだけ、着いた時刻で場面を渡すことを保証する。"""
+
+    def test_only_the_arriving_person_gets_the_surroundings(self) -> None:
+        """bob が小屋から洞窟に着くと、bob に着いた時刻の場面が届き、洞窟に元からいた alice と carol には届かない。"""
+        world = _World()
+        arrived = OccupantEnteredSpotEvent(
+            **new_event_stamp(),
+            world_id=_WORLD,
+            occupant=PersonBody(_BOB),
+            spot=SpotId("cave"),
+            origin=SpotId("hut"),
+            at=WorldTick(5),
+        )
+
+        DeliverSurroundingsOnArrivalHandler(world.deliver).handle(arrived)
+
+        assert set(world.received.by_person) == {_BOB}
+        assert [observation.time for observation in world.received.by_person[_BOB]] == [ObservedTime(display="tick 5")]
