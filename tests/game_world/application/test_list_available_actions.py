@@ -91,7 +91,7 @@ from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
-from ai_rpg_world.game_world.domain.rules.tend_rule import TendRule
+from ai_rpg_world.game_world.domain.rules.tend_rule import NoTending, TendRule
 from ai_rpg_world.game_world.domain.value_object import (
     Damage,
     DescriptionText,
@@ -202,8 +202,9 @@ class _Mine:
         *,
         object_interactions: tuple[InteractionDeclaration, ...] = (_UNLOCK, _KNOCK),
         person_interactions: tuple[InteractionDeclaration, ...] = (_WAVE,),
+        tending: TendRule | NoTending = TendRule(revive_hp_rate=Rate(0.5)),
     ) -> None:
-        self.design = _design(lighting, object_interactions, person_interactions)
+        self.design = _design(lighting, object_interactions, person_interactions, tending)
         self.store = SqliteWorldStore.create(
             ":memory:",
             world_id=_WORLD,
@@ -304,6 +305,7 @@ def _design(
     lighting: Lighting,
     object_interactions: tuple[InteractionDeclaration, ...],
     person_interactions: tuple[InteractionDeclaration, ...],
+    tending: TendRule | NoTending,
 ) -> WorldDesign:
     return compose_world(
         nouns(
@@ -330,7 +332,7 @@ def _design(
         item_uses=[ItemUseDeclaration(item_spec=_LAMP, effect=RaiseFlagEffect(_LAMP_LIT))],
         section_accesses=[access_to(_CART)],
         person_interactions=person_interactions,
-        world_rules=replace(world_rules_for_tests(), tend=TendRule(revive_hp_rate=Rate(0.5))),
+        world_rules=replace(world_rules_for_tests(), tend=tending),
         built_in_action_perceptions_=built_in_action_perceptions(),
     )
 
@@ -466,6 +468,14 @@ class TestListAvailableActions:
             for a in attempts
             if isinstance(a, TendAttempt | ItemHandOverAttempt | PersonInteractionAttempt | GroundItemPickupAttempt)
         ] == []
+
+    def test_world_without_tending_offers_no_tending(self) -> None:
+        """介抱の規則が無い世界 (NoTending) では、倒れた bob が見えていても介抱は候補に出ない。"""
+        mine = _Mine(tending=NoTending())
+
+        attempts = [action.attempt for action in mine.lists()]
+
+        assert [a for a in attempts if isinstance(a, TendAttempt)] == []
 
     def test_person_in_a_section_may_leave_it_but_not_enter_it_again(self) -> None:
         """トロッコに乗っている alice には、トロッコから降りるが出て、乗るは出ない。"""
