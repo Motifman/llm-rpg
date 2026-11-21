@@ -25,6 +25,7 @@ from ai_rpg_world.game_world.domain.perception import (
     Stimulus,
     Voice,
 )
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import NotWhispered
 from ai_rpg_world.game_world.domain.perception.surroundings import SpotContents, VisibleSurroundings
@@ -145,12 +146,28 @@ class TestDeadPerceiverPerceivesNothing:
 
         assert isinstance(outcome, Perceived)
 
-    @pytest.mark.parametrize("stimulus", _STIMULI_THAT_REACH_THE_LIVING.values(), ids=_STIMULI_THAT_REACH_THE_LIVING)
-    def test_dead_person_who_does_not_act_perceives_no_stimulus(self, stimulus: Callable[[], Stimulus]) -> None:
-        """死者が行動しない世界で死んだナツには、生きていれば届く刺激が、倒れたことのように必ず届くものも含めて NotPerceived になる。"""
+    @pytest.mark.parametrize(
+        ("stimulus", "reason"),
+        [
+            (_door_broken_in_the_square, NotPerceivedReason.ELSEWHERE),
+            (_door_crashing_in_the_square, NotPerceivedReason.ELSEWHERE),
+            (_whisper_to_natsu, NotPerceivedReason.ELSEWHERE),
+            (_struck, NotPerceivedReason.NOT_OWN_BODY),
+            (_told_to_gather, NotPerceivedReason.DEAD),
+        ],
+        ids=list(_STIMULI_THAT_REACH_THE_LIVING),
+    )
+    def test_dead_person_who_does_not_act_perceives_no_stimulus(
+        self, stimulus: Callable[[], Stimulus], reason: NotPerceivedReason
+    ) -> None:
+        """死者が行動しない世界で死んだナツには、生きていれば届く刺激がどれも NotPerceived になる。
+
+        居場所が無いので、見える・聞こえる刺激は「その場にいない」、体の刺激は「本人の体ではない」になる。
+        「死んでいる」になるのは、宛先に入っていた知らせだけ。
+        """
         outcome = stimulus().perceived_in(_NATSU, _BrightSquareWhereEverySoundCarries())
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(reason)
 
     def test_dead_person_who_does_not_act_has_nothing_in_view(self) -> None:
         """死者が行動しない世界で死んだナツが見渡すと、どの場所の明るさも中身も見ずに NothingInView になる。"""

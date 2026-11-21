@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.perception import (
     NotSeenWithoutActor,
 )
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.perception.sight_stimulus import SightStimulus, SightTarget, SightTexts
 from ai_rpg_world.game_world.domain.value_object import WorldTick
@@ -118,13 +119,13 @@ class TestSightStimulusLighting:
         """暗い場所で dim が NotSeenInDim なら NotPerceived を返す。"""
         outcome = _opening(dim=False).perceived_by(awake(BOB), Lighting.DARK, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.TOO_DARK)
 
     def test_in_pitch_dark_nothing_is_seen(self) -> None:
         """真っ暗な場所では、seen_in_dark でない刺激は NotPerceived を返す。"""
         outcome = _opening().perceived_by(awake(BOB), Lighting.PITCH_DARK, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.TOO_DARK)
 
     def test_in_pitch_dark_what_is_seen_in_dark_arrives_as_the_dim_text(self) -> None:
         """真っ暗な場所でも、seen_in_dark の刺激は dim の文で SeesShapes として届く。"""
@@ -142,7 +143,7 @@ class TestSightStimulusWhereabouts:
         """別の場所にいる人には、明るくても NotPerceived を返す。"""
         outcome = _opening().perceived_by(awake(BOB, HALL), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.ELSEWHERE)
 
 
 class TestSightStimulusCallsAttention:
@@ -180,7 +181,7 @@ class TestSightStimulusStealth:
             awake(CAROL), Lighting.BRIGHT, VIEW, FractionsInOrder((0.4,)), _STEALTH
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.STEALTH_UNNOTICED)
 
     def test_the_chance_follows_how_well_the_bystander_sees(self) -> None:
         """暗い場所では notice_by_bystander の SeesShapes 0.15 で決まり、0.2 を引くと気づかない。"""
@@ -188,7 +189,7 @@ class TestSightStimulusStealth:
             awake(CAROL), Lighting.DARK, VIEW, FractionsInOrder((0.2,)), _STEALTH
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.STEALTH_UNNOTICED)
 
     def test_an_attentive_bystander_gets_the_attentive_bonus(self) -> None:
         """耳を澄ましている人は attentive_bonus 0.2 が足されて 0.6 になり、0.5 を引いても気づく。"""
@@ -202,7 +203,7 @@ class TestSightStimulusStealth:
         """真っ暗で見えない人のためには偶然を引かない。値を並べなくても NotPerceived を返す。"""
         outcome = _opening(stealthily=True).perceived_by(awake(CAROL), Lighting.PITCH_DARK, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.TOO_DARK)
 
 
 class TestSightStimulusTarget:
@@ -240,7 +241,7 @@ class TestSightStimulusTarget:
             awake(CAROL), Lighting.BRIGHT, VIEW, FractionsInOrder((0.5,)), _STEALTH
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.STEALTH_UNNOTICED)
 
 
 class TestSightStimulusConstruction:
@@ -296,7 +297,7 @@ class TestSightStimulusDepartedActor:
         """unseen_actor が NotSeenWithoutActor なら、生きている人には NotPerceived を返す。"""
         outcome = _opening(actor_departed=True).perceived_by(awake(BOB), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.ACTOR_UNSEEN)
 
     def test_a_departed_viewer_sees_the_clear_text(self) -> None:
         """去った人には clear の文が SeesClearly で届く。"""
@@ -337,7 +338,7 @@ class TestSightStimulusDepartedViewer:
         """別の場所にいる去った人には NotPerceived を返す。"""
         outcome = _opening().perceived_by(departed(BOB, HALL), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.ELSEWHERE)
 
 
 class TestSightStimulusFallenViewer:
@@ -366,7 +367,7 @@ class TestSightStimulusFallenViewer:
         """関わっていても noticed_later が NotNoticedLater なら NotPerceived を返す。"""
         outcome = _opening().perceived_by(fallen(ALICE), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.UNCONSCIOUS)
 
     def test_a_fallen_person_not_involved_perceives_nothing(self) -> None:
         """関わっていない倒れている人には、明るくても NotPerceived を返す。"""
@@ -374,7 +375,7 @@ class TestSightStimulusFallenViewer:
             fallen(CAROL), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.UNCONSCIOUS)
 
     def test_a_fallen_target_elsewhere_perceives_nothing(self) -> None:
         """別の場所で倒れている相手には NotPerceived を返す。"""
@@ -382,7 +383,7 @@ class TestSightStimulusFallenViewer:
             fallen(BOB, HALL), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.ELSEWHERE)
 
 
 class TestSightStimulusTraveller:
@@ -392,4 +393,4 @@ class TestSightStimulusTraveller:
         """移動中の人は、明るくても NotPerceived を返す。"""
         outcome = _opening().perceived_by(travelling(BOB), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.ELSEWHERE)

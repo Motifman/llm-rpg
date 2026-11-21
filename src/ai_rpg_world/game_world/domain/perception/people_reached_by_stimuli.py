@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import final
 
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived, PerceptionRecipient
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
@@ -41,3 +42,6 @@ class _ReachedPeople:
     def noticed_later(self, perceiver: PersonId, notice: MissedNotice) -> None:
         self._people.add(perceiver)
         self._recipient.noticed_later(perceiver, notice)
+
+    def not_perceived(self, perceiver: PersonId, reason: NotPerceivedReason) -> None:
+        self._recipient.not_perceived(perceiver, reason)

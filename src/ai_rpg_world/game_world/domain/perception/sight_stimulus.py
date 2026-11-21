@@ -16,6 +16,7 @@ from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.no_target import NoTarget
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.not_seen_in_dim import NotSeenInDim
 from ai_rpg_world.game_world.domain.perception.not_seen_without_actor import NotSeenWithoutActor
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
@@ -106,7 +107,7 @@ class SightStimulus:
         stealth: StealthRule,
     ) -> PerceptionOutcome:
         if not perceiver.is_at(self.where):
-            return NotPerceived()
+            return NotPerceived(NotPerceivedReason.ELSEWHERE)
         texts = self.target.texts_for(perceiver.person, self.witness)
         chances = self.target.notice_chances_for(perceiver.person, stealth)
         involved = perceiver.person in self.involved
@@ -128,7 +129,7 @@ class SightStimulus:
     ) -> PerceptionOutcome:
         visible = texts if not self.actor_departed or perceiver.sees_departed_people() else texts.without_actor()
         if isinstance(visible, NotSeenWithoutActor):
-            return NotPerceived()
+            return NotPerceived(NotPerceivedReason.ACTOR_UNSEEN)
         sighting = _Sighting(
             stimulus=self,
             perceiver=perceiver,
@@ -159,17 +160,19 @@ class _Sighting:
 
     def when_shapes(self) -> PerceptionOutcome:
         if isinstance(self.texts.dim, NotSeenInDim):
-            return NotPerceived()
+            return NotPerceived(NotPerceivedReason.TOO_DARK)
         return self._seen_as(self.texts.dim.unidentified(), SeesShapes())
 
     def when_nothing(self) -> PerceptionOutcome:
-        return self.when_shapes() if self.stimulus.seen_in_dark else NotPerceived()
+        if self.stimulus.seen_in_dark:
+            return self.when_shapes()
+        return NotPerceived(NotPerceivedReason.TOO_DARK)
 
     def _seen_as(self, text: TextWithAssignedPeople, sight: SeesClearly | SeesShapes) -> PerceptionOutcome:
         if not self.stimulus.manner.noticed_when(
             lambda: self.perceiver.notices_stealthy_act(self.chances[sight], self.attentive_bonus, self.random)
         ):
-            return NotPerceived()
+            return NotPerceived(NotPerceivedReason.STEALTH_UNNOTICED)
         return Perceived(
             perceiver=self.perceiver.person,
             text=text,

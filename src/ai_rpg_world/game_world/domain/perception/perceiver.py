@@ -9,7 +9,9 @@ from ai_rpg_world.game_world.domain.condition.random_source import RandomSource
 from ai_rpg_world.game_world.domain.exception.perception_exception import DeadPersonCannotPerceiveAsLivingException
 from ai_rpg_world.game_world.domain.lighting.lighting import Lighting
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SightQuality
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
+from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived
 from ai_rpg_world.game_world.domain.perception.surroundings_awareness import (
     Aware,
     AwareOnWaking,
@@ -72,6 +74,14 @@ class LivingPerceiver:
     def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
         return values.quality(self.location.sound_level_from(origin, loudness, reach, values), self.attentive)
 
+    def unheard(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> NotPerceived:
+        if isinstance(self.location.sound_level_from(origin, loudness, reach, values), NotReached):
+            return self.out_of_earshot()
+        return NotPerceived(NotPerceivedReason.TOO_QUIET)
+
+    def out_of_earshot(self) -> NotPerceived:
+        return NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
+
 
 @final
 @dataclass(frozen=True)
@@ -108,6 +118,12 @@ class DepartedPerceiver:
             return HearsNothing()
         return HearsClearly()
 
+    def unheard(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> NotPerceived:
+        return self.out_of_earshot()
+
+    def out_of_earshot(self) -> NotPerceived:
+        return NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
+
 
 @final
 @dataclass(frozen=True)
@@ -115,7 +131,7 @@ class DeadPerceiver:
     person: PersonId
 
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
-        return Unaware()
+        return Unaware(because=NotPerceivedReason.DEAD)
 
     def takes_announcement(self, reaches_who_left_the_world: bool) -> bool:
         return True
@@ -140,6 +156,13 @@ class DeadPerceiver:
 
     def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
         return HearsNothing()
+
+    def unheard(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> NotPerceived:
+        return self.out_of_earshot()
+
+    def out_of_earshot(self) -> NotPerceived:
+        # 居場所が無いので、どこで鳴っても届く見込みは無かった。記録に並べない (D2206)。
+        return NotPerceived(NotPerceivedReason.ELSEWHERE)
 
 
 @final
@@ -176,6 +199,12 @@ class PersonWhoLeftTheWorld:
 
     def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
         return HearsNothing()
+
+    def unheard(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> NotPerceived:
+        return self.out_of_earshot()
+
+    def out_of_earshot(self) -> NotPerceived:
+        return NotPerceived(NotPerceivedReason.ELSEWHERE)
 
 
 def _spot_in_view(location: Location) -> SpotId | NothingInView:

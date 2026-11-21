@@ -3,6 +3,7 @@ from __future__ import annotations
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import Background, Notable
 from ai_rpg_world.game_world.domain.perception.bodily_stimulus import BodilyStimulus
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.value_object import WorldTick
@@ -32,7 +33,7 @@ class TestBodilyStimulusPerceivedBy:
 
     def test_someone_else_does_not_feel_it(self) -> None:
         """本人でない人には NotPerceived を返す。"""
-        assert _cold_on().perceived_by(awake(BOB), VIEW) == NotPerceived()
+        assert _cold_on().perceived_by(awake(BOB), VIEW) == NotPerceived(NotPerceivedReason.NOT_OWN_BODY)
 
     def test_a_fallen_person_still_feels_it(self) -> None:
         """倒れている本人にも、気を失っていても体に残るので Felt で届く。"""
@@ -43,7 +44,7 @@ class TestBodilyStimulusPerceivedBy:
 
     def test_a_departed_person_has_no_body_to_feel_it(self) -> None:
         """去った人には体が無いので、本人であっても NotPerceived を返す。"""
-        assert _cold_on().perceived_by(departed(ALICE), VIEW) == NotPerceived()
+        assert _cold_on().perceived_by(departed(ALICE), VIEW) == NotPerceived(NotPerceivedReason.NOT_OWN_BODY)
 
     def test_a_background_feeling_does_not_call_attention(self) -> None:
         """Background の体の刺激は、本人が感じても calls_attention は偽。"""

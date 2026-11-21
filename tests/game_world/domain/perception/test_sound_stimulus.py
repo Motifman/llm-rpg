@@ -4,6 +4,7 @@ import pytest
 
 from ai_rpg_world.game_world.domain.perception import Notable, NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import Noise, NotWhispered, SoundStimulus, Voice
 from ai_rpg_world.game_world.domain.sound import (
@@ -95,13 +96,13 @@ class TestSoundStimulusHearingQuality:
         """faint_from 未満なら NotPerceived を返す。"""
         outcome = _speech().perceived_by(awake(BOB, HALL), _reach(19), _VALUES, VIEW)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.TOO_QUIET)
 
     def test_a_sound_that_does_not_reach_the_spot_is_not_heard(self) -> None:
         """聞く人の場所に届いていなければ NotPerceived を返す。"""
         outcome = _speech().perceived_by(awake(BOB, HALL), SoundReach(levels={SQUARE: SoundLevel(60)}), _VALUES, VIEW)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
     def test_listening_closely_lowers_the_boundaries(self) -> None:
         """耳を澄ましている人は境目が attentive_allowance 15 だけ下がり、40 の声もはっきり聞こえる。"""
@@ -180,13 +181,13 @@ class TestSoundStimulusWhisper:
         """別の場所の人には、音が届いていても NotPerceived を返す。"""
         outcome = self._whisper().perceived_by(awake(CAROL, HALL, attentive=True), self._reach(), _VALUES, VIEW)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
     def test_an_addressee_at_another_spot_does_not_hear_it(self) -> None:
         """宛先でも、鳴った場所にいなければ NotPerceived を返す。"""
         outcome = self._whisper().perceived_by(awake(BOB, HALL, attentive=True), self._reach(), _VALUES, VIEW)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
 
 class TestSoundStimulusTraveller:
@@ -215,7 +216,7 @@ class TestSoundStimulusTraveller:
         """区間の端で鳴っても、ささやき・ふつうの音は NotPerceived を返す。"""
         outcome = _speech(loudness, origin=HALL).perceived_by(travelling(BOB), self._EMPTY_REACH, _VALUES, VIEW)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
     @pytest.mark.parametrize("origin", [SQUARE, HALL])
     def test_both_ends_of_the_first_passage_count(self, origin) -> None:
@@ -230,7 +231,7 @@ class TestSoundStimulusTraveller:
             setting_out(BOB), self._EMPTY_REACH, _VALUES, VIEW
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
     def test_a_loud_sound_away_from_the_passage_is_not_heard(self) -> None:
         """今の区間の端でない場所 (通り過ぎた広場) で鳴った大きい音は NotPerceived を返す。"""
@@ -238,7 +239,7 @@ class TestSoundStimulusTraveller:
             travelling(BOB), self._EMPTY_REACH, _VALUES, VIEW
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
     def test_listening_closely_while_travelling_lowers_the_boundaries(self) -> None:
         """loss_per_passage を 40 にした世界では大きい音が 35 になり、ふだんはくぐもるが、耳を澄ますとはっきり聞こえる。"""
@@ -287,7 +288,7 @@ class TestSoundStimulusDepartedListener:
             departed(BOB, HALL), SoundReach(levels={SQUARE: SoundLevel(60)}), _VALUES, VIEW
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
 
 class TestSoundStimulusFallenListener:
@@ -304,24 +305,24 @@ class TestSoundStimulusFallenListener:
         assert outcome == NoticedLater(notice=MissedNotice(text=self._LATER.seen_by(VIEW), happened_at=WorldTick(9)))
 
     def test_a_fallen_person_involved_misses_what_does_not_reach_them(self) -> None:
-        """関わっていても、届かない音は NotPerceived を返す。"""
+        """関わっていても、届いた大きさが faint_from 未満の音は、理由「音が小さい」の NotPerceived を返す。"""
         outcome = _speech(noticed_later=self._LATER, involved=(ALICE, BOB)).perceived_by(
             fallen(BOB, HALL), _reach(10), _VALUES, VIEW
         )
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.TOO_QUIET)
 
     def test_a_fallen_person_not_involved_perceives_nothing(self) -> None:
         """関わっていない倒れた人には NotPerceived を返す。"""
         outcome = _speech(noticed_later=self._LATER).perceived_by(fallen(BOB, HALL), _reach(55), _VALUES, VIEW)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.UNCONSCIOUS)
 
     def test_a_fallen_person_involved_without_a_noticed_later_text_perceives_nothing(self) -> None:
         """関わっていて届いても、noticed_later が NotNoticedLater なら NotPerceived を返す。"""
         outcome = _speech(involved=(ALICE, BOB)).perceived_by(fallen(BOB, HALL), _reach(55), _VALUES, VIEW)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.UNCONSCIOUS)
 
     def test_a_fallen_addressee_of_a_whisper_notices_later(self) -> None:
         """ささやきの宛先が同じ場所で倒れていれば、noticed_later を NoticedLater で渡す。"""

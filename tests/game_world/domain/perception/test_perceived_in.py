@@ -21,6 +21,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SoundStimulus,
     Voice,
 )
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, Told
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import NotWhispered
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
@@ -173,7 +174,7 @@ class TestSoundStimulusPerceivedIn:
 
         outcome = self._shout().perceived_in(awake(ALICE, HALL), senses)
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
 
 
 class TestBodilyAndAnnouncementPerceivedIn:

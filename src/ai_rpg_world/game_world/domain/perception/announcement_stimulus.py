@@ -7,6 +7,7 @@ from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
 from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Told
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
@@ -41,8 +42,10 @@ class AnnouncementStimulus:
         return self.perceived_by(perceiver, senses.view_for(perceiver.person))
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome:
-        if perceiver.person not in self.audience or not perceiver.takes_announcement(self.reaches_who_left_the_world):
-            return NotPerceived()
+        if perceiver.person not in self.audience:
+            return NotPerceived(NotPerceivedReason.NOT_ADDRESSED)
+        if not perceiver.takes_announcement(self.reaches_who_left_the_world):
+            return NotPerceived(NotPerceivedReason.LEFT_THE_WORLD)
         # 知らせは選ばれた本人に宛てたものなので、倒れていれば起きてから知る。
         # 時間帯は、目覚めたときに古い時間帯が届くといまの時刻と食い違うので、ためない (D2203)。
         return perceiver.notices_surroundings(involved=self.kept_while_fainted).outcome(
