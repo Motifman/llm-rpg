@@ -37,8 +37,8 @@ class SettleWorldConditions:
 `SettleWorldConditions` の決まり (#1978 の D2 / E2 / E3、#2145 で調整役と決めた):
 
 - 発火 1 回ごとを、確定の範囲の中の小さな範囲 (`WorldSession.attempt_apart`、[persistence.md](persistence.md)) にする。集約が断ったら、その発火の書き換えだけを巻き戻し、`ScenarioProgress.note_happening_fired` / `note_reaction_fired` に断った理由を渡して「その回は起きた」と記録する。次の tick に試し直さない
-- 記録のたびに `HappeningFiredEvent` / `ReactionFiredEvent` が出る。断った理由 (`refusal`) が trace の材料になる。出来事のイベントには、効果を当てる前の世界で選んだ `AnnouncementTo` の相手 (`audience`) が載る。`SightAt` / `SoundFrom` の受け手は `DeliverPerception` が選ぶ
-- 断られた発火のイベントには相手を載せない。何も変わっていないので、知らせると起きていないことを伝えてしまう
+- 記録のたびに `HappeningFiredEvent` / `ReactionFiredEvent` が出る。断った理由 (`refusal`) が trace の材料になる。出来事のイベントには、効果を当てる前の世界で選んだ `AnnouncementTo` の相手 (`audience`) と、`SightAt` / `SoundFrom` のための効果の前の人ごとの居場所 (`present`、`PeopleWhoWereThere`) が載る。場所の様子 (明るさ、通路) は `DeliverPerception` が確定した後の世界で決める (D2207)
+- 断られた発火のイベントには相手も効果の前の居場所も載せない。何も変わっていないので、知らせると起きていないことを伝えてしまう
 - 偶然を使う条件 (`requirements().uses_chance`) は、出来事・反応・終わりのどれも、時間を進めたあと (`AFTER_WORLD_TIME_PASSED`) だけ確かめる。コマンドのたびに確かめると、1 tick にくじを何度も引き、書いた確率より高くなる
 - 出来事は `ScenarioProgress` が 1 tick に 1 回までにする。反応には tick ごとの帳簿が無いので、1 回の `SettleWorldConditions` の中で同じ反応は 1 回まで (断られた回も数える)。自分の条件を崩す反応 (鐘が鳴ったら止める、止んだら鳴らす) でも止まる。回る回数は出来事と反応と二人で合わせる操作の宣言の数を超えない
 - 二人で合わせる操作は、帳簿が揃いか時間切れを返したものを発火する。当てる効果 (`on_complete` / `on_timeout`)、知らせ、きっかけ (`JointActionCompleted` / `JointActionTimedOut`) は `JointActionSettlement` が選ぶ。断られたら出来事と同じく巻き戻し、`ScenarioProgress.note_joint_action_settled` に理由を渡す。落ち着かせると帳簿が空になるので、1 回の落ち着かせに 1 回まで (D2173)
@@ -59,6 +59,7 @@ class DeliverPerception:
     def __call__(self, command: DeliverPerceptionCommand) -> None:
         # command は原因 (PerceptionCause) と刺激を持つ
         # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
+        # 作者の場所の知らせの刺激は、知覚する人を効果の前の居場所 (PeopleWhoWereThere) に置き直してから聞く (D2207)
         # → Perceiver と LightingConditions / SoundReach を作り、刺激の perceived_by に聞く
         # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、本人の体・見える・聞こえるは 1 人に最初に知覚したものだけ。世界の知らせは数えずに届ける (D2203)
         # → Perceived は観測の出口へ

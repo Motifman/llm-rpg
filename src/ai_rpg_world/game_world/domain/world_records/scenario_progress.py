@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.exception.world_records_exception import (
     JointActionNotSettlingException,
     JointActionUnsettledException,
 )
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId, Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
@@ -57,6 +58,7 @@ class HappeningFiredEvent(DomainEvent):
     happening_id: HappeningId
     at: WorldTick
     audience: frozenset[PersonId]
+    present: PeopleWhoWereThere
     refusal: RefusalCode | NoRefusal
 
 
@@ -142,17 +144,18 @@ class ScenarioProgress(AggregateRoot[ScenarioProgressEvent]):
         happening: HappeningDeclaration,
         now: WorldTick,
         audience: frozenset[PersonId],
+        present: PeopleWhoWereThere,
         refusal: RefusalCode | NoRefusal,
     ) -> None:
         self._last_fired[happening.happening_id] = now
-        notified = _notified(audience, refusal)
         self.add_event(
             HappeningFiredEvent(
                 **new_event_stamp(),
                 world_id=self._world_id,
                 happening_id=happening.happening_id,
                 at=now,
-                audience=notified,
+                audience=_notified(audience, refusal),
+                present=_present(present, refusal),
                 refusal=refusal,
             )
         )
@@ -221,6 +224,7 @@ class ScenarioProgress(AggregateRoot[ScenarioProgressEvent]):
         joint: JointActionDeclaration,
         now: WorldTick,
         audience: frozenset[PersonId],
+        present: PeopleWhoWereThere,
         refusal: RefusalCode | NoRefusal,
     ) -> None:
         settlement = self.joint_action_settlement(joint, now)
@@ -238,6 +242,7 @@ class ScenarioProgress(AggregateRoot[ScenarioProgressEvent]):
                 at=now,
                 parts_done=held.parts_done,
                 audience=_notified(audience, refusal),
+                present=_present(present, refusal),
                 refusal=refusal,
             )
         )
@@ -246,3 +251,7 @@ class ScenarioProgress(AggregateRoot[ScenarioProgressEvent]):
 def _notified(audience: frozenset[PersonId], refusal: RefusalCode | NoRefusal) -> frozenset[PersonId]:
     # 断られた発火は何も変えていないので、知らせると起きていないことを伝えてしまう
     return audience if isinstance(refusal, NoRefusal) else frozenset()
+
+
+def _present(present: PeopleWhoWereThere, refusal: RefusalCode | NoRefusal) -> PeopleWhoWereThere:
+    return present if isinstance(refusal, NoRefusal) else PeopleWhoWereThere()

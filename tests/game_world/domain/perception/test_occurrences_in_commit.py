@@ -3,6 +3,7 @@ from __future__ import annotations
 from ai_rpg_world.eventing import DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal
 from ai_rpg_world.game_world.domain.perception.occurrences_in_commit import OccurrencesInCommit
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.perception.perception_cause import (
     HappeningFiring,
     ReactionFiring,
@@ -27,6 +28,7 @@ def _happening_fired(name: str) -> HappeningFiredEvent:
         happening_id=HappeningId(name),
         at=_AT,
         audience=frozenset(),
+        present=PeopleWhoWereThere(),
         refusal=NoRefusal(),
     )
 

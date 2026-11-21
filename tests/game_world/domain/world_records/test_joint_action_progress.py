@@ -22,6 +22,7 @@ from ai_rpg_world.game_world.domain.exception.world_records_exception import (
 )
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import Notable
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId, Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.world_records import (
@@ -129,7 +130,7 @@ class TestJointActionWindow:
         """tick 8 の時間切れを落ち着かせてからナツが tick 8 に右を押すと、それが新しい試みの 1 つ目になり、tick 10 までは何も起きず、tick 11 に時間切れになる。"""
         progress = ScenarioProgress.start(_WORLD)
         _pushed(progress, (5, _HARU, _LEFT))
-        progress.note_joint_action_settled(_LEVERS, WorldTick(8), frozenset(), NoRefusal())
+        progress.note_joint_action_settled(_LEVERS, WorldTick(8), frozenset(), PeopleWhoWereThere(), NoRefusal())
 
         _pushed(progress, (8, _NATSU, _RIGHT))
 
@@ -237,7 +238,7 @@ class TestJointActionSettled:
         progress = ScenarioProgress.start(_WORLD)
         _pushed(progress, (5, _HARU, _LEFT), (7, _NATSU, _RIGHT))
 
-        progress.note_joint_action_settled(_LEVERS, WorldTick(7), frozenset({_HARU}), NoRefusal())
+        progress.note_joint_action_settled(_LEVERS, WorldTick(7), frozenset({_HARU}), PeopleWhoWereThere(), NoRefusal())
 
         (event,) = progress.get_events()
         assert isinstance(event, JointActionCompletedEvent)
@@ -254,7 +255,7 @@ class TestJointActionSettled:
         progress = ScenarioProgress.start(_WORLD)
         _pushed(progress, (5, _HARU, _LEFT))
 
-        progress.note_joint_action_settled(_LEVERS, WorldTick(8), frozenset(), NoRefusal())
+        progress.note_joint_action_settled(_LEVERS, WorldTick(8), frozenset(), PeopleWhoWereThere(), NoRefusal())
 
         (event,) = progress.get_events()
         assert isinstance(event, JointActionTimedOutEvent)
@@ -266,7 +267,7 @@ class TestJointActionSettled:
         progress = ScenarioProgress.start(_WORLD)
         _pushed(progress, (5, _HARU, _LEFT), (7, _NATSU, _RIGHT))
 
-        progress.note_joint_action_settled(_LEVERS, WorldTick(7), frozenset({_HARU}), _PACK_FULL)
+        progress.note_joint_action_settled(_LEVERS, WorldTick(7), frozenset({_HARU}), PeopleWhoWereThere(), _PACK_FULL)
 
         (event,) = progress.get_events()
         assert isinstance(event, JointActionCompletedEvent)
@@ -279,7 +280,7 @@ class TestJointActionSettled:
         _pushed(progress, (5, _HARU, _LEFT))
 
         with pytest.raises(JointActionNotSettlingException):
-            progress.note_joint_action_settled(_LEVERS, WorldTick(6), frozenset(), NoRefusal())
+            progress.note_joint_action_settled(_LEVERS, WorldTick(6), frozenset(), PeopleWhoWereThere(), NoRefusal())
 
         assert progress.joint_action_settlement(_LEVERS, WorldTick(8)) is JointActionSettlement.TIMED_OUT
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.manner import Openly
@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SightStimulus,
     Stimulus,
 )
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
 if TYPE_CHECKING:
@@ -39,7 +40,9 @@ class SightAt:
     def requirements(self) -> Requirements:
         return Requirements.nothing()
 
-    def stimuli(self, audience: frozenset[PersonId], at: WorldTick) -> tuple[Stimulus, ...]:
+    def stimuli(
+        self, audience: frozenset[PersonId], present: PeopleWhoWereThere, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
         return (
             SightStimulus(
                 where=self.spot.spot_id,
@@ -52,11 +55,15 @@ class SightAt:
                 salience=self.salience,
                 always_delivered=False,
                 at=at,
+                present=present,
             ),
         )
 
     def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
         return frozenset()
+
+    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
+        return PeopleWhoWereThere.before_the_effect(facts)
 
 
 @final
@@ -72,11 +79,17 @@ class SoundFrom:
     def requirements(self) -> Requirements:
         return Requirements.nothing()
 
-    def stimuli(self, audience: frozenset[PersonId], at: WorldTick) -> tuple[Stimulus, ...]:
-        return (self.sound.heard_at(self.spot.spot_id, {}, {}, Noise(), self.salience, at),)
+    def stimuli(
+        self, audience: frozenset[PersonId], present: PeopleWhoWereThere, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
+        heard = self.sound.heard_at(self.spot.spot_id, {}, {}, Noise(), self.salience, at)
+        return (replace(heard, present=present),)
 
     def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
         return frozenset()
+
+    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
+        return PeopleWhoWereThere.before_the_effect(facts)
 
 
 @final
@@ -92,11 +105,16 @@ class AnnouncementTo:
     def requirements(self) -> Requirements:
         return self.audience.requirements()
 
-    def stimuli(self, audience: frozenset[PersonId], at: WorldTick) -> tuple[Stimulus, ...]:
+    def stimuli(
+        self, audience: frozenset[PersonId], present: PeopleWhoWereThere, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
         return (AnnouncementStimulus(audience=audience, text=self.text.about({}), salience=self.salience, at=at),)
 
     def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
         return self.audience.select(facts, trigger)
+
+    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
+        return PeopleWhoWereThere()
 
 
 @final
@@ -105,11 +123,16 @@ class NoNotice:
     def requirements(self) -> Requirements:
         return Requirements.nothing()
 
-    def stimuli(self, audience: frozenset[PersonId], at: WorldTick) -> tuple[Stimulus, ...]:
+    def stimuli(
+        self, audience: frozenset[PersonId], present: PeopleWhoWereThere, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
         return ()
 
     def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
         return frozenset()
+
+    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
+        return PeopleWhoWereThere()
 
 
 HappeningNotice = SightAt | SoundFrom | AnnouncementTo

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import final
 
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNotic
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.not_seen_in_dim import NotSeenInDim
 from ai_rpg_world.game_world.domain.perception.not_seen_without_actor import NotSeenWithoutActor
+from ai_rpg_world.game_world.domain.perception.people_present import PeoplePresent, WhoeverIsThere
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_delivery_report import StimulusDescription
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
@@ -79,6 +80,7 @@ class SightStimulus:
     salience: Salience
     always_delivered: bool
     at: WorldTick
+    present: PeoplePresent = field(default_factory=WhoeverIsThere)
 
     def __post_init__(self) -> None:
         self.target.require_among(self.involved)
@@ -97,7 +99,7 @@ class SightStimulus:
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
         return self.perceived_by(
-            perceiver,
+            self.present.position(perceiver),
             senses.lighting_at(self.where),
             senses.view_for(perceiver.person),
             senses.random(),

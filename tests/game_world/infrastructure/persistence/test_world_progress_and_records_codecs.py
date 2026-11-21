@@ -25,6 +25,7 @@ from ai_rpg_world.game_world.domain.people.person_handle import PersonHandle
 from ai_rpg_world.game_world.domain.people.person_ref import NoVisibleName, PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
@@ -144,8 +145,12 @@ def _reaction(name: str) -> ReactionDeclaration:
 
 def _scenario_progress() -> ScenarioProgressMemento:
     progress = ScenarioProgress.start(_WORLD)
-    progress.note_happening_fired(_happening("tide_turns"), WorldTick(5), frozenset(), NoRefusal())
-    progress.note_happening_fired(_happening("ship_arrives"), WorldTick(8), frozenset(), NoRefusal())
+    progress.note_happening_fired(
+        _happening("tide_turns"), WorldTick(5), frozenset(), PeopleWhoWereThere(), NoRefusal()
+    )
+    progress.note_happening_fired(
+        _happening("ship_arrives"), WorldTick(8), frozenset(), PeopleWhoWereThere(), NoRefusal()
+    )
     progress.note_reaction_truth(_reaction("door_closed"), True)
     progress.note_reaction_truth(_reaction("lamp_lit"), False)
     levers = JointActionDeclaration(

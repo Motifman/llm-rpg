@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import 
     NoJointActionPartsException,
 )
 from ai_rpg_world.game_world.domain.perception import Stimulus
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId, Ticks, WorldTick
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 
@@ -43,9 +44,10 @@ class JointActionDeclaration:
         settlement: JointActionSettlement,
         refusal: RefusalCode | NoRefusal,
         audience: frozenset[PersonId],
+        present: PeopleWhoWereThere,
         at: WorldTick,
     ) -> tuple[Stimulus, ...]:
         # 断られた効果は巻き戻っていて、世界では何も起きていない。
         if isinstance(refusal, RefusalCode):
             return ()
-        return settlement.notice_in(self).stimuli(audience, at)
+        return settlement.notice_in(self).stimuli(audience, present, at)

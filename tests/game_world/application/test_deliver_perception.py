@@ -33,6 +33,8 @@ from ai_rpg_world.game_world.domain.perception import (
     Voice,
 )
 from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere, WhoeverIsThere
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.perception.perception_outcome import PerceptionOutcome
@@ -42,6 +44,7 @@ from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.sound import Loudness
 from ai_rpg_world.game_world.domain.value_object import Damage, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody, Route
+from ai_rpg_world.game_world.domain.whereabouts.location import AtSpot, OpenArea
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
@@ -113,9 +116,8 @@ class _World:
         OpenWorld(self.store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self.scope = CommandScope(self.store, CommittedEventsDistributor())
         self.received = _ObservationsReceived()
-        self._deliver = DeliverPerception(
-            self.scope, ObservationExit(_WORLD, self.received), PerceptionReportsReceived()
-        )
+        self.reports = PerceptionReportsReceived()
+        self._deliver = DeliverPerception(self.scope, ObservationExit(_WORLD, self.received), self.reports)
 
     def deliver_with_a_failing_commit(self, *, from_actions: tuple[Stimulus, ...]) -> None:
         scope = CommandScope(_CommitRefusingStore(self.store), CommittedEventsDistributor())
@@ -129,6 +131,15 @@ class _World:
         self.scope.run(
             lambda session: session.aggregates().vitals(person).take_damage(Damage(999), _AT, WorldHappening())
         )
+
+    def dies(self, person: PersonId) -> None:
+        def die(session: WorldSession) -> None:
+            facts = session.facts()
+            vitals = session.aggregates().vitals(person)
+            vitals.take_damage(Damage(999), facts.now(), WorldHappening())
+            vitals.pass_time(facts.now() + facts.rules().death.grace, facts.rules().death, facts.rules().hunger)
+
+        self.scope.run(die)
 
     def sets_out(self, person: PersonId, route: Route) -> None:
         self.scope.run(lambda session: session.aggregates().whereabouts().start_travel(PersonBody(person), route))
@@ -152,6 +163,7 @@ def _sight(
     involved: tuple[PersonId, ...] = (),
     salience: Salience = Notable(),
     always_delivered: bool = False,
+    were_at: dict[PersonId, SpotDeclaration] | None = None,
 ) -> SightStimulus:
     return SightStimulus(
         where=where.spot_id,
@@ -169,7 +181,12 @@ def _sight(
         salience=salience,
         always_delivered=always_delivered,
         at=_AT,
+        present=WhoeverIsThere() if were_at is None else _people_who_were_at(were_at),
     )
+
+
+def _people_who_were_at(were_at: dict[PersonId, SpotDeclaration]) -> PeopleWhoWereThere:
+    return PeopleWhoWereThere({person: AtSpot(spot_.spot_id, OpenArea()) for person, spot_ in were_at.items()})
 
 
 def _shout(where: SpotDeclaration = _SQUARE, *, loudness: Loudness = Loudness.LOUD) -> SoundStimulus:
@@ -230,14 +247,32 @@ class TestWhoPerceives:
         assert world.received.templates_of(_FRANK) == ["何かが動いた"]
 
 
-class TestReceiversChosenAfterTheEffect:
-    """場所の見える刺激の受け手は、効果を当てて確定した後の世界から選ばれることを保証する (#1978 の 7e で確かめること)。
+class TestPeopleWhoWereThere:
+    """見える刺激が効果の前の居場所 (PeopleWhoWereThere) を持つときは、その居場所で居合わせたかを決めることを保証する (D2207)。"""
 
-    出来事の効果が人を動かすと、動かされる前にその場所にいた人には、その場所の知らせが届かない。
-    """
+    def test_people_pushed_out_of_the_spot_see_its_sight(self) -> None:
+        """効果の前に alice と bob が広場にいたことを持つ見える刺激は、alice が広間へ押し出された後に配っても、alice と bob の両方に届く。"""
+        world = _World()
+        world.teleports(_ALICE, _HALL)
 
-    def test_person_pushed_out_of_the_spot_misses_its_sight(self) -> None:
-        """崩落で広場の alice だけが広間へ押し出された後に広場の崩落の見える刺激を配ると、広場に残った bob にだけ届き、alice には届かない。"""
+        world.deliver(
+            from_actions=(_sight(_SQUARE, clear="天井が崩れ落ちた", were_at={_ALICE: _SQUARE, _BOB: _SQUARE}),)
+        )
+
+        assert world.received.templates_of(_ALICE) == ["天井が崩れ落ちた"]
+        assert world.received.templates_of(_BOB) == ["天井が崩れ落ちた"]
+
+    def test_person_pushed_into_the_spot_misses_its_sight(self) -> None:
+        """効果の前に bob が広場、carol が広間にいたことを持つ見える刺激は、carol が広場へ入った後に配っても、carol には届かない。"""
+        world = _World()
+        world.teleports(_CAROL, _SQUARE)
+
+        world.deliver(from_actions=(_sight(_SQUARE, clear="天井が崩れ落ちた", were_at={_BOB: _SQUARE, _CAROL: _HALL}),))
+
+        assert world.received.templates_of(_CAROL) == []
+
+    def test_sight_without_people_who_were_there_goes_to_people_there_now(self) -> None:
+        """居合わせた人を持たない見える刺激は、配るときに広場にいる bob にだけ届き、広間へ移った alice には届かない。"""
         world = _World()
         world.teleports(_ALICE, _HALL)
 
@@ -245,6 +280,33 @@ class TestReceiversChosenAfterTheEffect:
 
         assert world.received.templates_of(_BOB) == ["天井が崩れ落ちた"]
         assert world.received.templates_of(_ALICE) == []
+
+    def test_person_who_died_since_is_listed_as_dead_for_the_sight(self) -> None:
+        """効果の前に広場にいて、その後に死んだ alice は、広場の見える刺激の記録に理由「死んでいる」で残る。"""
+        world = _World()
+        world.dies(_ALICE)
+
+        world.deliver(from_actions=(_sight(_SQUARE, were_at={_ALICE: _SQUARE, _BOB: _SQUARE}),))
+
+        assert world.reports.reports[-1].stimuli[0].missed_by[_ALICE] is NotPerceivedReason.DEAD
+
+    def test_person_who_died_since_is_listed_as_dead_for_the_sound_that_reached_them(self) -> None:
+        """効果の前に広場にいて、その後に死んだ alice は、広場の叫び声の記録に理由「死んでいる」で残る。"""
+        world = _World()
+        world.dies(_ALICE)
+
+        world.deliver(from_actions=(replace(_shout(_SQUARE), present=_people_who_were_at({_ALICE: _SQUARE})),))
+
+        assert world.reports.reports[-1].stimuli[0].missed_by[_ALICE] is NotPerceivedReason.DEAD
+
+    def test_person_who_died_far_away_is_listed_as_far_for_the_sound(self) -> None:
+        """効果の前に音の届かない屋根裏にいて、その後に死んだ eve は、広場の叫び声の記録に理由「遠い」で残る。"""
+        world = _World()
+        world.dies(_EVE)
+
+        world.deliver(from_actions=(replace(_shout(_SQUARE), present=_people_who_were_at({_EVE: _ATTIC})),))
+
+        assert world.reports.reports[-1].stimuli[0].missed_by[_EVE] is NotPerceivedReason.OUT_OF_EARSHOT
 
 
 class TestOnePerPerson:

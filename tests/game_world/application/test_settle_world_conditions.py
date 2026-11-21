@@ -35,7 +35,12 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDec
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.ending_declaration import EndingDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
-from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import AnnouncementTo, HappeningNotice, NoNotice
+from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import (
+    AnnouncementTo,
+    HappeningNotice,
+    NoNotice,
+    SightAt,
+)
 from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -61,6 +66,7 @@ from ai_rpg_world.game_world.domain.world_records import (
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.joint_actions_for_tests import PUSH, both_levers, levers_at, pushing
+from tests.game_world.support.verb_declarations_for_tests import seen_clearly_only
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
 from tests.game_world.support.world_design_for_tests import character, compose_world, item_spec, nouns, spot
 
@@ -516,6 +522,26 @@ class TestSettleWorldConditionsJointActions:
 
         [completed] = world.settled_joint_actions()
         assert completed.audience == frozenset({_ALICE, _BOB})
+
+    def test_completion_with_a_place_sight_carries_people_who_were_at_the_place(self) -> None:
+        """揃いの知らせが洞窟の見える知らせ (SightAt) なら、揃ったイベントに、効果の前の alice と bob の居場所が載る (D2207)。"""
+        world = _SettledWorld(
+            joint_actions=(
+                both_levers(
+                    _LEVERS,
+                    complete_notice=SightAt(
+                        spot=spot("cave"), texts=seen_clearly_only("岩が動いた"), salience=Notable()
+                    ),
+                ),
+            )
+        )
+        world.push(_ALICE, _LEFT)
+        world.push(_BOB, _RIGHT)
+
+        world.settle(_AFTER_COMMAND)
+
+        [completed] = world.settled_joint_actions()
+        assert set(completed.present.places) == {_ALICE, _BOB}
 
     def test_one_lever_left_past_the_window_applies_on_timeout_once(self) -> None:
         """alice が tick 0 に左を押しただけで窓 2 tick を過ぎると、tick 3 に 2 度落ち着かせても時間切れは 1 回だけ発火し、鐘が鳴り、岩は動かない。"""
