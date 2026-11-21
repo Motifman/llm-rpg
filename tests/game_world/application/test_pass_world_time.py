@@ -13,12 +13,21 @@ from ai_rpg_world.game_world.application.deliver_perception import DeliverPercep
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime, PassWorldTimeCommand
+from ai_rpg_world.game_world.application.person.decide_death_outcome import DecideDeathOutcome
+from ai_rpg_world.game_world.application.person.handlers.decide_death_outcome_handler import (
+    DecideDeathOutcomeHandler,
+)
+from ai_rpg_world.game_world.application.person.handlers.place_departed_person_handler import (
+    PlaceDepartedPersonHandler,
+)
+from ai_rpg_world.game_world.application.person.place_departed_person import PlaceDepartedPerson
 from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item.item_spec_declaration import Lasts
+from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
@@ -41,14 +50,21 @@ from ai_rpg_world.game_world.domain.objects_and_items import ItemGivenUpEvent, I
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
-from ai_rpg_world.game_world.domain.person.person_vitals_events import PersonDiedEvent
+from ai_rpg_world.game_world.domain.person.life_state import Alive, Down, LifeState, WorldHappening
+from ai_rpg_world.game_world.domain.person.person_outcomes import DeclaredOutcome
+from ai_rpg_world.game_world.domain.person.person_vitals_events import (
+    HungerLevelChangedEvent,
+    PersonDamagedEvent,
+    PersonDiedEvent,
+)
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import (
     Damage,
     DescriptionText,
+    DisplayName,
     HungerAmount,
+    OutcomeId,
     PersonId,
     SpotId,
     Ticks,
@@ -57,6 +73,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.whereabouts import (
     AtSpot,
+    DepartedPerson,
     Location,
     OccupantEnteredSpotEvent,
     OpenArea,
@@ -84,6 +101,12 @@ _PLAZA = SpotId("plaza")
 _MINE = SpotId("mine")
 _LAMP = replace(item_spec("lamp"), lasts=Lasts(Ticks(5), DescriptionText("ランプの油が切れた")))
 _ROPE = item_spec("rope")
+_AKI = PersonId("aki")
+_RESCUED = OutcomeDeclaration(
+    outcome_id=OutcomeId("rescued"),
+    name=DisplayName("救出"),
+    announcement=TextWithUnassignedPeople("{each_person}は昇降機で外へ出た。"),
+)
 _Read = TypeVar("_Read")
 _Event = TypeVar("_Event", bound=DomainEvent)
 
@@ -106,6 +129,7 @@ class _World:
                 passages=passages,
                 item_specs=item_specs,
                 characters=characters,
+                outcomes=(_RESCUED,),
             ),
             world_rules=rules,
             weather=weather,
@@ -122,9 +146,32 @@ class _World:
         )
         OpenWorld(self.store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self.events: list[DomainEvent] = []
-        distributor = CommittedEventsDistributor()
-        distributor.register_receiver(self)
-        self.scope = CommandScope(self.store, distributor)
+        self.distributor = CommittedEventsDistributor()
+        self.distributor.register_receiver(self)
+        self.scope = CommandScope(self.store, self.distributor)
+
+    def wire_handlers_of_person_died(self) -> None:
+        self.distributor.register_handler(PersonDiedEvent, DecideDeathOutcomeHandler(DecideDeathOutcome(self.scope)))
+        self.distributor.register_handler(PersonDiedEvent, PlaceDepartedPersonHandler(PlaceDepartedPerson(self.scope)))
+
+    def leave_by_rescue(self, person: PersonId) -> None:
+        def leave(session: WorldSession) -> None:
+            session.aggregates().outcomes().decide(person, DeclaredOutcome(_RESCUED), session.facts().now())
+            session.aggregates().whereabouts().remove(PersonBody(person))
+
+        self.scope.run(leave)
+
+    def knock_down(self, person: PersonId) -> None:
+        self.scope.run(
+            lambda session: (
+                session.aggregates().vitals(person).take_damage(Damage(9999), session.facts().now(), WorldHappening())
+            )
+        )
+
+    def vitals_of(self, person: PersonId) -> tuple[LifeState, HungerAmount]:
+        return self.read(
+            lambda session: (session.facts().vitals(person).life_state(), session.facts().vitals(person).hunger())
+        )
 
     def receive(self, events: tuple[DomainEvent, ...]) -> None:
         self.events.extend(events)
@@ -247,6 +294,73 @@ class TestPassWorldTimeVitals:
         assert [(event.person, event.died_at) for event in died] == [(_HARU, WorldTick(2))]
 
 
+def _starving_rules(departed_persons_act: bool = False) -> WorldRules:
+    base = world_rules_for_tests()
+    return replace(
+        base,
+        hunger=replace(base.hunger, per_tick=HungerAmount(1), limit=HungerAmount(1), starvation_damage=Damage(9999)),
+        death=DeathRule(grace=Ticks(1)),
+        departed_persons_act=departed_persons_act,
+    )
+
+
+def _aki_and_haru(*, rules: WorldRules) -> _World:
+    return _World(characters=(character("aki", "mine"), character("haru", "plaza")), rules=rules)
+
+
+class TestPassWorldTimeStopsTheBodyOfPersonWhoLeft:
+    """PassWorldTime が、作者の結末が決まって世界から外れた人の体の時間を進めず、世界に残る人の体の時間だけを進めることを保証する。
+
+    どの世界も、1 tick で空腹が限界 1 に達して飢えで倒れ、倒れてから 1 tick で死ぬ値にしてある。
+    """
+
+    def test_person_who_left_while_down_does_not_die(self) -> None:
+        """気を失ったまま救出の結末で外れたアキは、倒れてから死ぬまでの猶予 1 tick を過ぎる 3 tick を進めても、倒れたままで PersonDiedEvent は出ない。"""
+        world = _aki_and_haru(rules=_starving_rules())
+        world.knock_down(_AKI)
+        world.leave_by_rescue(_AKI)
+
+        world.pass_ticks(3)
+
+        assert isinstance(world.vitals_of(_AKI)[0], Down)
+        assert [event.person for event in world.events_of(PersonDiedEvent)] == [_HARU]
+
+    def test_person_who_left_awake_grows_no_hungrier(self) -> None:
+        """起きたまま外れたアキは、3 tick 進めても空腹は 0 のままで、空腹の段階も変わらず、飢えの痛手も受けない。"""
+        world = _aki_and_haru(rules=_starving_rules())
+        world.leave_by_rescue(_AKI)
+
+        world.pass_ticks(3)
+
+        assert world.vitals_of(_AKI) == (Alive(), HungerAmount(0))
+        assert [event.person for event in world.events_of(HungerLevelChangedEvent) if event.person == _AKI] == []
+        assert [event.person for event in world.events_of(PersonDamagedEvent) if event.person == _AKI] == []
+
+    def test_person_who_left_is_neither_given_death_nor_placed_as_departed(self) -> None:
+        """去った人が動く世界で、死の反応 (DecideDeathOutcomeHandler・PlaceDepartedPersonHandler) を配線しても、気を失ったまま外れたアキについてはどちらも動かず、断られた反応も無く、アキの結末は救出のまま。"""
+        world = _aki_and_haru(rules=_starving_rules(departed_persons_act=True))
+        world.wire_handlers_of_person_died()
+        world.knock_down(_AKI)
+        world.leave_by_rescue(_AKI)
+
+        world.pass_ticks(3)
+
+        assert world.distributor.refused_handlers == {}
+        assert world.read(lambda session: session.facts().outcomes().outcome_of(_AKI)) == DeclaredOutcome(_RESCUED)
+        occupants = world.read(lambda session: session.facts().whereabouts().occupants_at(spot("mine")))
+        assert DepartedPerson(_AKI) not in occupants and PersonBody(_AKI) not in occupants
+
+    def test_person_still_in_the_world_keeps_starving_and_dies(self) -> None:
+        """アキが外れても、広場に残るハルは 1 tick 目に飢えで倒れ、2 tick 目に死ぬ。"""
+        world = _aki_and_haru(rules=_starving_rules())
+        world.leave_by_rescue(_AKI)
+
+        world.pass_ticks(2)
+
+        died = world.events_of(PersonDiedEvent)
+        assert [(event.person, event.died_at) for event in died] == [(_HARU, WorldTick(2))]
+
+
 class TestPassWorldTimeItems:
     """PassWorldTime が、持つ時間が過ぎた品物を、持ち主の荷か置かれた地面から外して世界から出すことを保証する。"""
 
@@ -327,6 +441,32 @@ class TestPassWorldTimeItems:
         world.pass_ticks(1)
 
         assert world.carried_by_haru() == ()
+
+
+class TestPassWorldTimeStopsTheItemsOfPersonWhoLeft:
+    """PassWorldTime が、世界から外れた人の荷の品物の時間を進めず、世界に残る人の品物だけを切らすことを保証する。"""
+
+    def test_lamp_carried_out_of_the_world_never_runs_out(self) -> None:
+        """油が 5 tick もつランプを持ったまま救出の結末で外れたハルは、6 tick 進めてもランプを持ったままで、ItemRanOutEvent は出ない。"""
+        world = _World(characters=(_haru_carrying(_LAMP),), item_specs=(_LAMP,))
+        (lamp,) = world.carried_by_haru()
+        world.leave_by_rescue(_HARU)
+
+        world.pass_ticks(6)
+
+        assert world.carried_by_haru() == (lamp,)
+        assert world.events_of(ItemRanOutEvent) == []
+
+    def test_lamp_of_person_still_in_the_world_runs_out(self) -> None:
+        """ランプを持ったアキが外れても、同じランプを持って広場に残るハルのランプは 5 tick 目に切れる。"""
+        aki = replace(character("aki", "mine"), initial_items=(_LAMP.item_spec_id,))
+        world = _World(characters=(aki, _haru_carrying(_LAMP)), item_specs=(_LAMP,))
+        world.leave_by_rescue(_AKI)
+
+        world.pass_ticks(5)
+
+        ran_out = world.events_of(ItemRanOutEvent)
+        assert [(event.where, event.at) for event in ran_out] == [(CarriedBy(_HARU), WorldTick(5))]
 
 
 class TestPassWorldTimeWeather:

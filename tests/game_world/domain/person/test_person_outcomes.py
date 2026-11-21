@@ -65,6 +65,18 @@ class TestStart:
             PersonOutcomes.start(_WORLD, (_ALICE, _ALICE))
 
 
+class TestPeopleInWorld:
+    """people_in_world が、作者の結末が決まって世界から外れた人を除いた人を、始めに渡した順で返すことを保証する。"""
+
+    def test_person_with_declared_outcome_is_not_in_the_world(self) -> None:
+        """アリスが脱出に決まり、ボブが死に、キャロルが未決のとき、世界にいるのはボブとキャロル。死んだ人は外れない。"""
+        outcomes = _outcomes()
+        outcomes.decide(_ALICE, _ESCAPED, WorldTick(3))
+        outcomes.decide(_BOB, Died(), WorldTick(3))
+
+        assert outcomes.people_in_world() == (_BOB, _CAROL)
+
+
 class TestDecide:
     """decide が人ごとに結末を一度だけ決めることを保証する。"""
 

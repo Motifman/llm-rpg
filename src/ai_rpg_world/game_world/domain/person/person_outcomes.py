@@ -153,6 +153,9 @@ class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
         # 作者の結末が決まった人は、体が世界から外れる。死んだ人は外れない。
         return isinstance(self.outcome_of(person), DeclaredOutcome)
 
+    def people_in_world(self) -> tuple[PersonId, ...]:
+        return tuple(person for person in self._outcomes if not self.has_left_the_world(person))
+
     def all_decided(self) -> bool:
         return not self.undecided_people()
 
