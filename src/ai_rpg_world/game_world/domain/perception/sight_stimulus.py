@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPe
 from ai_rpg_world.game_world.domain.perception.not_seen_in_dim import NotSeenInDim
 from ai_rpg_world.game_world.domain.perception.not_seen_without_actor import NotSeenWithoutActor
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+from ai_rpg_world.game_world.domain.perception.perception_delivery_report import StimulusDescription
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
@@ -88,6 +89,11 @@ class SightStimulus:
 
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.SIGHT, self.salience)
+
+    def described(self) -> StimulusDescription:
+        return StimulusDescription(
+            sense=Sense.SIGHT, text=self.witness.clear.template.template, where=self.where, addressed_to=frozenset()
+        )
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
         return self.perceived_by(

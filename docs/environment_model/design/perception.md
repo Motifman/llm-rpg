@@ -3,16 +3,23 @@
 世界で起きたことを、誰が、どれだけはっきり知るか。決めた経緯は #1974。
 
 ```
-ドメインイベント
+確定したドメインイベント
+  ↓ OccurrencesInCommit がまとまり (1 つの行為、1 回の発火、時の経過のイベント 1 つ) に分ける
   ↓ StimulusTranslator が刺激に変える
 刺激 (Stimulus)
   ↓ DeliverPerception が知覚しうる人を選び、材料を集めて、刺激に聞く
-知覚の結果 (Perceived / NotPerceived / NoticedLater)
+知覚の結果 (Perceived / NotPerceived / NoticedLater)。まとまりごとに、届けた記録 (PerceptionDeliveryReport) も作る
   ↓ 観測の出口が時刻の札を付ける
 Being の契約の観測 (文は TextWithAssignedPeople のまま。人のプレースホルダーは Being が埋める)
 ```
 
-1 つの確定の範囲 (1 つの行為、1 つの出来事の発火、1 回の時の経過) から出た刺激は、1 人には最初に知覚したもの 1 つだけを渡す。扉が開くのを見た人に、同じ扉の音を別の観測として重ねないため。数えるのは、同じものを別の感覚で知る刺激 (本人の体・見える・聞こえる) だけで、世界の知らせ (結末、時間帯、作者の `announcement_to`) は数えず、ほかと重なっても届ける。世界の知らせは見聞きしたことの言い換えではなく、別のことを伝えるため (D2203)。聞く順は、行為のイベント (`PersonActedEvent`、`ActionAttemptFailedEvent`) から作った刺激が先で、状態のイベントから作った刺激が後。その中では 本人の体 → 見える → 聞こえる → 世界の知らせ。同じ種類の刺激が 2 つ以上あれば、目立つ刺激 (`Notable`) を目立たない刺激 (`Background`) より先にし、それも同じならイベントの通し番号の順 (出た順) にする。順はイベントの種類と刺激の目立ち方で決め、集約をまたいでイベントが集まる順には頼らない。数える刺激のうち、`always_delivered` の刺激 (倒れたこと) だけは、ほかと重なっても届ける。
+確定したイベントは、まとまりに分けて刺激に変える (D2206)。
+
+- 行為と、作者の出来事・反応・二人で合わせる操作の発火は、1 回ずつを 1 まとまりにする。確定したイベントを出た順 (`DomainEvent.sequence`) に読み、行為と発火の記録のイベント (`PersonActedEvent`、`ActionAttemptFailedEvent`、`HappeningFiredEvent`、`ReactionFiredEvent`、`JointActionCompletedEvent`、`JointActionTimedOutEvent`) までを 1 まとまりにする。効果は記録より先に当たるので、その発火の効果から出たイベントは、その発火のまとまりに入る。最後の記録より後に出たイベント (世界の終わりなど) は、最後のまとまりに入る
+- 時の経過 (`WorldTickAdvancedEvent` を含む確定) では、イベント 1 つずつを 1 まとまりにする。同じ tick に広場へ着いたハルとゲンは、広場のサヨにどちらも届く
+- どちらでもない確定 (ハンドラの確定など) は、確定全体で 1 まとまり。原因は名前の無い原因 (`UnnamedCause`) で、イベントの種類名を並べる
+
+1 つのまとまりから出た刺激は、1 人には最初に知覚したもの 1 つだけを渡す。扉が開くのを見た人に、同じ扉の音を別の観測として重ねないため。数えるのは、同じものを別の感覚で知る刺激 (本人の体・見える・聞こえる) だけで、世界の知らせ (結末、時間帯、作者の `announcement_to`) は数えず、ほかと重なっても届ける。世界の知らせは見聞きしたことの言い換えではなく、別のことを伝えるため (D2203)。聞く順は、行為のイベント (`PersonActedEvent`、`ActionAttemptFailedEvent`) から作った刺激が先で、状態のイベントから作った刺激が後。その中では 本人の体 → 見える → 聞こえる → 世界の知らせ。同じ種類の刺激が 2 つ以上あれば、目立つ刺激 (`Notable`) を目立たない刺激 (`Background`) より先にし、それも同じならイベントの通し番号の順 (出た順) にする。順はイベントの種類と刺激の目立ち方で決め、集約をまたいでイベントが集まる順には頼らない。数える刺激のうち、`always_delivered` の刺激 (倒れたこと) だけは、ほかと重なっても届ける。
 
 知覚の決まりはドメインサービスにしない。規則は知覚する人 (`Perceiver`) と刺激、明るさと音の値に置き、世界を何でも読める窓口 (`WorldFacts`) は渡さない。
 
@@ -281,6 +288,31 @@ class NoticedLater:
 | `LEFT_THE_WORLD` 世界から外れた | 結末が決まって世界から外れた人が、宛先に入っていた知らせを受けない |
 | `DEAD` 死んでいる | 去った人として行為をしない世界の死んだ人が、宛先に入っていた知らせを受けない |
 | `ALREADY_PERCEIVED` 同じものをもう知った | 同じまとまりの別の感覚の刺激を、もう知った (1 人に 1 つ) |
+
+## 届けた記録
+
+`DeliverPerception` は 1 まとまりを届けるたびに、記録 (`PerceptionDeliveryReport`) を作って受け口 (`PerceptionReportReceiver`) に渡す (D2206)。`trace.jsonl` への書き出しは、run の入口を作るときに足す。
+
+```python
+@final
+@dataclass(frozen=True)
+class PerceptionDeliveryReport:
+    cause: PerceptionCause                # ActionTaken | ActionFailed | HappeningFiring | ReactionFiring | JointActionSettling | TimePassed | Waking | UnnamedCause
+    at: WorldTick                         # 届けた時刻
+    stimuli: tuple[StimulusDeliveryResult, ...]   # 届けた順
+
+@final
+@dataclass(frozen=True)
+class StimulusDeliveryResult:
+    stimulus: StimulusDescription         # 種類 (Sense)、文 (はっきり知ったときの文の型)、場所、宛先
+    perceived_by: tuple[PersonId, ...]    # 届いた
+    kept_for: tuple[PersonId, ...]        # 起きてから知る形でためた
+    missed_by: Mapping[PersonId, NotPerceivedReason]   # 届く見込みがあって届かなかった人と理由
+```
+
+- 届く見込みの無かった人 (`ELSEWHERE`、`NOT_OWN_BODY`、`NOT_ADDRESSED`) は、`missed_by` に残さない。刺激ごとに世界の全員が並ぶと、追いたい人が埋もれるため。どの理由を外すかは記録を作る側 (`PeopleReachedByStimuli`) が決める
+- 居場所の無い人 (死んだ人、世界から外れた人) は、見える・聞こえる・他人の体の刺激では届く見込みが無かったので並ばない。外れたハルは扉の音の記録に並ばない
+- 例: 広場でハルが扉を壊すと、記録には、見える刺激がハルとサヨに届き、音が広間のゲンに届き、坑道の奥のアキには音が「遠い」で届かず、サヨには音が「同じものをもう知った」で届かなかったことが残る
 
 ## 明るさ
 

@@ -41,6 +41,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import ItemGivenUpEvent, I
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.person.person_vitals_events import PersonDiedEvent
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
@@ -67,6 +68,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
 from ai_rpg_world.game_world.domain.world_progress.world_clock import TimeOfDayChangedEvent
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.domain.whereabouts._builders import CLOSED, door
+from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.world_design_for_tests import (
     character,
     compose_world,
@@ -412,8 +414,8 @@ class TestPassWorldTimeDayPhase:
         [entered] = world.events_of(TimeOfDayChangedEvent)
         stimuli = StimulusTranslator().stimuli_of(entered, world.design)
 
-        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()))(
-            DeliverPerceptionCommand(from_actions=(), from_states=stimuli)
+        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()), PerceptionReportsReceived())(
+            DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli)
         )
 
         assert stimuli
@@ -433,8 +435,8 @@ class TestPassWorldTimeDayPhase:
         [entered] = world.events_of(TimeOfDayChangedEvent)
         stimuli = StimulusTranslator().stimuli_of(entered, world.design)
 
-        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()))(
-            DeliverPerceptionCommand(from_actions=(), from_states=stimuli)
+        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()), PerceptionReportsReceived())(
+            DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli)
         )
 
         assert entered.audience == frozenset({_HARU})

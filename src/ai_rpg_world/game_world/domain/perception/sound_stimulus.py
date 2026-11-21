@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+from ai_rpg_world.game_world.domain.perception.perception_delivery_report import StimulusDescription
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
@@ -102,6 +103,11 @@ class SoundStimulus:
 
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.SOUND, self.salience)
+
+    def described(self) -> StimulusDescription:
+        return StimulusDescription(
+            sense=Sense.SOUND, text=self.clear.template.template, where=self.origin, addressed_to=frozenset()
+        )
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
         return self.perceived_by(

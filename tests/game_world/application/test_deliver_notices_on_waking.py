@@ -30,6 +30,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SightTexts,
 )
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.person import PersonRevivedEvent
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.value_object import (
@@ -43,6 +44,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
+from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
 _WORLD = WorldId("waking_world")
@@ -119,7 +121,7 @@ class _World:
         self._scope = CommandScope(self._store, CommittedEventsDistributor())
         self.memories = _Memories()
         exit = ObservationExit(_WORLD, self.memories)
-        deliver_perception = DeliverPerception(self._scope, exit)
+        deliver_perception = DeliverPerception(self._scope, exit, PerceptionReportsReceived())
         self.deliver = DeliverNoticesOnWaking(
             self._scope,
             design,
@@ -130,7 +132,7 @@ class _World:
         self._scope.run(
             lambda session: session.aggregates().vitals(_ALICE).take_damage(Damage(999), _FELL_AT, WorldHappening())
         )
-        deliver_perception(DeliverPerceptionCommand(from_actions=(_collapse(),), from_states=()))
+        deliver_perception(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(_collapse(),), from_states=()))
 
     def revives_alice(self) -> None:
         self._scope.run(lambda session: session.aggregates().vitals(_ALICE).revive(Rate(0.5), _WOKE_AT))

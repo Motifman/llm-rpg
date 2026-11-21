@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.perception import BodilyStimulus
+from ai_rpg_world.game_world.domain.perception.perception_cause import Waking
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
@@ -39,7 +40,9 @@ class DeliverNoticesOnWaking:
 
     def __call__(self, command: DeliverNoticesOnWakingCommand) -> None:
         waking = BodilyStimulus.on_waking(command.person, self._design.surroundings_texts.waking, command.at)
-        self._deliver_perception(DeliverPerceptionCommand(from_actions=(waking,), from_states=()))
+        self._deliver_perception(
+            DeliverPerceptionCommand(cause=Waking(command.person), from_actions=(waking,), from_states=())
+        )
         for perceived in self._scope.run(lambda session: _missed_notices_taken(session, command)):
             self._exit.hand_over(perceived)
         self._deliver_surroundings(DeliverSurroundingsCommand(person=command.person, at=command.at))
