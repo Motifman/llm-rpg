@@ -31,10 +31,11 @@ def _pass_one_tick(session: WorldSession) -> None:
     now = clock.now()
     world.whereabouts().advance_travels(facts.passages().closed_passages(), now)
     rules = facts.rules()
-    for person in facts.people():
+    people_in_world = facts.outcomes().people_in_world()
+    for person in people_in_world:
         world.vitals(person).pass_time(now, rules.death, rules.hunger)
     items = ItemsRunningOut(world)
-    for person in facts.people():
+    for person in people_in_world:
         items.run_out_carried_by(person, now)
     for spot in facts.nouns().all_spots():
         items.run_out_lying_at(spot.spot_id, now)
