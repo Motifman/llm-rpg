@@ -9,10 +9,12 @@ from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+from ai_rpg_world.game_world.domain.perception.perception_delivery_report import StimulusDescription
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Notable, Salience
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts.location import NotAtSpot
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.people.text_with_unassigned_people import TextWithUnassignedPeople
@@ -40,6 +42,14 @@ class BodilyStimulus:
 
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.OWN_BODY, self.salience)
+
+    def described(self) -> StimulusDescription:
+        return StimulusDescription(
+            sense=Sense.OWN_BODY,
+            text=self.text.template.template,
+            where=NotAtSpot(),
+            addressed_to=frozenset({self.person}),
+        )
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
         return self.perceived_by(perceiver, senses.view_for(perceiver.person))

@@ -34,6 +34,7 @@ from ai_rpg_world.game_world.domain.perception import (
 )
 from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.perception.perception_outcome import PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import NotWhispered
@@ -43,6 +44,7 @@ from ai_rpg_world.game_world.domain.value_object import Damage, PersonId, WorldI
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody, Route
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
+from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, passage, spot
 
 _WORLD = WorldId("perception_world")
@@ -111,15 +113,17 @@ class _World:
         OpenWorld(self.store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self.scope = CommandScope(self.store, CommittedEventsDistributor())
         self.received = _ObservationsReceived()
-        self._deliver = DeliverPerception(self.scope, ObservationExit(_WORLD, self.received))
+        self._deliver = DeliverPerception(
+            self.scope, ObservationExit(_WORLD, self.received), PerceptionReportsReceived()
+        )
 
     def deliver_with_a_failing_commit(self, *, from_actions: tuple[Stimulus, ...]) -> None:
         scope = CommandScope(_CommitRefusingStore(self.store), CommittedEventsDistributor())
-        deliver = DeliverPerception(scope, ObservationExit(_WORLD, self.received))
-        deliver(DeliverPerceptionCommand(from_actions=from_actions, from_states=()))
+        deliver = DeliverPerception(scope, ObservationExit(_WORLD, self.received), PerceptionReportsReceived())
+        deliver(DeliverPerceptionCommand(cause=TimePassed(), from_actions=from_actions, from_states=()))
 
     def deliver(self, *, from_actions: tuple[Stimulus, ...] = (), from_states: tuple[Stimulus, ...] = ()) -> None:
-        self._deliver(DeliverPerceptionCommand(from_actions=from_actions, from_states=from_states))
+        self._deliver(DeliverPerceptionCommand(cause=TimePassed(), from_actions=from_actions, from_states=from_states))
 
     def fell(self, person: PersonId) -> None:
         self.scope.run(

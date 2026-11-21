@@ -47,14 +47,24 @@ class SettleWorldConditions:
 - `ForEveryoneEffect` は 1 人ずつを小さな範囲にし、断られた人の分だけを巻き戻す。1 人の荷が満杯なだけで、ほかの全員がもらえなくなるのを避ける。1 人ごとの断りは、いまはイベントに載せない
 
 ```python
+class DeliverPerceptionOfCommittedEvents:          # CommittedEventsDistributor の receiver。ハンドラより先に動く
+    def receive(self, events: tuple[DomainEvent, ...]) -> None:
+        # OccurrencesInCommit.split でまとまりに分け (1 つの行為、1 回の発火、時の経過のイベント 1 つ。D2206)
+        # → まとまりごとに StimulusTranslator で刺激に変え、行為のイベントの刺激と状態のイベントの刺激に分けて DeliverPerception
+        # → 刺激が 1 つも無いまとまりは渡さない
+        # 気を失ったまま結末が決まった人には、結末の知らせをここで MissedNotices にためてから、DeliverNoticesOnLeavingHandler が渡す。receiver がハンドラより先に動くことに頼る (D2203)
+        ...
+
 class DeliverPerception:
     def __call__(self, command: DeliverPerceptionCommand) -> None:
+        # command は原因 (PerceptionCause) と刺激を持つ
         # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
         # → Perceiver と LightingConditions / SoundReach を作り、刺激の perceived_by に聞く
         # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、本人の体・見える・聞こえるは 1 人に最初に知覚したものだけ。世界の知らせは数えずに届ける (D2203)
         # → Perceived は観測の出口へ
         # → NoticedLater は MissedNotices.keep
         # → 音の刺激は、計算した SoundReach を SoundsThisTick.note にも書く (モンスターが次の tick に聞く)
+        # → 確定したら、届けた記録 (PerceptionDeliveryReport。原因・tick・刺激・人ごとの結果と届かなかった理由) を受け口に渡す (D2206)
         ...
 
 class LookAround:
@@ -70,7 +80,7 @@ class DeliverSurroundings:
 
 class DeliverNoticesOnWaking:                     # 介抱の確定のあと、別の確定の範囲で動く
     def __call__(self, command: DeliverNoticesOnWakingCommand) -> None:
-        # 1. 起きたことの知らせ (本人の体の刺激) を DeliverPerception で配る
+        # 1. 起きたことの知らせ (本人の体の刺激) を DeliverPerception で配る。原因は Waking
         # 2. MissedNotices.perceived_on_waking (ためた順、目が覚めた時刻) を出口へ渡し、MissedNotices.clear
         # 3. DeliverSurroundings
         # 見渡した知らせが「目が覚めた」より先に記憶に入らないよう、この順に手順として置く
@@ -174,7 +184,7 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
    最後に、体を使う行為なら PersonVitals.exert、PersonVitals.start_action (行っているあいだ)、LatestActions.note (PersonActedEvent)、
    ScenarioProgress.note_joint_action_part_done (どの二人で合わせる操作のどの部分に当たるかは帳簿が決める。D2173)
 ──
-5. ドメインイベントを配る (ハンドラ、StimulusTranslator → DeliverPerception、trace)
+5. ドメインイベントを配る (DeliverPerceptionOfCommittedEvents → StimulusTranslator → DeliverPerception、ハンドラ、trace)
 6. SettleWorldConditions
 7. コマンドへの返事 (通った / 断られた理由) を返す
 

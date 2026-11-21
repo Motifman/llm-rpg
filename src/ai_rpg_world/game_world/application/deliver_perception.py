@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import Protocol, final
 
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
@@ -12,17 +12,27 @@ from ai_rpg_world.game_world.domain.perception import Perceived, Stimulus
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.people_reached_by_stimuli import PeopleReachedByStimuli
+from ai_rpg_world.game_world.domain.perception.perception_cause import PerceptionCause
+from ai_rpg_world.game_world.domain.perception.perception_delivery_report import PerceptionDeliveryReport
 from ai_rpg_world.game_world.domain.value_object import PersonId
+
+
+class PerceptionReportReceiver(Protocol):
+    def receive(self, report: PerceptionDeliveryReport) -> None: ...
 
 
 @final
 @dataclass(frozen=True)
 class DeliverPerceptionCommand:
+    cause: PerceptionCause
     from_actions: tuple[Stimulus, ...]
     from_states: tuple[Stimulus, ...]
 
     def in_delivery_order(self) -> tuple[Stimulus, ...]:
         return (*_ranked(self.from_actions), *_ranked(self.from_states))
+
+    def carries_stimuli(self) -> bool:
+        return bool(self.from_actions or self.from_states)
 
 
 def _ranked(stimuli: tuple[Stimulus, ...]) -> list[Stimulus]:
@@ -31,26 +41,29 @@ def _ranked(stimuli: tuple[Stimulus, ...]) -> list[Stimulus]:
 
 @final
 class DeliverPerception:
-    def __init__(self, scope: CommandScope, exit: ObservationExit) -> None:
+    def __init__(self, scope: CommandScope, exit: ObservationExit, reports: PerceptionReportReceiver) -> None:
         self._scope = scope
         self._exit = exit
+        self._reports = reports
 
     def __call__(self, command: DeliverPerceptionCommand) -> None:
-        perceived = self._scope.run(lambda session: _perceive(session, command))
+        perceived, report = self._scope.run(lambda session: _perceive(session, command))
         for one in perceived:
             self._exit.hand_over(one)
+        self._reports.receive(report)
 
 
-def _perceive(session: WorldSession, command: DeliverPerceptionCommand) -> tuple[Perceived, ...]:
+def _perceive(
+    session: WorldSession, command: DeliverPerceptionCommand
+) -> tuple[tuple[Perceived, ...], PerceptionDeliveryReport]:
     facts = session.facts()
     senses = WorldPerceptionSenses(facts)
     perceivers = perceivers_in_world(facts)
     handed_over = _PerceptionsHandedOver(session.aggregates())
     reached = PeopleReachedByStimuli(handed_over)
     for stimulus in command.in_delivery_order():
-        for perceiver in perceivers:
-            reached.deliver(stimulus, perceiver, senses)
-    return handed_over.perceived_so_far()
+        reached.deliver(stimulus, perceivers, senses)
+    return handed_over.perceived_so_far(), reached.report(command.cause, facts.now())
 
 
 @final

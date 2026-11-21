@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclarati
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import Notable, NoTarget, NotSeenWithoutActor, SightStimulus, SightTexts
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.person import DeclaredOutcome, Died, Outcome, PersonOutcomeDecidedEvent
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.value_object import (
@@ -34,6 +35,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
+from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
 _WORLD = WorldId("leaving_world")
@@ -109,14 +111,16 @@ class _World:
         self._scope = CommandScope(self._store, CommittedEventsDistributor())
         self.observations = _Observations()
         exit = ObservationExit(_WORLD, self.observations)
-        self._deliver_perception = DeliverPerception(self._scope, exit)
+        self._deliver_perception = DeliverPerception(self._scope, exit, PerceptionReportsReceived())
         self.deliver = DeliverNoticesOnLeaving(self._scope, exit)
         self._scope.run(lambda session: session.people_register().name(_AKI, DisplayName("アキ")))
         self._scope.run(lambda session: session.people_register().name(_GEN, DisplayName("ゲン")))
         self._scope.run(
             lambda session: session.aggregates().vitals(_AKI).take_damage(Damage(999), _FELL_AT, WorldHappening())
         )
-        self._deliver_perception(DeliverPerceptionCommand(from_actions=(_collapse(),), from_states=()))
+        self._deliver_perception(
+            DeliverPerceptionCommand(cause=TimePassed(), from_actions=(_collapse(),), from_states=())
+        )
 
     def aki_is_stranded(self) -> None:
         self.is_stranded(_AKI)
@@ -128,7 +132,7 @@ class _World:
 
         self._scope.run(leave)
         announced = DeclaredOutcome(_STRANDED).announced_to(person, _LEFT_AT)
-        self._deliver_perception(DeliverPerceptionCommand(from_actions=(), from_states=announced))
+        self._deliver_perception(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=announced))
 
     def missed_notices_of(self, person: PersonId) -> tuple[MissedNotice, ...]:
         session = self._store.session()
