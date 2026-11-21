@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import final
 
 from ai_rpg_world.game_world.domain.action.manner import Manner
@@ -21,6 +21,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SoundSource,
     Stimulus,
 )
+from ai_rpg_world.game_world.domain.perception.people_present import PeoplePresent
 from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import Occupant
 
@@ -58,6 +59,7 @@ class PerceptionDeclaration:
         target: PersonId | NoTarget,
         manner: Manner,
         source: SoundSource,
+        present: PeoplePresent,
     ) -> tuple[Stimulus, ...]:
         people = {"actor": actor.person} | ({"target": target} if isinstance(target, PersonId) else {})
         involved = tuple(people.values())
@@ -73,10 +75,11 @@ class PerceptionDeclaration:
             salience=self.salience,
             always_delivered=False,
             at=at,
+            present=present,
         )
         if isinstance(self.sound, Silent):
             return (sight,)
-        return (sight, self.sound.heard_at(where, people, names, source, self.salience, at))
+        return (sight, replace(self.sound.heard_at(where, people, names, source, self.salience, at), present=present))
 
     def failure_seen_at(
         self,

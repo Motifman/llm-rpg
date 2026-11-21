@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SightTexts,
     SoundStimulus,
 )
+from ai_rpg_world.game_world.domain.perception.people_present import WhoeverIsThere
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, SpotId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, PersonBody
@@ -56,7 +57,14 @@ class TestPerceptionDeclarationSeenAt:
     def test_witness_texts_become_a_sight_stimulus_at_the_spot(self) -> None:
         """ハルが広場から井戸に来たとき、井戸の見える刺激が 1 つでき、文の {origin} は広場で埋まり、{actor} はハルを指す。"""
         [stimulus] = _arrival().seen_at(
-            _WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+            _WELL,
+            PersonBody(_HAL),
+            _FROM_PLAZA,
+            _NOW,
+            target=NoTarget(),
+            manner=Openly(),
+            source=Noise(),
+            present=WhoeverIsThere(),
         )
 
         assert stimulus == SightStimulus(
@@ -89,7 +97,14 @@ class TestPerceptionDeclarationSeenAt:
         )
 
         _, sound = footsteps.seen_at(
-            _WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+            _WELL,
+            PersonBody(_HAL),
+            _FROM_PLAZA,
+            _NOW,
+            target=NoTarget(),
+            manner=Openly(),
+            source=Noise(),
+            present=WhoeverIsThere(),
         )
 
         assert sound == SoundStimulus(
@@ -107,7 +122,14 @@ class TestPerceptionDeclarationSeenAt:
     def test_departed_actor_is_marked_on_the_sight_stimulus(self) -> None:
         """去った人として動くハルが来たとき、見える刺激は行った人が去った人だと持つ。"""
         [stimulus] = _arrival().seen_at(
-            _WELL, DepartedPerson(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+            _WELL,
+            DepartedPerson(_HAL),
+            _FROM_PLAZA,
+            _NOW,
+            target=NoTarget(),
+            manner=Openly(),
+            source=Noise(),
+            present=WhoeverIsThere(),
         )
 
         assert isinstance(stimulus, SightStimulus) and stimulus.actor_departed is True
@@ -118,13 +140,27 @@ class TestPerceptionDeclarationSeenAt:
 
         with pytest.raises(PerceptionTargetNotGivenException):
             aimed.seen_at(
-                _WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+                _WELL,
+                PersonBody(_HAL),
+                _FROM_PLAZA,
+                _NOW,
+                target=NoTarget(),
+                manner=Openly(),
+                source=Noise(),
+                present=WhoeverIsThere(),
             )
 
     def test_dim_text_not_declared_stays_not_seen_in_dim(self) -> None:
         """暗いときの文を書いていない宣言では、刺激の dim も NotSeenInDim のままになる。"""
         [stimulus] = lever_pulled_quietly().seen_at(
-            _WELL, PersonBody(_HAL), {}, _NOW, target=NoTarget(), manner=Openly(), source=Noise()
+            _WELL,
+            PersonBody(_HAL),
+            {},
+            _NOW,
+            target=NoTarget(),
+            manner=Openly(),
+            source=Noise(),
+            present=WhoeverIsThere(),
         )
 
         assert isinstance(stimulus, SightStimulus) and stimulus.witness.dim == NotSeenInDim()

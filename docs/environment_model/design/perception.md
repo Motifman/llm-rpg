@@ -124,7 +124,7 @@ class SightStimulus:
     salience: Salience
     always_delivered: bool                # 作者の目撃の文が倒れたことに触れていなくても、見ていた人が知るため
     at: WorldTick
-    present: WhoeverIsThere | PeopleWhoWereThere   # 作者の場所の知らせは、効果の前の居場所に置き直して聞く (D2207)
+    present: WhoeverIsThere | PeopleWhoWereThere   # 作者の場所の知らせと行為の知らせは、効果の前の居場所に置き直して聞く (D2207、D2216)
 
     def perceived_by(self, perceiver: Perceiver, lighting: Lighting, view: PeopleAsSeen, random: RandomSource, stealth: StealthRule) -> PerceptionOutcome: ...
         # Stealthily の刺激だけ、見ていた人ごとに StealthRule の確率 (見え方ごと、耳を澄ましていれば attentive_bonus を足す) を random から引いて気づくかを決める。気づかなければ NotPerceived
@@ -217,7 +217,7 @@ class PersonWhoLeftTheWorld:              # 作者の結末が決まって、世
 
 @final
 @dataclass(frozen=True)
-class PersonGoneFromThePlace:             # 出来事の効果の前にその場にいて、効果で死んだ・外れた人 (D2207)
+class PersonGoneFromThePlace:             # 出来事・行為の効果の前にその場にいて、効果で死んだ・外れた人 (D2207、D2216)
     person: PersonId
     location: Location                    # 効果の前の居場所
     gone_because: NotPerceivedReason      # DEAD / LEFT_THE_WORLD
@@ -283,11 +283,11 @@ class NoticedLater:
     notice: MissedNotice
 ```
 
-知覚しなかった刺激は、理由 (`NotPerceivedReason`) を持つ (D2206)。理由は刺激と知覚する人が決める。死んだ人 (`DeadPerceiver`) と世界から外れた人は居場所が無いので、見える・聞こえる刺激では「その場にいない」、他人の体の刺激では「本人の体ではない」になる。「死んでいる」「世界から外れた」になるのは、宛先に入っていた知らせが届かなかったときと、出来事の効果で死んだ・外れた人に、その出来事の場所の知らせが届かなかったとき (D2207)。
+知覚しなかった刺激は、理由 (`NotPerceivedReason`) を持つ (D2206)。理由は刺激と知覚する人が決める。死んだ人 (`DeadPerceiver`) と世界から外れた人は居場所が無いので、見える・聞こえる刺激では「その場にいない」、他人の体の刺激では「本人の体ではない」になる。「死んでいる」「世界から外れた」になるのは、宛先に入っていた知らせが届かなかったときと、出来事・行為の効果で死んだ・外れた人に、その出来事の場所の知らせ・その行為の知らせが届かなかったとき (D2207、D2216)。
 
 | 理由 | いつ |
 |---|---|
-| `ELSEWHERE` その場にいない | 見える刺激の場所にいない。作者の場所の知らせでは、効果の前にその場所にいなかった (D2207)。効果の前から居場所の無い人 (死んだ人、世界から外れた人) の見える・聞こえる刺激 |
+| `ELSEWHERE` その場にいない | 見える刺激の場所にいない。作者の場所の知らせと行為の知らせでは、効果の前にその場所にいなかった (D2207、D2216)。効果の前から居場所の無い人 (死んだ人、世界から外れた人) の見える・聞こえる刺激 |
 | `OUT_OF_EARSHOT` 遠い | 音が届かない。ささやきで鳴った場所にいない |
 | `TOO_QUIET` 音が小さい | 届いたが、聞こえる大きさに足りない |
 | `TOO_DARK` 暗くて見えない | 暗い・真っ暗で、その明るさの文が無い |
@@ -296,7 +296,7 @@ class NoticedLater:
 | `UNCONSCIOUS` 気を失っている | 倒れていて関わっていない。関わっていても、起きてから知る文が無い |
 | `NOT_OWN_BODY` 本人の体ではない | 本人の体の刺激で、本人でない。体の無い去った人 |
 | `NOT_ADDRESSED` 知らせの宛先でない | 世界の知らせの相手でない |
-| `LEFT_THE_WORLD` 世界から外れた | 結末が決まって世界から外れた人が、宛先に入っていた知らせを受けない。出来事の効果で外れた人が、その出来事の場所の知らせを受けない (D2207) |
+| `LEFT_THE_WORLD` 世界から外れた | 結末が決まって世界から外れた人が、宛先に入っていた知らせを受けない。出来事・行為の効果で外れた人が、その出来事の場所の知らせ・その行為の知らせを受けない (D2207、D2216) |
 | `DEAD` 死んでいる | 去った人として行為をしない世界の死んだ人が、宛先に入っていた知らせを受けない。出来事の効果で死んだ人が、その出来事の場所の知らせを受けない (D2207) |
 | `ALREADY_PERCEIVED` 同じものをもう知った | 同じまとまりの別の感覚の刺激を、もう知った (1 人に 1 つ) |
 

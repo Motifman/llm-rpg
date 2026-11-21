@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefusedException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.value_object import Ticks
 
 _Attempt = TypeVar("_Attempt", bound=ActionAttempt)
@@ -57,10 +58,11 @@ class CarryOutAction:
     ) -> None:
         now = facts.now()
         situation = ActorSituation.of(attempt, facts)
+        present = PeopleWhoWereThere.before_the_effect(facts)
         world = session.aggregates()
         busy_for = steps.change_world(attempt, facts, world)
         world.vitals(attempt.actor).start_acting(attempt.exertion(), now + busy_for, facts.rules().fatigue)
-        session.latest_actions().note(attempt, situation, now)
+        session.latest_actions().note(attempt, situation, present, now)
         session.scenario_progress().note_joint_action_part_done(attempt, self._joint_actions, now)
 
     def _note_refusal(self, refusal: ActionRefusal) -> ActionRefused:

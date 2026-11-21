@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.condition.subject import Anyone
 from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.world_records_exception import LatestActionsDisagreeWithAnyoneException
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import NotAtSpot, Occupant
@@ -34,6 +35,7 @@ class PersonActedEvent(DomainEvent):
     at_spot: SpotId | NotAtSpot
     actor_as: Occupant
     item_specs: Mapping[ItemInstanceId, ItemSpecId]
+    present: PeopleWhoWereThere
     at: WorldTick
 
 
@@ -99,7 +101,9 @@ class LatestActions(AggregateRoot[LatestActionsEvent]):
             last_done=frozenset(ActionLastDoneAt(who, action, at) for (who, action), at in self._last_done.items()),
         )
 
-    def note(self, attempt: ActionAttempt, situation: ActorSituation, now: WorldTick) -> None:
+    def note(
+        self, attempt: ActionAttempt, situation: ActorSituation, present: PeopleWhoWereThere, now: WorldTick
+    ) -> None:
         for action in attempt.done_as():
             self._last_done[(attempt.actor, action)] = now
             self._last_done[(Anyone(), action)] = now
@@ -111,6 +115,7 @@ class LatestActions(AggregateRoot[LatestActionsEvent]):
                 at_spot=situation.at_spot,
                 actor_as=situation.actor_as,
                 item_specs=situation.item_specs,
+                present=present,
                 at=now,
             )
         )

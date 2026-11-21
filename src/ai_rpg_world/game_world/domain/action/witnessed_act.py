@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.people import NameInText
     from ai_rpg_world.game_world.domain.perception import NoTarget, SoundSource, Stimulus
+    from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 
 
 @final
@@ -26,11 +27,13 @@ class WitnessedAct:
     manner: Manner
     source: SoundSource
 
-    def stimuli_at(self, where: SpotId | NotAtSpot, actor: Occupant, at: WorldTick) -> tuple[Stimulus, ...]:
+    def stimuli_at(
+        self, where: SpotId | NotAtSpot, actor: Occupant, present: PeopleWhoWereThere, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
         if isinstance(where, NotAtSpot):
             return ()
         return self.perception.seen_at(
-            where, actor, self.names, at, target=self.target, manner=self.manner, source=self.source
+            where, actor, self.names, at, target=self.target, manner=self.manner, source=self.source, present=present
         )
 
     def failure_stimuli_at(self, where: SpotId | NotAtSpot, actor: Occupant, at: WorldTick) -> tuple[Stimulus, ...]:

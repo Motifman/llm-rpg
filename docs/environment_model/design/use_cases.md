@@ -59,7 +59,7 @@ class DeliverPerception:
     def __call__(self, command: DeliverPerceptionCommand) -> None:
         # command は原因 (PerceptionCause) と刺激を持つ
         # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
-        # 作者の場所の知らせの刺激は、知覚する人を効果の前の居場所 (PeopleWhoWereThere) に置き直してから聞く (D2207)
+        # 作者の場所の知らせと行為の知らせの刺激は、知覚する人を効果の前の居場所 (PeopleWhoWereThere) に置き直してから聞く (D2207、D2216)
         # → Perceiver と LightingConditions / SoundReach を作り、刺激の perceived_by に聞く
         # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、本人の体・見える・聞こえるは 1 人に最初に知覚したものだけ。世界の知らせは数えずに届ける (D2203)
         # → Perceived は観測の出口へ
@@ -182,7 +182,8 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 2. ActionPrerequisiteCheck.cleared (行っているあいだは Busy。話すことだけはできる。通ったら暗がりの誰かに向けた相手をその場から選ぶ)
 3. 行為ごとの前提 (InteractionDeclaration.precondition など)
 4. 世界を変える (Effect.apply、または専用のモデルの集約)
-   最後に、体を使う行為なら PersonVitals.exert、PersonVitals.start_action (行っているあいだ)、LatestActions.note (PersonActedEvent)、
+   世界を変える前に、行う人の状況 (ActorSituation.of) と、人ごとの居場所 (PeopleWhoWereThere.before_the_effect) を読む (D2216)
+   最後に、体を使う行為なら PersonVitals.exert、PersonVitals.start_action (行っているあいだ)、LatestActions.note (PersonActedEvent。効果の前の居場所を present に載せる)、
    ScenarioProgress.note_joint_action_part_done (どの二人で合わせる操作のどの部分に当たるかは帳簿が決める。D2173)
 ──
 5. ドメインイベントを配る (DeliverPerceptionOfCommittedEvents → StimulusTranslator → DeliverPerception、ハンドラ、trace)
@@ -202,7 +203,7 @@ class ActionSteps(Protocol[_Attempt]):
 - 集約が断った理由の文は `RefusalTexts.world_state` から引き、表に無ければ `RefusalTexts.unlisted` を使う。例外の文面は返さない (品物の ID が入る)
 
 断られたとき (2 か 3 か 4):
-- 巻き戻し、別の範囲で LatestActions.note_failed_attempt (ActionAttemptFailedEvent)
+- 巻き戻し、別の範囲で LatestActions.note_failed_attempt (ActionAttemptFailedEvent)。巻き戻したあとなので、いまの居場所が効果の前の居場所と同じになり、present は載せない (D2216)
 - コマンドへの返事として断られた理由を返し、本人の記憶にも、変換役が ActionAttemptFailedEvent から作る本人の体の刺激 (断られた理由の文) が届く
 - 見ていた人に届くのは 3 か 4 で断られ、作者が失敗の目撃の文 (`PerceptionDeclaration.on_failure`) を書いたときだけ。2 は周りから見て何も起きていない
 ```
