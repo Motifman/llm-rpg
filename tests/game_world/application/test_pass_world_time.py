@@ -9,20 +9,30 @@ import pytest
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
+from ai_rpg_world.game_world.application.deliver_perception import DeliverPerception, DeliverPerceptionCommand
+from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime, PassWorldTimeCommand
+from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ItemSpecDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item.item_spec_declaration import Lasts
 from ai_rpg_world.game_world.domain.declaration.spot import PassageDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
+    DayNightDeclaration,
+    DayPhaseDeclaration,
+    DayPhaseName,
     NoChange,
+    NoDayNight,
     NoWeather,
+    TimeOfDay,
     WeatherDeclaration,
     WeatherState,
 )
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_transitions import WeatherTransitions
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -30,6 +40,8 @@ from ai_rpg_world.game_world.domain.exception.world_contents_exception import Ag
 from ai_rpg_world.game_world.domain.objects_and_items import ItemGivenUpEvent, ItemRanOutEvent
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.person.person_vitals_events import PersonDiedEvent
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
@@ -52,6 +64,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     Route,
     TravelBlockedEvent,
 )
+from ai_rpg_world.game_world.domain.world_progress.world_clock import TimeOfDayChangedEvent
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.domain.whereabouts._builders import CLOSED, door
 from tests.game_world.support.world_design_for_tests import (
@@ -84,6 +97,7 @@ class _World:
         item_specs: tuple[ItemSpecDeclaration, ...] = (),
         rules: WorldRules | None = None,
         weather: WeatherDeclaration | NoWeather = NoWeather(),
+        day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
         fractions: tuple[float, ...] = (),
     ) -> None:
         design: WorldDesign = compose_world(
@@ -95,7 +109,9 @@ class _World:
             ),
             world_rules=rules,
             weather=weather,
+            day_night=day_night,
         )
+        self.design = design
         self.store = SqliteWorldStore.create(
             ":memory:",
             world_id=_WORLD,
@@ -346,3 +362,86 @@ class TestPassWorldTimeWeather:
 
         assert before == WeatherState(WeatherType.CLEAR)
         assert _weather_now(world) == WeatherState(WeatherType.CLOUDY)
+
+
+_DAWN = TextWithUnassignedPeople("空が白み、朝になった。")
+_DAWN_AT_TICK_1 = DayNightDeclaration(
+    ticks_per_day=Ticks(4),
+    starts_at=TimeOfDay(0),
+    phases=(
+        DayPhaseDeclaration(
+            name=DayPhaseName("night"),
+            begins_at=TimeOfDay(0),
+            dark=True,
+            announcement=NoAnnouncement(),
+            audience=EveryoneAwake(),
+        ),
+        DayPhaseDeclaration(
+            name=DayPhaseName("morning"),
+            begins_at=TimeOfDay(1),
+            dark=False,
+            announcement=_DAWN,
+            audience=EveryoneAwake(),
+        ),
+    ),
+)
+_AKI = PersonId("aki")
+
+
+class TestPassWorldTimeDayPhase:
+    """PassWorldTime が、時間帯の変わり目に、その時点で起きている相手を選んで TimeOfDayChangedEvent に載せることを保証する。"""
+
+    def _dawn_with_aki_fainted(self) -> _World:
+        world = _World(characters=(character("haru", "plaza"), character("aki", "plaza")), day_night=_DAWN_AT_TICK_1)
+        world.scope.run(
+            lambda session: session.aggregates().vitals(_AKI).take_damage(Damage(999), WorldTick(0), WorldHappening())
+        )
+        world.pass_ticks(1)
+        return world
+
+    def test_fainted_person_is_left_out_of_the_morning_audience(self) -> None:
+        """朝に入ると、広場で起きているハルだけが TimeOfDayChangedEvent の相手に載り、同じ広場で気を失っているアキは載らない。"""
+        world = self._dawn_with_aki_fainted()
+
+        [entered] = world.events_of(TimeOfDayChangedEvent)
+        assert (entered.after, entered.audience) == (DayPhaseName("morning"), frozenset({_HARU}))
+
+    def test_fainted_person_does_not_keep_the_morning_for_later(self) -> None:
+        """朝の知らせを届けても、気を失っているアキには、起きてから知る知らせとしてたまらない。"""
+        world = self._dawn_with_aki_fainted()
+        [entered] = world.events_of(TimeOfDayChangedEvent)
+        stimuli = StimulusTranslator().stimuli_of(entered, world.design)
+
+        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()))(
+            DeliverPerceptionCommand(from_actions=(), from_states=stimuli)
+        )
+
+        assert stimuli
+        assert world.read(lambda session: session.facts().missed_notices(_AKI).notices()) == ()
+
+    def test_person_fainting_in_the_tick_of_dawn_does_not_keep_the_morning(self) -> None:
+        """朝に入る tick に飢えで倒れたハルは、相手を選んだ時点では起きていて相手に載るが、朝の知らせをためない。"""
+        base = world_rules_for_tests()
+        starving = replace(
+            base,
+            hunger=replace(
+                base.hunger, per_tick=HungerAmount(1), limit=HungerAmount(1), starvation_damage=Damage(9999)
+            ),
+        )
+        world = _World(characters=(character("haru", "plaza"),), rules=starving, day_night=_DAWN_AT_TICK_1)
+        world.pass_ticks(1)
+        [entered] = world.events_of(TimeOfDayChangedEvent)
+        stimuli = StimulusTranslator().stimuli_of(entered, world.design)
+
+        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()))(
+            DeliverPerceptionCommand(from_actions=(), from_states=stimuli)
+        )
+
+        assert entered.audience == frozenset({_HARU})
+        assert world.read(lambda session: session.facts().vitals(_HARU).is_down())
+        assert world.read(lambda session: session.facts().missed_notices(_HARU).notices()) == ()
+
+
+class _NoOneListening:
+    def receive(self, person: PersonId, observation: object) -> None:
+        pass

@@ -121,7 +121,7 @@ def _world(*, hidden: bool = False, apples: int = 0, gold: int = 0, ticks: int =
         object_states=(ObjectState.from_declaration(_shrine(hidden=hidden), WorldTick(0)),),
     )
     for _ in range(ticks):
-        world.clock().advance(NoDayNight())
+        world.clock().advance(NoDayNight(), world.facts())
     return world
 
 

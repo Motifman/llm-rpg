@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     NoDayNight,
     TimeOfDay,
 )
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
 from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import (
@@ -26,7 +27,11 @@ from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
 
 def _phase(name: str, begins_at: int, *, dark: bool = False) -> DayPhaseDeclaration:
     return DayPhaseDeclaration(
-        name=DayPhaseName(name), begins_at=TimeOfDay(begins_at), dark=dark, announcement=NoAnnouncement()
+        name=DayPhaseName(name),
+        begins_at=TimeOfDay(begins_at),
+        dark=dark,
+        announcement=NoAnnouncement(),
+        audience=EveryoneAwake(),
     )
 
 
@@ -62,6 +67,7 @@ class TestDayPhaseAnnouncement:
             begins_at=TimeOfDay(20),
             dark=True,
             announcement=TextWithUnassignedPeople("日が沈んだ。"),
+            audience=EveryoneAwake(),
         )
 
         assert phase.announcement == TextWithUnassignedPeople("日が沈んだ。")

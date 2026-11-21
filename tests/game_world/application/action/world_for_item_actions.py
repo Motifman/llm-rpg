@@ -53,7 +53,7 @@ class WorldForItemActions:
 
     def pass_ticks(self, count: int) -> None:
         for _ in range(count):
-            self.scope.run(lambda session: session.clock().advance(self.design.day_night))
+            self.scope.run(lambda session: session.clock().advance(self.design.day_night, session.facts()))
 
     def fell(self, person: PersonId) -> None:
         self.scope.run(

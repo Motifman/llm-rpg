@@ -27,7 +27,7 @@ def _pass_one_tick(session: WorldSession) -> None:
     facts = session.facts()
     world = session.aggregates()
     clock = session.clock()
-    clock.advance(facts.day_night())
+    clock.advance(facts.day_night(), facts)
     now = clock.now()
     world.whereabouts().advance_travels(facts.passages().closed_passages(), now)
     rules = facts.rules()

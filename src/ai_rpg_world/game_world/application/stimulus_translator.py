@@ -153,6 +153,10 @@ def _outcome_decided(event: PersonOutcomeDecidedEvent, design: WorldDesign) -> t
     return event.outcome.announced_to(event.person, event.at)
 
 
+def _time_of_day_changed(event: TimeOfDayChangedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    return design.day_night.phase_named(event.after).stimuli_when_entered(event.audience, event.at)
+
+
 def _ran_out(event: ItemRanOutEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
     text = design.nouns.item_spec_of(event.spec_id).lasts.ended_notice()
     return (event.where.read(ItemRanOutNotice(text, event.at)),)
@@ -167,6 +171,7 @@ _TRANSLATIONS: dict[type[DomainEvent], Callable[[Any, WorldDesign], tuple[Stimul
     JointActionCompletedEvent: _joint_completed,
     JointActionTimedOutEvent: _joint_timed_out,
     PersonOutcomeDecidedEvent: _outcome_decided,
+    TimeOfDayChangedEvent: _time_of_day_changed,
 }
 
 NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
@@ -216,7 +221,6 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         StatusEffectAddedEvent,
         StatusEffectExpiredEvent,
         TextWrittenEvent,
-        TimeOfDayChangedEvent,
         TravelBlockedEvent,
         TravelCancelledEvent,
         TravelStartedEvent,

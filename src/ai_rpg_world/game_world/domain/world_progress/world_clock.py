@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
@@ -10,7 +10,10 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     NoDayNight,
     TimeOfDay,
 )
-from ai_rpg_world.game_world.domain.value_object import Ticks, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import PersonId, Ticks, WorldId, WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 
 
 @final
@@ -28,6 +31,7 @@ class TimeOfDayChangedEvent(DomainEvent):
     before: DayPhaseName
     after: DayPhaseName
     at: WorldTick
+    audience: frozenset[PersonId]
 
 
 WorldClockEvent = WorldTickAdvancedEvent | TimeOfDayChangedEvent
@@ -61,7 +65,7 @@ class WorldClock(AggregateRoot[WorldClockEvent]):
     def memento(self) -> WorldClockMemento:
         return WorldClockMemento(world_id=self._world_id, now=self._now)
 
-    def advance(self, day_night: DayNightDeclaration | NoDayNight) -> None:
+    def advance(self, day_night: DayNightDeclaration | NoDayNight, facts: WorldFacts) -> None:
         before = self._now
         self._now = before + Ticks(1)
         self.add_event(
@@ -75,6 +79,7 @@ class WorldClock(AggregateRoot[WorldClockEvent]):
                     before=change.before,
                     after=change.after,
                     at=self._now,
+                    audience=day_night.phase_named(change.after).addressees(facts, self._now),
                 )
             )
 

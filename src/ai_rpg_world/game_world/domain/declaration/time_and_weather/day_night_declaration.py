@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
     DayPhasesNotAscendingException,
     NoDayPhasesDeclaredException,
     TimeOfDayBeyondDayException,
+    UndeclaredDayPhaseException,
 )
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
 
@@ -40,6 +41,12 @@ class NoDayNight:
         raise NotDeclaredInThisWorldException("this world declares no day and night")
 
     def phase_changes(self, before: WorldTick, after: WorldTick) -> tuple[DayPhaseChange, ...]:
+        return ()
+
+    def phase_named(self, name: DayPhaseName) -> DayPhaseDeclaration:
+        raise NotDeclaredInThisWorldException("this world declares no day and night")
+
+    def declared_phases(self) -> tuple[DayPhaseDeclaration, ...]:
         return ()
 
 
@@ -86,6 +93,15 @@ class DayNightDeclaration:
         if phase_before == phase_after:
             return ()
         return (DayPhaseChange(before=phase_before.name, after=phase_after.name),)
+
+    def declared_phases(self) -> tuple[DayPhaseDeclaration, ...]:
+        return self.phases
+
+    def phase_named(self, name: DayPhaseName) -> DayPhaseDeclaration:
+        for phase in self.phases:
+            if phase.name == name:
+                return phase
+        raise UndeclaredDayPhaseException(f"day phase {name.value} is not declared")
 
     def _require_within_day(self, time_of_day: TimeOfDay) -> None:
         if time_of_day.tick_of_day >= self.ticks_per_day.value:

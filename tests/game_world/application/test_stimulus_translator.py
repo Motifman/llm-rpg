@@ -33,8 +33,16 @@ from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
 from ai_rpg_world.game_world.domain.condition.condition import HiddenFailure
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts
 from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    DayNightDeclaration,
+    DayPhaseDeclaration,
+    DayPhaseName,
+    TimeOfDay,
+)
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.verb import (
     AnnouncementTo,
     HappeningDeclaration,
@@ -103,7 +111,7 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     PersonBody,
     Teleported,
 )
-from ai_rpg_world.game_world.domain.world_progress.world_clock import WorldTickAdvancedEvent
+from ai_rpg_world.game_world.domain.world_progress.world_clock import TimeOfDayChangedEvent, WorldTickAdvancedEvent
 from ai_rpg_world.game_world.domain.world_records import (
     ActionAttemptFailedEvent,
     HappeningFiredEvent,
@@ -750,3 +758,63 @@ class TestStimulusTranslatorOutcomes:
     def test_death_makes_no_announcement(self) -> None:
         """ハルの結末が死んだこと (Died) に決まっても、作者の文が無いので刺激を作らない。"""
         assert StimulusTranslator().stimuli_of(_outcome_decided(Died()), _design()) == ()
+
+
+_DAWN = TextWithUnassignedPeople("空が白み、朝になった。")
+
+
+def _time_of_day_design() -> WorldDesign:
+    return compose_world(
+        nouns(),
+        day_night=DayNightDeclaration(
+            ticks_per_day=Ticks(48),
+            starts_at=TimeOfDay(0),
+            phases=(
+                DayPhaseDeclaration(
+                    name=DayPhaseName("predawn"),
+                    begins_at=TimeOfDay(0),
+                    dark=True,
+                    announcement=NoAnnouncement(),
+                    audience=EveryoneAwake(),
+                ),
+                DayPhaseDeclaration(
+                    name=DayPhaseName("morning"),
+                    begins_at=TimeOfDay(12),
+                    dark=False,
+                    announcement=_DAWN,
+                    audience=EveryoneAwake(),
+                ),
+            ),
+        ),
+    )
+
+
+def _phase_entered(phase: str, before: str) -> TimeOfDayChangedEvent:
+    return TimeOfDayChangedEvent(
+        **new_event_stamp(),
+        world_id=_WORLD,
+        before=DayPhaseName(before),
+        after=DayPhaseName(phase),
+        at=_NOW,
+        audience=frozenset({_HAL}),
+    )
+
+
+class TestStimulusTranslatorTimeOfDay:
+    """StimulusTranslator が、時間帯に入ったことを、イベントに載った相手への目立たない世界の知らせに変えることを保証する。"""
+
+    def test_entering_morning_becomes_a_background_announcement_to_the_audience(self) -> None:
+        """朝に入ると、イベントに載った相手 (ハル) への目立たない世界の知らせ「空が白み、朝になった。」になる。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_phase_entered("morning", "predawn"), _time_of_day_design())
+
+        assert stimulus == AnnouncementStimulus(
+            audience=frozenset({_HAL}),
+            text=_DAWN.about({}),
+            salience=Background(),
+            at=_NOW,
+            kept_while_fainted=False,
+        )
+
+    def test_entering_a_phase_without_announcement_makes_no_stimulus(self) -> None:
+        """知らせの文を書いていない夜明け前に入っても、刺激を作らない。"""
+        assert StimulusTranslator().stimuli_of(_phase_entered("predawn", "morning"), _time_of_day_design()) == ()

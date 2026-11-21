@@ -66,7 +66,7 @@ def _staged_world() -> WorldSession:
 
 def _at_tick(a_world: WorldSession, tick: int) -> WorldSession:
     while a_world.clock().now() < WorldTick(tick):
-        a_world.clock().advance(a_world.facts().day_night())
+        a_world.clock().advance(a_world.facts().day_night(), a_world.facts())
     return a_world
 
 

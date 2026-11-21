@@ -51,3 +51,19 @@ class TestAnnouncementStimulusPerceivedBy:
 
         assert isinstance(outcome, Perceived)
         assert outcome.calls_attention is False
+
+
+class TestAnnouncementNotKeptWhileFainted:
+    """kept_while_fainted が偽の世界の知らせ (時間帯) は、倒れている相手に届かず、起きてから知る形でもためないことを保証する。"""
+
+    def test_fainted_addressee_does_not_keep_an_announcement_not_kept_while_fainted(self) -> None:
+        """相手に選ばれたあとで倒れたアリスには、「日が落ち、夜になった」が届かず、ためもしない (NotPerceived)。"""
+        nightfall = AnnouncementStimulus(
+            audience=frozenset({ALICE}),
+            text=about("日が落ち、夜になった。"),
+            salience=Background(),
+            at=WorldTick(36),
+            kept_while_fainted=False,
+        )
+
+        assert nightfall.perceived_by(fallen(ALICE), VIEW) == NotPerceived()

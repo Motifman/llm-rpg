@@ -260,6 +260,10 @@ class WorldDesign:
             review.requirements(placement.at_field("choices"), rules.choices.requirements())
             review.effect(RulePlacement.in_group_decision_result(location).at_field("when_decided"), rules.when_decided)
             review.effect(placement.at_field("when_undecided"), rules.when_undecided)
+        for phase in day_night.declared_phases():
+            location = replace(_WORLD_LOCATION, field=f"time.day_night.phases.{phase.name.value}.audience")
+            placement = RulePlacement.in_world(location)
+            review.requirements(placement, phase.audience.requirements())
         for happening in happenings:
             placement = RulePlacement.in_world(design_location("happening", happening.happening_id, field=""))
             review.condition(placement.at_field("condition"), happening.condition)

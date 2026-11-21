@@ -18,16 +18,20 @@ from ai_rpg_world.game_world.domain.condition.person_conditions import (
 from ai_rpg_world.game_world.domain.declaration.character.group_declaration import MembershipVisibility
 from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts, ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.object_and_item.state_value import ChoiceName, ChoiceValue
+from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayPhaseName
 from ai_rpg_world.game_world.domain.declaration.verb import HappeningDeclaration, ObjectLooksDeclaration
 from ai_rpg_world.game_world.domain.design_flaw import DesignLocation
 from ai_rpg_world.game_world.domain.effect.combined_effects import ConditionalEffect, ForEveryoneEffect, SequenceEffect
 from ai_rpg_world.game_world.domain.effect.flag_effects import LowerFlagEffect
 from ai_rpg_world.game_world.domain.effect.membership_and_outcome_effects import SetOutcomeEffect
 from ai_rpg_world.game_world.domain.objects_and_items.object_state import ObjectState
+from ai_rpg_world.game_world.domain.person import PersonVitals
 from ai_rpg_world.game_world.domain.value_object import (
     Capacity,
     Count,
     DescriptionText,
+    HitPoints,
     ObjectId,
     PersonId,
     SpotId,
@@ -35,6 +39,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldId,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 from tests.game_world.support.world_in_memory import world_in_memory
 
@@ -310,3 +315,44 @@ class TestLightsBurnOut:
         names = {happening.happening_id.value for happening in mine_village.design.happenings()}
 
         assert names.isdisjoint({"lamp_flames_burn_out", "torches_burn_out"})
+
+
+class TestDayPhaseAudiences:
+    """廃坑の山村 v2 の時間帯の知らせが、空の様子を書いた朝・昼・夜は屋外の場所にいる人にだけ、夜明け前は起きている全員に届くことを保証する。"""
+
+    @pytest.mark.parametrize("phase", ["morning", "noon", "night"])
+    def test_sky_phases_reach_exactly_the_people_at_outdoor_spots(
+        self, mine_village: LoadedScenario, phase: str
+    ) -> None:
+        """場所ごとに 1 人ずつ立たせると、朝・昼・夜の知らせは、outdoor: true の場所に立つ人だけに届く。"""
+        world, standing_at = _one_person_at_each_spot(mine_village)
+
+        addressees = mine_village.design.day_night.phase_named(DayPhaseName(phase)).addressees(world.facts(), _START)
+
+        outdoors = {person for person, spot in standing_at.items() if spot.atmosphere.outdoor}
+        assert outdoors
+        assert addressees == outdoors
+
+    def test_predawn_reaches_everyone_awake(self, mine_village: LoadedScenario) -> None:
+        """夜明け前の知らせは audience を書いていないので、坑道の中を含め、どの場所に立つ人にも届く。"""
+        world, standing_at = _one_person_at_each_spot(mine_village)
+
+        addressees = mine_village.design.day_night.phase_named(DayPhaseName("predawn")).addressees(
+            world.facts(), _START
+        )
+
+        assert addressees == set(standing_at)
+
+
+def _one_person_at_each_spot(loaded: LoadedScenario) -> tuple[WorldSession, dict[PersonId, SpotDeclaration]]:
+    spots = loaded.design.nouns.all_spots()
+    standing_at = {PersonId(f"at_{spot.spot_id.value}"): spot for spot in spots}
+    world = world_in_memory(
+        world=WorldId("mine_village"),
+        people=tuple(standing_at),
+        spots=spots,
+        vitals=tuple(PersonVitals.start(person, HitPoints(current=10, maximum=10)) for person in standing_at),
+    )
+    for person, spot in standing_at.items():
+        world.aggregates().whereabouts().place(PersonBody(person), spot)
+    return world, standing_at

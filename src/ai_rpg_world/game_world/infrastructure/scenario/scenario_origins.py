@@ -21,7 +21,11 @@ _VERB_INSIDE_NOUN: dict[str, tuple[str, tuple[str, ...]]] = {
     "world_stage_effects": ("world_stage", ()),
     "group_decision_rules": ("group_decision", ()),
 }
-_TOP_OF_WORLD_FIELD = {"world_rules": "rules", "built_in_action_perceptions": "built_in_action_perceptions"}
+_TOP_OF_WORLD_FIELD = {
+    "world_rules": "rules",
+    "built_in_action_perceptions": "built_in_action_perceptions",
+    "time": "time",
+}
 _TOP_DECLARATIONS = ("ending", "built_in_action_perceptions")
 _FIELD_STEP = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
 

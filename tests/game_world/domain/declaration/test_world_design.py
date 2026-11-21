@@ -50,6 +50,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherState,
     WeatherType,
 )
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.time_of_day import TimeOfDay
 from ai_rpg_world.game_world.domain.declaration.verb import (
     AnnouncementTo,
@@ -139,10 +140,18 @@ _DAY_NIGHT = DayNightDeclaration(
     starts_at=TimeOfDay(0),
     phases=(
         DayPhaseDeclaration(
-            name=DayPhaseName("morning"), begins_at=TimeOfDay(0), dark=False, announcement=NoAnnouncement()
+            name=DayPhaseName("morning"),
+            begins_at=TimeOfDay(0),
+            dark=False,
+            announcement=NoAnnouncement(),
+            audience=EveryoneAwake(),
         ),
         DayPhaseDeclaration(
-            name=DayPhaseName("night"), begins_at=TimeOfDay(2), dark=True, announcement=NoAnnouncement()
+            name=DayPhaseName("night"),
+            begins_at=TimeOfDay(2),
+            dark=True,
+            announcement=NoAnnouncement(),
+            audience=EveryoneAwake(),
         ),
     ),
 )
@@ -268,6 +277,17 @@ class TestSubjectsOutsideActions:
             DesignLocation("object_interaction", "door/open", "perceived_as"),
             DesignLocation("happening", "bell", "notice"),
         }
+
+    def test_day_phase_audience_cannot_refer_to_an_actor(self) -> None:
+        """朝の知らせの相手を、行った人 (Actor) が倒れているかで選ぶと、行った人のいない時間帯の audience の欄が DesignFlaw になる。"""
+        morning, night = _DAY_NIGHT.phases
+        to_actor = PeopleSelection(where=IsDownCondition(who=Actor(), failure_text=NoText()))
+
+        flaws = flaws_of_composing(day_night=replace(_DAY_NIGHT, phases=(replace(morning, audience=to_actor), night)))
+
+        assert [flaw.location for flaw in flaws] == [
+            DesignLocation("world", "world", "time.day_night.phases.morning.audience")
+        ]
 
 
 class TestArgumentsRead:

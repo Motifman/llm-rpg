@@ -23,6 +23,7 @@ class AnnouncementStimulus:
     salience: Salience
     at: WorldTick
     reaches_who_left_the_world: bool = False
+    kept_while_fainted: bool = True
 
     @property
     def counts_toward_one_per_person(self) -> bool:
@@ -43,7 +44,8 @@ class AnnouncementStimulus:
         if perceiver.person not in self.audience or not perceiver.takes_announcement(self.reaches_who_left_the_world):
             return NotPerceived()
         # 知らせは選ばれた本人に宛てたものなので、倒れていれば起きてから知る。
-        return perceiver.notices_surroundings(involved=True).outcome(
+        # 時間帯は、目覚めたときに古い時間帯が届くといまの時刻と食い違うので、ためない (D2203)。
+        return perceiver.notices_surroundings(involved=self.kept_while_fainted).outcome(
             when_aware=lambda: Perceived(
                 perceiver=perceiver.person,
                 text=self.text.seen_by(view),
