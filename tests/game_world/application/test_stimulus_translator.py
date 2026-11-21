@@ -316,7 +316,10 @@ _SPECS = {_PICKAXE: ItemSpecId("pickaxe"), _ROPE: ItemSpecId("rope")}
 
 
 def _acted(
-    attempt: ActionAttempt, at_spot: SpotId | NotAtSpot = SpotId("well"), actor_as: Occupant = PersonBody(_HAL)
+    attempt: ActionAttempt,
+    at_spot: SpotId | NotAtSpot = SpotId("well"),
+    actor_as: Occupant = PersonBody(_HAL),
+    present: PeopleWhoWereThere = PeopleWhoWereThere(),
 ) -> PersonActedEvent:
     return PersonActedEvent(
         **new_event_stamp(),
@@ -325,6 +328,7 @@ def _acted(
         at_spot=at_spot,
         actor_as=actor_as,
         item_specs=_SPECS,
+        present=present,
         at=_NOW,
     )
 
@@ -391,6 +395,17 @@ class TestStimulusTranslatorBuiltInActs:
 
         assert isinstance(voice, SoundStimulus)
         assert (voice.clear.template.template, voice.source) == ("{actor}が「やあ」と言った。", Voice(NotWhispered()))
+
+    def test_act_stimuli_carry_where_people_were_before_the_effect(self) -> None:
+        """効果の前にミナが井戸にいたと PersonActedEvent が持つとき、ハルが話した見える刺激にも声にも、その居場所が載る (D2216)。"""
+        before = PeopleWhoWereThere({_MINA: AtSpot(SpotId("well"), OpenArea())})
+
+        stimuli = StimulusTranslator().stimuli_of(
+            _acted(SpeechAttempt(_HAL, OrdinaryVoice(), SpeechContent("やあ")), present=before), _acts_design()
+        )
+
+        assert [type(stimulus) for stimulus in stimuli] == [SightStimulus, SoundStimulus]
+        assert all(isinstance(s, (SightStimulus, SoundStimulus)) and s.present == before for s in stimuli)
 
     def test_whispering_makes_a_voice_whispered_to_the_listener(self) -> None:
         """ハルがミナにささやくと、声はミナ宛てで、見える刺激ではミナに相手の文が当たる。"""

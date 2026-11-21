@@ -16,6 +16,7 @@ from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import Actor, Anyone, SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import AllActionsAllowed, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
@@ -83,7 +84,7 @@ class TestTicksSinceLastActionSinceStart:
         """bob が tick 3 にレバーを引いたら、誰でもが 3 tick 以上引いていない条件は tick 5 で偽、tick 6 で真。"""
         condition = _since_lever(3, SinceStart())
         a_world = world()
-        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), WorldTick(3))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), PeopleWhoWereThere(), WorldTick(3))
 
         assert not condition.holds(_at_tick(a_world, 5).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 6).facts(), _BY_ALICE)
@@ -101,8 +102,8 @@ class TestTicksSinceLastActionSinceStart:
             who=Actor(), action=ActionKind.SEARCH, ticks=Ticks(3), since=SinceStart(), failure_text=NoText()
         )
         a_world = world()
-        a_world.latest_actions().note(_ALICE_SEARCHES, situation_for_tests(), WorldTick(1))
-        a_world.latest_actions().note(_BOB_SEARCHES, situation_for_tests(), WorldTick(4))
+        a_world.latest_actions().note(_ALICE_SEARCHES, situation_for_tests(), PeopleWhoWereThere(), WorldTick(1))
+        a_world.latest_actions().note(_BOB_SEARCHES, situation_for_tests(), PeopleWhoWereThere(), WorldTick(4))
 
         assert condition.holds(_at_tick(a_world, 4).facts(), _BY_ALICE)
 
@@ -128,7 +129,7 @@ class TestTicksSinceLastActionSinceWorldStageEntered:
         """tick 2 にレバーを引き、tick 5 に夜へ入ったなら、3 tick 以上の条件は tick 7 で偽、tick 8 で真。"""
         condition = _since_lever(3, SinceWorldStageEntered())
         a_world = _staged_world()
-        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), WorldTick(2))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), PeopleWhoWereThere(), WorldTick(2))
         _at_tick(a_world, 5)
         a_world.aggregates().world_stage().enter(_NIGHT, WorldTick(5))
 
@@ -140,7 +141,7 @@ class TestTicksSinceLastActionSinceWorldStageEntered:
         condition = _since_lever(3, SinceWorldStageEntered())
         a_world = _at_tick(_staged_world(), 5)
         a_world.aggregates().world_stage().enter(_NIGHT, WorldTick(5))
-        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), WorldTick(6))
+        a_world.latest_actions().note(_BOB_PULLS_LEVER, situation_for_tests(), PeopleWhoWereThere(), WorldTick(6))
 
         assert not condition.holds(_at_tick(a_world, 8).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 9).facts(), _BY_ALICE)

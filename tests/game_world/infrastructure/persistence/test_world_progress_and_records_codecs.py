@@ -97,11 +97,15 @@ def _stage() -> object:
 def _latest_actions() -> LatestActionsMemento:
     latest = LatestActions.start(_WORLD)
     latest.note(
-        ActionAttemptForTests(actor_id=_ALICE, action_kind=ActionKind.SEARCH), situation_for_tests(), WorldTick(4)
+        ActionAttemptForTests(actor_id=_ALICE, action_kind=ActionKind.SEARCH),
+        situation_for_tests(),
+        PeopleWhoWereThere(),
+        WorldTick(4),
     )
     latest.note(
         ObjectInteractionAttempt(_BOB, thing("lever", "landing"), InteractionForTests(_PULL_LEVER), {}, Openly()),
         situation_for_tests(),
+        PeopleWhoWereThere(),
         WorldTick(6),
     )
     return latest.memento()

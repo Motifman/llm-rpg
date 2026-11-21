@@ -126,7 +126,9 @@ def _arrival(event: OccupantEnteredSpotEvent, design: WorldDesign) -> tuple[Stim
 
 
 def _acted(event: PersonActedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
-    return event.attempt.witnessed_in(design, event.item_specs).stimuli_at(event.at_spot, event.actor_as, event.at)
+    return event.attempt.witnessed_in(design, event.item_specs).stimuli_at(
+        event.at_spot, event.actor_as, event.present, event.at
+    )
 
 
 def _failed(event: ActionAttemptFailedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:

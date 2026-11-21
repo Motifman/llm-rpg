@@ -24,6 +24,7 @@ from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import 
     UnfilledNameInBuiltInActionPerceptionException,
 )
 from ai_rpg_world.game_world.domain.perception import Noise, NoTarget, Stimulus
+from ai_rpg_world.game_world.domain.perception.people_present import WhoeverIsThere
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import SpotId, WorldTick
@@ -104,6 +105,7 @@ class BuiltInActionPerceptions:
             target=NoTarget(),
             manner=Openly(),
             source=Noise(),
+            present=WhoeverIsThere(),
         )
 
     def of_kind(self, kind: ActionKind) -> PerceptionDeclaration:

@@ -96,6 +96,7 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     SpotSearchProgress,
 )
 from ai_rpg_world.game_world.domain.people import PeopleRegister, TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.person import (
     Dead,
     Died,
@@ -609,7 +610,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "WorldFlags.lower_flag": lambda: _with(WorldFlags.start(_WORLD), lambda f: f.lower_flag(_GATE_SHUT, _TICK_PASSING)),
     "LatestActions.note": lambda: _with(
         LatestActions.start(_WORLD),
-        lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), situation_for_tests(), _NOW),
+        lambda a: a.note(ActionAttemptForTests(actor_id=_ALICE), situation_for_tests(), PeopleWhoWereThere(), _NOW),
     ),
     "LatestActions.note_failed_attempt": lambda: _with(
         LatestActions.start(_WORLD),
