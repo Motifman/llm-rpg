@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.people.text_with_assigned_people import Text
 from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
@@ -47,6 +48,13 @@ class Voice:
             return HearsNothing()
         return HearsClearly() if perceiver.person == self.whispered_to else HearsFaintly()
 
+    def unheard_by(
+        self, perceiver: Perceiver, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues
+    ) -> NotPerceived:
+        if isinstance(self.whispered_to, NotWhispered) or perceiver.is_at(origin):
+            return perceiver.unheard(origin, loudness, reach, values)
+        return perceiver.out_of_earshot()
+
     def clear_text(self, clear: TextAboutPeople, view: PeopleAsSeen) -> TextWithAssignedPeople:
         return clear.seen_by(view)
 
@@ -58,6 +66,11 @@ class Noise:
         self, perceiver: Perceiver, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues
     ) -> HearingQuality:
         return perceiver.hears(origin, loudness, reach, values)
+
+    def unheard_by(
+        self, perceiver: Perceiver, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues
+    ) -> NotPerceived:
+        return perceiver.unheard(origin, loudness, reach, values)
 
     def clear_text(self, clear: TextAboutPeople, view: PeopleAsSeen) -> TextWithAssignedPeople:
         return clear.unidentified()
@@ -98,7 +111,7 @@ class SoundStimulus:
     def perceived_by(
         self, perceiver: Perceiver, reach: SoundReach, values: HearingValues, view: PeopleAsSeen
     ) -> PerceptionOutcome:
-        hearing = _Hearing(stimulus=self, perceiver=perceiver, view=view)
+        hearing = _Hearing(stimulus=self, perceiver=perceiver, view=view, reach=reach, values=values)
         return self.source.heard_by(perceiver, self.origin, self.loudness, reach, values).read(hearing)
 
 
@@ -108,6 +121,8 @@ class _Hearing:
     stimulus: SoundStimulus
     perceiver: Perceiver
     view: PeopleAsSeen
+    reach: SoundReach
+    values: HearingValues
 
     def when_clear(self) -> PerceptionOutcome:
         return self._reached(
@@ -121,7 +136,8 @@ class _Hearing:
         return self._reached(self.stimulus.muffled.unidentified, HearsFaintly(), stands_out=False)
 
     def when_nothing(self) -> PerceptionOutcome:
-        return NotPerceived()
+        stimulus = self.stimulus
+        return stimulus.source.unheard_by(self.perceiver, stimulus.origin, stimulus.loudness, self.reach, self.values)
 
     def _reached(
         self,

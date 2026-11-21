@@ -3,6 +3,7 @@ from __future__ import annotations
 from ai_rpg_world.game_world.domain.perception import Background, Notable
 from ai_rpg_world.game_world.domain.perception.announcement_stimulus import AnnouncementStimulus
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Told
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.value_object import WorldTick
@@ -28,7 +29,7 @@ class TestAnnouncementStimulusPerceivedBy:
 
     def test_someone_outside_the_audience_is_not_told(self) -> None:
         """audience にいない人には NotPerceived を返す。"""
-        assert _call_to(ALICE).perceived_by(awake(BOB), VIEW) == NotPerceived()
+        assert _call_to(ALICE).perceived_by(awake(BOB), VIEW) == NotPerceived(NotPerceivedReason.NOT_ADDRESSED)
 
     def test_a_fallen_person_in_the_audience_notices_it_later(self) -> None:
         """audience にいる倒れている人には、知らせの文をそのまま MissedNotice にして NoticedLater で返す。"""
@@ -66,4 +67,4 @@ class TestAnnouncementNotKeptWhileFainted:
             kept_while_fainted=False,
         )
 
-        assert nightfall.perceived_by(fallen(ALICE), VIEW) == NotPerceived()
+        assert nightfall.perceived_by(fallen(ALICE), VIEW) == NotPerceived(NotPerceivedReason.UNCONSCIOUS)

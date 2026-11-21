@@ -26,6 +26,7 @@ from ai_rpg_world.game_world.domain.perception import (
     Stimulus,
     Voice,
 )
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perceiver import PersonWhoLeftTheWorld
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import NotWhispered
@@ -167,12 +168,28 @@ class TestPersonWhoLeftTheWorld:
         assert isinstance(outcome.notice, MissedNotice)
         assert outcome.notice.text.template == "{each_person}は昇降機で外へ出た"
 
-    @pytest.mark.parametrize("stimulus", _STIMULI_IN_THE_WORLD.values(), ids=_STIMULI_IN_THE_WORLD)
-    def test_person_who_left_perceives_nothing_in_the_world(self, stimulus: Callable[[], Stimulus]) -> None:
-        """外れたハルには、もといた広場の目撃・物音・ささやき・体の刺激も、宛先に入った世界の知らせ「皆を呼んでいる」も NotPerceived になる。"""
+    @pytest.mark.parametrize(
+        ("stimulus", "reason"),
+        [
+            (_door_broken_in_the_square, NotPerceivedReason.ELSEWHERE),
+            (_door_crashing_in_the_square, NotPerceivedReason.ELSEWHERE),
+            (_whisper_to_hal, NotPerceivedReason.ELSEWHERE),
+            (_struck, NotPerceivedReason.NOT_OWN_BODY),
+            (_told_to_gather, NotPerceivedReason.LEFT_THE_WORLD),
+        ],
+        ids=list(_STIMULI_IN_THE_WORLD),
+    )
+    def test_person_who_left_perceives_nothing_in_the_world(
+        self, stimulus: Callable[[], Stimulus], reason: NotPerceivedReason
+    ) -> None:
+        """外れたハルには、もといた広場の目撃・物音・ささやき・体の刺激も、宛先に入った世界の知らせ「皆を呼んでいる」も NotPerceived になる。
+
+        居場所が無いので、見える・聞こえる刺激は「その場にいない」、体の刺激は「本人の体ではない」になる。
+        「世界から外れた」になるのは、宛先に入っていた知らせだけ。
+        """
         outcome = stimulus().perceived_in(_HAL, _BrightSquareWhereEverySoundCarries())
 
-        assert outcome == NotPerceived()
+        assert outcome == NotPerceived(reason)
 
     def test_person_who_left_has_nothing_in_view(self) -> None:
         """外れたハルが見渡すと、どの場所の明るさも中身も見ずに NothingInView になる。"""

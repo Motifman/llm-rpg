@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.perception import Perceived, Stimulus
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.people_reached_by_stimuli import PeopleReachedByStimuli
 from ai_rpg_world.game_world.domain.value_object import PersonId
 
@@ -63,6 +64,9 @@ class _PerceptionsHandedOver:
 
     def noticed_later(self, perceiver: PersonId, notice: MissedNotice) -> None:
         self._aggregates.missed_notices(perceiver).keep(notice)
+
+    def not_perceived(self, perceiver: PersonId, reason: NotPerceivedReason) -> None:
+        pass
 
     def perceived_so_far(self) -> tuple[Perceived, ...]:
         return tuple(self._perceived)

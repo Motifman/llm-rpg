@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.lighting import SeesClearly
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 from tests.game_world.domain.perception._builders import ALICE, BOB, VIEW, about
@@ -16,6 +17,9 @@ class _Recipient:
 
     def noticed_later(self, perceiver: PersonId, notice: MissedNotice) -> None:
         self.handed.append(("noticed_later", (perceiver, notice)))
+
+    def not_perceived(self, perceiver: PersonId, reason: NotPerceivedReason) -> None:
+        self.handed.append(("not_perceived", (perceiver, reason)))
 
 
 class TestHandOver:
@@ -45,10 +49,10 @@ class TestHandOver:
 
         assert recipient.handed == [("noticed_later", (BOB, notice))]
 
-    def test_not_perceived_hands_nothing(self) -> None:
-        """NotPerceived は、受け手に何も渡さない。"""
+    def test_not_perceived_is_handed_with_its_reason(self) -> None:
+        """NotPerceived は、知覚しなかった人と理由を、受け手の not_perceived に渡す。"""
         recipient = _Recipient()
 
-        NotPerceived().hand_over(ALICE, recipient)
+        NotPerceived(NotPerceivedReason.TOO_DARK).hand_over(ALICE, recipient)
 
-        assert recipient.handed == []
+        assert recipient.handed == [("not_perceived", (ALICE, NotPerceivedReason.TOO_DARK))]

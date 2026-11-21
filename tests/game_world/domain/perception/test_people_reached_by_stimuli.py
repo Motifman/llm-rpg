@@ -16,6 +16,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SightStimulus,
     SightTexts,
 )
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.people_reached_by_stimuli import PeopleReachedByStimuli
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.sound import HearingValues, Loudness, SoundReach
@@ -58,6 +59,9 @@ class _Recipient:
 
     def noticed_later(self, perceiver: PersonId, notice: MissedNotice) -> None:
         self.notices.append((perceiver, notice))
+
+    def not_perceived(self, perceiver: PersonId, reason: NotPerceivedReason) -> None:
+        pass
 
 
 def _ache(person: PersonId, text: str) -> BodilyStimulus:

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, final
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
 from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
@@ -45,7 +46,7 @@ class BodilyStimulus:
 
     def perceived_by(self, perceiver: Perceiver, view: PeopleAsSeen) -> PerceptionOutcome:
         if not perceiver.feels_body_of(self.person):
-            return NotPerceived()
+            return NotPerceived(NotPerceivedReason.NOT_OWN_BODY)
         return Perceived(
             perceiver=perceiver.person,
             text=self.text.seen_by(view),
