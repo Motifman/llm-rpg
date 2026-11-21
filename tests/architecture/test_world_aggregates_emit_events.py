@@ -22,6 +22,7 @@ import importlib
 import inspect
 import pkgutil
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -83,6 +84,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.declaration.verb.discoverable_declaration import DiscoverableDeclaration, Finding
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items import (
     CarriedBy,
@@ -625,18 +627,40 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
 }
 
 
+def _ended_world() -> WorldEnding:
+    ending = WorldEnding.start(_WORLD)
+    ending.end(WorldTick(1))
+    ending.clear_events()
+    return ending
+
+
+@dataclass(frozen=True)
+class _AdmissionCheck:
+    admitting: Callable[[], _PreparedCall]
+    refusing: Callable[[], _PreparedCall]
+
+
+# 変化を受け付けるかを確かめるだけで、受け付けるときも断るときも状態とイベントを変えない
+_ADMISSION_CHECKS: dict[str, _AdmissionCheck] = {
+    "WorldEnding.admit_change": _AdmissionCheck(
+        admitting=lambda: _with(WorldEnding.start(_WORLD), lambda e: e.admit_change()),
+        refusing=lambda: _with(_ended_world(), lambda e: e.admit_change()),
+    ),
+}
+
+
 class TestEveryStateChangingOperationIsWatched:
     """走査で見つけた世界の集約の状態を変える操作と、状態が変わる呼び方の表が、過不足なく対応することを保証する。"""
 
     def test_every_discovered_operation_has_a_state_changing_call(self) -> None:
         """世界の集約に戻り値 None の公開メソッドを足して表に呼び方を書かないと、その操作の名前を挙げて落ちる。"""
-        missing = sorted(_discovered_operations() - _STATE_CHANGING_CALLS.keys())
+        missing = sorted(_discovered_operations() - _STATE_CHANGING_CALLS.keys() - _ADMISSION_CHECKS.keys())
 
         assert not missing, f"状態が変わる呼び方を _STATE_CHANGING_CALLS に足してください: {missing}"
 
     def test_every_state_changing_call_names_a_discovered_operation(self) -> None:
         """表に書いた呼び方は、どれも走査で見つけた操作を指す。操作を消したり改名したりして表に残ると落ちる。"""
-        stale = sorted(_STATE_CHANGING_CALLS.keys() - _discovered_operations())
+        stale = sorted((_STATE_CHANGING_CALLS.keys() | _ADMISSION_CHECKS.keys()) - _discovered_operations())
 
         assert not stale, f"走査で見つからない操作が _STATE_CHANGING_CALLS に残っています: {stale}"
 
@@ -673,6 +697,39 @@ class TestStateChangingCallRecordsEvents:
         call()
 
         assert aggregate.get_events()
+
+
+class TestAdmissionCheckChangesNothing:
+    """_ADMISSION_CHECKS に挙げた呼び方が、受け付けるときも断るときも集約の中身とイベントを変えないことを保証する。"""
+
+    def test_admission_checks_are_not_also_state_changing_calls(self) -> None:
+        """同じ操作を _STATE_CHANGING_CALLS と _ADMISSION_CHECKS の両方に書くと、その名前を挙げて落ちる。"""
+        both = sorted(_STATE_CHANGING_CALLS.keys() & _ADMISSION_CHECKS.keys())
+
+        assert not both, f"状態を変える操作と、受け付けるかの検査の両方に書かれています: {both}"
+
+    @pytest.mark.parametrize("operation", sorted(_ADMISSION_CHECKS))
+    def test_admitting_check_leaves_the_aggregate(self, operation: str) -> None:
+        """受け付ける呼び方をすると例外を投げず、中身は変わらず、イベントもたまらない。"""
+        aggregate, call = _ADMISSION_CHECKS[operation].admitting()
+        before = _state_of(aggregate)
+
+        call()
+
+        assert _state_of(aggregate) == before
+        assert aggregate.get_events() == []
+
+    @pytest.mark.parametrize("operation", sorted(_ADMISSION_CHECKS))
+    def test_refusing_check_raises_world_refusal_and_leaves_the_aggregate(self, operation: str) -> None:
+        """事前のイベントを空にした集約で断る呼び方をすると WorldRefusal を投げ、中身は変わらず、イベントもたまらない。"""
+        aggregate, call = _ADMISSION_CHECKS[operation].refusing()
+        before = _state_of(aggregate)
+
+        with pytest.raises(WorldRefusal):
+            call()
+
+        assert _state_of(aggregate) == before
+        assert aggregate.get_events() == []
 
 
 class TestWatchedAggregates:

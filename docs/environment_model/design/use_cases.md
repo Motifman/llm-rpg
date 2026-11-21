@@ -168,8 +168,10 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 
 ## 世界と外側
 
-- コマンドと時間を進めることは同じ待ち行列に並び、届いた順に 1 つずつ処理する
-- 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つの `CommandScope`) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
+- 入口は、行為を受け付ける `AcceptAction` と、時間を進める要求を受け付ける `AcceptWorldTimePassage`。どちらも 1 回の呼び出しで 1 つを同期で確定させる。世界の側に待ち行列は持たない
+- 届いた順に 1 つずつ呼ぶのも、同時に呼ばないのも、外側の責任
+- 世界が終わったあとに届いた行為と時間を進める要求は、どちらも断り、世界を変えない。規則は `WorldEnding.admit_change` が持つ。行為には「世界はもう終わった」の文 (`RefusalTexts.world_state`) で `ActionRefused` を返し、断られた試みは記録しない。時間には `WorldTimePassageRefused` を返す。外側は、返事か `WorldHasEnded` で終わりを知る (D2218)
+- 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つのコマンドの確定が 1 つの `CommandScope`。終わっていないかの確かめと `SettleWorldConditions` は、それぞれ別の範囲) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
 - `SettleWorldConditions` は、1 つのコマンドが確定するたびと、時間を進めるたびに回す
 - 誰がいつ考えて行動を送るか (手番、目立つ知らせで考え直す、しばらく何も無ければ考える) は世界の外側 (エージェントを動かす側) が決める。今の実験のターン制は、外側の進め方の 1 つ
 
@@ -186,10 +188,10 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
    ScenarioProgress.note_joint_action_part_done (どの二人で合わせる操作のどの部分に当たるかは帳簿が決める。D2173)
 ──
 5. ドメインイベントを配る (DeliverPerceptionOfCommittedEvents → StimulusTranslator → DeliverPerception、ハンドラ、trace)
-6. SettleWorldConditions
+6. SettleWorldConditions (別の範囲。断られたときも回す)
 7. コマンドへの返事 (通った / 断られた理由) を返す
 
-2〜4 と断られたときは、共通の流れ `CarryOutAction` が受け持つ。行為ごとのユースケースは、行為の試みを持つコマンド (`StartTravelCommand(attempt: TravelAttempt)` など) を受け、`ActionSteps` の 2 つ (3 の `unmet_precondition` と、4 で世界を変えて行っているあいだの長さを返す `change_world`) だけを書く。返事は `ActionDone()` か `ActionRefused(refusal: ActionRefusal)` (#2146)
+1 と 2 のあいだで、`AcceptAction` が世界が終わっていないかを確かめる。2〜5 は行為ごとのユースケースを呼べば済み、6 と 7 は `AcceptAction` が受け持つ。2〜4 と断られたときは、共通の流れ `CarryOutAction` が受け持つ。行為ごとのユースケースは、行為の試みを持つコマンド (`StartTravelCommand(attempt: TravelAttempt)` など) を受け、`ActionSteps` の 2 つ (3 の `unmet_precondition` と、4 で世界を変えて行っているあいだの長さを返す `change_world`) だけを書く。返事は `ActionDone()` か `ActionRefused(refusal: ActionRefusal)` (#2146)
 
 ```python
 class ActionSteps(Protocol[_Attempt]):
