@@ -44,10 +44,13 @@ class WorldEnding(AggregateRoot[WorldEndedEvent]):
         return WorldEndingMemento(world_id=self._world_id, ended=self._ended)
 
     def end(self, now: WorldTick) -> None:
-        if self._ended:
-            raise WorldAlreadyEndedException(f"world {self._world_id} has already ended")
+        self.admit_change()
         self._ended = True
         self.add_event(WorldEndedEvent(**new_event_stamp(), world_id=self._world_id, at=now))
+
+    def admit_change(self) -> None:
+        if self._ended:
+            raise WorldAlreadyEndedException(f"world {self._world_id} has already ended")
 
     def has_ended(self) -> bool:
         return self._ended

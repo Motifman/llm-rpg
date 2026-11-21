@@ -39,6 +39,28 @@ class TestWorldEnding:
         assert len(ending.get_events()) == 1
 
 
+class TestWorldEndingAdmitChange:
+    """WorldEnding.admit_change が、終わる前の世界への変化は通し、終わったあとの変化は断ることを保証する。"""
+
+    def test_world_before_ending_admits_change(self) -> None:
+        """まだ終わっていない世界で admit_change を呼ぶと、例外を投げずイベントもためない。"""
+        ending = WorldEnding.start(_WORLD)
+
+        ending.admit_change()
+
+        assert ending.get_events() == []
+
+    def test_ended_world_refuses_change(self) -> None:
+        """終わった世界で admit_change を呼ぶと WorldAlreadyEndedException を投げ、イベントを足さない。"""
+        ending = WorldEnding.start(_WORLD)
+        ending.end(WorldTick(40))
+
+        with pytest.raises(WorldAlreadyEndedException):
+            ending.admit_change()
+
+        assert len(ending.get_events()) == 1
+
+
 class TestWorldEndingMemento:
     """WorldEnding を memento から作り直すと、終わったかどうかが元と同じになり、イベントは出ないことを保証する。"""
 
