@@ -134,18 +134,20 @@ def _failed(event: ActionAttemptFailedEvent, design: WorldDesign) -> tuple[Stimu
 
 
 def _happened(event: HappeningFiredEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
-    return design.happening(event.happening_id).stimuli_when_fired(event.refusal, event.audience, event.at)
+    return design.happening(event.happening_id).stimuli_when_fired(
+        event.refusal, event.audience, event.present, event.at
+    )
 
 
 def _joint_completed(event: JointActionCompletedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
     return design.joint_action(event.joint_id).stimuli_when_settled(
-        JointActionSettlement.COMPLETED, event.refusal, event.audience, event.at
+        JointActionSettlement.COMPLETED, event.refusal, event.audience, event.present, event.at
     )
 
 
 def _joint_timed_out(event: JointActionTimedOutEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
     return design.joint_action(event.joint_id).stimuli_when_settled(
-        JointActionSettlement.TIMED_OUT, event.refusal, event.audience, event.at
+        JointActionSettlement.TIMED_OUT, event.refusal, event.audience, event.present, event.at
     )
 
 

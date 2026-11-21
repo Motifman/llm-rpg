@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import final
 
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
+from ai_rpg_world.game_world.domain.perception.people_present import PeoplePresent, WhoeverIsThere
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_delivery_report import StimulusDescription
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
@@ -92,6 +93,7 @@ class SoundStimulus:
     involved: tuple[PersonId, ...]
     salience: Salience
     at: WorldTick
+    present: PeoplePresent = field(default_factory=WhoeverIsThere)
 
     @property
     def counts_toward_one_per_person(self) -> bool:
@@ -111,7 +113,10 @@ class SoundStimulus:
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
         return self.perceived_by(
-            perceiver, senses.reach_of(self.origin, self.loudness), senses.hearing(), senses.view_for(perceiver.person)
+            self.present.position(perceiver),
+            senses.reach_of(self.origin, self.loudness),
+            senses.hearing(),
+            senses.view_for(perceiver.person),
         )
 
     def perceived_by(

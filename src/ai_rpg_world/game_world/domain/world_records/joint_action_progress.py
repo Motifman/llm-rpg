@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, Refusa
 from ai_rpg_world.game_world.domain.action.trigger import JointActionCompleted, JointActionTimedOut
 from ai_rpg_world.game_world.domain.exception.game_world_exception import require_distinct_memento_keys
 from ai_rpg_world.game_world.domain.exception.world_records_exception import JointActionNotSettlingException
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 
@@ -104,6 +105,7 @@ class JointActionCompletedEvent(DomainEvent):
     at: WorldTick
     parts_done: frozenset[JointActionPartDoneBy]
     audience: frozenset[PersonId]
+    present: PeopleWhoWereThere
     refusal: RefusalCode | NoRefusal
 
 
@@ -115,4 +117,5 @@ class JointActionTimedOutEvent(DomainEvent):
     at: WorldTick
     parts_done: frozenset[JointActionPartDoneBy]
     audience: frozenset[PersonId]
+    present: PeopleWhoWereThere
     refusal: RefusalCode | NoRefusal

@@ -84,6 +84,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SoundStimulus,
     Voice,
 )
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.person import DeclaredOutcome, Died, Outcome, PersonOutcomeDecidedEvent
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.tend_rule import TendRule
@@ -104,10 +105,12 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.whereabouts import (
+    AtSpot,
     DepartedPerson,
     NotAtSpot,
     Occupant,
     OccupantEnteredSpotEvent,
+    OpenArea,
     PersonBody,
     Teleported,
 )
@@ -586,13 +589,20 @@ def _happenings_design() -> WorldDesign:
     )
 
 
-def _fired(name: str, refusal: RefusalCode | NoRefusal = NoRefusal()) -> HappeningFiredEvent:
+_HAL_AT_THE_WELL = PeopleWhoWereThere({_HAL: AtSpot(SpotId("well"), OpenArea())})
+_HAL_IN_THE_SHAFT = PeopleWhoWereThere({_HAL: AtSpot(SpotId("shaft"), OpenArea())})
+
+
+def _fired(
+    name: str, refusal: RefusalCode | NoRefusal = NoRefusal(), present: PeopleWhoWereThere = PeopleWhoWereThere()
+) -> HappeningFiredEvent:
     return HappeningFiredEvent(
         **new_event_stamp(),
         world_id=_WORLD,
         happening_id=HappeningId(name),
         at=_NOW,
         audience=frozenset({_HAL}) if name == "bell" else frozenset(),
+        present=present,
         refusal=refusal,
     )
 
@@ -611,6 +621,15 @@ class TestStimulusTranslatorHappenings:
             (),
             Background(),
         )
+
+    def test_sight_notice_carries_where_people_were_before_the_effect(self) -> None:
+        """発火のイベントに、効果の前にハルが井戸にいたことが載っていれば、井戸の見える刺激はその居場所を持つ (D2207)。"""
+        event = _fired("lamp_flicker", present=_HAL_AT_THE_WELL)
+
+        [stimulus] = StimulusTranslator().stimuli_of(event, _happenings_design())
+
+        assert isinstance(stimulus, SightStimulus)
+        assert stimulus.present == _HAL_AT_THE_WELL
 
     def test_sound_notice_is_a_noise_from_its_spot(self) -> None:
         """SoundFrom の知らせは、井戸で鳴った大きい物音「坑道の奥で岩が崩れた。」になる。"""
@@ -679,11 +698,14 @@ def _completed(refusal: RefusalCode | NoRefusal = NoRefusal()) -> JointActionCom
         at=_NOW,
         parts_done=frozenset(),
         audience=frozenset({_HAL}),
+        present=PeopleWhoWereThere(),
         refusal=refusal,
     )
 
 
-def _timed_out(refusal: RefusalCode | NoRefusal = NoRefusal()) -> JointActionTimedOutEvent:
+def _timed_out(
+    refusal: RefusalCode | NoRefusal = NoRefusal(), present: PeopleWhoWereThere = PeopleWhoWereThere()
+) -> JointActionTimedOutEvent:
     return JointActionTimedOutEvent(
         **new_event_stamp(),
         world_id=_WORLD,
@@ -691,6 +713,7 @@ def _timed_out(refusal: RefusalCode | NoRefusal = NoRefusal()) -> JointActionTim
         at=_NOW,
         parts_done=frozenset(),
         audience=frozenset(),
+        present=present,
         refusal=refusal,
     )
 
@@ -715,6 +738,13 @@ class TestStimulusTranslatorJointActions:
 
         assert isinstance(stimulus, SoundStimulus)
         assert (stimulus.origin, stimulus.clear.template.template) == (SpotId("shaft"), "坑道の奥で岩が崩れた。")
+
+    def test_timeout_sound_carries_where_people_were_before_the_effect(self) -> None:
+        """時間切れのイベントに、効果の前にハルが坑道にいたことが載っていれば、坑道の物音はその居場所を持つ (D2207)。"""
+        [stimulus] = StimulusTranslator().stimuli_of(_timed_out(present=_HAL_IN_THE_SHAFT), _joint_actions_design())
+
+        assert isinstance(stimulus, SoundStimulus)
+        assert stimulus.present == _HAL_IN_THE_SHAFT
 
     def test_refused_completion_makes_no_stimulus(self) -> None:
         """効果を当てる途中で断られた揃いは、知らせを宣言していても刺激を作らない。"""

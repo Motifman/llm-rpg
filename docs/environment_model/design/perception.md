@@ -124,6 +124,7 @@ class SightStimulus:
     salience: Salience
     always_delivered: bool                # 作者の目撃の文が倒れたことに触れていなくても、見ていた人が知るため
     at: WorldTick
+    present: WhoeverIsThere | PeopleWhoWereThere   # 作者の場所の知らせは、効果の前の居場所に置き直して聞く (D2207)
 
     def perceived_by(self, perceiver: Perceiver, lighting: Lighting, view: PeopleAsSeen, random: RandomSource, stealth: StealthRule) -> PerceptionOutcome: ...
         # Stealthily の刺激だけ、見ていた人ごとに StealthRule の確率 (見え方ごと、耳を澄ましていれば attentive_bonus を足す) を random から引いて気づくかを決める。気づかなければ NotPerceived
@@ -140,6 +141,7 @@ class SoundStimulus:
     involved: tuple[PersonId, ...]
     salience: Salience
     at: WorldTick
+    present: WhoeverIsThere | PeopleWhoWereThere
 
     def perceived_by(self, perceiver: Perceiver, reach: SoundReach, values: HearingValues, view: PeopleAsSeen) -> PerceptionOutcome: ...
 
@@ -178,7 +180,7 @@ class AnnouncementStimulus:
 ## 知覚する人
 
 ```python
-Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver | PersonWhoLeftTheWorld
+Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver | PersonWhoLeftTheWorld | PersonGoneFromThePlace
 
 @final
 @dataclass(frozen=True)
@@ -212,6 +214,15 @@ class PersonWhoLeftTheWorld:              # 作者の結末が決まって、世
     life: Alive | Down
 
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...   # LivingPerceiver と同じく、倒れていれば AwareOnWaking
+
+@final
+@dataclass(frozen=True)
+class PersonGoneFromThePlace:             # 出来事の効果の前にその場にいて、効果で死んだ・外れた人 (D2207)
+    person: PersonId
+    location: Location                    # 効果の前の居場所
+    gone_because: NotPerceivedReason      # DEAD / LEFT_THE_WORLD
+
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness: ...   # いつも Unaware(gone_because)
 
 SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 ```
@@ -272,11 +283,11 @@ class NoticedLater:
     notice: MissedNotice
 ```
 
-知覚しなかった刺激は、理由 (`NotPerceivedReason`) を持つ (D2206)。理由は刺激と知覚する人が決める。死んだ人 (`DeadPerceiver`) と世界から外れた人は居場所が無いので、見える・聞こえる刺激では「その場にいない」、他人の体の刺激では「本人の体ではない」になる。「死んでいる」「世界から外れた」になるのは、宛先に入っていた知らせが届かなかったときだけ。
+知覚しなかった刺激は、理由 (`NotPerceivedReason`) を持つ (D2206)。理由は刺激と知覚する人が決める。死んだ人 (`DeadPerceiver`) と世界から外れた人は居場所が無いので、見える・聞こえる刺激では「その場にいない」、他人の体の刺激では「本人の体ではない」になる。「死んでいる」「世界から外れた」になるのは、宛先に入っていた知らせが届かなかったときと、出来事の効果で死んだ・外れた人に、その出来事の場所の知らせが届かなかったとき (D2207)。
 
 | 理由 | いつ |
 |---|---|
-| `ELSEWHERE` その場にいない | 見える刺激の場所にいない。居場所の無い人 (死んだ人、世界から外れた人) の見える・聞こえる刺激 |
+| `ELSEWHERE` その場にいない | 見える刺激の場所にいない。作者の場所の知らせでは、効果の前にその場所にいなかった (D2207)。効果の前から居場所の無い人 (死んだ人、世界から外れた人) の見える・聞こえる刺激 |
 | `OUT_OF_EARSHOT` 遠い | 音が届かない。ささやきで鳴った場所にいない |
 | `TOO_QUIET` 音が小さい | 届いたが、聞こえる大きさに足りない |
 | `TOO_DARK` 暗くて見えない | 暗い・真っ暗で、その明るさの文が無い |
@@ -285,8 +296,8 @@ class NoticedLater:
 | `UNCONSCIOUS` 気を失っている | 倒れていて関わっていない。関わっていても、起きてから知る文が無い |
 | `NOT_OWN_BODY` 本人の体ではない | 本人の体の刺激で、本人でない。体の無い去った人 |
 | `NOT_ADDRESSED` 知らせの宛先でない | 世界の知らせの相手でない |
-| `LEFT_THE_WORLD` 世界から外れた | 結末が決まって世界から外れた人が、宛先に入っていた知らせを受けない |
-| `DEAD` 死んでいる | 去った人として行為をしない世界の死んだ人が、宛先に入っていた知らせを受けない |
+| `LEFT_THE_WORLD` 世界から外れた | 結末が決まって世界から外れた人が、宛先に入っていた知らせを受けない。出来事の効果で外れた人が、その出来事の場所の知らせを受けない (D2207) |
+| `DEAD` 死んでいる | 去った人として行為をしない世界の死んだ人が、宛先に入っていた知らせを受けない。出来事の効果で死んだ人が、その出来事の場所の知らせを受けない (D2207) |
 | `ALREADY_PERCEIVED` 同じものをもう知った | 同じまとまりの別の感覚の刺激を、もう知った (1 人に 1 つ) |
 
 ## 届けた記録
@@ -407,7 +418,10 @@ class Loudness(Enum):
 HearingQuality = HearsClearly | HearsMuffled | HearsFaintly | HearsNothing
 ```
 
-音の届き方は、出来事が確定した後の通路の状態で計算する (扉を開けた音は、開いた扉を通る)。`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。聞こえる刺激で人が分かるのは声 (話す) だけ。物音の文の人のプレースホルダーはいつも `Unidentified`。ささやきは、鳴った場所にいる宛先にははっきり、同じ場所のほかの人には、去った人も含めてかすかに届く。かすかなときの文はくぐもったときと同じ (`muffled` を `unidentified()` で当てる)。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
+音の届き方は、出来事が確定した後の通路の状態で計算する (扉を開けた音は、開いた扉を通る)。
+
+作者の出来事・二人で合わせる操作の場所の知らせ (`SightAt` / `SoundFrom`) では、どこにいたかを効果の前の世界で決め、場所の様子 (明るさ、通路が開いているか) を効果の後の世界で決める (D2207)。効果を当てる前の人ごとの居場所 (`PeopleWhoWereThere`) が発火のイベントの `present` に載り、刺激は知覚する人をその居場所に置き直してから聞く。崩落で北の坑道から入口へ押し出されたゲンには、北の坑道の「天井が崩れ落ちた」が届き、崩れる音も北の坑道で聞いたものとしてくぐもらずに届く。効果で北の坑道へ押し込まれたナツには届かない。効果で死んだ人・外れた人は、効果の前の居場所にいたが知覚できなくなった人 (`PersonGoneFromThePlace`) になり、記録に「死んでいる」「世界から外れた」で残る。採らなかった読み方は、居合わせたかだけを効果の前で決め、聞く人の居場所を効果の後にするもので、崩落の真下にいたゲンに入口からのくぐもった音が届いてしまう。行為や到着から作る刺激は、届けるときの居場所のまま (`WhoeverIsThere`) にする (行為の側は #2216)。
+`HearingValues` は `WorldRules` にある ([world_design.md](world_design.md))。聞こえる刺激で人が分かるのは声 (話す) だけ。物音の文の人のプレースホルダーはいつも `Unidentified`。ささやきは、鳴った場所にいる宛先にははっきり、同じ場所のほかの人には、去った人も含めてかすかに届く。かすかなときの文はくぐもったときと同じ (`muffled` を `unidentified()` で当てる)。「N 名に届いた」も同じ計算で数え、倒れている人は入れない。
 
 ## 倒れている間のこと
 

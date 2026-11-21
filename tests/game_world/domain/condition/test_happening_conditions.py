@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickA
 from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration import HappeningDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.happening_notice import NoNotice
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
+from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from tests.game_world.domain.condition._builders import ALICE, text, world
@@ -47,14 +48,18 @@ class TestHappeningHasFiredCondition:
         a_world = world()
         assert not condition.holds(a_world.facts(), _BY_ALICE)
 
-        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(2), frozenset(), NoRefusal())
+        a_world.scenario_progress().note_happening_fired(
+            _LANDSLIDE, WorldTick(2), frozenset(), PeopleWhoWereThere(), NoRefusal()
+        )
 
         assert condition.holds(a_world.facts(), _BY_ALICE)
 
     def test_other_happening_firing_does_not_count(self) -> None:
         """地震が起きても、崖崩れの条件は偽のまま。"""
         a_world = world()
-        a_world.scenario_progress().note_happening_fired(_EARTHQUAKE, WorldTick(2), frozenset(), NoRefusal())
+        a_world.scenario_progress().note_happening_fired(
+            _EARTHQUAKE, WorldTick(2), frozenset(), PeopleWhoWereThere(), NoRefusal()
+        )
 
         assert not HappeningHasFiredCondition(happening=_LANDSLIDE.happening_id, failure_text=NoText()).holds(
             a_world.facts(), _BY_ALICE
@@ -92,7 +97,9 @@ class TestTicksSinceHappeningAtLeastCondition:
             happening=_LANDSLIDE.happening_id, ticks=Ticks(3), failure_text=NoText()
         )
         a_world = world()
-        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(2), frozenset(), NoRefusal())
+        a_world.scenario_progress().note_happening_fired(
+            _LANDSLIDE, WorldTick(2), frozenset(), PeopleWhoWereThere(), NoRefusal()
+        )
 
         assert not condition.holds(_at_tick(a_world, 4).facts(), _BY_ALICE)
         assert condition.holds(_at_tick(a_world, 5).facts(), _BY_ALICE)
@@ -103,8 +110,12 @@ class TestTicksSinceHappeningAtLeastCondition:
             happening=_LANDSLIDE.happening_id, ticks=Ticks(3), failure_text=NoText()
         )
         a_world = world()
-        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(1), frozenset(), NoRefusal())
-        a_world.scenario_progress().note_happening_fired(_LANDSLIDE, WorldTick(6), frozenset(), NoRefusal())
+        a_world.scenario_progress().note_happening_fired(
+            _LANDSLIDE, WorldTick(1), frozenset(), PeopleWhoWereThere(), NoRefusal()
+        )
+        a_world.scenario_progress().note_happening_fired(
+            _LANDSLIDE, WorldTick(6), frozenset(), PeopleWhoWereThere(), NoRefusal()
+        )
 
         assert not condition.holds(_at_tick(a_world, 8).facts(), _BY_ALICE)
 

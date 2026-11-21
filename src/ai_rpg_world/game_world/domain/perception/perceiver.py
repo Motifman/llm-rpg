@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import final
 
 from typing_extensions import assert_never
@@ -40,6 +40,12 @@ class LivingPerceiver:
             raise DeadPersonCannotPerceiveAsLivingException(
                 f"{self.person.value} is not alive or down, got {self.life!r}"
             )
+
+    def perceives_from(self) -> Location | None:
+        return self.location
+
+    def placed_at(self, location: Location) -> Perceiver:
+        return replace(self, location=location)
 
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
         if isinstance(self.life, Alive):
@@ -89,6 +95,12 @@ class DepartedPerceiver:
     person: PersonId
     location: Location
 
+    def perceives_from(self) -> Location | None:
+        return self.location
+
+    def placed_at(self, location: Location) -> Perceiver:
+        return replace(self, location=location)
+
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
         return Aware()
 
@@ -129,6 +141,12 @@ class DepartedPerceiver:
 @dataclass(frozen=True)
 class DeadPerceiver:
     person: PersonId
+
+    def perceives_from(self) -> Location | None:
+        return None
+
+    def placed_at(self, location: Location) -> Perceiver:
+        return PersonGoneFromThePlace(person=self.person, location=location, gone_because=NotPerceivedReason.DEAD)
 
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
         return Unaware(because=NotPerceivedReason.DEAD)
@@ -171,6 +189,14 @@ class PersonWhoLeftTheWorld:
     person: PersonId
     life: Alive | Down
 
+    def perceives_from(self) -> Location | None:
+        return None
+
+    def placed_at(self, location: Location) -> Perceiver:
+        return PersonGoneFromThePlace(
+            person=self.person, location=location, gone_because=NotPerceivedReason.LEFT_THE_WORLD
+        )
+
     def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
         if isinstance(self.life, Alive):
             return Aware()
@@ -207,6 +233,55 @@ class PersonWhoLeftTheWorld:
         return NotPerceived(NotPerceivedReason.ELSEWHERE)
 
 
+@final
+@dataclass(frozen=True)
+class PersonGoneFromThePlace:
+    person: PersonId
+    location: Location
+    gone_because: NotPerceivedReason
+
+    def perceives_from(self) -> Location | None:
+        return None
+
+    def placed_at(self, location: Location) -> Perceiver:
+        return replace(self, location=location)
+
+    def notices_surroundings(self, involved: bool) -> SurroundingsAwareness:
+        return Unaware(because=self.gone_because)
+
+    def takes_announcement(self, reaches_who_left_the_world: bool) -> bool:
+        return False
+
+    def feels_body_of(self, person: PersonId) -> bool:
+        return False
+
+    def is_at(self, spot: SpotId) -> bool:
+        return self.location.is_at(spot)
+
+    def sight_in(self, lighting: Lighting) -> SightQuality:
+        return SeesNothing()
+
+    def sees_departed_people(self) -> bool:
+        return False
+
+    def spot_in_view(self) -> SpotId | NothingInView:
+        return NothingInView()
+
+    def notices_stealthy_act(self, chance: Probability, attentive_bonus: Probability, random: RandomSource) -> bool:
+        return False
+
+    def hears(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> HearingQuality:
+        return HearsNothing()
+
+    def unheard(self, origin: SpotId, loudness: Loudness, reach: SoundReach, values: HearingValues) -> NotPerceived:
+        if isinstance(self.location.sound_level_from(origin, loudness, reach, values), NotReached):
+            return self.out_of_earshot()
+        return NotPerceived(self.gone_because)
+
+    def out_of_earshot(self) -> NotPerceived:
+        return NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
+
+
 def _spot_in_view(location: Location) -> SpotId | NothingInView:
     match location:
         case AtSpot(spot=spot):
@@ -217,4 +292,4 @@ def _spot_in_view(location: Location) -> SpotId | NothingInView:
             assert_never(location)
 
 
-Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver | PersonWhoLeftTheWorld
+Perceiver = LivingPerceiver | DepartedPerceiver | DeadPerceiver | PersonWhoLeftTheWorld | PersonGoneFromThePlace
