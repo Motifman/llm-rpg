@@ -7,12 +7,12 @@ from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_executor import (
-    UNKNOWN_EPISODE_TEXT,
     BeingEpisodeRecallToolExecutor,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
+from ai_rpg_world.being.application.episode_recall_tool import UNKNOWN_EPISODE_TEXT
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memory_turn_clock import (

@@ -12,9 +12,14 @@ from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from ai_rpg_world.being.application.episode_index_text import EPISODE_INDEX_HEADING
+from ai_rpg_world.being.application.episode_recall_tool import (
+    MALFORMED_HANDLES_TEXT,
+    read_handles,
+    recalled_text,
+    too_many_handles_text,
+)
 from ai_rpg_world.being.domain.episode import EpisodeRepository
-from ai_rpg_world.being.domain.episode_recall import RecallResult, recall_episodes
+from ai_rpg_world.being.domain.episode_recall import recall_episodes
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
@@ -22,27 +27,7 @@ from ai_rpg_world.domain.common.exception import DomainException
 
 _logger = logging.getLogger(__name__)
 
-UNKNOWN_EPISODE_TEXT = "そのような記憶は思い出せない。"
-_MALFORMED_MESSAGE = (
-    f"handles には、{EPISODE_INDEX_HEADING}に並ぶ ep_ で始まる呼び名を、"
-    '1 件でも配列で渡してください (例: ["ep_3f2a7b"])。'
-)
 _ERROR_TEXT_MAX_LENGTH = 300
-
-
-def _read_handles(arguments: dict[str, Any]) -> list[str] | None:
-    raw = arguments.get("handles")
-    if not isinstance(raw, list) or not raw:
-        return None
-    if not all(isinstance(h, str) and h.strip() for h in raw):
-        return None
-    return [h.strip() for h in raw]
-
-
-def _result_text(result: RecallResult) -> str:
-    if result.episode is None:
-        return f"[{result.handle}] {UNKNOWN_EPISODE_TEXT}"
-    return f"[{result.handle}] {result.episode.index.summary}\n  {result.episode.body}"
 
 
 @dataclass
@@ -69,15 +54,15 @@ class BeingEpisodeRecallToolExecutor:
             "being_id": acting.being_id.value,
             "requested": arguments.get("handles"),
         }
-        handles = _read_handles(arguments)
+        handles = read_handles(arguments)
         if handles is None:
             self._record(acting, outcome="rejected", reject_reason="malformed", max_handles=self.max_handles, **base)
-            return LlmCommandResultDto(success=False, message=_MALFORMED_MESSAGE, error_code="INVALID_ARGUMENT")
+            return LlmCommandResultDto(success=False, message=MALFORMED_HANDLES_TEXT, error_code="INVALID_ARGUMENT")
         if len(set(handles)) > self.max_handles:
             self._record(acting, outcome="rejected", reject_reason="too_many", max_handles=self.max_handles, **base)
             return LlmCommandResultDto(
                 success=False,
-                message=f"一度に思い出せるのは {self.max_handles} 件までです。呼び名を減らしてください。",
+                message=too_many_handles_text(self.max_handles),
                 error_code="INVALID_ARGUMENT",
             )
         try:
@@ -109,7 +94,7 @@ class BeingEpisodeRecallToolExecutor:
             ],
             **base,
         )
-        return LlmCommandResultDto(success=True, message="\n".join(_result_text(r) for r in results))
+        return LlmCommandResultDto(success=True, message=recalled_text(results))
 
     def _record(self, acting: ActingBeing, **payload: Any) -> None:
         try:
@@ -123,4 +108,4 @@ class BeingEpisodeRecallToolExecutor:
             _logger.exception("trace recorder.record raised for EPISODE_RECALL; skipping")
 
 
-__all__ = ["UNKNOWN_EPISODE_TEXT", "BeingEpisodeRecallToolExecutor"]
+__all__ = ["BeingEpisodeRecallToolExecutor"]

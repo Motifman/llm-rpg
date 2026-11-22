@@ -10,6 +10,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
 )
+from ai_rpg_world.being.application.episode_recall_tool import episode_recall_description, episode_recall_parameters
 from ai_rpg_world.being.domain.episode import INDEX_TEXT_MAX_LENGTH
 
 
@@ -17,29 +18,8 @@ def episode_recall_definition(max_handles: int) -> ToolDefinitionDto:
     """上限 M は profile の値なので、定義もそこから作る (#1623)。"""
     return ToolDefinitionDto(
         name=TOOL_NAME_EPISODE_RECALL,
-        description=(
-            "【思い出せる出来事】に並ぶ自分の昔の出来事を、呼び名を指定して詳しく思い出す。"
-            "目次の「思い出すとき」に今の場面が当てはまるとき、昔のことを人に話す前、"
-            "似た場面で前にどうしたかを確かめたいときに使う。"
-            f"1 回に {max_handles} 件まで、まとめて思い出せる。"
-            "目次に無い呼び名は思い出せない。思い出すだけで、世界の出来事は起こさない。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "handles": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "minItems": 1,
-                    "maxItems": max_handles,
-                    "description": (
-                        "【思い出せる出来事】の行の先頭にある ep_ で始まる呼び名。"
-                        '1 件でも配列で渡す (例: ["ep_3f2a7b"])。'
-                    ),
-                },
-            },
-            "required": ["handles"],
-        },
+        description=episode_recall_description(max_handles),
+        parameters=episode_recall_parameters(max_handles),
         category=ToolCategory.META_COGNITIVE,
     )
 

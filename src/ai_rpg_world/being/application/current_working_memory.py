@@ -63,7 +63,7 @@ class CurrentWorkingMemory:
         scene: Scene,
         closing: Closing,
     ) -> WorkingMemory:
-        environment_name = self._environment_name(being_id)
+        environment_name = self.environment_name(being_id)
         short_term = self._short_term_memories.get(being_id)
         shown_episodes = self.episodes_in_index(being_id)
         memory = MemoryTexts(
@@ -88,7 +88,8 @@ class CurrentWorkingMemory:
         """【思い出せる出来事】に並べるエピソード。目次の文と、目次に出したものの記録が同じ選び方を使う。"""
         return RecalledRisesToTop().select(self._episodes.list_by_being(being_id), limit=self._episode_index_limit)
 
-    def _environment_name(self, being_id: BeingId) -> str:
+    def environment_name(self, being_id: BeingId) -> str:
+        """Being が今いる環境の表示の名前。"""
         being = self._beings.get(being_id)
         if being.attachment is None:
             raise LookupError(f"Being {being_id.value} is not in any environment")

@@ -11,12 +11,22 @@ from uuid import uuid4
 from ai_rpg_world.being.application.action_tools import ActionTools
 from ai_rpg_world.being.application.closest_tool_name import suggest_closest_tool_name
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.episode_recall_tool import (
+    MALFORMED_HANDLES_TEXT,
+    read_handles,
+    recalled_text,
+    too_many_handles_text,
+)
+from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
+from ai_rpg_world.being.application.memo_arguments import read_memo_operations
+from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.names_for_people import name_for
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
 from ai_rpg_world.being.contract import (
     UNKNOWN,
     ActionChoices,
     AgentMove,
+    FrozenJsonObject,
     Observation,
     ObservedTime,
     OfferedBeingTools,
@@ -25,8 +35,16 @@ from ai_rpg_world.being.contract import (
     Scene,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.being.domain.episode import EpisodeRepository
+from ai_rpg_world.being.domain.episode_recall import recall_episodes
+from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
-from ai_rpg_world.being.domain.short_term_memory import ObservedOutcome, ShortTermMemoryRepository
+from ai_rpg_world.being.domain.short_term_memory import (
+    MemoryOperationOutcome,
+    ObservedOutcome,
+    Outcome,
+    ShortTermMemoryRepository,
+)
 from ai_rpg_world.being.domain.working_memory import Closing
 
 
@@ -81,6 +99,14 @@ class ActionChosen:
 
 
 @dataclass(frozen=True)
+class TurnSpentRecalling:
+    """思い出すツールを選んだ。世界には行為を渡さない。"""
+
+    move: AgentMove
+    exchange: LlmExchange
+
+
+@dataclass(frozen=True)
 class ActionNotChosen:
     """``requested_tool`` は出していないツールの名前。ツールを 1 つも呼ばなかったときは None。"""
 
@@ -99,14 +125,22 @@ class ChooseAction:
         completion: ActionChoosingCompletion,
         short_term_memories: ShortTermMemoryRepository,
         turn_clock: MemoryTurnClock,
+        memo_books: MemoBookRepository,
+        episodes: EpisodeRepository,
+        recall_limit: int,
     ) -> None:
+        if recall_limit < 1:
+            raise ValueError("recall_limit must be >= 1")
         self._working_memory = working_memory
         self._completion = completion
         self._short_term_memories = short_term_memories
         self._turn_clock = turn_clock
+        self._memo_books = memo_books
+        self._episodes = episodes
+        self._recall_limit = recall_limit
 
-    def execute(self, command: ChooseActionCommand) -> ActionChosen | ActionNotChosen:
-        tools = ActionTools(command.choices, command.being_tools, name_for)
+    def execute(self, command: ChooseActionCommand) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
+        tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
         scene = Scene(
             descriptions=(*command.scene.descriptions, tools.candidate_table()), notices=command.scene.notices
         )
@@ -142,26 +176,72 @@ class ChooseAction:
 
     def _outcome_of(
         self, call: ToolCallReply, tools: ActionTools, command: ChooseActionCommand, exchange: LlmExchange
-    ) -> ActionChosen | ActionNotChosen:
+    ) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
         call_id = call.call_id or f"call_{uuid4().hex}"
+        being_id = command.being_id
+        turn = self._turn_clock.current_turn(being_id) + 1
+        if call.tool_name == command.being_tools.episode_recall:
+            recall = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
+            body = self._recall(being_id, call.arguments, turn=turn)
+            self._act(
+                being_id, recall, turn=turn, result=MemoryOperationOutcome(call_id=call_id, body=body, time=command.now)
+            )
+            return TurnSpentRecalling(move=recall, exchange=exchange)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=call.arguments)
         if move is not None:
-            self._act(command.being_id, move, result=None)
+            # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
+            # 行動が世界に断られても、書いたことは本人がしたことなので残る。
+            self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
+            self._act(being_id, move, turn=turn, result=None)
             return ActionChosen(move=move, exchange=exchange)
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
         guess = f"もしかして '{suggestion}' ですか? " if suggestion else ""
         body = f"'{call.tool_name}' というツールは無い。{guess}いま使えるツール: [{', '.join(tools.tool_names())}]"
         self._act(
-            command.being_id,
+            being_id,
             AgentMove(call_id=call_id, tool_name=call.tool_name, arguments={}),
+            turn=turn,
             result=ObservedOutcome(_own_failure(body, call_id=call_id, now=command.now)),
         )
         return ActionNotChosen(requested_tool=call.tool_name, suggestion=suggestion, exchange=exchange)
 
-    def _act(self, being_id: BeingId, move: AgentMove, *, result: ObservedOutcome | None) -> None:
+    def _recall(self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int) -> str:
+        handles = read_handles(arguments)
+        if handles is None:
+            return MALFORMED_HANDLES_TEXT
+        # 一部だけ思い出すと、どれを落としたかを本人が知らないまま 1 手が終わる (D1623-2)。
+        if len(set(handles)) > self._recall_limit:
+            return too_many_handles_text(self._recall_limit)
+        return recalled_text(recall_episodes(self._episodes, being_id, handles, turn=turn))
+
+    def _write_memo(
+        self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int
+    ) -> None:
+        if being_tools.memo is None or being_tools.memo not in arguments:
+            return
+        episode_source_offered = being_tools.episode_index_shown
+        read = read_memo_operations(
+            {MEMO_FIELD_NAME: arguments[being_tools.memo]}, episode_source_offered=episode_source_offered
+        )
+        known_episode_handles = (
+            frozenset(e.handle for e in self._episodes.list_by_being(being_id))
+            if episode_source_offered
+            else frozenset()
+        )
+        book = self._memo_books.get(being_id)
+        apply_memo_operations(
+            book,
+            read.operations,
+            turn=turn,
+            environment_name=self._working_memory.environment_name(being_id),
+            new_memo_id=lambda: str(uuid4()),
+            known_episode_handles=known_episode_handles,
+        )
+        self._memo_books.save(book)
+
+    def _act(self, being_id: BeingId, move: AgentMove, *, turn: int, result: Outcome | None) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。
-        turn = self._turn_clock.current_turn(being_id) + 1
         memory = self._short_term_memories.get(being_id)
         memory.act(move, current_turn=turn)
         if result is not None:
@@ -192,4 +272,5 @@ __all__ = [
     "ChooseActionCommand",
     "LlmExchange",
     "ToolCallReply",
+    "TurnSpentRecalling",
 ]

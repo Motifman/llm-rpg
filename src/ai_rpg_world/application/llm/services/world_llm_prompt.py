@@ -8,11 +8,11 @@ from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder impor
     PersonaPromptFragmentBuilder,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import INNER_THOUGHT_FIELD_NAME
-from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.application.llm.services.world_orientation import world_orientation
 from ai_rpg_world.application.llm.services.world_scene import CURRENT_SURROUNDINGS_HEADING
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
 from ai_rpg_world.being.application.conduct_text import conduct_text
+from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.working_memory_text import system_prompt_text
 from ai_rpg_world.being.contract import Description, OfferedBeingTools, Orientation
 from ai_rpg_world.being.domain.working_memory import WorkingMemory

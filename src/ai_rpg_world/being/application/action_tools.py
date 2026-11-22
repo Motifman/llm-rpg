@@ -6,6 +6,8 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from itertools import product
 from typing import Any
 
+from ai_rpg_world.being.application.episode_recall_tool import episode_recall_description, episode_recall_parameters
+from ai_rpg_world.being.application.memo_argument import memo_field_property
 from ai_rpg_world.being.application.people_called_apart import PeopleCalledApart
 from ai_rpg_world.being.contract import (
     ActionChoice,
@@ -41,16 +43,29 @@ class ActionTools:
         choices: ActionChoices,
         being_tools: OfferedBeingTools,
         name_for: Callable[[PersonPlaceholderValue], str],
+        *,
+        recall_limit: int,
     ) -> None:
         self._choices = choices
         self._being_tools = being_tools
         self._people = PeopleCalledApart(name_for, choices.people())
+        self._recall_limit = recall_limit
 
     def definitions(self) -> tuple[dict[str, Any], ...]:
-        return tuple(self._definition(choice) for choice in self._choices.choices)
+        actions = tuple(self._definition(choice) for choice in self._choices.choices)
+        recall = self._being_tools.episode_recall
+        if recall is None:
+            return actions
+        return (
+            *actions,
+            _function(
+                recall, episode_recall_description(self._recall_limit), episode_recall_parameters(self._recall_limit)
+            ),
+        )
 
     def tool_names(self) -> tuple[str, ...]:
-        return tuple(choice.name for choice in self._choices.choices)
+        recall = self._being_tools.episode_recall
+        return tuple(choice.name for choice in self._choices.choices) + (() if recall is None else (recall,))
 
     def move_from(self, *, call_id: str, tool_name: str, arguments: Mapping[str, object]) -> AgentMove | None:
         """出していないツールの名前なら None。
@@ -63,6 +78,8 @@ class ActionTools:
             return None
         given = dict(arguments)
         thought = given.pop(self._being_tools.inner_thought, None) if self._being_tools.inner_thought else None
+        if self._being_tools.memo is not None:
+            given.pop(self._being_tools.memo, None)
         details = given.pop(DETAILS, None) if choice.takes_details else None
         flat = {**(details if isinstance(details, Mapping) else {}), **given}
         picked = _picked_names(choice.values)
@@ -85,7 +102,8 @@ class ActionTools:
         properties: dict[str, Any] = {o.name: {"type": "string", "description": o.label} for o in choice.outline}
         required = [o.name for o in choice.outline if o.required]
         inner_thought = self._being_tools.inner_thought
-        reserved = {name for name in (DETAILS, inner_thought) if name is not None} & set(properties)
+        memo = self._being_tools.memo
+        reserved = {name for name in (DETAILS, inner_thought, memo) if name is not None} & set(properties)
         if reserved:
             raise ValueError(f"{choice.name!r} has outline names reserved by the Being: {sorted(reserved)}")
         if choice.takes_details:
@@ -102,17 +120,14 @@ class ActionTools:
                 "minLength": 1,
             }
             required.append(inner_thought)
-        return {
-            "type": "function",
-            "function": {
-                "name": choice.name,
-                "description": (
-                    f"{choice.label}。候補のある引数には【{CANDIDATE_TABLE_HEADING}】の文字をそのまま書く。"
-                    f"いまはできないことも【{CANDIDATE_TABLE_HEADING}】に出る。"
-                ),
-                "parameters": {"type": "object", "properties": properties, "required": required},
-            },
-        }
+        if memo is not None:
+            properties[memo] = memo_field_property(episode_source_offered=self._being_tools.episode_index_shown)
+        return _function(
+            choice.name,
+            f"{choice.label}。候補のある引数には【{CANDIDATE_TABLE_HEADING}】の文字をそのまま書く。"
+            f"いまはできないことも【{CANDIDATE_TABLE_HEADING}】に出る。",
+            {"type": "object", "properties": properties, "required": required},
+        )
 
     def _table_lines(self, choice: ActionChoice) -> Iterator[str]:
         yield f"{choice.name}（{choice.label}）"
@@ -161,6 +176,10 @@ class ActionTools:
     def _person_or_value(self, value: object) -> object:
         person = self._people.person_named(value) if isinstance(value, str) else None
         return value if person is None else {"person": person.handle}
+
+
+def _function(name: str, description: str, parameters: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "function", "function": {"name": name, "description": description, "parameters": parameters}}
 
 
 def _picked_names(values: Sequence[ChoiceValue]) -> frozenset[str]:
