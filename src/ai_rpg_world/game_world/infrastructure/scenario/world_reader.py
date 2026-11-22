@@ -10,7 +10,12 @@ from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSele
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
-from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
+from ai_rpg_world.game_world.domain.declaration.spot.temperature import Temperature
+from ai_rpg_world.game_world.domain.declaration.surroundings_texts import (
+    SCENE_LINE_NAMES,
+    SceneTexts,
+    SurroundingsTexts,
+)
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
     ClockWording,
@@ -38,6 +43,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionT
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.declaration.world_map import WorldMapWording
+from ai_rpg_world.game_world.domain.declaration.world_words import WorldWords
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
@@ -224,16 +230,29 @@ def surroundings_texts(node: YamlNode) -> SurroundingsTexts:
     )
 
 
+_SCENE_LINES = tuple(SCENE_LINE_NAMES)
+
+
 def scene_texts(node: YamlNode) -> SceneTexts:
-    fields = node.fields("heading", "objects", "destinations", "ground_items", "count_mark", "pitch_dark")
+    fields = node.fields("heading", *_SCENE_LINES, "ground_items", "count_mark", "pitch_dark")
     return node.build(
         lambda: SceneTexts(
             heading=DisplayName(fields.required("heading").text()),
-            objects=DisplayName(fields.required("objects").text()),
-            destinations=DisplayName(fields.required("destinations").text()),
+            **{line: fields.required(line).text() for line in _SCENE_LINES},
             ground_items=DisplayName(fields.required("ground_items").text()),
             count_mark=DisplayName(fields.required("count_mark").text()),
             pitch_dark=DisplayName(fields.required("pitch_dark").text()),
+        )
+    )
+
+
+def world_words(node: YamlNode) -> WorldWords:
+    fields = node.fields("lighting", "temperature", "weather")
+    return node.build(
+        lambda: WorldWords(
+            lighting=_by_enum(fields.required("lighting"), Lighting, lambda value: value.text()),
+            temperature=_by_enum(fields.required("temperature"), Temperature, lambda value: value.text()),
+            weather=_by_enum(fields.required("weather"), WeatherType, lambda value: value.text()),
         )
     )
 
@@ -386,11 +405,12 @@ def _by_enum(node: YamlNode, enum_type: type[_Enum], read: Callable[[YamlNode], 
 
 
 def _day_phase(name: str, node: YamlNode, conditions: ConditionReader) -> DayPhaseDeclaration:
-    fields = node.fields("begins_at", "dark", "announcement", "audience")
+    fields = node.fields("display", "begins_at", "dark", "announcement", "audience")
     announcement = fields.required("announcement")
     return node.build(
         lambda: DayPhaseDeclaration(
             name=DayPhaseName(name),
+            display_name=DisplayName(fields.required("display").text()),
             begins_at=_time_of_day(fields.required("begins_at")),
             dark=fields.required("dark").boolean(),
             announcement=NoAnnouncement() if announcement.is_null() else people_text(announcement),

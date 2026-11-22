@@ -8,7 +8,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_name 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.time_of_day import TimeOfDay
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, WorldTick
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class DayPhaseDeclaration:
     name: DayPhaseName
+    display_name: DisplayName
     begins_at: TimeOfDay
     dark: bool
     announcement: TextWithUnassignedPeople | NoAnnouncement

@@ -825,6 +825,7 @@ def _time_of_day_design() -> WorldDesign:
             phases=(
                 DayPhaseDeclaration(
                     name=DayPhaseName("predawn"),
+                    display_name=DisplayName("predawn"),
                     begins_at=TimeOfDay(0),
                     dark=True,
                     announcement=NoAnnouncement(),
@@ -832,6 +833,7 @@ def _time_of_day_design() -> WorldDesign:
                 ),
                 DayPhaseDeclaration(
                     name=DayPhaseName("morning"),
+                    display_name=DisplayName("morning"),
                     begins_at=TimeOfDay(12),
                     dark=False,
                     announcement=_DAWN,

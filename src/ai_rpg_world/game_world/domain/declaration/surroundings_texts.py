@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.exception.surroundings_texts_exception impor
     NoPeopleToListException,
     PeopleNotWrittenOnceException,
     PersonInSurroundingsNoticeException,
+    UnfillableSceneTextException,
 )
 from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedPeople, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
@@ -17,15 +18,73 @@ from ai_rpg_world.game_world.domain.value_object import DisplayName
 _PEOPLE = "people"
 
 
+SCENE_LINE_NAMES = {
+    "description": ("description",),
+    "atmosphere": ("parts",),
+    "lighting": ("lighting",),
+    "sound": ("sound",),
+    "temperature": ("temperature",),
+    "smell": ("smell",),
+    "atmosphere_joiner": (),
+    "weather": ("weather",),
+    "clock": ("time",),
+    "day_phase": ("phase",),
+    "dark_day_phase": ("phase",),
+    "destinations": (),
+    "destination": ("passage", "spot", "status"),
+    "passable": (),
+    "impassable": ("state",),
+    "objects": (),
+    "object": ("object", "look", "description"),
+    "object_without_look": ("object", "description"),
+    "no_objects": (),
+    "no_objects_in_dark": (),
+    "objects_in_dark": (),
+}
+
+
 @final
 @dataclass(frozen=True)
 class SceneTexts:
     heading: DisplayName
-    objects: DisplayName
-    destinations: DisplayName
+    description: str
+    atmosphere: str
+    lighting: str
+    sound: str
+    temperature: str
+    smell: str
+    atmosphere_joiner: str
+    weather: str
+    clock: str
+    day_phase: str
+    dark_day_phase: str
+    destinations: str
+    destination: str
+    passable: str
+    impassable: str
+    objects: str
+    object: str
+    object_without_look: str
+    no_objects: str
+    no_objects_in_dark: str
+    objects_in_dark: str
     ground_items: DisplayName
     count_mark: DisplayName
     pitch_dark: DisplayName
+
+    def __post_init__(self) -> None:
+        # 書けない言い回しと、埋めるべき値を書き忘れた言い回しを、場面を書くときではなく、読み込みのときに断る
+        for field_name, names in SCENE_LINE_NAMES.items():
+            text = getattr(self, field_name)
+            try:
+                written = {name for _, name, _, _ in Formatter().parse(text) if name is not None}
+                if written != set(names):
+                    raise UnfillableSceneTextException(
+                        f"SceneTexts.{field_name} must write exactly {sorted(names)}, got {text!r}"
+                    )
+                text.format(**dict.fromkeys(names, ""))
+            except ValueError as error:
+                raise UnfillableSceneTextException(f"SceneTexts.{field_name} cannot be read: {text!r}") from error
 
 
 @final

@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceiv
 from ai_rpg_world.game_world.domain.perception.surroundings import SeenObject, SeenPerson, VisibleSurroundings
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotSectionId, WorldTick
 from tests.game_world.domain.perception._surroundings_builders import (
+    conditions,
     contents,
     item,
     passage,
@@ -29,7 +30,9 @@ class TestHiddenThingsStayOutOfSurroundings:
         corridor = passage("corridor")
         secret_tunnel = passage("secret_tunnel", to="old_shaft", revealed=False)
 
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(passages=(corridor, secret_tunnel)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesClearly(), contents(passages=(corridor, secret_tunnel)), conditions()
+        )
 
         assert surroundings.passages == (corridor.passage,)
 
@@ -38,7 +41,9 @@ class TestHiddenThingsStayOutOfSurroundings:
         lamp_stand = thing("lamp_stand")
         hidden_door = thing("hidden_door", revealed=False)
 
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(lamp_stand, hidden_door)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesClearly(), contents(objects=(lamp_stand, hidden_door)), conditions()
+        )
 
         assert surroundings.objects == (seen(lamp_stand),)
 
@@ -50,7 +55,7 @@ class TestClearSightShowsEverythingRevealed:
         """明るいとき、その場にいる人は材料を集める側が当てた PersonRef のまま、居る区画とともに出る。"""
         miner = person(1, section=SpotSectionId("cage"))
 
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(people=(miner,)))
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(people=(miner,)), conditions())
 
         assert surroundings.people == (
             SeenPerson(person=miner.person, section=SpotSectionId("cage"), visible_items=()),
@@ -62,7 +67,9 @@ class TestClearSightShowsEverythingRevealed:
         ore_cart = thing("ore_cart", seen_in_dark=False)
 
         surroundings = VisibleSurroundings.seen_with(
-            SeesClearly(), contents(sections=(cage,), objects=(ore_cart,), ground_items=(item("rusty_key"),))
+            SeesClearly(),
+            contents(sections=(cage,), objects=(ore_cart,), ground_items=(item("rusty_key"),)),
+            conditions(),
         )
 
         assert surroundings.shows_description
@@ -78,7 +85,7 @@ class TestShapesInTheDark:
         """暗いとき、その場にいる人は Unidentified として、居る区画とともに出る。"""
         miner = person(1, section=SpotSectionId("cage"))
 
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(people=(miner,)))
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(people=(miner,)), conditions())
 
         assert [(seen.person, seen.section) for seen in surroundings.people] == [
             (Unidentified(), SpotSectionId("cage"))
@@ -86,7 +93,9 @@ class TestShapesInTheDark:
 
     def test_ground_items_are_not_shown(self) -> None:
         """暗いとき、地面に落ちている品物は場面に出ない。"""
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(ground_items=(item("rusty_key"),)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesShapes(), contents(ground_items=(item("rusty_key"),)), conditions()
+        )
 
         assert surroundings.ground_items == ()
 
@@ -95,7 +104,9 @@ class TestShapesInTheDark:
         glowing_moss = thing("glowing_moss", seen_in_dark=True)
         ore_cart = thing("ore_cart", seen_in_dark=False)
 
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(objects=(glowing_moss, ore_cart)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesShapes(), contents(objects=(glowing_moss, ore_cart)), conditions()
+        )
 
         assert surroundings.objects == (seen(glowing_moss),)
 
@@ -104,7 +115,9 @@ class TestShapesInTheDark:
         corridor = passage("corridor")
         cage = section("cage")
 
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(passages=(corridor,), sections=(cage,)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesShapes(), contents(passages=(corridor,), sections=(cage,)), conditions()
+        )
 
         assert surroundings.shows_description
         assert surroundings.passages == (corridor.passage,)
@@ -116,14 +129,16 @@ class TestNothingInPitchDark:
 
     def test_people_and_bodies_are_not_shown(self) -> None:
         """真っ暗なとき、起きている人も倒れている人も場面に出ない。"""
-        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(people=(person(1),), bodies=(person(2),)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesNothing(), contents(people=(person(1),), bodies=(person(2),)), conditions()
+        )
 
         assert surroundings.people == ()
         assert surroundings.bodies == ()
 
     def test_description_is_not_shown(self) -> None:
         """真っ暗なとき、shows_description は偽になる。"""
-        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents())
+        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(), conditions())
 
         assert not surroundings.shows_description
 
@@ -132,7 +147,9 @@ class TestNothingInPitchDark:
         corridor = passage("corridor")
         cage = section("cage")
 
-        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(passages=(corridor,), sections=(cage,)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesNothing(), contents(passages=(corridor,), sections=(cage,)), conditions()
+        )
 
         assert surroundings.passages == (corridor.passage,)
         assert surroundings.sections == (cage,)
@@ -143,7 +160,7 @@ class TestNothingInPitchDark:
         ore_cart = thing("ore_cart", seen_in_dark=False)
 
         surroundings = VisibleSurroundings.seen_with(
-            SeesNothing(), contents(objects=(glowing_moss, ore_cart), ground_items=(item("rusty_key"),))
+            SeesNothing(), contents(objects=(glowing_moss, ore_cart), ground_items=(item("rusty_key"),)), conditions()
         )
 
         assert surroundings.objects == (seen(glowing_moss),)
@@ -157,7 +174,7 @@ class TestItemsSeenOnPeople:
         """明るいとき、起きている人は手に持っている物だけが見え、荷の中の物は見えない。"""
         miner = person(1, held=(item("pickaxe"),), carried=(item("bread"),))
 
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(people=(miner,)))
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(people=(miner,)), conditions())
 
         assert [seen.visible_items for seen in surroundings.people] == [(item("pickaxe"),)]
 
@@ -165,14 +182,14 @@ class TestItemsSeenOnPeople:
         """明るいとき、倒れている人と死んだ人は、手の物も荷の中の物も、持ち物すべてが見える。"""
         fallen = person(2, held=(item("lantern"),), carried=(item("map"),))
 
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(bodies=(fallen,)))
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(bodies=(fallen,)), conditions())
 
         assert [seen.visible_items for seen in surroundings.bodies] == [(item("lantern"), item("map"))]
         assert [seen.person for seen in surroundings.bodies] == [fallen.person]
 
     def test_body_appears_as_unidentified_in_the_dark(self) -> None:
         """暗いとき、倒れている人も Unidentified として出る。"""
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(person(2),)))
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(person(2),)), conditions())
 
         assert [seen.person for seen in surroundings.bodies] == [Unidentified()]
 
@@ -184,7 +201,7 @@ class TestHiddenThingsStayOutInTheDark:
         """暗いとき、seen_in_dark が真でも現れていない物体 (隠し戸の光る印) は出ない。"""
         hidden_glow = thing("hidden_glow", seen_in_dark=True, revealed=False)
 
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(objects=(hidden_glow,)))
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(objects=(hidden_glow,)), conditions())
 
         assert surroundings.objects == ()
 
@@ -192,7 +209,7 @@ class TestHiddenThingsStayOutInTheDark:
         """真っ暗なとき、seen_in_dark が真でも現れていない物体は出ない。"""
         hidden_glow = thing("hidden_glow", seen_in_dark=True, revealed=False)
 
-        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(objects=(hidden_glow,)))
+        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(objects=(hidden_glow,)), conditions())
 
         assert surroundings.objects == ()
 
@@ -204,7 +221,7 @@ class TestItemsOnPeopleHiddenInTheDark:
         """暗いとき、起きている人が手に持っている物は見えず、visible_items は空になる。"""
         miner = person(1, held=(item("pickaxe"),))
 
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(people=(miner,)))
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(people=(miner,)), conditions())
 
         assert [seen.visible_items for seen in surroundings.people] == [()]
 
@@ -212,7 +229,7 @@ class TestItemsOnPeopleHiddenInTheDark:
         """暗いとき、倒れている人の持ち物は手の物も荷の中の物も見えず、visible_items は空になる。"""
         fallen = person(2, held=(item("lantern"),), carried=(item("map"),))
 
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(fallen,)))
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(fallen,)), conditions())
 
         assert [seen.visible_items for seen in surroundings.bodies] == [()]
 
@@ -224,7 +241,7 @@ class TestObjectLooksReachSurroundings:
         """「開いていて、水の流れる音がする」と決めた水門は、その見え方を持った SeenObject として場面に出る。"""
         floodgate = thing("floodgate", look=DescriptionText("開いていて、水の流れる音がする"))
 
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(floodgate,)))
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(floodgate,)), conditions())
 
         assert surroundings.objects == (
             SeenObject(declaration=floodgate.declaration, look=DescriptionText("開いていて、水の流れる音がする")),
@@ -234,7 +251,7 @@ class TestObjectLooksReachSurroundings:
         """どの見え方にも当てはまらなかった物は、NoLook を持った SeenObject として場面に出る。"""
         ore_cart = thing("ore_cart")
 
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(ore_cart,)))
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(objects=(ore_cart,)), conditions())
 
         assert surroundings.objects == (SeenObject(declaration=ore_cart.declaration, look=NoLook()),)
 
@@ -263,7 +280,9 @@ class TestSurroundingsPerceivedAsOneObservation:
     def test_people_and_bodies_become_one_clear_sight(self) -> None:
         """明るいとき、人と倒れた体が当てた PersonRef のまま 1 つの文に入り、SeesClearly の目立たない知覚になる。"""
         miner, fallen = person(1), person(2)
-        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(people=(miner,), bodies=(fallen,)))
+        surroundings = VisibleSurroundings.seen_with(
+            SeesClearly(), contents(people=(miner,), bodies=(fallen,)), conditions()
+        )
 
         perceived = surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW)
 
@@ -282,7 +301,7 @@ class TestSurroundingsPerceivedAsOneObservation:
 
     def test_dim_sight_lists_unidentified_people(self) -> None:
         """薄暗いとき、人は見分けられないまま文に入り、SeesShapes の知覚になる。"""
-        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(people=(person(1),)))
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(people=(person(1),)), conditions())
 
         perceived = surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW)
 
@@ -291,14 +310,14 @@ class TestSurroundingsPerceivedAsOneObservation:
     def test_no_people_and_no_bodies_is_not_perceived(self) -> None:
         """明るくても、人も倒れた体もいなければ、物や地面の品物があっても知覚にならない。"""
         surroundings = VisibleSurroundings.seen_with(
-            SeesClearly(), contents(objects=(thing("ore_cart"),), ground_items=(item("rusty_key"),))
+            SeesClearly(), contents(objects=(thing("ore_cart"),), ground_items=(item("rusty_key"),)), conditions()
         )
 
         assert surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW) == ()
 
     def test_people_in_pitch_dark_are_not_perceived(self) -> None:
         """真っ暗では、その場に人がいても知覚にならない。"""
-        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(people=(person(1),)))
+        surroundings = VisibleSurroundings.seen_with(SeesNothing(), contents(people=(person(1),)), conditions())
 
         assert surroundings.perceived_by(_VIEWER, _surroundings_texts(), _NOW) == ()
 

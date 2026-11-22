@@ -232,6 +232,11 @@ built_in_action_perceptions:
     sound: null
     salience: background
 
+world_words:
+  lighting: { bright: 明るい, dusky: 薄暗い, dark: 暗い, pitch_dark: 真っ暗 }
+  temperature: { freezing: 凍える寒さ, cold: 寒い, normal: 過ごしやすい, warm: 暖かい, hot: 暑い }
+  weather: { clear: 晴れ, cloudy: 曇り, rain: 雨, heavy_rain: 大雨, snow: 雪, blizzard: 吹雪, fog: 霧, storm: 嵐 }
+
 clock:
   day: "Day {day}"
   late_night: "深夜 "
@@ -254,8 +259,27 @@ surroundings_texts:
   darkening: 辺りが暗くなった。
   scene:
     heading: 現在地と周囲
-    objects: "物:"
-    destinations: "行き先:"
+    description: "  {description}"
+    atmosphere: "雰囲気: {parts}"
+    lighting: "明るさ: {lighting}"
+    sound: "音: {sound}"
+    temperature: "気温: {temperature}"
+    smell: "匂い: {smell}"
+    atmosphere_joiner: " / "
+    weather: "天候: {weather}（屋外）"
+    clock: "現在時刻: {time}"
+    day_phase: "時刻帯: {phase}"
+    dark_day_phase: "時刻帯: {phase} (暗い)"
+    destinations: "接続先:"
+    destination: '  - "{passage}" → "{spot}"（{status}）'
+    passable: 通行可
+    impassable: "通行不可 — {state}"
+    objects: "オブジェクト:"
+    object: '  - "{object}" ({look}) — {description}'
+    object_without_look: '  - "{object}" — {description}'
+    no_objects: "オブジェクト: (ここには何も無い)"
+    no_objects_in_dark: "オブジェクト: (暗くて何も見えない。灯りが要る)"
+    objects_in_dark: "  (暗い。灯りがなければ、見えるのはこれだけ)"
     ground_items: "落ちている品物:"
     count_mark: ×
     pitch_dark: 真っ暗で、何も見えない。

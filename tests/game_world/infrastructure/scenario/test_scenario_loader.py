@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSele
 from ai_rpg_world.game_world.domain.condition.person_conditions import IsAtSpotCondition
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayPhaseName, NoDayNight, NoWeather
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.declaration.verb import NoticedOnWaking, ObjectLook
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, ScenarioFile
@@ -1129,8 +1130,9 @@ _DAY_NIGHT = """time:
     ticks_per_day: 48
     starts_at: 0
     phases:
-      predawn: { begins_at: 0, dark: true, announcement: 夜明け前の、いちばん冷える時刻になった。 }
+      predawn: { display: 未明, begins_at: 0, dark: true, announcement: 夜明け前の、いちばん冷える時刻になった。 }
       morning:
+        display: 朝
         begins_at: 12
         dark: false
         announcement: 空が白み、朝になった。
@@ -1147,6 +1149,18 @@ def _with_morning_audience(audience: str) -> str:
 
 class TestDayPhaseAudience:
     """時間帯の知らせの届く相手 (audience) を、人の選び方か everyone_awake で読み、書かなければ共通の部品の既定で起きている全員にすることを保証する。"""
+
+    def test_display_is_read_as_the_phase_display_name(self, tmp_path: Path) -> None:
+        """時間帯の display は、場面の時刻帯に出す表示名として読まれる。"""
+        design = _load(tmp_path, _with_morning_audience("everyone_awake")).design
+
+        assert design.day_night.phase_named(DayPhaseName("predawn")).display_name == DisplayName("未明")
+
+    def test_phase_without_display_is_a_flaw(self, tmp_path: Path) -> None:
+        """時間帯に display を書かないと、その時間帯の場所を付けた DesignFlaw になる。識別子を場面に出さないため。"""
+        text = _with_morning_audience("everyone_awake").replace("display: 未明, ", "", 1)
+
+        assert any("predawn" in str(flaw.location) for flaw in _flaws(tmp_path, text))
 
     def test_phase_without_audience_reaches_everyone_awake(self, tmp_path: Path) -> None:
         """audience を書かない夜明け前は、共通の部品の既定で、起きている全員 (EveryoneAwake) に届く。"""
@@ -1180,3 +1194,27 @@ class TestDayPhaseAudience:
         flaws = _flaws(tmp_path, _with_morning_audience("{ where: { is_down: { who: actor } } }"))
 
         assert [flaw.location for flaw in flaws] == [_mine("world", "world", "time.day_night.phases.morning.audience")]
+
+
+class TestWorldWords:
+    """明るさ・気温・天候の言葉 (world_words) が共通の部品から読まれ、欠けと誤りが読み込みで DesignFlaw になることを保証する。"""
+
+    def test_scenario_overrides_one_weather_word(self, tmp_path: Path) -> None:
+        """シナリオが雪の言葉だけを書くと、その言葉に置き換わり、ほかの言葉は共通の部品のまま残る。"""
+        text = _LIFT_LANDING + "world_words:\n  weather: { snow: 粉雪 }\n"
+
+        words = _load(tmp_path, text).design.world_words
+
+        assert (words.weather[WeatherType.SNOW], words.weather[WeatherType.RAIN]) == ("粉雪", "雨")
+
+    def test_unknown_weather_is_a_flaw(self, tmp_path: Path) -> None:
+        """天候の言葉に宣言に無い天候を書くと、その欄の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING + "world_words:\n  weather: { hail: 雹 }\n"
+
+        assert any("hail" in str(flaw.location) for flaw in _flaws(tmp_path, text))
+
+    def test_blank_word_is_a_flaw(self, tmp_path: Path) -> None:
+        """言葉を空にすると、MissingWorldWordException が読み込みの DesignFlaw として集まる。"""
+        text = _LIFT_LANDING + "world_words:\n  lighting: { dark: ' ' }\n"
+
+        assert any("world_words" in str(flaw.location) for flaw in _flaws(tmp_path, text))
