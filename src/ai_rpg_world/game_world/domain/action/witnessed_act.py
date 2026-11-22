@@ -33,7 +33,15 @@ class WitnessedAct:
         if isinstance(where, NotAtSpot):
             return ()
         return self.perception.seen_at(
-            where, actor, self.names, at, target=self.target, manner=self.manner, source=self.source, present=present
+            where,
+            actor,
+            self.names,
+            at,
+            target=self.target,
+            manner=self.manner,
+            source=self.source,
+            present=present,
+            withheld_from=frozenset({actor.person}),
         )
 
     def failure_stimuli_at(self, where: SpotId | NotAtSpot, actor: Occupant, at: WorldTick) -> tuple[Stimulus, ...]:

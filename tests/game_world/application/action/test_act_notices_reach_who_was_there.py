@@ -212,13 +212,22 @@ class TestActNoticeReachesWhoWasThereBeforeTheEffect:
         assert cliff.seen_push().missed_by[_GEN] is NotPerceivedReason.LEFT_THE_WORLD
 
 
-class TestActorWhoMovesSeesTheirOwnAct:
-    """行う人自身が動く行為でも、行う人は効果の前の居場所で自分の行為を知覚することを保証する (D2216)。"""
+class TestActorIsNotToldOfTheirOwnAct:
+    """行う人には、自分の行為の知らせを届けないことを保証する。自分の行為は行動の結果として本人に返す (D2232-2、D2216 を改めた)。"""
 
-    def test_person_setting_off_sees_their_own_departure(self) -> None:
-        """崖の上のハルが山道へ移動を始めると、もう崖の上にいなくても、ハルに「ハルが山道 (trail) へ向かった」が届く。"""
+    def test_person_setting_off_is_not_told_of_their_own_departure(self) -> None:
+        """崖の上のハルが山道へ移動を始めても、ハルには「ハルが山道 (trail) へ向かった」が届かない。"""
         cliff = _Cliff(_PUSH_DOWN)
 
         cliff.haru_sets_off_to_the_trail()
 
-        assert cliff.observations.templates_of(_HARU) == ["{actor}がtrailへ向かった。"]
+        assert cliff.observations.templates_of(_HARU) == []
+
+    def test_person_pushing_is_not_told_of_their_own_push(self) -> None:
+        """動かない行為でも、ゲンを突き落としたハルには「ハルがゲンを崖から突き落とした」が届かず、記録に理由「自分の行為」が残る。"""
+        cliff = _Cliff(_PUSH_DOWN)
+
+        cliff.haru_pushes_gen()
+
+        assert cliff.observations.templates_of(_HARU) == []
+        assert cliff.seen_push().missed_by[_HARU] is NotPerceivedReason.OWN_ACT
