@@ -117,7 +117,7 @@ def _with_lantern(where_kept: str) -> WorldSession:
     )
     _placed(world, _ALICE, _lit_as(Lighting.PITCH_DARK))
     inventory = world.aggregates().inventory(_ALICE)
-    inventory.receive(lantern.item_id, lantern.spec_id)
+    inventory.receive(lantern.item_id, lantern.spec_id, WorldTick(0))
     if where_kept == "hand":
         inventory.hold(lantern.item_id, HandsNeeded(1))
     return world

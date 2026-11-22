@@ -107,7 +107,7 @@ def _world(*, hidden: bool = False, apples: int = 0, gold: int = 0, ticks: int =
     items = []
     for number in range(1, apples + 1):
         item = ItemInstanceId(f"apple#{number}")
-        alice.receive(item, _APPLE.item_spec_id)
+        alice.receive(item, _APPLE.item_spec_id, WorldTick(0))
         items.append(Item.come_into_world(item, _APPLE, WorldTick(0)))
     alice.earn(Gold(gold))
     world = world_in_memory(

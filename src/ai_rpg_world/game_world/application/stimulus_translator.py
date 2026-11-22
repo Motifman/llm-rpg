@@ -164,8 +164,20 @@ def _ran_out(event: ItemRanOutEvent, design: WorldDesign) -> tuple[Stimulus, ...
     return (event.where.read(ItemRanOutNotice(text, event.at)),)
 
 
+def _received(event: ItemReceivedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    return (design.belongings_texts.received_by(event.person, design.nouns.item_spec_of(event.spec).name, event.at),)
+
+
+def _given_up(event: ItemGivenUpEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    return design.belongings_texts.given_up_by(
+        event.person, design.nouns.item_spec_of(event.spec).name, event.at, ran_out=event.ran_out
+    )
+
+
 _TRANSLATIONS: dict[type[DomainEvent], Callable[[Any, WorldDesign], tuple[Stimulus, ...]]] = {
     OccupantEnteredSpotEvent: _arrival,
+    ItemReceivedEvent: _received,
+    ItemGivenUpEvent: _given_up,
     ItemRanOutEvent: _ran_out,
     PersonActedEvent: _acted,
     ActionAttemptFailedEvent: _failed,
@@ -191,11 +203,9 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
         GroupDecisionUnresolvedEvent,
         HungerLevelChangedEvent,
         ItemCameIntoWorldEvent,
-        ItemGivenUpEvent,
         ItemHeldEvent,
         ItemLeftWorldEvent,
         ItemPutAwayEvent,
-        ItemReceivedEvent,
         ItemStateChangedEvent,
         ObjectRevealedEvent,
         ObjectStateChangedEvent,

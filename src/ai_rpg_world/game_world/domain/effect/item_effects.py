@@ -13,7 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item import (
 from ai_rpg_world.game_world.domain.exception.effect_exception import ArgumentIsNotAnItemException
 from ai_rpg_world.game_world.domain.objects_and_items import PersonInventory
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.value_object import Count, PersonId
+from ai_rpg_world.game_world.domain.value_object import Count, PersonId, WorldTick
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ class GiveItemEffect:
         receiver = world.inventory(self.who.person_in(trigger))
         for _ in range(self.count.value):
             item = world.bring_item_into_world(self.item_spec, facts.now())
-            receiver.receive(item, self.item_spec.item_spec_id)
+            receiver.receive(item, self.item_spec.item_spec_id, facts.now())
 
     def requirements(self) -> Requirements:
         return self.who.requirements()
@@ -50,7 +50,7 @@ class TakeItemEffect:
         person = self.who.person_in(trigger)
         taken = facts.inventory(person).items_to_give_up(self.item_spec.item_spec_id, self.count)
         for item in taken:
-            world.inventory(person).give_up(item)
+            world.inventory(person).give_up(item, facts.now())
             world.take_item_out_of_world(item)
 
     def requirements(self) -> Requirements:
@@ -60,22 +60,22 @@ class TakeItemEffect:
 @final
 @dataclass(frozen=True)
 class InHands:
-    def give_up(self, inventory: PersonInventory, item: ItemInstanceId) -> None:
-        inventory.give_up_held(item)
+    def give_up(self, inventory: PersonInventory, item: ItemInstanceId, at: WorldTick) -> None:
+        inventory.give_up_held(item, at)
 
 
 @final
 @dataclass(frozen=True)
 class InPack:
-    def give_up(self, inventory: PersonInventory, item: ItemInstanceId) -> None:
-        inventory.give_up_packed(item)
+    def give_up(self, inventory: PersonInventory, item: ItemInstanceId, at: WorldTick) -> None:
+        inventory.give_up_packed(item, at)
 
 
 @final
 @dataclass(frozen=True)
 class Anywhere:
-    def give_up(self, inventory: PersonInventory, item: ItemInstanceId) -> None:
-        inventory.give_up(item)
+    def give_up(self, inventory: PersonInventory, item: ItemInstanceId, at: WorldTick) -> None:
+        inventory.give_up(item, at)
 
 
 ItemPlace = InHands | InPack | Anywhere
@@ -93,7 +93,7 @@ class ItemByArgument:
         item = trigger.argument(self.argument)
         if not isinstance(item, ItemInstanceId):
             raise ArgumentIsNotAnItemException(f"the argument {self.argument.value!r} holds {item!r}, not an item")
-        self.place.give_up(world.inventory(owner), item)
+        self.place.give_up(world.inventory(owner), item, facts.now())
         return item
 
     def requirements(self) -> Requirements:
@@ -107,7 +107,7 @@ class RandomItemOf:
         self, owner: PersonId, facts: WorldFacts, world: WorldAggregates, trigger: Trigger
     ) -> ItemInstanceId:
         item = facts.inventory(owner).random_packed_item(facts.random())
-        world.inventory(owner).give_up_packed(item)
+        world.inventory(owner).give_up_packed(item, facts.now())
         return item
 
     def requirements(self) -> Requirements:
@@ -123,7 +123,7 @@ class MoveItemEffect:
 
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         moved = self.item.give_up_from(self.from_who.person_in(trigger), facts, world, trigger)
-        world.inventory(self.to_who.person_in(trigger)).receive(moved, facts.item(moved).spec_id)
+        world.inventory(self.to_who.person_in(trigger)).receive(moved, facts.item(moved).spec_id, facts.now())
 
     def requirements(self) -> Requirements:
         return (

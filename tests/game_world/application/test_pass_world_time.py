@@ -407,7 +407,7 @@ class TestPassWorldTimeItems:
         (lamp,) = world.carried_by_haru()
 
         def drop(session: WorldSession) -> None:
-            session.aggregates().inventory(_HARU).give_up(lamp)
+            session.aggregates().inventory(_HARU).give_up(lamp, WorldTick(0))
             session.aggregates().ground_items(_PLAZA).place(lamp)
 
         world.scope.run(drop)

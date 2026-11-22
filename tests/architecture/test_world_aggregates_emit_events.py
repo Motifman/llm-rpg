@@ -400,7 +400,7 @@ def _ground(*items: ItemInstanceId) -> GroundItems:
 def _inventory(*items: ItemInstanceId, gold: int = 0) -> PersonInventory:
     inventory = PersonInventory.start(_ALICE, Capacity(5))
     for item in items:
-        inventory.receive(item, _LANTERN_SPEC)
+        inventory.receive(item, _LANTERN_SPEC, _NOW)
     inventory.earn(Gold(gold))
     _cleared(inventory)
     return inventory
@@ -557,10 +557,11 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     "SpotSearchProgress.mark_found": lambda: _with(
         SpotSearchProgress.start(_PLAZA.spot_id), lambda s: s.mark_found(_FOUNTAIN_COIN, _ALICE)
     ),
-    "PersonInventory.receive": lambda: _with(_inventory(), lambda i: i.receive(_LANTERN, _LANTERN_SPEC)),
-    "PersonInventory.give_up": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up(_LANTERN)),
-    "PersonInventory.give_up_held": lambda: _with(_holding(_ROPE), lambda i: i.give_up_held(_ROPE)),
-    "PersonInventory.give_up_packed": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up_packed(_LANTERN)),
+    "PersonInventory.receive": lambda: _with(_inventory(), lambda i: i.receive(_LANTERN, _LANTERN_SPEC, _NOW)),
+    "PersonInventory.give_up": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up(_LANTERN, _NOW)),
+    "PersonInventory.run_out": lambda: _with(_inventory(_LANTERN), lambda i: i.run_out(_LANTERN, _NOW)),
+    "PersonInventory.give_up_held": lambda: _with(_holding(_ROPE), lambda i: i.give_up_held(_ROPE, _NOW)),
+    "PersonInventory.give_up_packed": lambda: _with(_inventory(_LANTERN), lambda i: i.give_up_packed(_LANTERN, _NOW)),
     "PersonInventory.hold": lambda: _with(_inventory(_LANTERN), lambda i: i.hold(_LANTERN, HandsNeeded(1))),
     "PersonInventory.hold_packed_at_start": lambda: _with(
         _inventory(_LANTERN), lambda i: i.hold_packed_at_start(_LANTERN_SPEC, HandsNeeded(1))

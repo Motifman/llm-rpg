@@ -215,7 +215,7 @@ class TestForEveryoneEffect:
         )
         for person in (ALICE, CAROL):
             rope = world.aggregates().bring_item_into_world(_ROPE, WorldTick(0))
-            world.aggregates().inventory(person).receive(rope, _ROPE.item_spec_id)
+            world.aggregates().inventory(person).receive(rope, _ROPE.item_spec_id, WorldTick(0))
         hurt_and_lose_rope = SequenceEffect(
             (DamageEffect(EachPerson(), Damage(3)), TakeItemEffect(EachPerson(), _ROPE, Count(1)))
         )

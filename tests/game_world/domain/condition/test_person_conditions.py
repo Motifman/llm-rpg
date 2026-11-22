@@ -112,7 +112,7 @@ def _world(*, departed_persons_act: bool = False) -> WorldSession:
 
 def _carry(a_world: WorldSession, spec: ItemSpecDeclaration, *, hold: bool = False) -> None:
     item = a_world.aggregates().bring_item_into_world(spec, WorldTick(0))
-    a_world.aggregates().inventory(ALICE).receive(item, spec.item_spec_id)
+    a_world.aggregates().inventory(ALICE).receive(item, spec.item_spec_id, WorldTick(0))
     if hold:
         a_world.aggregates().inventory(ALICE).hold(item, HandsNeeded(1))
 

@@ -33,7 +33,15 @@ from ai_rpg_world.game_world.domain.objects_and_items import (
     PersonInventory,
     PersonInventoryMemento,
 )
-from ai_rpg_world.game_world.domain.value_object import Capacity, Count, Gold, HandsNeeded, ItemSpecId, PersonId
+from ai_rpg_world.game_world.domain.value_object import (
+    Capacity,
+    Count,
+    Gold,
+    HandsNeeded,
+    ItemSpecId,
+    PersonId,
+    WorldTick,
+)
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 from tests.game_world.support.world_in_memory import FractionsInOrder
@@ -59,7 +67,7 @@ def _spec_of(item: ItemInstanceId) -> ItemSpecId:
 def _inventory(*items: ItemInstanceId, capacity: int = 10) -> PersonInventory:
     inventory = PersonInventory.start(_ALICE, Capacity(capacity))
     for item in items:
-        inventory.receive(item, _spec_of(item))
+        inventory.receive(item, _spec_of(item), WorldTick(0))
     inventory.clear_events()
     return inventory
 
@@ -77,23 +85,23 @@ class TestPersonInventoryReceiveAndGiveUp:
         assert not inventory.is_full()
 
     def test_receive_puts_item_in_pack_and_records_event(self) -> None:
-        """receive した品物は荷に入り、手には無く、持ち主と品物を持つ ItemReceivedEvent がたまる。"""
+        """receive した品物は荷に入り、手には無く、持ち主・品物・品物の種類・受け取った時刻を持つ ItemReceivedEvent がたまる。"""
         inventory = _inventory()
 
-        inventory.receive(_LANTERN, _spec_of(_LANTERN))
+        inventory.receive(_LANTERN, _spec_of(_LANTERN), WorldTick(7))
 
         assert inventory.packed_items() == (_LANTERN,)
         assert inventory.held_items() == ()
         [event] = inventory.get_events()
         assert isinstance(event, ItemReceivedEvent)
-        assert (event.person, event.item) == (_ALICE, _LANTERN)
+        assert (event.person, event.item, event.spec, event.at) == (_ALICE, _LANTERN, _spec_of(_LANTERN), WorldTick(7))
 
     def test_receiving_an_item_already_carried_is_refused(self) -> None:
         """もう持っている品物を receive すると ItemAlreadyCarriedException を投げ、イベントはたまらない。"""
         inventory = _inventory(_LANTERN)
 
         with pytest.raises(ItemAlreadyCarriedException):
-            inventory.receive(_LANTERN, _spec_of(_LANTERN))
+            inventory.receive(_LANTERN, _spec_of(_LANTERN), WorldTick(0))
 
         assert inventory.items() == (_LANTERN,)
         assert inventory.get_events() == []
@@ -104,7 +112,7 @@ class TestPersonInventoryReceiveAndGiveUp:
         inventory.hold(_LANTERN, _ONE_HAND)
         assert not inventory.is_full()
 
-        inventory.receive(_KNIFE, _spec_of(_KNIFE))
+        inventory.receive(_KNIFE, _spec_of(_KNIFE), WorldTick(0))
 
         assert inventory.is_full()
 
@@ -113,21 +121,38 @@ class TestPersonInventoryReceiveAndGiveUp:
         inventory = _inventory(_LANTERN, _KNIFE, capacity=2)
 
         with pytest.raises(InventoryFullException):
-            inventory.receive(_ROPE, _spec_of(_ROPE))
+            inventory.receive(_ROPE, _spec_of(_ROPE), WorldTick(0))
 
         assert inventory.items() == (_LANTERN, _KNIFE)
         assert inventory.get_events() == []
 
     def test_give_up_removes_packed_item(self) -> None:
-        """荷の物を give_up すると持ち物から無くなり、手に持っていなかったことを示す ItemGivenUpEvent がたまる。"""
+        """荷の物を give_up すると持ち物から無くなり、手に持っていなかったこと・品物の種類・手放した時刻を持ち、使い切りではない ItemGivenUpEvent がたまる。"""
         inventory = _inventory(_LANTERN, _KNIFE)
 
-        inventory.give_up(_LANTERN)
+        inventory.give_up(_LANTERN, WorldTick(7))
 
         assert inventory.items() == (_KNIFE,)
         [event] = inventory.get_events()
         assert isinstance(event, ItemGivenUpEvent)
-        assert (event.person, event.item, event.was_held) == (_ALICE, _LANTERN, False)
+        assert (event.person, event.item, event.was_held, event.spec, event.at, event.ran_out) == (
+            _ALICE,
+            _LANTERN,
+            False,
+            _spec_of(_LANTERN),
+            WorldTick(7),
+            False,
+        )
+
+    def test_run_out_removes_the_item_as_used_up(self) -> None:
+        """run_out した品物は持ち物から無くなり、使い切って消えた印を持つ ItemGivenUpEvent がたまる。"""
+        inventory = _inventory(_LANTERN)
+
+        inventory.run_out(_LANTERN, WorldTick(16))
+
+        assert inventory.items() == ()
+        [event] = inventory.get_events()
+        assert isinstance(event, ItemGivenUpEvent) and event.ran_out
 
     def test_give_up_removes_held_item(self) -> None:
         """手の物を give_up すると手からも持ち物からも無くなり、手に持っていたことを示す ItemGivenUpEvent がたまる。"""
@@ -135,7 +160,7 @@ class TestPersonInventoryReceiveAndGiveUp:
         inventory.hold(_LANTERN, _ONE_HAND)
         inventory.clear_events()
 
-        inventory.give_up(_LANTERN)
+        inventory.give_up(_LANTERN, WorldTick(0))
 
         assert inventory.items() == ()
         assert inventory.held_items() == ()
@@ -148,7 +173,7 @@ class TestPersonInventoryReceiveAndGiveUp:
         inventory = _inventory(_LANTERN)
 
         with pytest.raises(ItemNotCarriedException):
-            inventory.give_up(_KNIFE)
+            inventory.give_up(_KNIFE, WorldTick(0))
 
         assert inventory.get_events() == []
 
@@ -397,7 +422,7 @@ class TestPersonInventoryItemsBySpec:
         """りんごを 1 つ give_up すると、count_of(りんご) は 1 つ減る。"""
         inventory = _inventory(_APPLE_1, _APPLE_2)
 
-        inventory.give_up(_APPLE_1)
+        inventory.give_up(_APPLE_1, WorldTick(0))
 
         assert inventory.count_of(_APPLE) == Count(1)
 
@@ -490,7 +515,7 @@ class TestPersonInventoryGiveUpFromHandsOrPack:
         inventory.hold(_LANTERN, _ONE_HAND)
         inventory.clear_events()
 
-        inventory.give_up_held(_LANTERN)
+        inventory.give_up_held(_LANTERN, WorldTick(0))
 
         assert inventory.items() == (_ROPE,)
         events = inventory.get_events()
@@ -504,7 +529,7 @@ class TestPersonInventoryGiveUpFromHandsOrPack:
         inventory = _inventory(_ROPE)
 
         with pytest.raises(ItemNotHeldException):
-            inventory.give_up_held(_ROPE)
+            inventory.give_up_held(_ROPE, WorldTick(0))
 
         assert inventory.items() == (_ROPE,)
         assert inventory.get_events() == []
@@ -514,13 +539,13 @@ class TestPersonInventoryGiveUpFromHandsOrPack:
         inventory = _inventory()
 
         with pytest.raises(ItemNotCarriedException):
-            inventory.give_up_held(_ROPE)
+            inventory.give_up_held(_ROPE, WorldTick(0))
 
     def test_give_up_packed_releases_item_in_pack(self) -> None:
         """荷にある縄を give_up_packed すると持ち物から消え、was_held が偽の ItemGivenUpEvent を出す。"""
         inventory = _inventory(_ROPE)
 
-        inventory.give_up_packed(_ROPE)
+        inventory.give_up_packed(_ROPE, WorldTick(0))
 
         assert inventory.items() == ()
         events = inventory.get_events()
@@ -535,7 +560,7 @@ class TestPersonInventoryGiveUpFromHandsOrPack:
         inventory.clear_events()
 
         with pytest.raises(ItemNotPackedException):
-            inventory.give_up_packed(_LANTERN)
+            inventory.give_up_packed(_LANTERN, WorldTick(0))
 
         assert inventory.items() == (_LANTERN,)
         assert inventory.get_events() == []
@@ -545,7 +570,7 @@ class TestPersonInventoryGiveUpFromHandsOrPack:
         inventory = _inventory()
 
         with pytest.raises(ItemNotCarriedException):
-            inventory.give_up_packed(_ROPE)
+            inventory.give_up_packed(_ROPE, WorldTick(0))
 
 
 class TestPersonInventoryMemento:

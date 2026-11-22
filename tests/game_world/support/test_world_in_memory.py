@@ -261,7 +261,7 @@ class TestFactsSeeWhatAggregatesChanged:
         inventory = world.aggregates().inventory(_ALICE)
         for spec in (_APPLE, _APPLE, _PEAR):
             item = world.aggregates().bring_item_into_world(spec, WorldTick(0))
-            inventory.receive(item, spec.item_spec_id)
+            inventory.receive(item, spec.item_spec_id, WorldTick(0))
 
         assert world.facts().inventory(_ALICE).count_of(_APPLE.item_spec_id) == Count(2)
 
@@ -269,7 +269,7 @@ class TestFactsSeeWhatAggregatesChanged:
         """alice が梨を手に持つと、facts の inventory の手の物は梨だけになる。"""
         pear = Item.come_into_world(ItemInstanceId("pear-1"), _PEAR, WorldTick(0))
         world = _world(items=(pear,))
-        world.aggregates().inventory(_ALICE).receive(pear.item_id, pear.spec_id)
+        world.aggregates().inventory(_ALICE).receive(pear.item_id, pear.spec_id, WorldTick(0))
 
         world.aggregates().inventory(_ALICE).hold(pear.item_id, HandsNeeded(1))
 
