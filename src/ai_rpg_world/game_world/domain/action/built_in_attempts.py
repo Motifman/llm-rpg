@@ -33,7 +33,6 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import (
-    ArgumentsNotChosenException,
     HandOverToSelfException,
     NothingToHandOverException,
 )
