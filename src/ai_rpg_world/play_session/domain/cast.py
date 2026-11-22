@@ -11,6 +11,7 @@ from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.play_session.domain.play_session_exception import (
     CastValidationException,
+    PersonAlreadyBriefedException,
     PersonNotBriefedException,
     PersonNotCastException,
 )
@@ -45,6 +46,10 @@ class Cast(AggregateRoot[BeingCastInWorldEvent]):
     def __init__(self, world: WorldId, environment_name: str, members: Iterable[CastMember]) -> None:
         super().__init__()
         members = tuple(members)
+        if not members:
+            raise CastValidationException(f"cast for {world.value} has no members")
+        if not environment_name.strip():
+            raise CastValidationException(f"cast for {world.value} has a blank environment name")
         for label, values in (
             ("person", [m.person for m in members]),
             ("being", [m.being_id for m in members]),
@@ -63,16 +68,13 @@ class Cast(AggregateRoot[BeingCastInWorldEvent]):
     def world(self) -> WorldId:
         return self._world
 
-    def members(self) -> tuple[CastMember, ...]:
-        return tuple(self._members.values())
-
-    def being_of(self, person: PersonId) -> BeingId:
-        return self._member(person).being_id
-
     def brief(
         self, person: PersonId, *, orientation: Orientation, imposed_goal: str, known_people: Sequence[PersonId]
     ) -> None:
         member = self._member(person)
+        if person in self._briefed:
+            # 入った Being は最初の取り決めで入っているので、渡し直すと Being の受け取ったものと食い違う
+            raise PersonAlreadyBriefedException(f"{person.value} has already been briefed in {self._world.value}")
         entry = EnvironmentEntry(
             environment_name=self._environment_name,
             imposed_goal=imposed_goal,

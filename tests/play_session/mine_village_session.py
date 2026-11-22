@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import Sqli
 from ai_rpg_world.play_session.application.start_play_session import StartPlaySession, StartPlaySessionCommand
 from ai_rpg_world.play_session.domain.cast import BeingCastInWorldEvent
 from ai_rpg_world.play_session.infrastructure.in_memory_cast_repository import InMemoryCastRepository
-from ai_rpg_world.play_session.infrastructure.roles_from_scenario import roles_from_scenario
+from ai_rpg_world.play_session.infrastructure.roles_from_scenario import casting_by_person_name, roles_from_scenario
 
 _MINE_VILLAGE = Path(__file__).parents[2] / "data" / "scenarios" / "mine_village_v2.yaml"
 WORLD = WorldId("mine_village_v2#1")
@@ -32,7 +32,7 @@ def _scenario() -> LoadedScenario:
 class MineVillageSession:
     """廃坑の山村 v2 を開き、4 人の Being を用意して入れたところ。"""
 
-    def __init__(self) -> None:
+    def __init__(self, *, without: tuple[str, ...] = ()) -> None:
         scenario = _scenario()
         self.store = SqliteWorldStore.create(
             ":memory:",
@@ -47,16 +47,20 @@ class MineVillageSession:
         self.clock = InMemoryMemoryTurnClock()
         self.cast_events: list[BeingCastInWorldEvent] = []
         self.casts = InMemoryCastRepository(handoff=self.cast_events.extend)
-        StartPlaySession(
+        self.start = StartPlaySession(
             open_world=OpenWorld(self.store),
             brief=BriefEnteringPerson(scenario.design),
             prepare_being=PrepareBeing(self.beings),
             enter_environment=EnterEnvironment(self.beings, self.acquaintances, self.clock),
             casts=self.casts,
-        )(
-            StartPlaySessionCommand(
-                open_world=OpenWorldCommand(world_id=WORLD, design=scenario.design),
-                environment_name=ENVIRONMENT_NAME,
-                roles=roles_from_scenario(scenario),
-            )
         )
+        self.command = StartPlaySessionCommand(
+            open_world=OpenWorldCommand(world_id=WORLD, design=scenario.design),
+            environment_name=ENVIRONMENT_NAME,
+            roles=tuple(role for role in roles_from_scenario(scenario) if role.person.value not in without),
+            casting=casting_by_person_name(scenario),
+        )
+
+    def started(self) -> MineVillageSession:
+        self.start(self.command)
+        return self

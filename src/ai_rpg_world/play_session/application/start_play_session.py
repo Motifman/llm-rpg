@@ -17,11 +17,18 @@ from ai_rpg_world.play_session.domain.cast import Cast, CastMember, CastReposito
 @dataclass(frozen=True)
 class Role:
     person: PersonId
-    being_id: BeingId
-    being_name: str
     persona_fields: Mapping[str, object]
     known_facts: DescriptionText
     objective: DescriptionText
+
+    def __post_init__(self) -> None:
+        name = self.persona_fields.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"role {self.person.value} has no being name in its persona fields")
+
+    @property
+    def being_name(self) -> str:
+        return str(self.persona_fields["name"])
 
 
 @final
@@ -30,6 +37,12 @@ class StartPlaySessionCommand:
     open_world: OpenWorldCommand
     environment_name: str
     roles: tuple[Role, ...]
+    casting: Mapping[PersonId, BeingId]
+
+    def __post_init__(self) -> None:
+        uncast = sorted(role.person.value for role in self.roles if role.person not in self.casting)
+        if uncast:
+            raise ValueError(f"no Being is cast as {uncast}")
 
 
 @final
@@ -54,12 +67,10 @@ class StartPlaySession:
         cast = Cast(
             world,
             command.environment_name,
-            (CastMember(role.person, role.being_id, role.being_name) for role in command.roles),
+            (CastMember(role.person, command.casting[role.person], role.being_name) for role in command.roles),
         )
-        self._open_world(command.open_world)
-        # 紹介は相手の Being の名前で渡すので、全員を配役してから一人ずつ入れる
+        # 世界を開いて Being を入れたあとで断られると、同じコマンドでやり直せない。断られうる手順を先に済ませる
         for role in command.roles:
-            self._prepare_being.execute(PrepareBeingCommand(being_id=role.being_id, persona_fields=role.persona_fields))
             briefing = self._brief(
                 BriefEnteringPersonCommand(person=role.person, known_facts=role.known_facts, objective=role.objective)
             )
@@ -69,9 +80,15 @@ class StartPlaySession:
                 imposed_goal=briefing.imposed_goal,
                 known_people=briefing.known_people,
             )
+        for role in command.roles:
+            self._prepare_being.execute(
+                PrepareBeingCommand(being_id=command.casting[role.person], persona_fields=role.persona_fields)
+            )
+        self._open_world(command.open_world)
+        for role in command.roles:
             self._enter_environment.execute(
                 EnterEnvironmentCommand(
-                    being_id=role.being_id, environment_id=world.value, entry=cast.entry_of(role.person)
+                    being_id=command.casting[role.person], environment_id=world.value, entry=cast.entry_of(role.person)
                 )
             )
         self._casts.save(cast)

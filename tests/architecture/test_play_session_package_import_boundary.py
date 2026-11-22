@@ -1,7 +1,8 @@
 """遊びの進行 (play_session、#2229) が、世界と Being を入口だけで呼ぶよう、層ごとに import を見張る。
 
 - どの層も: play_session の domain、eventing、Being の契約と BeingId、世界の ID の値
-- application はさらに: play_session の application、Being の application、世界の application (入口)
+- application はさらに: play_session の application と、Being と世界の入口のモジュール。入口でない application の部品
+  (世界の作業単位など) には触らない
 - infrastructure はさらに: play_session の infrastructure、シナリオの読み込み。シナリオのファイルを読むのは infrastructure の仕事なので
 """
 
@@ -23,12 +24,13 @@ _EVERY_LAYER = (
     "ai_rpg_world.being.domain.being_id",
     "ai_rpg_world.game_world.domain.value_object",
 )
-_APPLICATION = (
-    *_EVERY_LAYER,
-    f"{_PLAY_SESSION_PACKAGE}.application",
-    "ai_rpg_world.being.application",
-    "ai_rpg_world.game_world.application",
+_BEING_ENTRANCES = tuple(
+    f"ai_rpg_world.being.application.{name}" for name in ("prepare_being", "enter_environment", "perceive_observation")
 )
+_WORLD_ENTRANCES = tuple(
+    f"ai_rpg_world.game_world.application.{name}" for name in ("open_world", "brief_entering_person")
+)
+_APPLICATION = (*_EVERY_LAYER, f"{_PLAY_SESSION_PACKAGE}.application", *_BEING_ENTRANCES, *_WORLD_ENTRANCES)
 _INFRASTRUCTURE = (
     *_APPLICATION,
     f"{_PLAY_SESSION_PACKAGE}.infrastructure",
@@ -109,6 +111,10 @@ def test_play_session_has_domain_application_and_infrastructure_layers() -> None
             "from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore\n",
         ),
         ("domain", "def f():\n    from ai_rpg_world.game_world.application import open_world\n"),
+        ("application", "from ai_rpg_world.game_world.application.world_store import WorldStore\n"),
+        ("application", "from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory\n"),
+        ("application", "import ai_rpg_world.game_world.application.command_scope\n"),
+        ("infrastructure", "import ai_rpg_world.domain.world.aggregate.player_beings\n"),
         ("domain", "from ..application.start_play_session import Role\n"),
         ("application", "from ai_rpg_world.play_session.infrastructure import roles_from_scenario\n"),
     ],

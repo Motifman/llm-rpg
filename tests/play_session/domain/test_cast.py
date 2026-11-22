@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.play_session.domain.cast import BeingCastInWorldEvent, Cast, CastMember
 from ai_rpg_world.play_session.domain.play_session_exception import (
     CastValidationException,
+    PersonAlreadyBriefedException,
     PersonNotBriefedException,
     PersonNotCastException,
 )
@@ -32,9 +33,17 @@ def _cast() -> Cast:
 class TestCastMembers:
     """Cast が、登場人物と Being を 1 対 1 で結び、重なる配役を断ることを保証する。"""
 
-    def test_being_of_returns_the_being_driving_the_person(self) -> None:
-        """ゲンを動かす Being は being_gen になる。"""
-        assert _cast().being_of(_GEN) == BeingId("being_gen")
+    @pytest.mark.parametrize(
+        ("environment_name", "members"),
+        [("廃坑の山村", ()), (" ", (CastMember(_GEN, BeingId("being_gen"), "ゲン"),))],
+        ids=["no_members", "blank_environment_name"],
+    )
+    def test_empty_cast_or_blank_environment_name_is_refused(
+        self, environment_name: str, members: tuple[CastMember, ...]
+    ) -> None:
+        """配役が 1 人もいないか、環境の名前が空白だけなら CastValidationException で断る。"""
+        with pytest.raises(CastValidationException):
+            Cast(_WORLD, environment_name, members)
 
     @pytest.mark.parametrize(
         "second",
@@ -51,9 +60,9 @@ class TestCastMembers:
             Cast(_WORLD, "廃坑の山村", (CastMember(_GEN, BeingId("being_gen"), "ゲン"), second))
 
     def test_person_not_cast_is_refused(self) -> None:
-        """配役に無い登場人物の Being を聞くと PersonNotCastException で断る。"""
+        """配役に無い登場人物に渡そうとすると PersonNotCastException で断る。"""
         with pytest.raises(PersonNotCastException):
-            _cast().being_of(PersonId("mio"))
+            _cast().brief(PersonId("mio"), orientation=_ORIENTATION, imposed_goal="外へ出る。", known_people=())
 
 
 class TestCastBrief:
@@ -96,6 +105,17 @@ class TestCastBrief:
         assert cast.get_events() == []
         with pytest.raises(PersonNotBriefedException):
             cast.entry_of(_GEN)
+
+    def test_second_brief_to_the_same_person_is_refused(self) -> None:
+        """ゲンに 2 回渡そうとすると PersonAlreadyBriefedException で断り、最初の取り決めのまま、イベントも 1 件のまま。"""
+        cast = _cast()
+        cast.brief(_GEN, orientation=_ORIENTATION, imposed_goal="外へ出る。", known_people=(_SAYO,))
+
+        with pytest.raises(PersonAlreadyBriefedException):
+            cast.brief(_GEN, orientation=_ORIENTATION, imposed_goal="村に残る。", known_people=())
+
+        assert cast.entry_of(_GEN).imposed_goal == "外へ出る。"
+        assert len(cast.get_events()) == 1
 
     def test_entry_before_brief_is_refused(self) -> None:
         """まだ渡していない人の取り決めを聞くと PersonNotBriefedException で断る。"""

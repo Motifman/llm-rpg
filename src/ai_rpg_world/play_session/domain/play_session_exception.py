@@ -16,3 +16,7 @@ class PersonNotBriefedException(PlaySessionDomainException):
 
 class CastNotFoundException(PlaySessionDomainException):
     error_code = "PLAY_SESSION.CAST_NOT_FOUND"
+
+
+class PersonAlreadyBriefedException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.PERSON_ALREADY_BRIEFED"

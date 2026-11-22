@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
+
 from ai_rpg_world.being.contract import Introduction
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.play_session.domain.play_session_exception import CastNotFoundException, PersonNotCastException
 from tests.play_session.mine_village_session import ENVIRONMENT_NAME, WORLD, MineVillageSession
 
 _GEN = PersonId("gen")
@@ -14,7 +20,7 @@ class TestStartPlaySession:
 
     def test_gen_is_prepared_with_name_and_first_person_from_the_scenario(self) -> None:
         """ゲンの Being は、シナリオの人柄どおり名前「ゲン」と一人称「俺」で用意される。"""
-        session = MineVillageSession()
+        session = MineVillageSession().started()
 
         persona = session.beings.get(BeingId("gen")).persona
 
@@ -22,7 +28,7 @@ class TestStartPlaySession:
 
     def test_every_being_enters_the_world(self) -> None:
         """4 人の Being がどれも、世界の識別子と環境の名前「廃坑の山村」の環境に入っている。"""
-        session = MineVillageSession()
+        session = MineVillageSession().started()
 
         attachments = {being: session.beings.get(BeingId(being)).attachment for being in ("gen", "sayo", "haru", "mio")}
 
@@ -32,7 +38,7 @@ class TestStartPlaySession:
 
     def test_gens_orientation_has_introduction_premises_and_what_he_knows(self) -> None:
         """ゲンの案内には導入・前提・「あなたが知っていること」が並び、知っていることに金庫の番号 1907 がある。"""
-        session = MineVillageSession()
+        session = MineVillageSession().started()
 
         descriptions = tuple(session.casts.get(WORLD).orientation_of(_GEN).descriptions)
 
@@ -41,7 +47,7 @@ class TestStartPlaySession:
 
     def test_gens_imposed_goal_is_only_his_objective(self) -> None:
         """ゲンに課された目的は「サヨと二人そろって、坑道の奥の昇降機で外へ出る。」だけになる。"""
-        session = MineVillageSession()
+        session = MineVillageSession().started()
 
         entry = session.casts.get(WORLD).entry_of(_GEN)
 
@@ -49,7 +55,7 @@ class TestStartPlaySession:
 
     def test_gen_is_introduced_to_sayo_only(self) -> None:
         """ゲンの紹介にはサヨだけが入り、ハルとミオは入らない。ゲンの知り合いにもサヨだけが記録される。"""
-        session = MineVillageSession()
+        session = MineVillageSession().started()
 
         entry = session.casts.get(WORLD).entry_of(_GEN)
         known = [a.name for a in session.acquaintances.list_by_being(BeingId("gen"))]
@@ -58,11 +64,66 @@ class TestStartPlaySession:
         assert known == ["サヨ"]
 
     def test_entry_and_orientation_given_to_each_being_are_announced(self) -> None:
-        """4 人それぞれに、渡した取り決めと案内を持つ BeingCastInWorldEvent が 1 件ずつ出る。"""
-        session = MineVillageSession()
-        cast = session.casts.get(WORLD)
+        """4 人それぞれに BeingCastInWorldEvent が 1 件ずつ出て、ゲンのものは Being gen と、ゲンの課された目的・紹介 (サヨ)・案内を持つ。"""
+        session = MineVillageSession().started()
 
-        announced = {event.person: (event.being_id, event.entry, event.orientation) for event in session.cast_events}
+        announced = {event.person: event for event in session.cast_events}
 
         assert len(session.cast_events) == 4
-        assert announced[_GEN] == (BeingId("gen"), cast.entry_of(_GEN), cast.orientation_of(_GEN))
+        assert {person.value for person in announced} == {"gen", "sayo", "haru", "mio"}
+        gen = announced[_GEN]
+        assert (gen.being_id, gen.entry.imposed_goal, tuple(gen.entry.introductions)) == (
+            BeingId("gen"),
+            "サヨと二人そろって、坑道の奥の昇降機で外へ出る。",
+            (Introduction(name="サヨ"),),
+        )
+        assert [d.heading for d in gen.orientation.descriptions] == [
+            "この世界について",
+            "この世界の前提",
+            "あなたが知っていること",
+        ]
+
+    def test_casting_decides_which_being_plays_each_person(self) -> None:
+        """配役でゲンを Being wanderer に当てると、ゲンの人柄の Being wanderer が用意されて入り、Being gen は用意されない。"""
+        session = MineVillageSession()
+        casting = {**session.command.casting, _GEN: BeingId("wanderer")}
+
+        session.start(replace(session.command, casting=casting))
+
+        assert session.beings.get(BeingId("wanderer")).persona.name == "ゲン"
+        with pytest.raises(BeingNotFoundException):
+            session.beings.get(BeingId("gen"))
+
+    def test_refused_brief_opens_no_world_and_prepares_no_being(self) -> None:
+        """ゲンが知っているサヨを配役から外すと、ゲンへの紹介が組めずに PersonNotCastException で断り、世界は開かず、どの Being も用意しない。
+        同じ世界を、サヨを入れた配役で開き直せる。"""
+        session = MineVillageSession(without=("sayo",))
+
+        with pytest.raises(PersonNotCastException):
+            session.start(session.command)
+
+        with pytest.raises(BeingNotFoundException):
+            session.beings.get(BeingId("haru"))
+        with pytest.raises(CastNotFoundException):
+            session.casts.get(WORLD)
+        session.start(MineVillageSession().command)
+        assert session.casts.get(WORLD).entry_of(_GEN).imposed_goal is not None
+
+
+class TestStartPlaySessionCommand:
+    """StartPlaySessionCommand と Role が、配役の無い役と、名前の無い人柄を受け取らないことを保証する。"""
+
+    def test_role_without_being_name_is_refused(self) -> None:
+        """人柄の欄に名前が無い役は ValueError で断る。紹介に使う名前が無いため。"""
+        role = MineVillageSession().command.roles[0]
+
+        with pytest.raises(ValueError):
+            replace(role, persona_fields={"first_person": "俺"})
+
+    def test_role_not_in_casting_is_refused(self) -> None:
+        """配役にゲンが無いのにゲンの役があると ValueError で断る。"""
+        command = MineVillageSession().command
+        casting = {person: being for person, being in command.casting.items() if person != _GEN}
+
+        with pytest.raises(ValueError):
+            replace(command, casting=casting)
