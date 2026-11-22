@@ -6,6 +6,7 @@ import pytest
 
 from ai_rpg_world.game_world.domain.action.action_attempt import DoesNotUseBody
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.character import (
     CharacterDeclaration,
@@ -310,6 +311,12 @@ def world_words() -> WorldWords:
     )
 
 
+def belongings_texts() -> BelongingsTexts:
+    return BelongingsTexts(
+        received=TextWithUnassignedPeople("{item}を入手した。"), given_up=TextWithUnassignedPeople("{item}を手放した。")
+    )
+
+
 def clock_wording() -> ClockWording:
     return ClockWording(day="Day {day}", late_night="深夜 ", late_night_before_hour=6)
 
@@ -461,6 +468,7 @@ def compose_world(
         action_texts=action_texts(),
         surroundings_texts=surroundings_texts(),
         clock_wording=clock_wording(),
+        belongings_texts=belongings_texts(),
         world_map_wording=world_map_wording(),
         world_words=world_words(),
         weather=weather,

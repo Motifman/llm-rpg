@@ -32,5 +32,5 @@ class DropItem:
         return None
 
     def change_world(self, attempt: ItemDropAttempt, facts: WorldFacts, world: WorldAggregates) -> Ticks:
-        ItemsChangingPlace(world).drop(attempt.actor, attempt.item)
+        ItemsChangingPlace(world).drop(attempt.actor, attempt.item, facts.now())
         return facts.rules().duration_of(attempt.kind(), DefaultDuration())

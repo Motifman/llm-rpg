@@ -66,7 +66,7 @@ def _world(
 ) -> WorldSession:
     alice = inventory(ALICE, capacity)
     for item_id, spec in items:
-        alice.receive(item_id, spec.item_spec_id)
+        alice.receive(item_id, spec.item_spec_id, WorldTick(0))
     return world_in_memory(
         world=WORLD,
         people=(ALICE, BOB),

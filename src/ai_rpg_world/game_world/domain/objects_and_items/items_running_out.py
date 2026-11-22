@@ -18,7 +18,7 @@ class ItemsRunningOut:
 
     def run_out_carried_by(self, person: PersonId, now: WorldTick) -> None:
         inventory = self._world.inventory(person)
-        self._run_out_aged(now, CarriedBy(person), inventory.items(), inventory.give_up)
+        self._run_out_aged(now, CarriedBy(person), inventory.items(), lambda item: inventory.run_out(item, now))
 
     def run_out_lying_at(self, spot: SpotId, now: WorldTick) -> None:
         ground = self._world.ground_items(spot)

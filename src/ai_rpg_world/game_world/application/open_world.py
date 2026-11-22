@@ -80,7 +80,7 @@ def _inventory_at_start(
     inventory = PersonInventory.start(person.person, person.pack_capacity)
     items = tuple(serial_counter.make_numbered_item(spec, now) for spec in person.items)
     for item in items:
-        inventory.receive(item.item_id, item.spec_id)
+        inventory.receive(item.item_id, item.spec_id, now)
     for spec in person.held:
         inventory.hold_packed_at_start(spec.item_spec_id, spec.hands_needed)
     return inventory, items

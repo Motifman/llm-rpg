@@ -117,6 +117,7 @@ class TestCommonJaDefaultReads:
             "world_words",
             "surroundings_texts",
             "clock",
+            "belongings_texts",
             "briefing_headings",
             "perception_defaults",
             "defaults",

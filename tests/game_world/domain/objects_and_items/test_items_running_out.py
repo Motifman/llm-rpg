@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.declaration.object_and_item.item_spec_declar
 from ai_rpg_world.game_world.domain.exception.world_contents_exception import AggregateNotInWorldException
 from ai_rpg_world.game_world.domain.objects_and_items import CarriedBy, Item, ItemInstanceId, ItemRanOutEvent, LyingAt
 from ai_rpg_world.game_world.domain.objects_and_items.items_running_out import ItemsRunningOut
+from ai_rpg_world.game_world.domain.objects_and_items.person_inventory import ItemGivenUpEvent
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, SpotId, Ticks, WorldTick
 from tests.game_world.domain.effect._builders import ALICE, WORLD, inventory, item_spec
 from tests.game_world.support.world_design_for_tests import spot
@@ -24,7 +25,7 @@ _ROPE_1 = ItemInstanceId("rope#1")
 def _alice_carrying(*items: tuple[ItemInstanceId, Item]) -> WorldSession:
     alice = inventory(ALICE)
     for item_id, item in items:
-        alice.receive(item_id, item.spec_id)
+        alice.receive(item_id, item.spec_id, WorldTick(0))
     return world_in_memory(
         world=WORLD,
         people=(ALICE,),
@@ -58,6 +59,15 @@ class TestItemsRunningOutCarriedBy:
 
         assert world.aggregates().inventory(ALICE).items() == ()
         assert _ran_out(world) == [(_LAMP_1, CarriedBy(ALICE), WorldTick(5))]
+
+    def test_item_that_ran_out_leaves_the_pack_as_used_up(self) -> None:
+        """切れたランプは、使い切って消えた印を持つ ItemGivenUpEvent で荷から外れる。捨てたと知らせないため。"""
+        world = _alice_carrying(_lamp())
+
+        ItemsRunningOut(world.aggregates()).run_out_carried_by(ALICE, WorldTick(5))
+
+        given_up = [event for event in world.commit() if isinstance(event, ItemGivenUpEvent)]
+        assert [(event.item, event.ran_out, event.at) for event in given_up][-1] == (_LAMP_1, True, WorldTick(5))
 
     def test_item_that_ran_out_is_taken_out_of_the_world(self) -> None:
         """切れたランプは世界から出て、引こうとすると AggregateNotInWorldException で断られる。"""
@@ -93,7 +103,7 @@ class TestItemsRunningOutLyingAt:
     def test_aged_item_leaves_the_ground_and_runs_out_in_the_name_of_the_spot(self) -> None:
         """広場の地面に置いたランプを tick 5 に切らすと、地面から外れ、ItemRanOutEvent が広場の名で出る。"""
         world = _alice_carrying(_lamp())
-        world.aggregates().inventory(ALICE).give_up(_LAMP_1)
+        world.aggregates().inventory(ALICE).give_up(_LAMP_1, WorldTick(0))
         world.aggregates().ground_items(_PLAZA).place(_LAMP_1)
 
         ItemsRunningOut(world.aggregates()).run_out_lying_at(_PLAZA, WorldTick(5))

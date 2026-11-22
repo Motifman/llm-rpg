@@ -344,12 +344,12 @@ class TestCarriedItem:
         """使おうとした品物が行う人の荷に無ければ NotCarrying で断り、荷に入れば断らない。"""
         world = _world(inventories=(PersonInventory.start(ALICE, Capacity(5)), PersonInventory.start(BOB, Capacity(5))))
         lamp = ItemInstanceId("lamp_1")
-        world.aggregates().inventory(BOB).receive(lamp, ItemSpecId("lamp"))
+        world.aggregates().inventory(BOB).receive(lamp, ItemSpecId("lamp"), WorldTick(0))
         attempt = ItemUseAttempt(ALICE, lamp)
 
         assert _reason(attempt, world) == NotCarrying()
-        world.aggregates().inventory(BOB).give_up(lamp)
-        world.aggregates().inventory(ALICE).receive(lamp, ItemSpecId("lamp"))
+        world.aggregates().inventory(BOB).give_up(lamp, WorldTick(0))
+        world.aggregates().inventory(ALICE).receive(lamp, ItemSpecId("lamp"), WorldTick(0))
         assert _reason(attempt, world) is None
 
 

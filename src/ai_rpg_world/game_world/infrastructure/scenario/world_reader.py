@@ -7,6 +7,7 @@ from typing import TypeVar
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
@@ -186,6 +187,15 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
             shout=read_row(shout),
             arrival=read_row(arrival),
             item_joiner=ItemNameJoiner(rows.required(_ITEM_JOINER).text()),
+        )
+    )
+
+
+def belongings_texts(node: YamlNode) -> BelongingsTexts:
+    fields = node.fields("received", "given_up")
+    return node.build(
+        lambda: BelongingsTexts(
+            received=people_text(fields.required("received")), given_up=people_text(fields.required("given_up"))
         )
     )
 

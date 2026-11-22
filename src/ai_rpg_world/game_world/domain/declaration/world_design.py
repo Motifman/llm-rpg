@@ -9,6 +9,7 @@ from ai_rpg_world.being.contract import Description, Orientation
 from ai_rpg_world.game_world.domain.action.offered_action import ActionChoiceKind
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
+from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.initial_world import InitialWorld
@@ -126,6 +127,7 @@ class WorldDesign:
         action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
         clock_wording: ClockWording,
+        belongings_texts: BelongingsTexts,
         world_map_wording: WorldMapWording,
         world_words: WorldWords,
         weather: WeatherDeclaration | NoWeather,
@@ -162,6 +164,7 @@ class WorldDesign:
         self._action_texts = action_texts
         self._surroundings_texts = surroundings_texts
         self._clock_wording = clock_wording
+        self._belongings_texts = belongings_texts
         self._world_map_wording = world_map_wording
         self._world_words = world_words
         self._weather = weather
@@ -195,6 +198,7 @@ class WorldDesign:
         action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
         clock_wording: ClockWording,
+        belongings_texts: BelongingsTexts,
         world_map_wording: WorldMapWording,
         world_words: WorldWords,
         weather: WeatherDeclaration | NoWeather,
@@ -447,6 +451,7 @@ class WorldDesign:
             action_texts=action_texts,
             surroundings_texts=surroundings_texts,
             clock_wording=clock_wording,
+            belongings_texts=belongings_texts,
             world_map_wording=world_map_wording,
             world_words=world_words,
             weather=weather,
@@ -523,6 +528,10 @@ class WorldDesign:
     @property
     def clock_wording(self) -> ClockWording:
         return self._clock_wording
+
+    @property
+    def belongings_texts(self) -> BelongingsTexts:
+        return self._belongings_texts
 
     @property
     def world_words(self) -> WorldWords:

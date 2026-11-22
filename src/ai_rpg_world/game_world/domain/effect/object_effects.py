@@ -137,7 +137,7 @@ class DepositItemToObjectEffect:
     def apply(self, facts: WorldFacts, world: WorldAggregates, trigger: Trigger) -> None:
         person = self.who.person_in(trigger)
         (deposited,) = facts.inventory(person).items_to_give_up(self.item_spec.item_spec_id, Count(1))
-        world.inventory(person).give_up(deposited)
+        world.inventory(person).give_up(deposited, facts.now())
         world.take_item_out_of_world(deposited)
         world.object_state(self.key.object_id).add_to_count(self.key, Count(1))
 

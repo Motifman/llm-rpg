@@ -34,5 +34,5 @@ class PickUpGroundItem:
         return None
 
     def change_world(self, attempt: GroundItemPickupAttempt, facts: WorldFacts, world: WorldAggregates) -> Ticks:
-        ItemsChangingPlace(world).pick_up(attempt.actor, attempt.item)
+        ItemsChangingPlace(world).pick_up(attempt.actor, attempt.item, facts.now())
         return facts.rules().duration_of(attempt.kind(), DefaultDuration())

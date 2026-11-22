@@ -31,6 +31,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     HandsNeeded,
     ItemSpecId,
     PersonId,
+    WorldTick,
 )
 
 if TYPE_CHECKING:
@@ -42,6 +43,8 @@ if TYPE_CHECKING:
 class ItemReceivedEvent(DomainEvent):
     person: PersonId
     item: ItemInstanceId
+    spec: ItemSpecId
+    at: WorldTick
 
 
 @final
@@ -49,7 +52,10 @@ class ItemReceivedEvent(DomainEvent):
 class ItemGivenUpEvent(DomainEvent):
     person: PersonId
     item: ItemInstanceId
+    spec: ItemSpecId
     was_held: bool
+    ran_out: bool
+    at: WorldTick
 
 
 @final
@@ -176,36 +182,52 @@ class PersonInventory(AggregateRoot[PersonInventoryEvent]):
             packed=tuple(PackedItem(item, self._specs[item]) for item in self._packed),
         )
 
-    def receive(self, item: ItemInstanceId, spec: ItemSpecId) -> None:
+    def receive(self, item: ItemInstanceId, spec: ItemSpecId, at: WorldTick) -> None:
         if self._carries(item):
             raise ItemAlreadyCarriedException(f"{self._person_id.value} already carries {item.value}")
         if self.is_full():
             raise InventoryFullException(f"{self._person_id.value} cannot carry more than {self._capacity.value} items")
         self._packed.append(item)
         self._specs[item] = spec
-        self.add_event(ItemReceivedEvent(**new_event_stamp(), person=self._person_id, item=item))
+        self.add_event(ItemReceivedEvent(**new_event_stamp(), person=self._person_id, item=item, spec=spec, at=at))
 
-    def give_up(self, item: ItemInstanceId) -> None:
+    def give_up(self, item: ItemInstanceId, at: WorldTick) -> None:
+        self._let_go(item, at, ran_out=False)
+
+    def run_out(self, item: ItemInstanceId, at: WorldTick) -> None:
+        self._let_go(item, at, ran_out=True)
+
+    def _let_go(self, item: ItemInstanceId, at: WorldTick, *, ran_out: bool) -> None:
         self._require_carried(item)
         was_held = self._is_held(item)
         if was_held:
             self._held = [held for held in self._held if held.item != item]
         else:
             self._packed.remove(item)
-        del self._specs[item]
-        self.add_event(ItemGivenUpEvent(**new_event_stamp(), person=self._person_id, item=item, was_held=was_held))
+        spec = self._specs.pop(item)
+        self.add_event(
+            ItemGivenUpEvent(
+                **new_event_stamp(),
+                person=self._person_id,
+                item=item,
+                spec=spec,
+                was_held=was_held,
+                ran_out=ran_out,
+                at=at,
+            )
+        )
 
-    def give_up_held(self, item: ItemInstanceId) -> None:
+    def give_up_held(self, item: ItemInstanceId, at: WorldTick) -> None:
         self._require_carried(item)
         if not self._is_held(item):
             raise ItemNotHeldException(f"{self._person_id.value} does not hold {item.value}")
-        self.give_up(item)
+        self.give_up(item, at)
 
-    def give_up_packed(self, item: ItemInstanceId) -> None:
+    def give_up_packed(self, item: ItemInstanceId, at: WorldTick) -> None:
         self._require_carried(item)
         if self._is_held(item):
             raise ItemNotPackedException(f"{self._person_id.value} holds {item.value} instead of packing it")
-        self.give_up(item)
+        self.give_up(item, at)
 
     def hold(self, item: ItemInstanceId, hands_needed: HandsNeeded) -> None:
         self._require_carried(item)

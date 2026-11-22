@@ -156,8 +156,8 @@ def _object_state() -> ObjectStateMemento:
 def _inventory() -> PersonInventoryMemento:
     inventory = PersonInventory.start(_ALICE, Capacity(6))
     for name in ("knife", "apple", "rope", "map"):
-        inventory.receive(ItemInstanceId(name), _ROPE)
-    inventory.receive(ItemInstanceId("lantern#1"), _LANTERN)
+        inventory.receive(ItemInstanceId(name), _ROPE, WorldTick(0))
+    inventory.receive(ItemInstanceId("lantern#1"), _LANTERN, WorldTick(0))
     inventory.hold(ItemInstanceId("rope"), HandsNeeded(1))
     inventory.hold(ItemInstanceId("knife"), HandsNeeded(1))
     inventory.earn(Gold(7))

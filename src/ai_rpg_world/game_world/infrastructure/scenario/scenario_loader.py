@@ -51,6 +51,7 @@ _TOP_FIELDS = (
     "action_texts",
     "surroundings_texts",
     "clock",
+    "belongings_texts",
     "world_map",
     "world_words",
     "briefing_headings",
@@ -155,6 +156,9 @@ class _ScenarioLoading:
         )
         action_texts = collector.attempt(lambda: world_reader.action_texts(self._fields.required("action_texts")))
         clock_wording = collector.attempt(lambda: world_reader.clock_wording(self._fields.required("clock")))
+        belongings_texts = collector.attempt(
+            lambda: world_reader.belongings_texts(self._fields.required("belongings_texts"))
+        )
         world_map_wording = collector.attempt(
             lambda: world_reader.world_map_wording(self._fields.required("world_map"))
         )
@@ -188,6 +192,7 @@ class _ScenarioLoading:
             or action_texts is None
             or surroundings_texts is None
             or clock_wording is None
+            or belongings_texts is None
             or world_map_wording is None
             or world_words is None
             or introduction is None
@@ -221,6 +226,7 @@ class _ScenarioLoading:
                 action_texts=action_texts,
                 surroundings_texts=surroundings_texts,
                 clock_wording=clock_wording,
+                belongings_texts=belongings_texts,
                 world_map_wording=world_map_wording,
                 world_words=world_words,
                 weather=weather,

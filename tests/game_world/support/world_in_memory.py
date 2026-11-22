@@ -35,6 +35,7 @@ from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import Sqli
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
 from tests.game_world.support.world_design_for_tests import (
     action_texts,
+    belongings_texts,
     briefing_headings,
     built_in_action_perceptions,
     clock_wording,
@@ -172,6 +173,7 @@ def _design(
         action_texts=action_texts(),
         surroundings_texts=surroundings_texts(),
         clock_wording=clock_wording(),
+        belongings_texts=belongings_texts(),
         world_map_wording=world_map_wording(),
         world_words=world_words(),
         weather=(

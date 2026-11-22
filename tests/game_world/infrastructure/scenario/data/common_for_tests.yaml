@@ -146,6 +146,10 @@ world_words:
   temperature: { freezing: 凍える寒さ, cold: 寒い, normal: 過ごしやすい, warm: 暖かい, hot: 暑い }
   weather: { clear: 晴れ, cloudy: 曇り, rain: 雨, heavy_rain: 大雨, snow: 雪, blizzard: 吹雪, fog: 霧, storm: 嵐 }
 
+belongings_texts:
+  received: "{item}を入手しました。"
+  given_up: "{item}を捨てました。"
+
 clock:
   day: "Day {day}"
   late_night: "深夜 "

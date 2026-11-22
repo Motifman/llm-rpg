@@ -34,5 +34,5 @@ class HandOverItems:
         return None
 
     def change_world(self, attempt: ItemHandOverAttempt, facts: WorldFacts, world: WorldAggregates) -> Ticks:
-        ItemsChangingPlace(world).hand_over(attempt.actor, attempt.to, attempt.items)
+        ItemsChangingPlace(world).hand_over(attempt.actor, attempt.to, attempt.items, facts.now())
         return facts.rules().duration_of(attempt.kind(), DefaultDuration())

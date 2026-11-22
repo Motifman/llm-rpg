@@ -22,6 +22,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     SpotId,
     SpotSectionId,
     StateKeyId,
+    WorldTick,
 )
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
@@ -95,7 +96,7 @@ def _ready_to_start_the_lift(session: WorldSession) -> None:
     [fuel] = [k for k in nouns.object_of(ObjectId("generator")).state_keys if k.key == StateKeyId("fuel")]
     world.object_state(ObjectId("generator")).add_to_count(fuel, Count(2))
     key = world.bring_item_into_world(nouns.item_spec_of(ItemSpecId("lift_key")), now)
-    world.inventory(_GEN).receive(key, ItemSpecId("lift_key"))
+    world.inventory(_GEN).receive(key, ItemSpecId("lift_key"), WorldTick(0))
     world.whereabouts().teleport(PersonBody(_GEN), nouns.spot_of(SpotId("lift_landing")), now)
     world.whereabouts().enter_section(PersonBody(_GEN), nouns.section_of(SpotSectionId("cage")), frozenset())
 
@@ -239,3 +240,36 @@ class TestArrivalComesBackAsOwnAction:
         )
         assert "  呼び出し: travel_to()" in recent
         assert "やって来た" not in recent
+
+
+class TestBelongingsComingAndGoing:
+    """持ち物が増えたり減ったりしたことが、本人にだけ品物の名前つきで届くことを保証する。"""
+
+    def test_lighting_the_lamp_tells_gen_the_oil_went_and_the_flame_came(self) -> None:
+        """ゲンがカンテラに油を足して灯すと、古い run と同じく「カンテラの油を捨てました。」「カンテラの灯を入手しました。」が、効果の順でゲンの【直近の出来事】に並び、サヨには届かない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=4).started()
+        answers = _AnswersByPerson(session, {_GEN: [_reply("interact", "l1", target="カンテラ", how="油を足して灯す")]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        gen = [prompt for person, prompt in answers.prompts if person == _GEN][-1]
+        sayo = [prompt for person, prompt in answers.prompts if person == PersonId("sayo")][-1]
+        recent = gen[gen.index("【直近の出来事】") : gen.index("【思い出せる出来事】")]
+        assert recent.index("カンテラの油を捨てました。") < recent.index("カンテラの灯を入手しました。")
+        assert "を入手しました。" not in sayo and "を捨てました。" not in sayo
+
+    def test_handing_the_oil_to_sayo_tells_each_side_at_the_time_it_happened(self) -> None:
+        """2 巡り目 (0:30) にゲンがサヨへカンテラの油を渡すと、ゲンには「[Day 1 深夜 0:30] カンテラの油を捨てました。」、サヨには「[Day 1 深夜 0:30] カンテラの油を入手しました。」が届く。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=4).started()
+        answers = _AnswersByPerson(
+            session,
+            {_GEN: [_reply("listen", "l0"), _reply("give_item", "g1", to="サヨ", item="カンテラの油")]},
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        gen = [prompt for person, prompt in answers.prompts if person == _GEN][-1]
+        sayo = [prompt for person, prompt in answers.prompts if person == PersonId("sayo")][-1]
+        assert "- [Day 1 深夜 0:30] カンテラの油を捨てました。" in gen
+        assert "- [Day 1 深夜 0:30] カンテラの油を入手しました。" in sayo
+        assert "入手しました" not in gen and "捨てました" not in sayo
