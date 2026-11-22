@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import (
     BeingSnapshotCodec,
@@ -39,6 +40,12 @@ class InMemoryBeingRepository(BeingRepository):
         if not isinstance(snapshot, BeingSnapshot):
             raise TypeError(f"snapshot must be BeingSnapshot, got {type(snapshot).__name__}")
         self._snapshots[BeingId(snapshot.being_id_value)] = snapshot
+
+    def get(self, being_id: BeingId) -> Being:
+        being = self.find_by_id(being_id)
+        if being is None:
+            raise BeingNotFoundException(f"Being({being_id}) is not saved")
+        return being
 
     def find_by_id(self, being_id: BeingId) -> Being | None:
         if not isinstance(being_id, BeingId):

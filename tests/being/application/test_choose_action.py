@@ -63,7 +63,7 @@ WITH_MEMORY = OfferedBeingTools(
 
 
 class _Beings:
-    def find_by_id(self, being_id: BeingId) -> Being | None:
+    def get(self, being_id: BeingId) -> Being:
         attachment = BeingAttachment(environment_id="mine_village_v2#1", environment_name="廃坑の山村")
         return Being(being_id=GEN, persona=Persona(name="ゲン"), attachment=attachment)
 
@@ -168,7 +168,6 @@ def _choose(
         completion=completion,
         short_term_memories=short_term_memories,
         turn_clock=clock,
-        beings=_Beings(),
         memo_books=memo_books,
         episodes=episodes,
         recall_limit=2,
