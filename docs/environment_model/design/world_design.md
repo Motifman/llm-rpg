@@ -284,7 +284,8 @@ class DeclaredNouns:
     def monster_spec(self, name: str, at: DesignLocation) -> MonsterSpecDeclaration: ...
     def monster_spawn(self, name: str, at: DesignLocation) -> MonsterSpawnDeclaration: ...
     def scenario_shops(self) -> tuple[ScenarioShopDeclaration, ...]: ...
-    def has_shops(self) -> bool: ...   # 店を出せる場所か作者の店が 1 つでもあるか。無ければ店の行為をツールの一覧から消す (ToolExposure)
+    def has_shop_sites(self) -> bool: ...   # 人が店を出せる場所 (allows_shops) が 1 つでもあるか。無ければ持ち主の行為のツールを消す (ToolExposure)
+    def has_shops(self) -> bool: ...        # 店を出せる場所か作者の店が 1 つでもあるか。無ければ買う・売るのツールと、店の行為の知覚の行を求めない
     # 引けなかった名前は UnknownNameFlaw を投げる。読む側はその宣言 1 つを諦めて DesignFlaw を記録し、次へ進む
 
 

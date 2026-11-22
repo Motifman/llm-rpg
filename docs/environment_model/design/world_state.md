@@ -252,20 +252,23 @@ class Shop(AggregateRoot[ShopEvent]):             # 店ごと (D2224)
         # 人の店を初めて開く。spot.allows_shops でなければ SHOP.NOT_A_SHOP_SITE。ShopOpenedEvent
     @classmethod
     def from_declaration(cls, declaration: ScenarioShopDeclaration) -> "Shop": ...
-        # 作者の店。開いた状態で始まり、宣言の品目・在庫・お金を持つ。在庫の品物は、売れたときに世界に出す
+        # 作者の店。開いた状態で始まり、宣言の品目・在庫・お金を持つ
+        # 数を書いた在庫は、世界を開くとき (OpenWorld) に Item.come_into_world で品物を作って預ける。人の店の品と同じく傷む
+        # 尽きない在庫 (UnlimitedSupply) は品物を持たず、売れたときに作る。作るまでは世界に無いので傷まない
 
     def reopen(self, spot: SpotDeclaration, look: ShopLook) -> None: ...
         # 閉じた人の店を開く。同じ場所ならそのまま再開する。別の場所なら、品目と受け取った品が空のときだけ店ごと移る
-        # 残っていれば SHOP.ALREADY_OPEN_ELSEWHERE、開いていれば SHOP.ALREADY_OPEN
+        # 残っていれば SHOP.GOODS_LEFT_ELSEWHERE、開いていれば SHOP.ALREADY_OPEN
     def close(self) -> None: ...                  # 品目、預けた品とお金、受け取った品は店に残る。閉じた店は閉じても何もしない
     def rewrite_look(self, look: ShopLook) -> None: ...   # 閉じていれば SHOP.CLOSED
     def stock(self, spec: ItemSpecId, items: tuple[ItemInstanceId, ...], unit_price: Gold, note: ShopLineNote | NoNote) -> None: ...
         # 売りの品目を、渡した品を足した数にする。単価と説明も書き換える。品は持ち主の荷から手放したもの
     def unstock(self, spec: ItemSpecId, count: Count, unit_price: Gold, note: ShopLineNote | NoNote) -> None: ...
         # 売りの品目を count 減らす。戻す品は預けた順の新しいものから選び、ShopLineChangedEvent の removed に載せる。0 になれば品目が消える
-    def want(self, spec: ItemSpecId, count: Count, unit_price: Gold, deposit: Gold, note: ShopLineNote | NoNote) -> None: ...
+    def post_wanted(self, spec: ItemSpecId, count: Count, unit_price: Gold, deposit: Gold, note: ShopLineNote | NoNote) -> None: ...
         # 買い取りの品目を count、単価 unit_price にし、預けたお金を count × unit_price にする。deposit はその差 (足すお金)
-        # 減らした分のお金は ShopLineChangedEvent の refunded に載せる
+        # 減らした分のお金は ShopLineChangedEvent の refunded に載せる。count が 0 なら品目が消え、預けたお金は全部戻る
+        # 品目の編集 (stock / unstock / post_wanted) と hand_over_received は、閉じた店でも受ける
     def sell(self, buyer: PersonId, spec: ItemSpecId, count: Count, seen_unit_price: Gold) -> None: ...
         # 閉じていれば SHOP.CLOSED、品目が無ければ SHOP.NOT_LISTED、単価が違えば SHOP.PRICE_CHANGED、在庫が足りなければ SHOP.NOT_ENOUGH_STOCK
         # 預けた順の古いものから count 個を外し、ShopSoldItemsEvent に載せる。作者の店で尽きない在庫は、渡す品の種類と数だけを載せる

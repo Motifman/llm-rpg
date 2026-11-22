@@ -138,7 +138,8 @@ Manner = Openly | Stealthily
 | 区画に入る・出る | 区画の出入りの宣言 | × | — | × | × |
 | 持ち替え (HOLD / PUT_AWAY) | × | × | — | × | × |
 | 投票 (CAST_BALLOT) | × | × | — | × | × |
-| 店を開く・閉じる・品目を編集する・見た目を書き直す・受け取った品を引き取る | ○ | × | 自分の店 | × | × |
+| 店を開く (OPEN_SHOP) | ○ | × | — (いまいる場所に開く) | × | × |
+| 店を閉じる・品目を編集する・見た目を書き直す・受け取った品を引き取る | ○ | × | 自分の店 | × | × |
 | 店で買う・店に売る (BUY_FROM_SHOP / SELL_TO_SHOP) | ○ | × | 相手の店 | × | × |
 | 物・品物・人への操作 | 操作の宣言 | × | 物 / 持っている品物 / 相手 | 操作の宣言 | 操作の宣言 |
 
@@ -208,24 +209,27 @@ CollectFromShopAttempt(actor: PersonId)                          # 店が買い�
 BuyFromShopAttempt(actor: PersonId, shop: ShopId, item_spec: ItemSpecDeclaration, count: Count, seen_unit_price: Gold)
 SellToShopAttempt(actor: PersonId, shop: ShopId, item_spec: ItemSpecDeclaration, count: Count, seen_unit_price: Gold)
 
-ShopLineSide = SELLING | BUYING                 # 店が売る品目か、買い取る品目か
+class ShopLineSide(Enum):                       # 店が売る品目か、買い取る品目か
+    SELLING = "SELLING"
+    BUYING = "BUYING"
 ShopLook(text: str)                             # 空でない 1 行、80 文字まで。超えれば行為を作るときにドメイン例外
 ShopLineNote(text: str)                         # 品目の説明の文。空でない 1 行、80 文字まで
 ```
 
 - 自分の店に向けた買う・売ると、数が 0 の買う・売るは、行為を作るときにドメイン例外で断る (形の誤り)。行う人の店かは `ShopId` と行う人から分かる
-- 持ち主の行為 (開く・閉じる・品目を編集する・見た目を書き直す・引き取る) は、自分の店の場所にいるときだけできる (`WithShop`)。開くのは、まだ店が無いか、閉じた店があってそれと同じ場所のとき
+- 開くのは、いまいる場所に開く。近くにいる必要は無い。まだ店が無ければ新しく開き、閉じた店があれば `Shop.reopen` に任せる。閉じた店が同じ場所ならそのまま再開し、別の場所なら、品目と受け取った品が空のときだけ店ごと移る
+- 開く以外の持ち主の行為 (閉じる・品目を編集する・見た目を書き直す・引き取る) は、自分の店の場所にいるときだけできる (`WithShop`)。品目の編集と引き取りは、閉じた店でもできる (閉じた店から品とお金を引き上げるため)。見た目の書き直しは、開いているあいだだけ
 - 買う・売るは、場面に見えている店 (`SeenShop`、[perception.md](perception.md)) だけを相手にできる。暗くて店が見えなければ候補に出ない
 - 試みが持つ単価 (`seen_unit_price`) は、エージェントが場面で見た単価。届いたときに店の単価と違えば断る (`SHOP.PRICE_CHANGED`)。考えているあいだに値段が上がっても、知らずに払わないため
 - 買う・売るは、全部できるか、何もしないか。在庫・買い取りの残り・預けたお金・買い手のお金・荷の空きのどれかが足りなければ断る
-- 店を開く行為は、店を出せる場所 (`SpotDeclaration.allows_shops`) が 1 つも無い世界ではツールの一覧から消す (`ToolExposure`)。店を出せない場所にいるときは、できない (`NotNow`) で出す。買う・売るは、店を出せる場所も作者の店も無い世界では消す
+- 持ち主の行為のツールは、店を出せる場所 (`SpotDeclaration.allows_shops`) が 1 つも無い世界では一覧から消す (`ToolExposure`、`DeclaredNouns.has_shop_sites`)。店を出せない場所にいるときは、できない (`NotNow`) で出す。買う・売るのツールは、店を出せる場所も作者の店も無い世界では消す (`DeclaredNouns.has_shops`)
 
 断る理由 (`WorldStateRefusal` の `RefusalCode`)。文は共通の部品の `refusal_texts.world_state` に書く。
 
 | error_code | いつ | 例 |
 |---|---|---|
 | `GAME_WORLD.SHOP.NOT_A_SHOP_SITE` | 店を出せない場所で開こうとした | 坑道の奥でトムが店を開こうとする |
-| `GAME_WORLD.SHOP.ALREADY_OPEN_ELSEWHERE` | 品目の残った自分の店が別の場所にある | 広場に店のあるトムが、通りで開こうとする |
+| `GAME_WORLD.SHOP.GOODS_LEFT_ELSEWHERE` | 品目か受け取った品の残った自分の店が、別の場所にある | 広場の閉じた店にパンを残したトムが、通りで開こうとする |
 | `GAME_WORLD.SHOP.ALREADY_OPEN` | もう開いている店を開こうとした | |
 | `GAME_WORLD.SHOP.CLOSED` | 閉じた店で買う・売る、閉じた店の見た目を書き直す | |
 | `GAME_WORLD.SHOP.NOT_ENOUGH_STOCK` | 買う数が在庫より多い | パン 3 つを頼んで残りが 2 つ |

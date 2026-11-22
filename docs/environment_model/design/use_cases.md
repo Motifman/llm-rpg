@@ -149,7 +149,7 @@ class CloseShop:
 class EditShopLine:
     def __call__(self, command: EditShopLineCommand) -> ActionReply:
         # 売り: 増やす分を PersonInventory.items_to_give_up で選んで give_up → Shop.stock。減らす分は Shop.unstock → 戻る品を receive
-        # 買い取り: 足すお金を PersonInventory.pay → Shop.want。戻るお金は earn
+        # 買い取り: 足すお金を PersonInventory.pay → Shop.post_wanted。戻るお金は earn
         ...
 
 class RewriteShopLook:
