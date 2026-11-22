@@ -732,10 +732,13 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
                 expectation="扉が開く",
                 inner_thought="鍵が要るかもしれない",
             ),
-            memo_rejections=("1 件目: text が空です。", "2 件目: m_3f2a7b というメモはありません。"),
+            memo_rejections=(
+                "「メモを足す」は書けなかった（理由: text が空）",
+                "「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",
+            ),
             result=ObservedOutcome(
                 observation(
-                    OwnActionResult(call_id="call-1", succeeded=False),
+                    OwnActionResult(call_id="call-1", succeeded=False, action_summary="「扉」に働きかけた"),
                     body="扉は開かなかった",
                     subject_is_self=True,
                     addressed_to_self=True,
@@ -779,7 +782,7 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
     awaiting = Attempt(
         turn=16,
         move=AgentMove(call_id="call-6", tool_name="wait", arguments={}),
-        memo_rejections=("memo: memo は操作の配列で書いてください。",),
+        memo_rejections=("「メモの書き込み」は書けなかった（理由: memo は操作の配列で書く）",),
     )
     awaited = AwaitedBackstory(until_turn=20, since_turn=30)
     return ShortTermMemory(
