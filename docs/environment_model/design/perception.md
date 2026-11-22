@@ -487,7 +487,7 @@ class SeenObject:
 @dataclass(frozen=True)
 class ContainedShop:                      # その場所の店。ユースケースが Shop から集める (D2224)
     shop: ShopId
-    keeper: PersonRef | ScenarioShopkeeper # 人の店は持ち主。作者の店は宣言の keeper_name
+    keeper: PersonRef | ScenarioShopkeeper # 人の店は持ち主。作者の店は ScenarioShopkeeper(name: DisplayName) で、宣言の keeper_name を持つ
     look: ShopLook
     is_open: bool
     selling: tuple[ShopLine, ...]
