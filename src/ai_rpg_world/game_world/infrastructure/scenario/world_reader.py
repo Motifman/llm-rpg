@@ -115,7 +115,7 @@ def world_rules(node: YamlNode) -> WorldRules:
 
 
 def refusal_texts(node: YamlNode) -> RefusalTexts:
-    fields = node.fields("common_rules", "world_state", "hidden", "unlisted")
+    fields = node.fields("common_rules", "world_state", "hidden", "unlisted", "done")
     return node.build(
         lambda: RefusalTexts(
             common_rules=_by_enum(fields.required("common_rules"), CommonRuleRefusalKind, people_text),
@@ -125,6 +125,7 @@ def refusal_texts(node: YamlNode) -> RefusalTexts:
             },
             hidden=people_text(fields.required("hidden")),
             unlisted=people_text(fields.required("unlisted")),
+            done=people_text(fields.required("done")),
         )
     )
 

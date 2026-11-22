@@ -28,6 +28,7 @@ from ai_rpg_world.game_world.domain.value_object import PersonId
 ALICE = PersonId("alice")
 HIDDEN = TextWithUnassignedPeople("今はできない。")
 UNLISTED = TextWithUnassignedPeople("うまくいかなかった。")
+DONE = TextWithUnassignedPeople("できた。")
 SECTION_FULL = RefusalCode("GAME_WORLD.WHEREABOUTS.SECTION_FULL")
 
 
@@ -65,7 +66,11 @@ class TestRefusalTexts:
     def test_text_for_common_rule_assigns_the_actor(self) -> None:
         """{actor} を書いた文は、行った人の PersonId を当てた TextAboutPeople で返る。"""
         texts = RefusalTexts(
-            common_rules=_common_rules(BUSY="{actor}は手が離せない。"), world_state={}, hidden=HIDDEN, unlisted=UNLISTED
+            common_rules=_common_rules(BUSY="{actor}は手が離せない。"),
+            world_state={},
+            hidden=HIDDEN,
+            unlisted=UNLISTED,
+            done=DONE,
         )
 
         assert texts.common_rule_text(Busy(), ALICE) == TextAboutPeople(
@@ -79,6 +84,7 @@ class TestRefusalTexts:
             world_state={},
             hidden=HIDDEN,
             unlisted=UNLISTED,
+            done=DONE,
         )
 
         assert texts.common_rule_text(TooTired(), ALICE) == TextAboutPeople(
@@ -91,9 +97,9 @@ class TestRefusalTexts:
         del common_rules[CommonRuleRefusalKind.OUT_OF_REACH]
 
         with pytest.raises(MissingCommonRuleRefusalTextException):
-            RefusalTexts(common_rules=common_rules, world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+            RefusalTexts(common_rules=common_rules, world_state={}, hidden=HIDDEN, unlisted=UNLISTED, done=DONE)
 
-    @pytest.mark.parametrize("where", ["common_rules", "world_state", "hidden", "unlisted"])
+    @pytest.mark.parametrize("where", ["common_rules", "world_state", "hidden", "unlisted", "done"])
     def test_person_other_than_actor_raises(self, where: str) -> None:
         """どの文にも {actor} 以外の人 ({target} など) を書くと、作るときに UnknownPersonInRefusalTextException を投げる。"""
         bad = TextWithUnassignedPeople("{target}が遠い。")
@@ -101,17 +107,22 @@ class TestRefusalTexts:
         world_state = {RefusalCode("GAME_WORLD.WHEREABOUTS.SECTION_FULL"): TextWithUnassignedPeople("満員だ。")}
         hidden = HIDDEN
         unlisted = UNLISTED
+        done = DONE
         if where == "common_rules":
             common_rules[CommonRuleRefusalKind.NOT_TOGETHER] = bad
         elif where == "world_state":
             world_state[RefusalCode("GAME_WORLD.WHEREABOUTS.SECTION_FULL")] = bad
         elif where == "hidden":
             hidden = bad
-        else:
+        elif where == "unlisted":
             unlisted = bad
+        else:
+            done = bad
 
         with pytest.raises(UnknownPersonInRefusalTextException):
-            RefusalTexts(common_rules=common_rules, world_state=world_state, hidden=hidden, unlisted=unlisted)
+            RefusalTexts(
+                common_rules=common_rules, world_state=world_state, hidden=hidden, unlisted=unlisted, done=done
+            )
 
 
 class TestWorldStateText:
@@ -124,6 +135,7 @@ class TestWorldStateText:
             world_state={SECTION_FULL: TextWithUnassignedPeople("{actor}の乗る場所が無い。")},
             hidden=HIDDEN,
             unlisted=UNLISTED,
+            done=DONE,
         )
 
         assert texts.world_state_text(SECTION_FULL, ALICE) == TextAboutPeople(
@@ -132,7 +144,7 @@ class TestWorldStateText:
 
     def test_unlisted_code_returns_unlisted_text(self) -> None:
         """表に無い RefusalCode は、hidden ではなく unlisted の文で返る。"""
-        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED, done=DONE)
 
         assert texts.world_state_text(SECTION_FULL, ALICE) == TextAboutPeople(UNLISTED, {})
 
@@ -143,19 +155,19 @@ class TestPreconditionText:
     def test_failure_reason_with_text_returns_authored_text(self) -> None:
         """文のある FailureReason は、作者の文がそのまま返る。"""
         authored = TextAboutPeople(TextWithUnassignedPeople("{actor}は鍵を持っていない。"), {"actor": ALICE})
-        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED, done=DONE)
 
         assert texts.precondition_text(FailureReason(ConditionPath.root(), authored), ALICE) == authored
 
     def test_hidden_failure_returns_hidden_text(self) -> None:
         """HiddenFailure は、hidden の文で返る。"""
-        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED, done=DONE)
 
         assert texts.precondition_text(HiddenFailure(ConditionPath.root()), ALICE) == TextAboutPeople(HIDDEN, {})
 
     def test_failure_reason_without_text_returns_hidden_text(self) -> None:
         """文の無い FailureReason (NoText) は、hidden の文で返る。"""
-        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED)
+        texts = RefusalTexts(common_rules=_common_rules(), world_state={}, hidden=HIDDEN, unlisted=UNLISTED, done=DONE)
 
         assert texts.precondition_text(FailureReason(ConditionPath.root(), NoText()), ALICE) == TextAboutPeople(
             HIDDEN, {}
@@ -174,3 +186,21 @@ class TestRefusalCode:
         """空や空白だけの文字列から作ると BlankRefusalCodeException を投げる。"""
         with pytest.raises(BlankRefusalCodeException):
             RefusalCode(value)
+
+
+class TestDoneText:
+    """RefusalTexts.done_text が、行為が通ったときの本人向けの短い文を、行った人を当てて返すことを保証する。"""
+
+    def test_done_text_assigns_the_actor(self) -> None:
+        """{actor} を書いた done の文は、行った人の PersonId を当てた TextAboutPeople で返る。"""
+        texts = RefusalTexts(
+            common_rules=_common_rules(),
+            world_state={},
+            hidden=HIDDEN,
+            unlisted=UNLISTED,
+            done=TextWithUnassignedPeople("{actor}はやり遂げた。"),
+        )
+
+        assert texts.done_text(ALICE) == TextAboutPeople(
+            TextWithUnassignedPeople("{actor}はやり遂げた。"), {"actor": ALICE}
+        )
