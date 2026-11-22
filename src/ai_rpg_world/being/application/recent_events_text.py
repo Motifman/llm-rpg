@@ -27,7 +27,6 @@ def _line(time: ObservedTime, body: str, inner_thought: str | None = None) -> st
 
 
 def _attempt_line(attempt: Attempt, time: ObservedTime, result_body: str) -> str:
-    # 古い run と同じく、書けなかったメモの操作は結果の文の末尾に足す (D2240)。
     return _line(time, result_body + feedback_text(attempt.memo_rejections), attempt.move.inner_thought)
 
 

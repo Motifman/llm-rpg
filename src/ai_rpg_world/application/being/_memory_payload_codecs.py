@@ -322,7 +322,7 @@ class _ExperienceToDict:
         }
 
     def attempted_without_result(self, attempt: Attempt) -> dict[str, Any]:
-        return {"kind": "attempt", **_move_and_turn_to_dict(attempt), "result": None}
+        return {"kind": "attempt", **_attempt_fields_to_dict(attempt), "result": None}
 
     def lapsed(self, lapse: Lapse) -> dict[str, Any]:
         return {
@@ -387,7 +387,7 @@ def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
     return {
         "experiences": [experience.show_to(to_dict) for experience in memory.experiences],
         "recent_from": memory.recent_from,
-        "awaiting": None if memory.awaiting is None else _move_and_turn_to_dict(memory.awaiting),
+        "awaiting": None if memory.awaiting is None else _attempt_fields_to_dict(memory.awaiting),
         "awaited_backstory": None
         if memory.awaited_backstory is None
         else {"until_turn": memory.awaited_backstory.until_turn, "since_turn": memory.awaited_backstory.since_turn},
@@ -398,7 +398,7 @@ def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
     }
 
 
-def _move_and_turn_to_dict(attempt: Attempt) -> dict[str, Any]:
+def _attempt_fields_to_dict(attempt: Attempt) -> dict[str, Any]:
     return {
         "turn": attempt.turn,
         "move": _move_to_dict(attempt.move),

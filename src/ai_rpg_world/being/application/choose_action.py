@@ -218,7 +218,6 @@ class ChooseAction:
     def _write_memo(
         self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int
     ) -> tuple[str, ...]:
-        """書けなかった操作の理由を、配列の位置の順に返す。"""
         if being_tools.memo is None or being_tools.memo not in arguments:
             return ()
         episode_source_offered = being_tools.episode_index_shown
