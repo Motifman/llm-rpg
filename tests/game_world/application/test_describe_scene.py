@@ -17,8 +17,10 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.design_flaw.design_location import DesignLocation
+from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
+    Damage,
     DisplayName,
     ObjectId,
     PersonId,
@@ -72,7 +74,7 @@ def _scene_of_gen_at(
 
 
 def test_gen_in_the_office_sees_the_safe_the_ways_out_and_sayo(mine_village: WorldDesign) -> None:
-    """事務所にいるゲンの場面に、古い run と同じ行の形で、説明・雰囲気・時刻・時刻帯・接続先・金庫とその見た目・サヨが出る。サヨは人の穴で渡り、知らせは空。"""
+    """事務所にいるゲンの場面に、古い run と同じ行の形で、説明・雰囲気・時刻・時刻帯・接続先・金庫とその見た目・サヨ・ゲンの持ち物・ゲンの身体の状態が出る。サヨは人の穴で渡り、知らせは空。"""
     scene = _scene_of_gen_in_the_office(mine_village)
 
     assert scene == Scene(
@@ -97,6 +99,13 @@ def test_gen_in_the_office_sees_the_safe_the_ways_out_and_sayo(mine_village: Wor
                         '  - "事務机" — 埃をかぶった事務机。引き出しが半分開いている。',
                         "同じ場所にいるプレイヤー:",
                         '  - "{person_1}"',
+                        "所持アイテム:",
+                        '  - "カンテラ" — 油を足して灯す手提げのカンテラ。',
+                        '  - "カンテラの油" x3 — カンテラに足す油の小瓶。',
+                        "身体の状態:",
+                        "  HP: 良好（100/100）",
+                        "  空腹: 問題なし（0/100）",
+                        "  疲労: 問題なし（0/100）",
                     )
                 ),
                 people={"person_1": PersonInText(handle=3, appearance="綿入れを着込んだ若い娘", visible_name="サヨ")},
@@ -111,7 +120,10 @@ def test_being_fills_the_hole_with_the_name_it_sees(mine_village: WorldDesign) -
     assert surroundings is not None
     assert isinstance(surroundings.text, TextWithPeople)
 
-    assert text_naming_people(surroundings.text).endswith('同じ場所にいるプレイヤー:\n  - "サヨ"')
+    assert text_naming_people(surroundings.text).splitlines()[-9:-7] == [
+        "同じ場所にいるプレイヤー:",
+        '  - "サヨ"',
+    ]
 
 
 def test_gen_at_the_south_adit_mouth_sees_the_snow_and_the_night_like_the_old_run(mine_village: WorldDesign) -> None:
@@ -176,3 +188,54 @@ def test_closed_gate_hides_closing_it(mine_village: WorldDesign) -> None:
     lines = _object_lines(_scene_of_gen_at(mine_village, SpotId("north_tunnel")))
 
     assert not any("水門を閉じる" in line for line in lines)
+
+
+def _body_and_belongings(scene: Scene) -> list[str]:
+    assert scene.here is not None and isinstance(scene.here.text, TextWithPeople)
+    lines = scene.here.text.template.splitlines()
+    return lines[lines.index("所持アイテム:") :]
+
+
+def test_held_lantern_is_marked_and_hurt_gen_sees_the_hit_points_tier(mine_village: WorldDesign) -> None:
+    """カンテラを手に持ち、HP が 30/100 まで減ったゲンの場面は、カンテラに「(手に持っている)」を付け、HP を「危険（30/100）」と書く。"""
+
+    def hold_lantern_and_get_hurt(session: WorldSession) -> None:
+        inventory = session.aggregates().inventory(_GEN)
+        lantern = next(
+            item
+            for item in inventory.items()
+            if mine_village.nouns.item_spec_of(session.facts().item(item).spec_id).name == DisplayName("カンテラ")
+        )
+        spec = mine_village.nouns.item_spec_of(session.facts().item(lantern).spec_id)
+        inventory.hold(lantern, spec.hands_needed)
+        session.aggregates().vitals(_GEN).take_damage(Damage(70), WorldTick(0), WorldHappening())
+
+    scene = _scene_of_gen_at(mine_village, _OFFICE, hold_lantern_and_get_hurt)
+
+    assert _body_and_belongings(scene) == [
+        "所持アイテム:",
+        '  - "カンテラ" — 油を足して灯す手提げのカンテラ。 (手に持っている)',
+        '  - "カンテラの油" x3 — カンテラに足す油の小瓶。',
+        "身体の状態:",
+        "  HP: 危険（30/100）",
+        "  空腹: 問題なし（0/100）",
+        "  疲労: 問題なし（0/100）",
+    ]
+
+
+def test_held_one_of_the_same_kind_is_listed_apart_from_the_packed_ones(mine_village: WorldDesign) -> None:
+    """3 本の油のうち 1 本を手に持つと、手の 1 本は「(手に持っている)」の行、荷の 2 本は「x2」の行に分かれる。"""
+
+    def hold_one_oil(session: WorldSession) -> None:
+        inventory = session.aggregates().inventory(_GEN)
+        oil = next(
+            item
+            for item in inventory.items()
+            if mine_village.nouns.item_spec_of(session.facts().item(item).spec_id).name == DisplayName("カンテラの油")
+        )
+        inventory.hold(oil, mine_village.nouns.item_spec_of(session.facts().item(oil).spec_id).hands_needed)
+
+    lines = _body_and_belongings(_scene_of_gen_at(mine_village, _OFFICE, hold_one_oil))
+
+    assert '  - "カンテラの油" — カンテラに足す油の小瓶。 (手に持っている)' in lines
+    assert '  - "カンテラの油" x2 — カンテラに足す油の小瓶。' in lines

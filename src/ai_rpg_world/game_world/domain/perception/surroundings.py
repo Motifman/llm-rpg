@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.declaration.world_words import WorldWords
     from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
+    from ai_rpg_world.game_world.domain.perception.oneself import Oneself
     from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 
 
@@ -348,8 +349,11 @@ class VisibleSurroundings:
         clock: ClockWording,
         unavailable: Sequence[UnavailableObjectOperation],
         view: PeopleAsSeen,
+        oneself: Oneself,
     ) -> Scene:
-        described = self._described_with(texts, names, words, clock, _NotNowOnObjects(unavailable, view)).for_being()
+        described = self._described_with(
+            texts, names, words, clock, _NotNowOnObjects(unavailable, view), oneself
+        ).for_being()
         return Scene(here=Here(place=self.spot.name.text, heading=texts.scene.heading.text, text=described))
 
     def _described_with(
@@ -359,6 +363,7 @@ class VisibleSurroundings:
         words: WorldWords,
         clock: ClockWording,
         not_now: _NotNowOnObjects,
+        oneself: Oneself,
     ) -> TextWithAssignedPeople:
         # 名前は行動の選択肢の候補と同じものを使う。場面の文で見た名前を、そのまま候補から選べるようにするため (D2226)。
         wording = texts.scene
@@ -373,6 +378,7 @@ class VisibleSurroundings:
         lines += _listed(wording.ground_items, _counted(self.ground_items, names, wording.count_mark))
         holes: dict[str, PersonRef | Unidentified] = dict(not_now.holes)
         lines += self._people_lines(wording, names, holes)
+        lines += [_letters(line) for line in oneself.lines(wording)]
         return TextWithAssignedPeople("\n".join(lines), holes)
 
     def _people_lines(

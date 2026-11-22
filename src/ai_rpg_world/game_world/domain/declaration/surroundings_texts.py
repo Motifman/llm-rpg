@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from string import Formatter
 from typing import final
 
+from ai_rpg_world.game_world.domain.declaration.body_tiers import HitPointsTiers, NeedTiers
 from ai_rpg_world.game_world.domain.exception.surroundings_texts_exception import (
     BlankPeopleJoinerException,
     NoPeopleToListException,
@@ -52,6 +53,16 @@ SCENE_LINE_NAMES = {
     "carried": ("items",),
     "carrying_nothing": (),
     "carried_joiner": (),
+    "belongings": (),
+    "belonging": ("item", "count", "description", "held"),
+    "belonging_count": ("count",),
+    "belonging_description": ("description",),
+    "belonging_held": (),
+    "body": (),
+    "hit_points": ("tier", "current", "maximum"),
+    "hunger": ("tier", "amount", "limit"),
+    "fatigue": ("tier", "amount", "limit"),
+    "fatigue_felt": ("feel",),
 }
 
 
@@ -92,6 +103,18 @@ class SceneTexts:
     carried: str
     carrying_nothing: str
     carried_joiner: str
+    belongings: str
+    belonging: str
+    belonging_count: str
+    belonging_description: str
+    belonging_held: str
+    body: str
+    hit_points: str
+    hunger: str
+    fatigue: str
+    fatigue_felt: str
+    need_tiers: NeedTiers
+    hit_points_tiers: HitPointsTiers
     ground_items: DisplayName
     count_mark: DisplayName
     pitch_dark: DisplayName

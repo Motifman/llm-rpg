@@ -1245,3 +1245,16 @@ class TestWorldWords:
         text = _LIFT_LANDING + "world_words:\n  lighting: { dark: ' ' }\n"
 
         assert any("world_words" in str(flaw.location) for flaw in _flaws(tmp_path, text))
+
+
+def test_fatigue_level_reads_what_the_person_feels(tmp_path: Path) -> None:
+    """疲れの段階の 100 にだけ felt_as を書くと、その段階はその一言を持ち、書いていない 0 の段階は持たない。"""
+    text = _LIFT_LANDING + (
+        "rules:\n  fatigue:\n    levels:\n"
+        "      - { starts_at: 0, name: 元気 }\n"
+        "      - { starts_at: 100, name: 限界, felt_as: 体を使う行動ができない。 }\n"
+    )
+
+    levels = _load(tmp_path, text).design.world_rules.fatigue.levels
+
+    assert [level.felt_as for level in levels] == [None, DisplayName("体を使う行動ができない。")]

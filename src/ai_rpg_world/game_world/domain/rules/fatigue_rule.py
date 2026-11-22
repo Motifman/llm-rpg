@@ -19,6 +19,7 @@ class FatigueLevel:
     starts_at: FatigueAmount
     name: FatigueLevelName
     seen_as: DisplayName | None = None
+    felt_as: DisplayName | None = None
 
 
 @dataclass(frozen=True)
