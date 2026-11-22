@@ -37,13 +37,16 @@ from ai_rpg_world.game_world.domain.person.person_outcomes import (
     PersonOutcomesMemento,
 )
 from ai_rpg_world.game_world.domain.person.person_vitals import NotBusy, PersonVitals, PersonVitalsMemento
+from ai_rpg_world.game_world.domain.person.shown_body import LastShownBody, NothingShownYet, ShownBody
 from ai_rpg_world.game_world.domain.person.status_effect import StatusEffect, StatusEffectType
 from ai_rpg_world.game_world.domain.value_object import (
     Damage,
     DisplayName,
+    FatigueAmount,
     GroupId,
     GroupingId,
     HitPoints,
+    HungerAmount,
     OutcomeId,
     PersonId,
     WorldId,
@@ -161,6 +164,29 @@ class TestRoundTrip:
         restored = GAME_WORLD_CODECS.memento(GAME_WORLD_CODECS.stored(memento), PersonVitalsMemento)
 
         assert restored == memento
+
+    @pytest.mark.parametrize(
+        "last_shown",
+        [
+            NothingShownYet(),
+            ShownBody(hp=HitPoints(current=7, maximum=10), hunger=HungerAmount(3), fatigue=FatigueAmount(5)),
+        ],
+    )
+    def test_last_shown_body_survives_a_round_trip(self, last_shown: LastShownBody) -> None:
+        """まだ見せていない印も、最後に見せた HP・空腹・疲労も、読み戻すと同じ値になる。"""
+        memento = replace(_vitals(), last_shown=last_shown)
+
+        restored = GAME_WORLD_CODECS.memento(GAME_WORLD_CODECS.stored(memento), PersonVitalsMemento)
+
+        assert restored.last_shown == last_shown
+
+    def test_person_vitals_row_of_version_1_is_refused(self) -> None:
+        """身体の状態の行は版 2 で書き、最後に見せた身体を持たない版 1 の行は StoredMementoUnreadableException で断る。"""
+        stored = GAME_WORLD_CODECS.stored(_MEMENTOS["person_vitals"])
+
+        assert stored.version == 2
+        with pytest.raises(StoredMementoUnreadableException, match="version 1"):
+            GAME_WORLD_CODECS.memento(replace(stored, version=1), PersonVitalsMemento)
 
     def test_life_state_is_written_under_its_tag(self) -> None:
         """倒れた状態は、印 down の中に、倒れた tick と、印で包んだ原因を持つ。"""

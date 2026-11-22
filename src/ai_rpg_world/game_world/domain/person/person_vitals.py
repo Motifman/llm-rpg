@@ -28,6 +28,7 @@ from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     HungerLevelChangedEvent,
     NoPreviousAction,
     PersonBecameBusyEvent,
+    PersonBodyShownEvent,
     PersonDamagedEvent,
     PersonDiedEvent,
     PersonFellEvent,
@@ -37,6 +38,7 @@ from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     StatusEffectAddedEvent,
     StatusEffectExpiredEvent,
 )
+from ai_rpg_world.game_world.domain.person.shown_body import BodyChange, LastShownBody, NothingShownYet, ShownBody
 from ai_rpg_world.game_world.domain.person.status_effect import (
     NoPreviousStatusEffect,
     StatusEffect,
@@ -80,6 +82,7 @@ class PersonVitalsMemento:
     fatigue: FatigueAmount
     status_effects: frozenset[StatusEffect]
     busy_until: WorldTick | NotBusy
+    last_shown: LastShownBody
 
 
 class PersonVitals(AggregateRoot[PersonVitalsEvent]):
@@ -92,6 +95,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         fatigue: FatigueAmount,
         status_effects: frozenset[StatusEffect],
         busy_until: WorldTick | NotBusy,
+        last_shown: LastShownBody,
     ) -> None:
         super().__init__()
         has_hit_points = hp.current > 0
@@ -109,12 +113,13 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         self._fatigue = fatigue
         self._status_effects = effects
         self._busy_until = busy_until
+        self._last_shown = last_shown
 
     @classmethod
     def start(cls, person: PersonId, hp: HitPoints) -> PersonVitals:
         if hp.current == 0:
             raise PersonStartsFallenException(f"{person.value} cannot start with 0 hit points")
-        return cls(person, hp, Alive(), HungerAmount(0), FatigueAmount(0), frozenset(), NotBusy())
+        return cls(person, hp, Alive(), HungerAmount(0), FatigueAmount(0), frozenset(), NotBusy(), NothingShownYet())
 
     @classmethod
     def from_memento(cls, memento: PersonVitalsMemento, nouns: DeclaredNouns) -> PersonVitals:
@@ -129,6 +134,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
             memento.fatigue,
             memento.status_effects,
             memento.busy_until,
+            memento.last_shown,
         )
 
     def memento(self) -> PersonVitalsMemento:
@@ -140,6 +146,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
             fatigue=self._fatigue,
             status_effects=frozenset(self._status_effects.values()),
             busy_until=self._busy_until,
+            last_shown=self._last_shown,
         )
 
     @property
@@ -218,6 +225,13 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         if isinstance(self._busy_until, WorldTick) and until < self._busy_until:
             return
         self.start_action(until)
+
+    def note_shown(self) -> None:
+        self._last_shown = ShownBody(hp=self._hp, hunger=self._hunger, fatigue=self._fatigue)
+        self._add(PersonBodyShownEvent, shown=self._last_shown)
+
+    def change_since_shown(self) -> BodyChange:
+        return self._last_shown.change_to(self._hp, self._hunger, self._fatigue)
 
     def is_busy(self, now: WorldTick) -> bool:
         return isinstance(self._busy_until, WorldTick) and now < self._busy_until

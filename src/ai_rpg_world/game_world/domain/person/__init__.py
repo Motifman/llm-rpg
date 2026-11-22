@@ -33,6 +33,7 @@ from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     HungerLevelChangedEvent,
     NoPreviousAction,
     PersonBecameBusyEvent,
+    PersonBodyShownEvent,
     PersonDamagedEvent,
     PersonDiedEvent,
     PersonFellEvent,
@@ -42,6 +43,7 @@ from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     StatusEffectAddedEvent,
     StatusEffectExpiredEvent,
 )
+from ai_rpg_world.game_world.domain.person.shown_body import BodyChange, NothingShownYet, ShownBody
 from ai_rpg_world.game_world.domain.person.status_effect import (
     NoPreviousStatusEffect,
     StatusEffect,
@@ -63,11 +65,15 @@ __all__ = [
     "LifeState",
     "NoPreviousAction",
     "NoPreviousStatusEffect",
+    "BodyChange",
     "NotBusy",
+    "NothingShownYet",
+    "ShownBody",
     "NotInAnyGroup",
     "Outcome",
     "OutcomeOfPerson",
     "PersonBecameBusyEvent",
+    "PersonBodyShownEvent",
     "PersonDamagedEvent",
     "PersonDiedEvent",
     "PersonFellEvent",

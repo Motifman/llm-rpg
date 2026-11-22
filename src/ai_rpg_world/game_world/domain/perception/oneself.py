@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.game_world.domain.person.shown_body import BodyChange
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
@@ -38,6 +39,7 @@ class Oneself:
     fatigue: FatigueAmount
     fatigue_limit: FatigueAmount
     fatigue_felt: DisplayName | None
+    change: BodyChange
 
     @classmethod
     def of(cls, person: PersonId, facts: WorldFacts) -> Oneself:
@@ -68,6 +70,7 @@ class Oneself:
             fatigue=vitals.fatigue(),
             fatigue_limit=rules.fatigue.limit,
             fatigue_felt=rules.fatigue.level_of(vitals.fatigue()).felt_as,
+            change=vitals.change_since_shown(),
         )
 
     def lines(self, wording: SceneTexts) -> list[str]:
@@ -94,17 +97,28 @@ class Oneself:
         return [
             wording.body,
             wording.hit_points.format(
-                tier=wording.hit_points_tiers.name_of(self.hp).text, current=self.hp.current, maximum=self.hp.maximum
+                tier=wording.hit_points_tiers.name_of(self.hp).text,
+                current=self.hp.current,
+                maximum=self.hp.maximum,
+                change=_change(self.change.hp, wording),
             ),
             wording.hunger.format(
                 tier=needs.name_of(self.hunger.value, self.hunger_limit.value).text,
                 amount=self.hunger.value,
                 limit=self.hunger_limit.value,
+                change=_change(self.change.hunger, wording),
             ),
             wording.fatigue.format(
                 tier=needs.name_of(self.fatigue.value, self.fatigue_limit.value).text,
                 amount=self.fatigue.value,
                 limit=self.fatigue_limit.value,
+                change=_change(self.change.fatigue, wording),
             ),
             *([] if self.fatigue_felt is None else [wording.fatigue_felt.format(feel=self.fatigue_felt.text)]),
         ]
+
+
+def _change(amount: int, wording: SceneTexts) -> str:
+    if amount == 0:
+        return ""
+    return wording.body_change.format(change=f"{amount:+d}")

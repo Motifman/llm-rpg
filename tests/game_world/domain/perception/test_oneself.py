@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ai_rpg_world.game_world.domain.perception.oneself import Oneself
+from ai_rpg_world.game_world.domain.person.shown_body import BodyChange
 from ai_rpg_world.game_world.domain.value_object import DisplayName, FatigueAmount, HitPoints, HungerAmount
 from tests.game_world.support.world_design_for_tests import scene_texts
 
@@ -17,6 +18,7 @@ def test_hunger_and_fatigue_each_use_their_own_amount_and_limit() -> None:
         fatigue=FatigueAmount(70),
         fatigue_limit=FatigueAmount(100),
         fatigue_felt=None,
+        change=BodyChange(hp=0, hunger=0, fatigue=0),
     )
 
     assert oneself.lines(scene_texts())[-2:] == ["  空腹: 少し（45/200）", "  疲労: 高い（70/100）"]
@@ -31,6 +33,7 @@ def _tired(felt: DisplayName | None) -> Oneself:
         fatigue=FatigueAmount(100),
         fatigue_limit=FatigueAmount(100),
         fatigue_felt=felt,
+        change=BodyChange(hp=0, hunger=0, fatigue=0),
     )
 
 
@@ -52,3 +55,23 @@ def test_carrying_nothing_leaves_out_the_belongings_section() -> None:
 
     assert "所持アイテム:" not in lines
     assert lines[0] == "身体の状態:"
+
+
+def test_change_since_shown_is_written_with_its_sign_and_zero_is_left_out() -> None:
+    """前回から HP +5・空腹 0・疲労 -2 のとき、HP は「、前回 +5」、疲労は「、前回 -2」を添え、変わらない空腹には何も添えない。"""
+    oneself = Oneself(
+        belongings=(),
+        hp=HitPoints(current=60, maximum=100),
+        hunger=HungerAmount(10),
+        hunger_limit=HungerAmount(100),
+        fatigue=FatigueAmount(30),
+        fatigue_limit=FatigueAmount(100),
+        fatigue_felt=None,
+        change=BodyChange(hp=5, hunger=0, fatigue=-2),
+    )
+
+    assert oneself.lines(scene_texts())[1:] == [
+        "  HP: 消耗（60/100、前回 +5）",
+        "  空腹: 問題なし（10/100）",
+        "  疲労: 少し（30/100、前回 -2）",
+    ]

@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
 from ai_rpg_world.game_world.domain.perception import DeadPerceiver, DepartedPerceiver, LivingPerceiver
 from ai_rpg_world.game_world.domain.person import (
     Alive,
+    BodyChange,
     Dead,
     Down,
     FatigueLevelChangedEvent,
@@ -26,7 +27,9 @@ from ai_rpg_world.game_world.domain.person import (
     NoPreviousAction,
     NoPreviousStatusEffect,
     NotBusy,
+    NothingShownYet,
     PersonBecameBusyEvent,
+    PersonBodyShownEvent,
     PersonDamagedEvent,
     PersonDiedEvent,
     PersonFellEvent,
@@ -34,6 +37,7 @@ from ai_rpg_world.game_world.domain.person import (
     PersonRevivedEvent,
     PersonVitals,
     PersonVitalsMemento,
+    ShownBody,
     Starvation,
     StatusEffect,
     StatusEffectAddedEvent,
@@ -786,6 +790,44 @@ class TestHungerAndFatigueReadings:
         assert vitals.fatigue() == FatigueAmount(2)
 
 
+class TestChangeSinceShown:
+    """PersonVitals が、最後に本人へ見せた HP・空腹・疲労を覚え、そこからの増減を返すことを保証する。"""
+
+    def test_nothing_shown_yet_has_no_change(self) -> None:
+        """まだ一度も見せていない人は、傷ついていても増減 0 を返す。"""
+        vitals = _vitals()
+        vitals.take_damage(Damage(3), WorldTick(0), WorldHappening())
+
+        assert vitals.change_since_shown() == BodyChange(hp=0, hunger=0, fatigue=0)
+
+    def test_change_is_taken_from_what_was_shown_last(self) -> None:
+        """見せたあとに 3 傷つき、疲れが 2 増え、空腹が 1 増えると、増減は HP -3・空腹 +1・疲労 +2 になる。"""
+        vitals = _vitals()
+        vitals.note_shown()
+
+        vitals.take_damage(Damage(3), WorldTick(0), WorldHappening())
+        vitals.exert(_fatigue())
+        vitals.pass_time(WorldTick(1), _death(), _hunger())
+
+        assert vitals.change_since_shown() == BodyChange(hp=-3, hunger=1, fatigue=2)
+
+    def test_showing_again_resets_the_change(self) -> None:
+        """傷ついたあとにもう一度見せると、増減は 0 に戻り、見せた値を持つ PersonBodyShownEvent がたまる。"""
+        vitals = _vitals()
+        vitals.note_shown()
+        vitals.take_damage(Damage(3), WorldTick(0), WorldHappening())
+        vitals.clear_events()
+
+        vitals.note_shown()
+
+        assert vitals.change_since_shown() == BodyChange(hp=0, hunger=0, fatigue=0)
+        (event,) = vitals.get_events()
+        assert isinstance(event, PersonBodyShownEvent)
+        assert event.shown == ShownBody(
+            hp=HitPoints(current=7, maximum=10), hunger=HungerAmount(0), fatigue=FatigueAmount(0)
+        )
+
+
 class TestOccupantInWorld:
     """PersonVitals.occupant_in_world が、体の生死と去った人が動く世界かで、世界の中で居場所を持つ主を答えることを保証する。"""
 
@@ -826,6 +868,7 @@ def _memento(
         fatigue=FatigueAmount(0),
         status_effects=status_effects,
         busy_until=NotBusy(),
+        last_shown=NothingShownYet(),
     )
 
 
@@ -932,6 +975,7 @@ class TestPersonVitalsMementoRefusals:
                 FatigueAmount(0),
                 poisons,
                 NotBusy(),
+                NothingShownYet(),
             )
 
     def test_same_status_effect_kind_twice_is_refused(self) -> None:

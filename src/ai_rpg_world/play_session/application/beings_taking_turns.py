@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.application.describe_action_result import (
     DescribeActionResultCommand,
 )
 from ai_rpg_world.game_world.application.describe_scene import DescribeScene, DescribeSceneCommand
+from ai_rpg_world.game_world.application.mark_body_as_shown import MarkBodyAsShown, MarkBodyAsShownCommand
 from ai_rpg_world.game_world.application.offer_action_choices import OfferActionChoices, OfferActionChoicesCommand
 from ai_rpg_world.game_world.application.take_chosen_action import TakeChosenAction, TakeChosenActionCommand
 from ai_rpg_world.game_world.application.tell_current_time import TellCurrentTime, TellCurrentTimeCommand
@@ -31,6 +32,7 @@ class BeingsTakingTurnsOneByOne(TurnTakers):
         being_tools: OfferedBeingTools,
         closing: Closing,
         describe_scene: DescribeScene,
+        mark_body_as_shown: MarkBodyAsShown,
         offer_choices: OfferActionChoices,
         tell_time: TellCurrentTime,
         choose_action: ChooseAction,
@@ -43,6 +45,7 @@ class BeingsTakingTurnsOneByOne(TurnTakers):
         self._being_tools = being_tools
         self._closing = closing
         self._describe_scene = describe_scene
+        self._mark_body_as_shown = mark_body_as_shown
         self._offer_choices = offer_choices
         self._tell_time = tell_time
         self._choose_action = choose_action
@@ -67,6 +70,8 @@ class BeingsTakingTurnsOneByOne(TurnTakers):
             choices=self._offer_choices(OfferActionChoicesCommand(person)),
             now=self._tell_time(TellCurrentTimeCommand()),
         )
+        # 「前回」は、この人に最後に渡した場面の値にする。LLM の呼び出しが落ちても場面は渡したので、選ぶ前に覚える
+        self._mark_body_as_shown(MarkBodyAsShownCommand(person))
         try:
             chosen = self._choose_action.execute(command)
         # LLM の呼び出しの失敗は provider ごとに型が違うので、型で絞らずに ChooseAction ごと囲み、呼び出しが落ちたターンとして数える
