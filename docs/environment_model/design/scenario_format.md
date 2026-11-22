@@ -280,7 +280,7 @@ happenings:
 1 人の登場人物に、性質の違う 3 つを分けて書く (D2222)。
 
 - 世界に渡す部分 (`appearance`、`spawn_spot` など)。読み込む側が `CharacterDeclaration` にする
-- この世界での立場 (`known_facts`) と本人の目的 (`objective`)。登場人物の直下に書く。読み込む側は世界の宣言に入れず、入るときの材料 `CharacterBriefing` にして `LoadedScenario.briefings` に返す。立場は案内 (`Orientation`) に「あなたが知っていること」の見出しで、目的は課された目的 (`EnvironmentEntry.imposed_goal`) で Being に渡す
+- この世界での立場 (`known_facts`) と本人の目的 (`objective`)。登場人物の直下に書く。読み込む側は世界の宣言に入れず、人ごとに入るときに渡す文 `CharacterBriefing` にして `LoadedScenario.briefings` に返す。立場は案内 (`Orientation`) に「あなたが知っていること」の見出しで、目的は課された目的 (`EnvironmentEntry.imposed_goal`) で Being に渡す
 - Being に渡す人柄 (`being:`)。鍵は人柄の型 (`Persona`) の欄の名前 (`name`、`first_person`、`speech`、`traits`、`values`、`fears`、`background`) と同じ。読み込む側は世界の宣言に入れず、`LoadedScenario.beings` に返す。世界をまたいで持ち越すものだけを書き、この世界でしか通じないこと (金庫の番号など) は `known_facts` に書く
 
 `knows_at_start` は最初から知っている人、`known_facts` は最初から知っている事柄。全員に同じ導入と前提は `introduction` だけに書き、人ごとには書かない。
@@ -325,4 +325,4 @@ characters:
 
 1. 人柄 (`being:`) は `Persona` の欄ごとに書く。この世界での立場 (`known_facts`) と本人の目的 (`objective`) は `being:` の外、登場人物の直下に書く
 2. `known_facts` と `objective` は世界の宣言に入れず、`LoadedScenario.briefings` に返す
-3. `introduction.objective` を `introduction.premises` に改める。中身は目的ではなく、全員に同じ世界の前提
+3. `introduction.objective` を `introduction.premises` に改める。中身は目的ではなく、全員に同じ世界の前提。目的の箇条は書かず、各人の `objective` に書く

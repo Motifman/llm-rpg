@@ -181,7 +181,7 @@ class GroupingDeclaration:
 @final
 @dataclass(frozen=True)
 class CharacterDeclaration:
-    person_id: PersonId                      # 人柄 (Persona)、この世界での立場、本人の目的は持たない。Being が自分の人柄を持って入る (D1928-3)。立場と目的は、読み込む側が入るときの材料 (CharacterBriefing) にして世界の宣言の外に返す (D2222)
+    person_id: PersonId                      # 人柄 (Persona)、この世界での立場、本人の目的は持たない。Being が自分の人柄を持って入る (D1928-3)。立場と目的は、読み込む側が人ごとに入るときに渡す文 (CharacterBriefing) にして世界の宣言の外に返す (D2222)
     appearance: DescriptionText
     spawn_spot: SpotId
     initial_items: tuple[ItemSpecId, ...]    # 同じ品物を 2 回書けば 2 つ持つ
@@ -491,10 +491,10 @@ class DayNightDeclaration:
 
     def time_of_day_at(self, now: WorldTick) -> TimeOfDay: ...   # (starts_at + now) を ticks_per_day で割った余り
     def phase_at(self, time_of_day: TimeOfDay) -> DayPhaseDeclaration: ...
-    def clock_reading_at(self, now: WorldTick) -> ClockReading: ...   # 1 日 = 24 時間として割り当てる。世界が始まった日が 1 日目 (D2222)
+    def day_and_clock_time_at(self, now: WorldTick) -> DayAndClockTime: ...   # 1 日 = 24 時間として割り当て、分は切り捨てる。世界が始まった日が 1 日目。NoDayNight では NotDeclaredInThisWorldException (D2222)
 
 TimeOfDay(tick_of_day: int)                 # 1 日の中の tick の位置。ticks_per_day 未満
-ClockReading(day: int, hour: int, minute: int)   # 何日目と時:分。day は 1 から
+DayAndClockTime(day: int, hour: int, minute: int)   # 何日目と時:分。day は 1 から
 
 @final
 @dataclass(frozen=True)
