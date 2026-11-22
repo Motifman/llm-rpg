@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.contract import PersonInText, TextWithPeople, UnidentifiedPerson
 from ai_rpg_world.game_world.domain.exception.people_exception import (
     MalformedTemplateException,
     PlaceholdersAndPeopleMismatchException,
@@ -98,3 +99,35 @@ class TestTextWithAssignedPeopleMalformedTemplate:
         """位置のプレースホルダー、変換、書式指定、属性や添字、閉じていない括弧を含む文は MalformedTemplateException を投げる。プレースホルダーは人だけで、人の中身を文が読みに行かないため。"""
         with pytest.raises(MalformedTemplateException):
             TextWithAssignedPeople(template=template, people={"actor": _ref(1)})
+
+
+class TestTextWithAssignedPeopleForBeing:
+    """TextWithAssignedPeople.for_being が、Being の契約の文の形に変えることを保証する。"""
+
+    def test_text_without_people_becomes_plain_letters(self) -> None:
+        """人のいない文は文字になり、{{ }} は括弧の文字に戻る。"""
+        text = TextWithAssignedPeople(template="{{札}}が掛かっている。", people={})
+
+        assert text.for_being() == "{札}が掛かっている。"
+
+    def test_text_with_people_keeps_the_placeholders_and_their_people(self) -> None:
+        """人のいる文は、穴を残したまま人の印を付けて渡る。名前の見えない人は名前を持たず、見分けられない人は印を持たない。"""
+        text = TextWithAssignedPeople(
+            template="{actor}が{target}を見た。", people={"actor": _ref(2), "target": Unidentified()}
+        )
+
+        assert text.for_being() == TextWithPeople(
+            template="{actor}が{target}を見た。",
+            people={
+                "actor": PersonInText(handle=2, appearance="旅装の女", visible_name=None),
+                "target": UnidentifiedPerson(),
+            },
+        )
+
+    def test_visible_name_goes_with_the_person(self) -> None:
+        """名前の見えている人は、見えている名前を持って渡る。"""
+        named = PersonRef(
+            handle=PersonHandle(1), appearance=DescriptionText("旅装の女"), visible_name=DisplayName("ミオ")
+        )
+
+        assert named.for_being() == PersonInText(handle=1, appearance="旅装の女", visible_name="ミオ")

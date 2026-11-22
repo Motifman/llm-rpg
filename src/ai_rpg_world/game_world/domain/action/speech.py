@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import CopresenceRequirement, WithPerson
-from ai_rpg_world.game_world.domain.action.offered_action import LISTENER, REACH, OfferedStep
+from ai_rpg_world.game_world.domain.action.offered_action import CONTENT, LISTENER, REACH, OfferedStep
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     ArgumentsNotChosenException,
     BlankSpeechContentException,
 )
+from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.perception import NoTarget, NotWhispered, Voice
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId
 
@@ -76,6 +79,12 @@ SpeechReach = Whisper | OrdinaryVoice | Shout
 @final
 @dataclass(frozen=True)
 class SpeechContentNotChosen:
+    def written_as(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> SpeechContent:
+        written = values.get(CONTENT.name)
+        if not isinstance(written, TextArgumentValue):
+            raise ArgumentsNotChosenException("the content of the speech was not written")
+        return SpeechContent(written.text)
+
     def chosen_by(self, speaker: PersonId) -> SpeechContent:
         raise ArgumentsNotChosenException(f"{speaker.value} has not chosen what to say")
 
@@ -88,6 +97,9 @@ class SpeechContent:
     def __post_init__(self) -> None:
         if not isinstance(self.text, str) or not self.text.strip():
             raise BlankSpeechContentException(f"SpeechContent must be non-blank, got {self.text!r}")
+
+    def written_as(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> SpeechContent:
+        return self
 
     def chosen_by(self, speaker: PersonId) -> SpeechContent:
         return self

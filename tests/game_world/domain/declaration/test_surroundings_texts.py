@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedP
 from ai_rpg_world.game_world.domain.people.person_handle import PersonHandle
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName
+from tests.game_world.support.world_design_for_tests import scene_texts
 
 
 def _seen(handle: int, name: str) -> PersonRef:
@@ -37,6 +38,7 @@ def _texts(
         joiner=joiner,
         waking=TextWithUnassignedPeople(waking),
         darkening=TextWithUnassignedPeople(darkening),
+        scene=scene_texts(),
     )
 
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import final
 
+from ai_rpg_world.being.contract import TextWithPeople
 from ai_rpg_world.game_world.domain.exception.people_exception import PlaceholdersAndPeopleMismatchException
 from ai_rpg_world.game_world.domain.people._person_placeholders import person_placeholders_in
 from ai_rpg_world.game_world.domain.people.person_ref import PersonRef, Unidentified
@@ -23,3 +24,10 @@ class TextWithAssignedPeople:
                 f"placeholders {sorted(placeholders)} and people {sorted(self.people)} differ in {self.template!r}"
             )
         object.__setattr__(self, "people", MappingProxyType(dict(self.people)))
+
+    def for_being(self) -> str | TextWithPeople:
+        if not self.people:
+            return self.template.format()
+        return TextWithPeople(
+            template=self.template, people={key: person.for_being() for key, person in self.people.items()}
+        )
