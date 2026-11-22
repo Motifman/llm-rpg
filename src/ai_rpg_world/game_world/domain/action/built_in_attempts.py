@@ -22,7 +22,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.declared_section_access import DeclaredSectionAccess
 from ai_rpg_world.game_world.domain.action.manner import Manner, Openly
-from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechReach
+from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechContentNotChosen, SpeechReach
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct, item_names
@@ -33,6 +33,7 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import (
+    ArgumentsNotChosenException,
     HandOverToSelfException,
     NothingToHandOverException,
 )
@@ -205,7 +206,7 @@ class SpeechAttempt(_BuiltInAttempt):
     _KIND = ActionKind.SPEAK
     actor: PersonId
     reach: SpeechReach
-    content: SpeechContent
+    content: SpeechContent | SpeechContentNotChosen
 
     def exertion(self) -> Exertion:
         return DoesNotUseBody()
@@ -214,6 +215,8 @@ class SpeechAttempt(_BuiltInAttempt):
         return self.reach.copresence_requirements()
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+        if isinstance(self.content, SpeechContentNotChosen):
+            raise ArgumentsNotChosenException(f"{self.actor.value} has not chosen what to say")
         return WitnessedAct(
             perception=design.built_in_action_perceptions.speech(self.reach),
             names={"speech": self.content},

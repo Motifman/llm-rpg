@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import final
 
 from ai_rpg_world.game_world.domain.action.trigger import Trigger
-from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.condition import AwaitsArguments, FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -82,6 +82,11 @@ class EachPersonIsOneOf:
     def requirements(self) -> Requirements:
         return replace(Requirements.nothing(), subjects=frozenset({SubjectKind.EACH_PERSON}))
 
+    def failure_reason_before_arguments(
+        self, facts: WorldFacts, trigger: Trigger
+    ) -> FailureReason | HiddenFailure | AwaitsArguments | None:
+        return self.failure_reason(facts, trigger)
+
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None
 
@@ -100,6 +105,11 @@ class FixedTruth:
 
     def requirements(self) -> Requirements:
         return self.needs
+
+    def failure_reason_before_arguments(
+        self, facts: WorldFacts, trigger: Trigger
+    ) -> FailureReason | HiddenFailure | AwaitsArguments | None:
+        return self.failure_reason(facts, trigger)
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import reduce
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.trigger import EachPersonOf
-from ai_rpg_world.game_world.domain.condition.condition import Condition, FailureReason, HiddenFailure, NoText
+from ai_rpg_world.game_world.domain.condition.condition import (
+    AwaitsArguments,
+    Condition,
+    FailureReason,
+    HiddenFailure,
+    NoText,
+)
 from ai_rpg_world.game_world.domain.condition.failure_texts import (
     explains,
     failure_of_all_children,
@@ -26,6 +33,36 @@ if TYPE_CHECKING:
 
 def _combined(*parts: Requirements) -> Requirements:
     return reduce(Requirements.combined_with, parts, Requirements.nothing())
+
+
+_Verdict = FailureReason | HiddenFailure | AwaitsArguments | None
+
+
+def _every_holds_before_arguments(
+    verdicts: Iterable[tuple[int, Trigger, _Verdict]], failure_text: TextWithUnassignedPeople | NoText
+) -> _Verdict:
+    awaits = False
+    for position, child_trigger, verdict in verdicts:
+        if isinstance(verdict, AwaitsArguments):
+            awaits = True
+        elif verdict is not None:
+            return failure_of_child(verdict, position, failure_text, child_trigger)
+    return AwaitsArguments() if awaits else None
+
+
+def _some_holds_before_arguments(
+    verdicts: Iterable[_Verdict], failure_text: TextWithUnassignedPeople | NoText, trigger: Trigger
+) -> _Verdict:
+    reasons: list[FailureReason | HiddenFailure] = []
+    awaits = False
+    for verdict in verdicts:
+        if verdict is None:
+            return None
+        if isinstance(verdict, AwaitsArguments):
+            awaits = True
+        else:
+            reasons.append(verdict)
+    return AwaitsArguments() if awaits else failure_of_all_children(reasons, failure_text, trigger)
 
 
 def _selected_in_world_order(people: PeopleSelection, facts: WorldFacts, trigger: Trigger) -> tuple[PersonId, ...]:
@@ -58,6 +95,15 @@ class AllOfCondition:
                 return failure_of_child(reason, position, self.failure_text, trigger)
         return None
 
+    def failure_reason_before_arguments(self, facts: WorldFacts, trigger: Trigger) -> _Verdict:
+        return _every_holds_before_arguments(
+            (
+                (position, trigger, child.failure_reason_before_arguments(facts, trigger))
+                for position, child in enumerate(self.children)
+            ),
+            self.failure_text,
+        )
+
 
 @final
 @dataclass(frozen=True)
@@ -85,6 +131,13 @@ class AnyOfCondition:
             reasons.append(reason)
         return failure_of_all_children(reasons, self.failure_text, trigger)
 
+    def failure_reason_before_arguments(self, facts: WorldFacts, trigger: Trigger) -> _Verdict:
+        return _some_holds_before_arguments(
+            (child.failure_reason_before_arguments(facts, trigger) for child in self.children),
+            self.failure_text,
+            trigger,
+        )
+
 
 @final
 @dataclass(frozen=True)
@@ -105,6 +158,14 @@ class NotCondition:
         if self.holds(facts, trigger):
             return None
         return own_failure(self.failure_text, trigger)
+
+    def failure_reason_before_arguments(self, facts: WorldFacts, trigger: Trigger) -> _Verdict:
+        verdict = self.child.failure_reason_before_arguments(facts, trigger)
+        if isinstance(verdict, AwaitsArguments):
+            return verdict
+        if verdict is None:
+            return own_failure(self.failure_text, trigger)
+        return None
 
 
 @final
@@ -139,6 +200,16 @@ class ForSomeoneCondition:
             reasons.append(reason)
         return failure_of_all_children(reasons, self.failure_text, trigger)
 
+    def failure_reason_before_arguments(self, facts: WorldFacts, trigger: Trigger) -> _Verdict:
+        return _some_holds_before_arguments(
+            (
+                self.condition.failure_reason_before_arguments(facts, EachPersonOf(trigger, person))
+                for person in _selected_in_world_order(self.people, facts, trigger)
+            ),
+            self.failure_text,
+            trigger,
+        )
+
 
 @final
 @dataclass(frozen=True)
@@ -167,3 +238,15 @@ class ForEveryoneCondition:
             if reason is not None:
                 return failure_of_child(reason, 0, self.failure_text, each_person)
         return None
+
+    def failure_reason_before_arguments(self, facts: WorldFacts, trigger: Trigger) -> _Verdict:
+        each_people = (
+            EachPersonOf(trigger, person) for person in _selected_in_world_order(self.people, facts, trigger)
+        )
+        return _every_holds_before_arguments(
+            (
+                (0, each_person, self.condition.failure_reason_before_arguments(facts, each_person))
+                for each_person in each_people
+            ),
+            self.failure_text,
+        )

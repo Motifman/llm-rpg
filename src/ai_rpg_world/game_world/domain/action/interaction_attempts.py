@@ -9,7 +9,11 @@ from typing import TYPE_CHECKING, final
 from typing_extensions import Self, assert_never
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
-from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, TextArgumentValue
+from ai_rpg_world.game_world.domain.action.action_arguments import (
+    ActionArguments,
+    ArgumentsNotChosen,
+    TextArgumentValue,
+)
 from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActorRequirement,
     CopresenceRequirement,
@@ -23,13 +27,14 @@ from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredI
 from ai_rpg_world.game_world.domain.action.manner import Manner
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
-from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.condition import AwaitsArguments, FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     ArgumentsDoNotMatchDeclarationException,
+    ArgumentsNotChosenException,
     UnseenTargetNotAllowedException,
 )
 from ai_rpg_world.game_world.domain.exception.perception_exception import PerceivedItemSpecNotGivenException
@@ -69,7 +74,7 @@ class SomeoneInTheDark:
 class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     actor: PersonId
     interaction: DeclaredInteraction
-    arguments: ActionArguments
+    arguments: ActionArguments | ArgumentsNotChosen
     manner: Manner
 
     @abstractmethod
@@ -80,17 +85,19 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
 
     def __post_init__(self) -> None:
         self.manner.require_allowed_by(self.interaction)
-        self._require_declared_arguments()
+        if isinstance(self.arguments, ArgumentsNotChosen):
+            return
+        self._require_declared_arguments(self.arguments)
         object.__setattr__(self, "arguments", MappingProxyType(dict(self.arguments)))
 
-    def _require_declared_arguments(self) -> None:
+    def _require_declared_arguments(self, arguments: ActionArguments) -> None:
         declared = {declaration.name: declaration for declaration in self.interaction.arguments}
-        if declared.keys() != self.arguments.keys() or not all(
-            declared[name].accepts(value) for name, value in self.arguments.items()
+        if declared.keys() != arguments.keys() or not all(
+            declared[name].accepts(value) for name, value in arguments.items()
         ):
             raise ArgumentsDoNotMatchDeclarationException(
                 f"{self.interaction.interaction_id.value} declares"
-                f" {sorted(name.value for name in declared)} but got {sorted(name.value for name in self.arguments)}"
+                f" {sorted(name.value for name in declared)} but got {sorted(name.value for name in arguments)}"
             )
 
     def exertion(self) -> Exertion:
@@ -106,6 +113,8 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
         return stage.allows_interaction(self.interaction.interaction_id)
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
+        if isinstance(self.arguments, ArgumentsNotChosen):
+            return ()
         return tuple(value for value in self.arguments.values() if isinstance(value, ItemInstanceId))
 
     def done_as(self) -> frozenset[ActionKind | InteractionId]:
@@ -123,7 +132,7 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
         return self.actor
 
     def argument(self, name: ArgumentName) -> TextArgumentValue | ItemInstanceId:
-        if name in self.arguments:
+        if not isinstance(self.arguments, ArgumentsNotChosen) and name in self.arguments:
             return self.arguments[name]
         return super().argument(name)
 
@@ -151,9 +160,18 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
         return self
 
     def unmet_precondition(self, design: WorldDesign, facts: WorldFacts) -> FailureReason | HiddenFailure | None:
-        return self._declared_now(design, facts).precondition.failure_reason(facts, self)
+        precondition = self._declared_now(design, facts).precondition
+        if not isinstance(self.arguments, ArgumentsNotChosen):
+            return precondition.failure_reason(facts, self)
+        # 値しだいで決まる前提は、値を選べば満たせる見込みがあるので、できる側に倒す。
+        verdict = precondition.failure_reason_before_arguments(facts, self)
+        return None if isinstance(verdict, AwaitsArguments) else verdict
 
     def take_effect(self, design: WorldDesign, facts: WorldFacts, world: WorldAggregates) -> Ticks:
+        if isinstance(self.arguments, ArgumentsNotChosen):
+            raise ArgumentsNotChosenException(
+                f"{self.actor.value} has not chosen the arguments of {self.interaction.interaction_id.value}"
+            )
         declared = self._declared_now(design, facts)
         declared.effect.apply(facts, world, self)
         return facts.rules().duration_of(self.kind(), declared.duration)
@@ -168,7 +186,7 @@ class ObjectInteractionAttempt(_InteractionAttempt):
     actor: PersonId
     obj: ObjectDeclaration
     interaction: DeclaredInteraction
-    arguments: ActionArguments
+    arguments: ActionArguments | ArgumentsNotChosen
     manner: Manner
 
     def kind(self) -> ActionKind:
@@ -190,7 +208,7 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
     actor: PersonId
     item: ItemInstanceId
     interaction: DeclaredInteraction
-    arguments: ActionArguments
+    arguments: ActionArguments | ArgumentsNotChosen
     manner: Manner
 
     def kind(self) -> ActionKind:
@@ -220,7 +238,7 @@ class PersonInteractionAttempt(_InteractionAttempt):
     actor: PersonId
     target: PersonId | SomeoneInTheDark
     interaction: DeclaredInteraction
-    arguments: ActionArguments
+    arguments: ActionArguments | ArgumentsNotChosen
     manner: Manner
 
     def __post_init__(self) -> None:

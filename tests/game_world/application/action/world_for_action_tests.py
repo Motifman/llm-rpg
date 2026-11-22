@@ -18,7 +18,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     TravelAttempt,
 )
 from ai_rpg_world.game_world.domain.action.trigger import Trigger
-from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.condition import AwaitsArguments, FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -63,6 +63,11 @@ class GateIsShut:
 
     def requirements(self) -> Requirements:
         return Requirements.nothing()
+
+    def failure_reason_before_arguments(
+        self, facts: WorldFacts, trigger: Trigger
+    ) -> FailureReason | HiddenFailure | AwaitsArguments | None:
+        return self.failure_reason(facts, trigger)
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return FailureReason(ConditionPath.root(), TextAboutPeople(TextWithUnassignedPeople(GATE_CLOSED_TEXT), {}))
