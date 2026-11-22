@@ -9,6 +9,7 @@ from ai_rpg_world.being.application.choose_action import (
     ChooseAction,
     ChooseActionCommand,
     ToolCallReply,
+    TurnSpentRecalling,
 )
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
@@ -32,9 +33,12 @@ from ai_rpg_world.being.contract import (
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, EpisodeRepository
+from ai_rpg_world.being.domain.memo_book import MemoBookRepository, MemoKind
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
+    MemoryOperationOutcome,
     ObservedOutcome,
     ShortTermMemory,
     ShortTermMemoryRepository,
@@ -48,10 +52,14 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
     InMemoryShortTermMemoryRepository,
 )
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
+from tests.event_handoff_helpers import discard_events
 
 GEN = BeingId("being_gen")
 SAYO = PersonInText(handle=2, appearance="綿入れを着込んだ若い娘", visible_name="サヨ")
 NOW = ObservedTime(display="1日目 9:00")
+WITH_MEMORY = OfferedBeingTools(
+    inner_thought="inner_thought", memo="memo", episode_recall="episode_recall", episode_index_shown=True
+)
 
 
 class _Beings:
@@ -104,11 +112,11 @@ def _choices() -> ActionChoices:
     )
 
 
-def _command() -> ChooseActionCommand:
+def _command(being_tools: OfferedBeingTools) -> ChooseActionCommand:
     return ChooseActionCommand(
         being_id=GEN,
         orientation=Orientation([Description(heading="ペルソナ", text="あなたはゲン。")]),
-        being_tools=OfferedBeingTools(inner_thought="inner_thought"),
+        being_tools=being_tools,
         imposed_goal="金庫の中を確かめる",
         scene=Scene([Description(heading="現在地と周囲", text="事務所")]),
         closing=Closing(instruction="行動を 1 つ選んでください。"),
@@ -133,16 +141,21 @@ def _choose(
     *replies: ActionChoosingReply,
     memories: ShortTermMemoryRepository | None = None,
     clock: InMemoryMemoryTurnClock | None = None,
-) -> tuple[ActionChosen | ActionNotChosen, ScriptedActionChoosing]:
+    being_tools: OfferedBeingTools = OfferedBeingTools(inner_thought="inner_thought"),
+    episodes: EpisodeRepository | None = None,
+    memo_books: MemoBookRepository | None = None,
+) -> tuple[ActionChosen | ActionNotChosen | TurnSpentRecalling, ScriptedActionChoosing]:
     short_term_memories = memories or InMemoryShortTermMemoryRepository()
     clock = clock or InMemoryMemoryTurnClock()
+    episodes = episodes or InMemoryEpisodeRepository(handoff=discard_events)
+    memo_books = memo_books or InMemoryMemoBookRepository(handoff=discard_events)
     completion = ScriptedActionChoosing(replies)
     working_memory = CurrentWorkingMemory(
         beings=_Beings(),
         short_term_memories=short_term_memories,
         acquaintances=InMemoryAcquaintanceRepository(),
-        episodes=InMemoryEpisodeRepository(),
-        memo_books=InMemoryMemoBookRepository(),
+        episodes=episodes,
+        memo_books=memo_books,
         episode_index_limit=5,
     )
     choose = ChooseAction(
@@ -150,8 +163,26 @@ def _choose(
         completion=completion,
         short_term_memories=short_term_memories,
         turn_clock=clock,
+        beings=_Beings(),
+        memo_books=memo_books,
+        episodes=episodes,
+        recall_limit=2,
     )
-    return choose.execute(_command()), completion
+    return choose.execute(_command(being_tools)), completion
+
+
+def _episodes_with_the_safe_story() -> tuple[EpisodeRepository, str]:
+    episodes = InMemoryEpisodeRepository(handoff=discard_events)
+    episode = Episode.write(
+        being_id=GEN,
+        episode_id="3f2a7b00-0000-4000-8000-00000000abcd",
+        environment_name="廃坑の山村",
+        written_turn=1,
+        index=EpisodeIndex(summary="親方が金庫の番号を口にした", recall_when="金庫の話が出たとき"),
+        body="親方は酔って、金庫は 1907 で開くと言った。",
+    )
+    episodes.add(episode)
+    return episodes, episode.handle
 
 
 class TestChooseAction:
@@ -284,6 +315,130 @@ class TestChooseAction:
             attempt.result.observation.body
             == "'gather' というツールは無い。いま使えるツール: [interact, speak, pickup_item]"
         )
+
+
+class TestWritingMemoWithTheMove:
+    """ChooseAction が、行動と一緒に書かれたメモを、行動を選んだその場でメモ帳に書くことを保証する。"""
+
+    def test_memo_written_with_the_move_goes_into_the_memo_book(self) -> None:
+        """「行く」に添えたやることは、今いる環境の名前でメモ帳に入り、世界に渡す行動には残らない。"""
+        memo_books = InMemoryMemoBookRepository(handoff=discard_events)
+        todo = {"do": "add", "kind": "todo", "text": "事務所で鍵を取る"}
+
+        outcome, _ = _choose(
+            _reply("speak", {"reach": "ささやく", "to": "サヨ", "content": "鍵は?", "memo": [todo]}),
+            being_tools=WITH_MEMORY,
+            memo_books=memo_books,
+        )
+
+        [memo] = memo_books.get(GEN).memos
+        assert (memo.kind, memo.text, memo.environment_name) == (MemoKind.TODO, "事務所で鍵を取る", "廃坑の山村")
+        assert isinstance(outcome, ActionChosen) and "memo" not in outcome.move.arguments
+
+    def test_memo_is_left_alone_when_the_memo_argument_is_not_offered(self) -> None:
+        """メモの引数を出していなければ、memo と書かれていてもメモ帳には書かない。"""
+        memo_books = InMemoryMemoBookRepository(handoff=discard_events)
+
+        _choose(
+            _reply("interact", {"target": "金庫", "memo": [{"do": "add", "kind": "todo", "text": "開ける"}]}),
+            memo_books=memo_books,
+        )
+
+        assert memo_books.get(GEN).memos == ()
+
+    def test_memo_is_not_written_for_a_tool_that_was_not_offered(self) -> None:
+        """出していないツールの呼び出しに添えたメモは書かない。"""
+        memo_books = InMemoryMemoBookRepository(handoff=discard_events)
+
+        _choose(
+            _reply("pickup", {"memo": [{"do": "add", "kind": "todo", "text": "拾う"}]}),
+            being_tools=WITH_MEMORY,
+            memo_books=memo_books,
+        )
+
+        assert memo_books.get(GEN).memos == ()
+
+
+class TestRecallingEpisodes:
+    """ChooseAction が、思い出すツールを選ばれたら世界に行為を渡さず、思い出した本文を自分の 1 手の結果として残すことを保証する。"""
+
+    def test_recalling_spends_the_turn_and_keeps_the_body_as_the_result(self) -> None:
+        """金庫の話の呼び名を思い出すと、TurnSpentRecalling が返り、目次と本文が試みの結果として短期記憶に残る。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        memories = InMemoryShortTermMemoryRepository()
+
+        outcome, _ = _choose(
+            _reply("episode_recall", {"handles": [handle]}, call_id="call_r"),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+            memories=memories,
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(outcome, TurnSpentRecalling) and outcome.move.tool_name == "episode_recall"
+        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
+        assert (
+            attempt.result.body
+            == f"[{handle}] 親方が金庫の番号を口にした\n  親方は酔って、金庫は 1907 で開くと言った。"
+        )
+        assert (attempt.result.call_id, attempt.result.time) == ("call_r", NOW)
+
+    def test_recalling_counts_the_recall_at_the_new_turn(self) -> None:
+        """思い出すと、そのエピソードの思い出した回数が 1 増え、記憶のターンが 1 進む。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        clock = InMemoryMemoryTurnClock()
+
+        _choose(
+            _reply("episode_recall", {"handles": [handle]}), being_tools=WITH_MEMORY, episodes=episodes, clock=clock
+        )
+
+        recalled = episodes.find_by_handle(GEN, handle)
+        assert recalled is not None and (recalled.recall_count, recalled.last_recalled_turn) == (1, 1)
+        assert clock.current_turn(GEN) == 1
+
+    def test_unknown_handle_is_answered_as_not_remembered(self) -> None:
+        """目次に無い呼び名は、思い出せないと結果に残る。"""
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(_reply("episode_recall", {"handles": ["ep_ffffff"]}), being_tools=WITH_MEMORY, memories=memories)
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
+        assert attempt.result.body == "[ep_ffffff] そのような記憶は思い出せない。"
+
+    def test_more_handles_than_the_limit_recall_nothing(self) -> None:
+        """一度に思い出せる件数 (2) を超えて渡すと、どれも思い出さず、件数を減らすよう結果に残る。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(
+            _reply("episode_recall", {"handles": [handle, "ep_a", "ep_b"]}),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+            memories=memories,
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        recalled = episodes.find_by_handle(GEN, handle)
+        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
+        assert attempt.result.body == "一度に思い出せるのは 2 件までです。呼び名を減らしてください。"
+        assert recalled is not None and recalled.recall_count == 0
+
+    def test_handles_not_written_as_a_list_are_answered_with_how_to_write_them(self) -> None:
+        """呼び名を配列で渡さなければ、書き方を結果に残す。"""
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(_reply("episode_recall", {"handles": "ep_1"}), being_tools=WITH_MEMORY, memories=memories)
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
+        assert attempt.result.body.startswith("handles には、【思い出せる出来事】に並ぶ")
+
+    def test_recall_tool_not_offered_is_an_unknown_tool(self) -> None:
+        """思い出すツールを出していなければ、episode_recall は無いツールとして選べなかったを返す。"""
+        outcome, _ = _choose(_reply("episode_recall", {"handles": ["ep_1"]}))
+
+        assert isinstance(outcome, ActionNotChosen) and outcome.requested_tool == "episode_recall"
 
 
 class TestReceiveActionResult:

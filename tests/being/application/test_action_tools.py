@@ -23,6 +23,9 @@ SHADOW_A = PersonInText(handle=7, appearance="煤けた上着の男", visible_na
 SHADOW_B = PersonInText(handle=9, appearance="煤けた上着の男", visible_name=None)
 SAY_INLINE = ArgumentOutline(name="say_inline", label="この行動をしながら、同じ場所の人にかける一言 (任意)")
 TOOLS = OfferedBeingTools(inner_thought="inner_thought")
+WITH_MEMORY = OfferedBeingTools(
+    inner_thought="inner_thought", memo="memo", episode_recall="episode_recall", episode_index_shown=True
+)
 
 
 def _name_for(person: PersonPlaceholderValue) -> str:
@@ -93,7 +96,7 @@ def _gen_in_the_office() -> ActionChoices:
 
 
 def _tools(choices: ActionChoices, being_tools: OfferedBeingTools = TOOLS) -> ActionTools:
-    return ActionTools(choices, being_tools, _name_for)
+    return ActionTools(choices, being_tools, _name_for, recall_limit=3)
 
 
 def _table(choices: ActionChoices) -> list[str]:
@@ -145,13 +148,45 @@ class TestActionToolDefinitions:
 
         assert wait["function"]["parameters"] == {"type": "object", "properties": {}, "required": []}
 
-    @pytest.mark.parametrize("reserved", ["details", "inner_thought"])
+    @pytest.mark.parametrize("reserved", ["details", "inner_thought", "memo"])
     def test_outline_name_reserved_by_the_being_is_rejected(self, reserved: str) -> None:
-        """見取り図に Being の使う引数の名前 (details・独白) があると、ツールの引数が重なるので ValueError を投げる。"""
+        """見取り図に Being の使う引数の名前 (details・独白・メモ) があると、ツールの引数が重なるので ValueError を投げる。"""
         choice = ActionChoice(name="wait", label="待つ", outline=(ArgumentOutline(name=reserved, label="細かいこと"),))
 
         with pytest.raises(ValueError, match=reserved):
-            _tools(ActionChoices((choice,))).definitions()
+            _tools(ActionChoices((choice,)), WITH_MEMORY).definitions()
+
+    def test_memo_is_added_to_every_action_tool_but_not_required(self) -> None:
+        """メモの引数を環境が出していれば、どの行動のツールにも memo を付け、必須にはしない。"""
+        definitions = _tools(_gen_in_the_office(), WITH_MEMORY).definitions()
+
+        actions = [d["function"] for d in definitions if d["function"]["name"] != "episode_recall"]
+        assert all("memo" in a["parameters"]["properties"] for a in actions)
+        assert all("memo" not in a["parameters"]["required"] for a in actions)
+
+    @pytest.mark.parametrize(
+        ("index_shown", "sources"), [(True, ["self", "heard", "episode"]), (False, ["self", "heard"])]
+    )
+    def test_memo_offers_episode_as_a_source_only_when_the_index_is_shown(
+        self, index_shown: bool, sources: list[str]
+    ) -> None:
+        """メモの出どころに episode を出すのは、呼び名の載る【思い出せる出来事】を出しているときだけ。"""
+        being_tools = OfferedBeingTools(memo="memo", episode_index_shown=index_shown)
+
+        [wait] = _tools(ActionChoices((ActionChoice(name="wait", label="待つ"),)), being_tools).definitions()
+
+        assert wait["function"]["parameters"]["properties"]["memo"]["items"]["properties"]["source"]["enum"] == sources
+
+    def test_recall_tool_follows_the_action_tools_when_offered(self) -> None:
+        """思い出すツールを環境が出していれば、行動のツールの後ろに並べ、一度に思い出せる件数を上限にする。"""
+        definitions = _tools(_gen_in_the_office(), WITH_MEMORY).definitions()
+
+        assert [d["function"]["name"] for d in definitions] == ["travel_to", "speak", "interact", "episode_recall"]
+        assert definitions[-1]["function"]["parameters"]["properties"]["handles"]["maxItems"] == 3
+
+    def test_recall_tool_is_left_out_when_not_offered(self) -> None:
+        """思い出すツールを環境が出していなければ、行動のツールだけが並ぶ。"""
+        assert _tools(_gen_in_the_office()).tool_names() == ("travel_to", "speak", "interact")
 
 
 class TestCandidateTable:
@@ -273,6 +308,22 @@ class TestMoveFrom:
         )
 
         assert move is not None and move.arguments["to"] == "ミオ"
+
+    def test_memo_is_not_passed_to_the_world(self) -> None:
+        """行動と一緒に書いたメモは Being が書くので、世界に渡す AgentMove の引数には残さない。"""
+        move = _tools(_gen_in_the_office(), WITH_MEMORY).move_from(
+            call_id="c1",
+            tool_name="travel_to",
+            arguments={"destination": "井戸", "memo": [{"do": "add", "kind": "todo", "text": "水を汲む"}]},
+        )
+
+        assert move is not None and dict(move.arguments) == {"destination": "井戸"}
+
+    def test_recall_tool_gives_no_move(self) -> None:
+        """思い出すツールは世界の行為ではないので、AgentMove にしない。"""
+        tools = _tools(_gen_in_the_office(), WITH_MEMORY)
+
+        assert tools.move_from(call_id="c1", tool_name="episode_recall", arguments={"handles": ["ep_1"]}) is None
 
     def test_blank_inner_thought_is_dropped(self) -> None:
         """独白が空白だけなら、AgentMove の独白は None になり、引数にも残らない。"""
