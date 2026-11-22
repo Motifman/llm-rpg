@@ -138,6 +138,34 @@ class SearchSpot:
 class AttackMonster:
     def __call__(self, command: AttackMonsterCommand) -> None: ...
 
+# 店 (D2224)。どれも行為の共通の前提を通ってから集約を呼ぶ
+class OpenShop:
+    def __call__(self, command: OpenShopCommand) -> ActionReply: ...        # 店が無ければ Shop.open_at、あれば Shop.reopen
+
+class CloseShop:
+    def __call__(self, command: CloseShopCommand) -> ActionReply: ...
+
+class EditShopLine:
+    def __call__(self, command: EditShopLineCommand) -> ActionReply:
+        # 売り: 増やす分を PersonInventory.items_to_give_up で選んで give_up → Shop.stock。減らす分は Shop.unstock → 戻る品を receive
+        # 買い取り: 足すお金を PersonInventory.pay → Shop.want。戻るお金は earn
+        ...
+
+class RewriteShopLook:
+    def __call__(self, command: RewriteShopLookCommand) -> ActionReply: ...
+
+class BuyFromShop:
+    def __call__(self, command: BuyFromShopCommand) -> ActionReply: ...      # ShopTrade.buy。代金を持ち主に入れるのも手順の中 (売り買いが果たせないため)
+
+class SellToShop:
+    def __call__(self, command: SellToShopCommand) -> ActionReply: ...       # ShopTrade.sell
+
+class CollectFromShop:
+    def __call__(self, command: CollectFromShopCommand) -> ActionReply: ...  # Shop.hand_over_received → 品を荷へ receive
+
+class CloseShopOfGoneOwnerHandler:      # PersonDiedEvent / PersonOutcomeDecidedEvent (世界から外れた) を受け、その人の店を close_for_gone_owner
+    ...
+
 class StartTravel:
     def __call__(self, command: StartTravelCommand) -> ActionReply: ...
 

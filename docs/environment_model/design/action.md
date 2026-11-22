@@ -83,7 +83,8 @@ class WorldConditionsSettling:              # 終わりの条件を確かめる�
     tick: WorldTick                         # コマンドの後の判定を「時間が進んだから終わった」と読ませないよう、WorldTimePassing と分ける
 
 ActorRequirement = LivingOnly | LivingOrDeparted
-CopresenceRequirement = WithPerson | WithObject | WithGroundItem | WithMonster   # 商人と市場 (取引の Issue) は、設計するときに足す
+CopresenceRequirement = WithPerson | WithObject | WithGroundItem | WithMonster | WithShop
+# WithShop(shop: ShopId): 行う人が店と同じ場所にいる。区画の中からでも届く (店は区画に置かない) (D2224)
 Exertion = UsesBody | DoesNotUseBody
 
 class ActionKind(Enum):                     # どの世界にもある行為の種類。作者の操作は InteractionId で指す
@@ -106,7 +107,13 @@ class ActionKind(Enum):                     # どの世界にもある行為の�
     INTERACT_WITH_CARRIED_ITEM = "INTERACT_WITH_CARRIED_ITEM"
     INTERACT_WITH_PERSON = "INTERACT_WITH_PERSON"
     ATTACK_MONSTER = "ATTACK_MONSTER"
-    # 取引と市場の種類は、その宣言を設計するときに足す
+    OPEN_SHOP = "OPEN_SHOP"                 # 店の行為 (D2224)。下の「店の行為」
+    CLOSE_SHOP = "CLOSE_SHOP"
+    EDIT_SHOP_LINE = "EDIT_SHOP_LINE"
+    REWRITE_SHOP_LOOK = "REWRITE_SHOP_LOOK"
+    BUY_FROM_SHOP = "BUY_FROM_SHOP"
+    SELL_TO_SHOP = "SELL_TO_SHOP"
+    COLLECT_FROM_SHOP = "COLLECT_FROM_SHOP"
 Manner = Openly | Stealthily
 # Stealthily: 拾う・置く・渡すと、allows_stealth の操作だけ。見ていた人ごとに StealthRule の確率で気づく
 # (気づいた人にはふつうの文、気づかなかった人には何も届かない)。行っているあいだは StealthRule.duration_multiplier 倍、物音は 1 段小さい
@@ -131,6 +138,8 @@ Manner = Openly | Stealthily
 | 区画に入る・出る | 区画の出入りの宣言 | × | — | × | × |
 | 持ち替え (HOLD / PUT_AWAY) | × | × | — | × | × |
 | 投票 (CAST_BALLOT) | × | × | — | × | × |
+| 店を開く・閉じる・品目を編集する・見た目を書き直す・受け取った品を引き取る | ○ | × | 自分の店 | × | × |
+| 店で買う・店に売る (BUY_FROM_SHOP / SELL_TO_SHOP) | ○ | × | 相手の店 | × | × |
 | 物・品物・人への操作 | 操作の宣言 | × | 物 / 持っている品物 / 相手 | 操作の宣言 | 操作の宣言 |
 
 - 去った人にできるのは、移動・耳を澄ます・待つだけ (幽霊は観戦者に近い)
@@ -147,7 +156,9 @@ PersonInteractionAttempt(actor: PersonId, target: PersonId | SomeoneInTheDark, i
 
 ItemUseAttempt(actor: PersonId, item: ItemInstanceId)
 TendAttempt(actor: PersonId, target: PersonId)
-ItemHandOverAttempt(actor: PersonId, to: PersonId, items: tuple[ItemInstanceId, ...], manner: Manner)     # 品物は 1 つ以上
+ItemHandOverAttempt(actor: PersonId, to: PersonId, items: tuple[ItemInstanceId, ...], gold: Gold, manner: Manner)
+# 品物かお金 (1G 以上) の少なくともどちらかを渡す。どちらも無ければ行為を作るときにドメイン例外 (形の誤り)。お金だけを渡してもよい (D2224)
+# お金が足りなければ渡す途中で PersonInventory.pay が断る (INSUFFICIENT_GOLD)。品物もお金も渡さない
 GroundItemPickupAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 ItemDropAttempt(actor: PersonId, item: ItemInstanceId, manner: Manner)
 SpotSearchAttempt(actor: PersonId)
@@ -180,7 +191,51 @@ TextArgumentValue(text: str)            # 空でない文
 
 物・品物・人への操作は、操作の宣言 (`InteractionDeclaration`) の欄 (`interaction_id`、`exertion`、`actor_requirement`、`allows_stealth`、`reaches_unseen`、`arguments`) を読んで性質を答える。
 
-モンスターへの攻撃は `AttackMonsterAttempt(actor, monster: MonsterId)` ([monster.md](monster.md))。商人・取引・市場の行為 (取引の Issue) は、設計するときに足す。
+モンスターへの攻撃は `AttackMonsterAttempt(actor, monster: MonsterId)` ([monster.md](monster.md))。
+
+## 店の行為
+
+取引は店 1 つにまとめる (D2224)。店の型と集約は [world_state.md](world_state.md) の `Shop`。
+
+```python
+OpenShopAttempt(actor: PersonId, look: ShopLook)                 # いる場所に自分の店を開く
+CloseShopAttempt(actor: PersonId)
+EditShopLineAttempt(actor: PersonId, side: ShopLineSide, item_spec: ItemSpecDeclaration, count: Count, unit_price: Gold, note: ShopLineNote | NoNote)
+    # その品目を、この値に書き換える。数を増やせば荷から預け、減らせば荷へ戻す。0 なら品目が消える
+    # 買い取りでは、数 × 単価のお金を預ける。増やせば荷から払い、減らせば荷へ戻す
+RewriteShopLookAttempt(actor: PersonId, look: ShopLook)          # 開いているあいだだけ
+CollectFromShopAttempt(actor: PersonId)                          # 店が買い取って受け取った品を、全部荷へ移す
+BuyFromShopAttempt(actor: PersonId, shop: ShopId, item_spec: ItemSpecDeclaration, count: Count, seen_unit_price: Gold)
+SellToShopAttempt(actor: PersonId, shop: ShopId, item_spec: ItemSpecDeclaration, count: Count, seen_unit_price: Gold)
+
+ShopLineSide = SELLING | BUYING                 # 店が売る品目か、買い取る品目か
+ShopLook(text: str)                             # 空でない 1 行、80 文字まで。超えれば行為を作るときにドメイン例外
+ShopLineNote(text: str)                         # 品目の説明の文。空でない 1 行、80 文字まで
+```
+
+- 自分の店に向けた買う・売ると、数が 0 の買う・売るは、行為を作るときにドメイン例外で断る (形の誤り)。行う人の店かは `ShopId` と行う人から分かる
+- 持ち主の行為 (開く・閉じる・品目を編集する・見た目を書き直す・引き取る) は、自分の店の場所にいるときだけできる (`WithShop`)。開くのは、まだ店が無いか、閉じた店があってそれと同じ場所のとき
+- 買う・売るは、場面に見えている店 (`SeenShop`、[perception.md](perception.md)) だけを相手にできる。暗くて店が見えなければ候補に出ない
+- 試みが持つ単価 (`seen_unit_price`) は、エージェントが場面で見た単価。届いたときに店の単価と違えば断る (`SHOP.PRICE_CHANGED`)。考えているあいだに値段が上がっても、知らずに払わないため
+- 買う・売るは、全部できるか、何もしないか。在庫・買い取りの残り・預けたお金・買い手のお金・荷の空きのどれかが足りなければ断る
+- 店を開く行為は、店を出せる場所 (`SpotDeclaration.allows_shops`) が 1 つも無い世界ではツールの一覧から消す (`ToolExposure`)。店を出せない場所にいるときは、できない (`NotNow`) で出す。買う・売るは、店を出せる場所も作者の店も無い世界では消す
+
+断る理由 (`WorldStateRefusal` の `RefusalCode`)。文は共通の部品の `refusal_texts.world_state` に書く。
+
+| error_code | いつ | 例 |
+|---|---|---|
+| `GAME_WORLD.SHOP.NOT_A_SHOP_SITE` | 店を出せない場所で開こうとした | 坑道の奥でトムが店を開こうとする |
+| `GAME_WORLD.SHOP.ALREADY_OPEN_ELSEWHERE` | 品目の残った自分の店が別の場所にある | 広場に店のあるトムが、通りで開こうとする |
+| `GAME_WORLD.SHOP.ALREADY_OPEN` | もう開いている店を開こうとした | |
+| `GAME_WORLD.SHOP.CLOSED` | 閉じた店で買う・売る、閉じた店の見た目を書き直す | |
+| `GAME_WORLD.SHOP.NOT_ENOUGH_STOCK` | 買う数が在庫より多い | パン 3 つを頼んで残りが 2 つ |
+| `GAME_WORLD.SHOP.NOT_ENOUGH_WANTED` | 売る数が買い取りの残りより多い。作者の店では、預けたお金が足りない | 薬草 3 つを売ろうとして、買い取りの残りが 2 つ |
+| `GAME_WORLD.SHOP.NOT_LISTED` | その品物の品目が無い | パンを売っていない店でパンを買う |
+| `GAME_WORLD.SHOP.PRICE_CHANGED` | 見た単価と店の単価が違う | レナが 10G で見たあと、トムが 50G に上げた |
+| `GAME_WORLD.SHOP.NOTHING_TO_COLLECT` | 受け取った品が無いのに引き取ろうとした | |
+| `GAME_WORLD.INSUFFICIENT_GOLD` (いまのもの) | 買い手のお金、または買い取りに預けるお金が足りない | 20G のレナがパンを 3 つ買う |
+| `GAME_WORLD.INVENTORY_FULL` (いまのもの) | 買った品・引き取る品・品目から戻す品が荷に入らない | |
+| `GAME_WORLD.NOT_ENOUGH_ITEMS_OF_SPEC` (いまのもの) | 売る品・品目に預ける品を、足りるだけ持っていない | |
 
 ## 断られたとき
 

@@ -209,16 +209,15 @@ class PersonInventory:                            # 人ごと。持てる数の�
         # 荷から手に持つ。手は 2 本。足りなければ、今手に持っている物を先に持った順に荷にしまう
     def put_away(self, item: ItemInstanceId) -> None: ...
     def earn(self, amount: Gold) -> None: ...
-    def pay(self, amount: Gold) -> None: ...
-    def reserve(self, reservation: ReservationId, items: frozenset[ItemInstanceId], gold: Gold) -> None: ...
-    def release_reservation(self, reservation: ReservationId) -> None: ...
+    def pay(self, amount: Gold) -> None: ...      # 足りなければ INSUFFICIENT_GOLD
+    # 店に並べた品と買い取りのお金は、荷に残して予約の印を付けるのではなく、give_up と pay で荷から出して店 (Shop) に預ける。
+    # 預けた品は荷の数に数えず、持ち主も使えない。予約 (reserve / release_reservation / is_reserved) は持たない (D2224)
 
     def items(self) -> tuple[ItemInstanceId, ...]: ...
     def held_items(self) -> tuple[ItemInstanceId, ...]: ...      # 起きている人を見る人に見えるのは、これだけ
     def packed_items(self) -> tuple[ItemInstanceId, ...]: ...
     def is_full(self) -> bool: ...                               # 手の物も数える
     def available_gold(self) -> Gold: ...
-    def is_reserved(self, item: ItemInstanceId) -> bool: ...   # 取引に出した品は、ほかで使えない
     def count_of(self, spec: ItemSpecId) -> Count: ...
     def items_to_give_up(self, spec: ItemSpecId, count: Count) -> tuple[ItemInstanceId, ...]: ...
         # 荷から先に、足りなければ手からも選ぶ。持っている数が足りなければドメイン例外 (TakeItemEffect が 1 つも取らずに断るため)
@@ -232,14 +231,75 @@ class Item:                                       # 品物ごと。ItemInstanceI
 
     def set(self, key: ItemStateKeyDeclaration, value: StateValue) -> None: ...
     def leave_world(self) -> None: ...
-    def run_out(self, now: WorldTick, where: CarriedBy | LyingAt) -> None: ...
+    def run_out(self, now: WorldTick, where: CarriedBy | LyingAt | KeptInShop) -> None: ...
         # 宣言の Lasts の時間が過ぎていなければ断る。過ぎていれば ItemRanOutEvent(item, spec_id, where, at) を出して世界から出る
-        # どこにあったかは Item が知らないので、手放させたユースケースが渡す (CarriedBy(person) / LyingAt(spot))
+        # どこにあったかは Item が知らないので、手放させたユースケースが渡す (CarriedBy(person) / LyingAt(spot) / KeptInShop(shop))
+        # 店に預けた品も時間が進む。持ち主が世界から外れた店の品は、外れた人の荷と同じく時間が止まる (D2211、D2224)
 
     def has_run_out(self, now: WorldTick) -> bool: ...     # 世界にいて、宣言の Lasts の時間が過ぎたか。PassWorldTime が手放させる品物を選ぶのに使う
     def value_of(self, key: ItemStateKeyDeclaration) -> StateValue: ...
     def age(self, now: WorldTick) -> Ticks: ...
     def gives_light(self) -> bool: ...
+
+
+ShopId = PersonShopId | ScenarioShopId
+# PersonShopId(owner: PersonId): 人の店。1 人が開ける店は 1 つなので、持ち主で決まる
+# ScenarioShopId(name: str): 作者の店。シナリオの shops の鍵 (world_design.md の ScenarioShopDeclaration)
+
+class Shop(AggregateRoot[ShopEvent]):             # 店ごと (D2224)
+    @classmethod
+    def open_at(cls, owner: PersonId, spot: SpotDeclaration, look: ShopLook) -> "Shop": ...
+        # 人の店を初めて開く。spot.allows_shops でなければ SHOP.NOT_A_SHOP_SITE。ShopOpenedEvent
+    @classmethod
+    def from_declaration(cls, declaration: ScenarioShopDeclaration) -> "Shop": ...
+        # 作者の店。開いた状態で始まり、宣言の品目・在庫・お金を持つ。在庫の品物は、売れたときに世界に出す
+
+    def reopen(self, spot: SpotDeclaration, look: ShopLook) -> None: ...
+        # 閉じた人の店を開く。同じ場所ならそのまま再開する。別の場所なら、品目と受け取った品が空のときだけ店ごと移る
+        # 残っていれば SHOP.ALREADY_OPEN_ELSEWHERE、開いていれば SHOP.ALREADY_OPEN
+    def close(self) -> None: ...                  # 品目、預けた品とお金、受け取った品は店に残る。閉じた店は閉じても何もしない
+    def rewrite_look(self, look: ShopLook) -> None: ...   # 閉じていれば SHOP.CLOSED
+    def stock(self, spec: ItemSpecId, items: tuple[ItemInstanceId, ...], unit_price: Gold, note: ShopLineNote | NoNote) -> None: ...
+        # 売りの品目を、渡した品を足した数にする。単価と説明も書き換える。品は持ち主の荷から手放したもの
+    def unstock(self, spec: ItemSpecId, count: Count, unit_price: Gold, note: ShopLineNote | NoNote) -> None: ...
+        # 売りの品目を count 減らす。戻す品は預けた順の新しいものから選び、ShopLineChangedEvent の removed に載せる。0 になれば品目が消える
+    def want(self, spec: ItemSpecId, count: Count, unit_price: Gold, deposit: Gold, note: ShopLineNote | NoNote) -> None: ...
+        # 買い取りの品目を count、単価 unit_price にし、預けたお金を count × unit_price にする。deposit はその差 (足すお金)
+        # 減らした分のお金は ShopLineChangedEvent の refunded に載せる
+    def sell(self, buyer: PersonId, spec: ItemSpecId, count: Count, seen_unit_price: Gold) -> None: ...
+        # 閉じていれば SHOP.CLOSED、品目が無ければ SHOP.NOT_LISTED、単価が違えば SHOP.PRICE_CHANGED、在庫が足りなければ SHOP.NOT_ENOUGH_STOCK
+        # 預けた順の古いものから count 個を外し、ShopSoldItemsEvent に載せる。作者の店で尽きない在庫は、渡す品の種類と数だけを載せる
+        # 作者の店は代金を自分のお金に足す。人の店の代金は持ち主に入る (ShopTrade)
+    def buy(self, seller: PersonId, spec: ItemSpecId, items: tuple[ItemInstanceId, ...], seen_unit_price: Gold) -> None: ...
+        # 閉じていれば SHOP.CLOSED、品目が無ければ SHOP.NOT_LISTED、単価が違えば SHOP.PRICE_CHANGED、買い取りの残りが足りなければ SHOP.NOT_ENOUGH_WANTED
+        # 人の店は、品を受け取った品 (received) にため、預けたお金から代金を出す。作者の店は、品を世界から出すよう ShopBoughtItemsEvent に載せ、自分のお金から代金を出す (足りなければ SHOP.NOT_ENOUGH_WANTED)
+    def hand_over_received(self) -> None: ...     # 受け取った品を全部外し、ShopReceivedItemsCollectedEvent に載せる。無ければ SHOP.NOTHING_TO_COLLECT
+    def close_for_gone_owner(self) -> None: ...   # 持ち主が死んだ・世界から外れた。閉じて、以後は開けない。ShopClosedEvent(reason=OWNER_GONE)
+
+    def shop_id(self) -> ShopId: ...
+    def spot(self) -> SpotId: ...
+    def is_open(self) -> bool: ...
+    def look(self) -> ShopLook: ...
+    def lines(self, side: ShopLineSide) -> tuple[ShopLine, ...]: ...   # 品物の種類の宣言の順
+    def kept_items(self) -> tuple[ItemInstanceId, ...]: ...           # 預けた品と受け取った品。品物の時間 (PassWorldTime) が使う
+    def is_kept_by(self, person: PersonId) -> bool: ...                # 人の店で、その人が持ち主か
+
+@final
+@dataclass(frozen=True)
+class ShopLine:                                   # 品目。売りと買い取りで同じ形 (何を・いくつ・いくらで)
+    item_spec: ItemSpecId
+    count: Count | UnlimitedSupply                # 売りは預けた品の数、買い取りは残りの数。尽きないのは作者の店だけ
+    unit_price: Gold
+    note: ShopLineNote | NoNote                   # 持ち主が自由に書く説明。品物の名前は宣言の名前で出し、書き換えられない
+
+
+class ShopTrade:                                  # ドメインサービス。売り買いで動く集約をまとめて書き換える
+    def buy(self, shop: Shop, buyer: PersonInventory, keeper: PersonInventory | NoKeeper, spec: ItemSpecDeclaration, count: Count, seen_unit_price: Gold) -> None: ...
+        # buyer.pay(合計) → shop.sell → 買い手の荷へ receive (荷がいっぱいなら INVENTORY_FULL) → 人の店なら keeper.earn(合計)
+        # 作者の店の尽きない在庫は Item.come_into_world で品を作ってから receive する
+    def sell(self, shop: Shop, seller: PersonInventory, spec: ItemSpecDeclaration, count: Count, seen_unit_price: Gold) -> None: ...
+        # seller.items_to_give_up で選んで give_up → shop.buy → seller.earn(合計)。作者の店が買い取った品は Item.leave_world
+    # 1 つの行為の中で全部当たるか、どれかが断って全部巻き戻るか (CommandScope)
 
 
 class PassageStates:                              # 世界に 1 つ
@@ -378,7 +438,8 @@ PersonJoinedGroupEvent, PersonLeftGroupEvent
 WorldTickAdvancedEvent, TimeOfDayChangedEvent
 ObjectStateChangedEvent, ObjectRevealedEvent, TextWrittenEvent
 ItemStateChangedEvent, ItemCameIntoWorldEvent, ItemLeftWorldEvent, ItemRanOutEvent
-ItemReceivedEvent, ItemGivenUpEvent, ItemHeldEvent, ItemPutAwayEvent, GoldEarnedEvent, GoldPaidEvent, ItemsReservedEvent, ReservationReleasedEvent
+ItemReceivedEvent, ItemGivenUpEvent, ItemHeldEvent, ItemPutAwayEvent, GoldEarnedEvent, GoldPaidEvent
+ShopOpenedEvent, ShopClosedEvent, ShopLookRewrittenEvent, ShopLineChangedEvent, ShopSoldItemsEvent, ShopBoughtItemsEvent, ShopReceivedItemsCollectedEvent
 GroundItemPlacedEvent, GroundItemTakenEvent
 SpotSearchedEvent, DiscoverableFoundEvent
 WorldFlagRaisedEvent, WorldFlagLoweredEvent
@@ -400,5 +461,11 @@ PersonActedEvent, ActionAttemptFailedEvent
 - 行為の記録 (`LatestActions` の `note` / `note_failed_attempt`) は、状態が変わらなくてもイベントを出す。行為が起きたこと、断られたことそのものを知らせるため (知覚は `PersonActedEvent` / `ActionAttemptFailedEvent` から刺激を作る)
 - 世界を表す集約は、状態を変えたら必ずイベントを出す。帳簿の集約 (`ScenarioProgress`、`MissedNotices`) は見張りの外に置く。`ScenarioProgress` は発火と二人で合わせる操作の揃い・時間切れの記録だけイベントを出し (知らせと trace の出口、#2145、D2173)、発火しなかった反応の真偽と、部分を行ったことの記録では出さない。漏れはアーキテクチャのテストで見張る
 - 空腹と疲れは、段階 (`HungerRule.levels` / `FatigueRule.levels`) が変わったときだけイベントにする
+- 店のイベント (D2224)
+  - `ShopLineChangedEvent` は、売りか買い取りか・品物の種類と、変わる前と後の品目 (`ShopLine | NoLine`) を持つ。荷へ戻す品 (`removed`) と戻すお金 (`refunded`) も持ち、品目を編集するユースケースが持ち主の荷へ戻す
+  - `ShopSoldItemsEvent` は店・買い手・品物の種類・渡した品・単価・合計と、人の店なら持ち主を持つ。見ていた人への刺激は買う行為 (`PersonActedEvent`) から作り、このイベントからは留守の持ち主への知らせだけを作る ([perception.md](perception.md))
+  - `ShopBoughtItemsEvent` も同じ形で、売り手を持つ
+  - `ShopClosedEvent` は閉じた理由 (`BY_OWNER` / `OWNER_GONE`) を持つ。持ち主が死んだ (`PersonDiedEvent`)・世界から外れた (`PersonOutcomeDecidedEvent`) ことへの反応で、ハンドラ (`CloseShopOfGoneOwnerHandler`) が `close_for_gone_owner` を呼ぶ。店を閉じなくても死や結末は果たせるので、ユースケースの手順に入れない
+- 店は世界の snapshot に入れる。預けた品と受け取った品の `ItemInstanceId` も店の中身として残す
 - 場所に着いたこと (`OccupantEnteredSpotEvent`) は、来た場所 (`origin`) と着いた時刻 (`at`) を持つ。来た場所は最後に歩き切った区間の出発点。区間を歩き切る前に通路が閉じて引き返したときや移動をやめたときは、歩いていた区間の向こうの端になる。teleport では `Teleported`。arrival の文の `{origin}` を、確定したあとの世界から読まずに埋めるため (#2152)
 - 移動 (`Whereabouts.advance_travels`) は、着いたとき (`OccupantEnteredSpotEvent`) と止められたとき (`TravelBlockedEvent`) だけイベントにする。道の途中で残りの tick が減ること、途中の場所を通り過ぎることはイベントにしない。tick ごとに出すと、何も起きていない知らせがハンドラと観測に流れるため。見張りのテスト (`tests/architecture/test_world_aggregates_emit_events.py`) もこの例外を持つ
