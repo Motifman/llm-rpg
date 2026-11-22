@@ -28,6 +28,7 @@ from ai_rpg_world.game_world.application.settle_world_conditions import (
     SettleWorldConditionsCommand,
 )
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.built_in_attempts import SpeechAttempt, TravelAttempt
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
@@ -194,7 +195,7 @@ class _World:
         self.scope.run(_name_everyone)
 
     def breaks_the_door(self, actor: PersonId) -> None:
-        attempt = ObjectInteractionAttempt(actor, _DOOR, _BREAK_DOOR, {}, Openly())
+        attempt = ObjectInteractionAttempt(actor, _DOOR, _BREAK_DOOR, ChosenArguments(), Openly())
         InteractWithObject(self._carry_out, self.design)(InteractWithObjectCommand(attempt))
 
     def says(self, actor: PersonId, text: str) -> None:

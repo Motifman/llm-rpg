@@ -22,6 +22,7 @@ from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.built_in_attempts import ItemUseAttempt
 from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     CarriedItemInteractionAttempt,
@@ -141,11 +142,11 @@ class WorldForInteractions:
         self.events_received.extend(events)
 
     def interact_with_lever(self, actor: PersonId, interaction: InteractionDeclaration) -> ActionReply:
-        attempt = ObjectInteractionAttempt(actor, LEVER, interaction, {}, Openly())
+        attempt = ObjectInteractionAttempt(actor, LEVER, interaction, ChosenArguments(), Openly())
         return InteractWithObject(self.carry_out, self.design)(InteractWithObjectCommand(attempt))
 
     def rub(self, actor: PersonId, item: ItemInstanceId) -> ActionReply:
-        attempt = CarriedItemInteractionAttempt(actor, item, RUB, {}, Openly())
+        attempt = CarriedItemInteractionAttempt(actor, item, RUB, ChosenArguments(), Openly())
         return InteractWithCarriedItem(self.carry_out, self.design)(InteractWithCarriedItemCommand(attempt))
 
     def use(self, actor: PersonId, item: ItemInstanceId) -> ActionReply:
@@ -157,7 +158,7 @@ class WorldForInteractions:
         target: PersonId | SomeoneInTheDark,
         interaction: InteractionDeclaration = TAP_SHOULDER,
     ) -> ActionReply:
-        attempt = PersonInteractionAttempt(actor, target, interaction, {}, Openly())
+        attempt = PersonInteractionAttempt(actor, target, interaction, ChosenArguments(), Openly())
         return InteractWithPerson(self.carry_out, self.design)(InteractWithPersonCommand(attempt))
 
     def item_of(self, person: PersonId, spec: ItemSpecDeclaration) -> ItemInstanceId:

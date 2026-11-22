@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, TextArgumentValue
+from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, ChosenArguments, TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActionAttempt,
     DoesNotUseBody,
@@ -67,13 +67,13 @@ _Build = Callable[[DeclaredInteraction, Manner, ActionArguments], ActionAttempt]
 
 _BUILDERS: dict[str, _Build] = {
     "object": lambda interaction, manner, arguments: ObjectInteractionAttempt(
-        ALICE, LEVER, interaction, arguments, manner
+        ALICE, LEVER, interaction, ChosenArguments(arguments), manner
     ),
     "carried_item": lambda interaction, manner, arguments: CarriedItemInteractionAttempt(
-        ALICE, NOTEBOOK, interaction, arguments, manner
+        ALICE, NOTEBOOK, interaction, ChosenArguments(arguments), manner
     ),
     "person": lambda interaction, manner, arguments: PersonInteractionAttempt(
-        ALICE, BOB, interaction, arguments, manner
+        ALICE, BOB, interaction, ChosenArguments(arguments), manner
     ),
 }
 
@@ -152,21 +152,25 @@ class TestPropertiesReadFromTheDeclaration:
 
     def test_object_interaction_requires_being_with_the_object(self) -> None:
         """物への操作は、その物の近くにいる必要 (WithObject) を答える。"""
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+        attempt = ObjectInteractionAttempt(
+            ALICE, LEVER, InteractionForTests(InteractionId("pull")), ChosenArguments(), Openly()
+        )
 
         assert attempt.copresence_requirements() == (WithObject(ObjectId("lever")),)
 
     def test_carried_item_interaction_requires_carrying_the_item(self) -> None:
         """持っている品物への操作は、その品物を持っている必要 (WithCarriedItem) だけを答える。"""
         attempt = CarriedItemInteractionAttempt(
-            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), {}, Openly()
+            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), ChosenArguments(), Openly()
         )
 
         assert attempt.copresence_requirements() == (WithCarriedItem(NOTEBOOK),)
 
     def test_person_interaction_requires_being_with_the_target(self) -> None:
         """人への操作は、相手と同じ場所にいる必要 (WithPerson) を答え、person_as(TARGET) に相手を答える。"""
-        attempt = PersonInteractionAttempt(ALICE, BOB, InteractionForTests(InteractionId("hit")), {}, Openly())
+        attempt = PersonInteractionAttempt(
+            ALICE, BOB, InteractionForTests(InteractionId("hit")), ChosenArguments(), Openly()
+        )
 
         assert attempt.copresence_requirements() == (WithPerson(BOB),)
         assert attempt.person_as(SubjectKind.TARGET) == BOB
@@ -174,21 +178,25 @@ class TestPropertiesReadFromTheDeclaration:
     def test_carried_item_interaction_answers_the_item(self) -> None:
         """持っている品物への操作は、this_item() にその品物を答える。"""
         attempt = CarriedItemInteractionAttempt(
-            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), {}, Openly()
+            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), ChosenArguments(), Openly()
         )
 
         assert attempt.this_item() == NOTEBOOK
 
     def test_object_interaction_answers_no_item(self) -> None:
         """物への操作は品物を持たず、this_item() は ItemNotInTriggerException を投げる。"""
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+        attempt = ObjectInteractionAttempt(
+            ALICE, LEVER, InteractionForTests(InteractionId("pull")), ChosenArguments(), Openly()
+        )
 
         with pytest.raises(ItemNotInTriggerException):
             attempt.this_item()
 
     def test_unanswered_subject_message_names_the_attempt_and_the_kind(self) -> None:
         """物への操作に TARGET を尋ねると、文は「<操作の repr> does not answer TARGET」。"""
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+        attempt = ObjectInteractionAttempt(
+            ALICE, LEVER, InteractionForTests(InteractionId("pull")), ChosenArguments(), Openly()
+        )
 
         with pytest.raises(SubjectNotInTriggerException) as raised:
             attempt.person_as(SubjectKind.TARGET)
@@ -197,7 +205,9 @@ class TestPropertiesReadFromTheDeclaration:
 
     def test_unanswered_item_message_names_the_attempt(self) -> None:
         """物への操作に品物を尋ねると、文は「<操作の repr> does not answer the item」。"""
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+        attempt = ObjectInteractionAttempt(
+            ALICE, LEVER, InteractionForTests(InteractionId("pull")), ChosenArguments(), Openly()
+        )
 
         with pytest.raises(ItemNotInTriggerException) as raised:
             attempt.this_item()
@@ -232,12 +242,12 @@ class TestSomeoneInTheDark:
         interaction = InteractionForTests(InteractionId("hit"), reaches_unseen=False)
 
         with pytest.raises(UnseenTargetNotAllowedException):
-            PersonInteractionAttempt(ALICE, SomeoneInTheDark(), interaction, {}, Openly())
+            PersonInteractionAttempt(ALICE, SomeoneInTheDark(), interaction, ChosenArguments(), Openly())
 
     def test_unseen_target_is_not_yet_a_person(self) -> None:
         """SomeoneInTheDark に向けた操作は、相手がまだ決まっていないので、近くにいる必要を答えず、person_as(TARGET) は SubjectNotInTriggerException を投げる。"""
         interaction = InteractionForTests(InteractionId("hit"), reaches_unseen=True)
-        attempt = PersonInteractionAttempt(ALICE, SomeoneInTheDark(), interaction, {}, Openly())
+        attempt = PersonInteractionAttempt(ALICE, SomeoneInTheDark(), interaction, ChosenArguments(), Openly())
 
         assert attempt.copresence_requirements() == ()
         with pytest.raises(SubjectNotInTriggerException):
@@ -261,7 +271,7 @@ class TestArguments:
             ALICE,
             NOTEBOOK,
             interaction,
-            {WORDS: TextArgumentValue("ここを掘れ"), ArgumentName("pen"): pen},
+            ChosenArguments({WORDS: TextArgumentValue("ここを掘れ"), ArgumentName("pen"): pen}),
             Openly(),
         )
 
@@ -271,7 +281,7 @@ class TestArguments:
     def test_undeclared_argument_name_raises_when_asked(self) -> None:
         """宣言に無い名前を argument() に尋ねると ArgumentNotInTriggerException を投げる。"""
         attempt = CarriedItemInteractionAttempt(
-            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), {}, Openly()
+            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), ChosenArguments(), Openly()
         )
 
         with pytest.raises(ArgumentNotInTriggerException):
@@ -280,7 +290,7 @@ class TestArguments:
     def test_undeclared_argument_message_names_the_attempt_and_the_argument(self) -> None:
         """宣言に無い引数 words を尋ねると、文は「<操作の repr> does not answer the argument 'words'」。"""
         attempt = CarriedItemInteractionAttempt(
-            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), {}, Openly()
+            ALICE, NOTEBOOK, InteractionForTests(InteractionId("read")), ChosenArguments(), Openly()
         )
 
         with pytest.raises(ArgumentNotInTriggerException) as raised:
@@ -304,7 +314,7 @@ class TestArguments:
         )
 
         with pytest.raises(ArgumentsDoNotMatchDeclarationException):
-            CarriedItemInteractionAttempt(ALICE, NOTEBOOK, interaction, arguments, Openly())
+            CarriedItemInteractionAttempt(ALICE, NOTEBOOK, interaction, ChosenArguments(arguments), Openly())
 
     def test_text_given_for_item_argument_raises(self) -> None:
         """品物の引数 (ItemArgument) に文を渡すと ArgumentsDoNotMatchDeclarationException を投げる。"""
@@ -313,7 +323,9 @@ class TestArguments:
         )
 
         with pytest.raises(ArgumentsDoNotMatchDeclarationException):
-            PersonInteractionAttempt(ALICE, BOB, interaction, {ArgumentName("gift"): TextArgumentValue("花")}, Openly())
+            PersonInteractionAttempt(
+                ALICE, BOB, interaction, ChosenArguments({ArgumentName("gift"): TextArgumentValue("花")}), Openly()
+            )
 
 
 class TestItemsHandled:
@@ -334,7 +346,9 @@ class TestItemsHandled:
             ALICE,
             BOB,
             interaction,
-            {ArgumentName("gift"): gift, ArgumentName("price"): price, WORDS: TextArgumentValue("どうぞ")},
+            ChosenArguments(
+                {ArgumentName("gift"): gift, ArgumentName("price"): price, WORDS: TextArgumentValue("どうぞ")}
+            ),
             Openly(),
         )
 
@@ -346,12 +360,16 @@ class TestItemsHandled:
         interaction = InteractionForTests(
             InteractionId("write"), arguments=(ArgumentDeclaration(ArgumentName("pen"), ItemArgument()),)
         )
-        attempt = CarriedItemInteractionAttempt(ALICE, NOTEBOOK, interaction, {ArgumentName("pen"): pen}, Openly())
+        attempt = CarriedItemInteractionAttempt(
+            ALICE, NOTEBOOK, interaction, ChosenArguments({ArgumentName("pen"): pen}), Openly()
+        )
 
         assert set(attempt.items_handled()) == {NOTEBOOK, pen}
 
     def test_object_interaction_without_item_arguments_handles_no_item(self) -> None:
         """品物の引数の無い物への操作は、items_handled が空。"""
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, InteractionForTests(InteractionId("pull")), {}, Openly())
+        attempt = ObjectInteractionAttempt(
+            ALICE, LEVER, InteractionForTests(InteractionId("pull")), ChosenArguments(), Openly()
+        )
 
         assert attempt.items_handled() == ()

@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.built_in_attempts import WaitAttempt
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
@@ -73,7 +74,7 @@ def _push(who: PersonId, lever: ObjectId) -> ObjectInteractionAttempt:
         actor=who,
         obj=thing(lever.value, "shaft"),
         interaction=InteractionForTests(_PUSH),
-        arguments={},
+        arguments=ChosenArguments(),
         manner=Openly(),
     )
 

@@ -232,9 +232,7 @@ class SpeechAttempt(_BuiltInAttempt):
         return True
 
     def _chosen_content(self) -> SpeechContent:
-        if isinstance(self.content, SpeechContentNotChosen):
-            raise ArgumentsNotChosenException(f"{self.actor.value} has not chosen what to say")
-        return self.content
+        return self.content.chosen_by(self.actor)
 
 
 @final

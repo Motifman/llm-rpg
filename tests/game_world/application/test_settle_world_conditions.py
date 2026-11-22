@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.application.settle_world_conditions import (
     WorldConditionsDidNotSettleError,
 )
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal, RefusalCode
@@ -174,7 +175,7 @@ class _SettledWorld:
 
     def push(self, person: PersonId, lever: ObjectDeclaration) -> ActionReply:
         interaction = self._design.interaction_on_object(lever.object_id, PUSH)
-        attempt = ObjectInteractionAttempt(person, lever, interaction, {}, Openly())
+        attempt = ObjectInteractionAttempt(person, lever, interaction, ChosenArguments(), Openly())
         return InteractWithObject(self._carry_out, self._design)(InteractWithObjectCommand(attempt))
 
     def raise_flag(self, flag: FlagDeclaration) -> None:

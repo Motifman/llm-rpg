@@ -18,6 +18,7 @@ from ai_rpg_world.game_world.application.deliver_perception_of_committed_events 
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.built_in_attempts import TravelAttempt
 from ai_rpg_world.game_world.domain.action.interaction_attempts import PersonInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
@@ -152,7 +153,7 @@ class _Cliff:
         self.scope.run(_name_everyone)
 
     def haru_pushes_gen(self) -> None:
-        attempt = PersonInteractionAttempt(_HARU, _GEN, self.push, {}, Openly())
+        attempt = PersonInteractionAttempt(_HARU, _GEN, self.push, ChosenArguments(), Openly())
         InteractWithPerson(CarryOutAction(self.scope, self.design), self.design)(InteractWithPersonCommand(attempt))
 
     def haru_sets_off_to_the_trail(self) -> None:

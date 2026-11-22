@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
-from ai_rpg_world.game_world.domain.action.action_arguments import ActionArguments, ArgumentsNotChosen
+from ai_rpg_world.game_world.domain.action.action_arguments import ArgumentsNotChosen, ChosenArguments
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
     GroundItemPickupAttempt,
@@ -173,8 +173,8 @@ class ActionCandidates:
         )
 
 
-def _arguments_of(interaction: InteractionDeclaration) -> ActionArguments | ArgumentsNotChosen:
-    return ArgumentsNotChosen() if interaction.arguments else {}
+def _arguments_of(interaction: InteractionDeclaration) -> ChosenArguments | ArgumentsNotChosen:
+    return ArgumentsNotChosen() if interaction.arguments else ChosenArguments()
 
 
 def _in_view(actor: PersonId, seen: VisibleSurroundings, facts: WorldFacts) -> _InView:
