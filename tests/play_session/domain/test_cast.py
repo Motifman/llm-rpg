@@ -59,6 +59,14 @@ class TestCastMembers:
         with pytest.raises(CastValidationException):
             Cast(_WORLD, "廃坑の山村", (CastMember(_GEN, BeingId("being_gen"), "ゲン"), second))
 
+    def test_being_of_returns_the_being_playing_the_person(self) -> None:
+        """ゲンを演じる Being は being_gen になり、配役に無いミオを聞くと PersonNotCastException で断る。"""
+        cast = _cast()
+
+        assert cast.being_of(_GEN) == BeingId("being_gen")
+        with pytest.raises(PersonNotCastException):
+            cast.being_of(PersonId("mio"))
+
     def test_person_not_cast_is_refused(self) -> None:
         """配役に無い登場人物に渡そうとすると PersonNotCastException で断る。"""
         with pytest.raises(PersonNotCastException):

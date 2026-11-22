@@ -68,6 +68,9 @@ class Cast(AggregateRoot[BeingCastInWorldEvent]):
     def world(self) -> WorldId:
         return self._world
 
+    def being_of(self, person: PersonId) -> BeingId:
+        return self._member(person).being_id
+
     def brief(
         self, person: PersonId, *, orientation: Orientation, imposed_goal: str, known_people: Sequence[PersonId]
     ) -> None:
