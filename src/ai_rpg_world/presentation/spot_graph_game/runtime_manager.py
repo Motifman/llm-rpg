@@ -100,7 +100,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.metrics_sink import ( 
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (  # noqa: E402
     build_unsupported_tool_message,
-    suggest_closest_tool_name,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (  # noqa: E402
     WorldLlmTurnTrigger as _WorldLlmTurnTrigger,
@@ -111,6 +110,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.types import (  # noqa
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noqa: E402
     WorldLlmWiring as _WorldLlmWiring,
 )
+from ai_rpg_world.being.application.closest_tool_name import suggest_closest_tool_name  # noqa: E402
 
 
 def _character_to_prompt_input(
