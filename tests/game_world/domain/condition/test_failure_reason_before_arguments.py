@@ -57,12 +57,12 @@ class TestFailureReasonBeforeArguments:
         assert reason == FailureReason(failed_part=_ROOT, text=text("夜明けを待て").about({}))
 
     def test_all_of_fails_when_one_child_fails_even_if_another_awaits_arguments(self) -> None:
-        """all_of は、分からない子があっても、成り立たない子が 1 つあれば成り立たない (開いた金庫は「いまはできない」)。"""
-        condition = AllOfCondition(children=(_false(text("もう開いている")), _code_is_1907()), failure_text=NoText())
+        """all_of は、分からない子が先に並んでいても、成り立たない子が 1 つあれば、その子の位置と文で成り立たない。"""
+        condition = AllOfCondition(children=(_code_is_1907(), _false(text("もう開いている"))), failure_text=NoText())
 
         reason = condition.failure_reason_before_arguments(world().facts(), _BY_ALICE)
 
-        assert reason == FailureReason(failed_part=_ROOT.under(0), text=text("もう開いている").about({}))
+        assert reason == FailureReason(failed_part=_ROOT.under(1), text=text("もう開いている").about({}))
 
     def test_all_of_awaits_arguments_when_no_child_fails(self) -> None:
         """all_of は、成り立たない子が無く、分からない子があれば分からない。"""
