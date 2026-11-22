@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldTimePassing
-from ai_rpg_world.game_world.domain.condition.condition import Condition, FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.condition import AwaitsArguments, Condition, FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.condition.subject import Actor, EachPerson, SubjectKind
@@ -34,6 +34,11 @@ class _IsNotTheActor(Condition):
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         return None
 
+    def failure_reason_before_arguments(
+        self, facts: WorldFacts, trigger: Trigger
+    ) -> FailureReason | HiddenFailure | AwaitsArguments | None:
+        return None
+
     def explains_failure(self) -> bool:
         return False
 
@@ -47,6 +52,11 @@ class _CanAct(Condition):
         return EachPerson().requirements()
 
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
+        return None
+
+    def failure_reason_before_arguments(
+        self, facts: WorldFacts, trigger: Trigger
+    ) -> FailureReason | HiddenFailure | AwaitsArguments | None:
         return None
 
     def explains_failure(self) -> bool:

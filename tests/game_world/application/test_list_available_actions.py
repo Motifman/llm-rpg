@@ -29,6 +29,7 @@ from ai_rpg_world.game_world.application.action.leave_section import LeaveSectio
 from ai_rpg_world.game_world.application.action.pick_up_ground_item import PickUpGroundItem, PickUpGroundItemCommand
 from ai_rpg_world.game_world.application.action.put_away_item import PutAwayItem, PutAwayItemCommand
 from ai_rpg_world.game_world.application.action.search_spot import SearchSpot, SearchSpotCommand
+from ai_rpg_world.game_world.application.action.speak import Speak, SpeakCommand
 from ai_rpg_world.game_world.application.action.start_travel import StartTravel, StartTravelCommand
 from ai_rpg_world.game_world.application.action.tend_fallen_person import TendFallenPerson, TendFallenPersonCommand
 from ai_rpg_world.game_world.application.action.use_item import UseItem, UseItemCommand
@@ -602,6 +603,13 @@ class TestListAvailableActions:
         mine.scope.run(_rescue_alice)
 
         assert _doable(mine.lists()) == []
+
+    def test_speech_without_content_cannot_take_effect(self) -> None:
+        """中身をまだ書いていない発話を試すと、世界を変える前に ArgumentsNotChosenException を投げる。"""
+        mine = _Mine()
+
+        with pytest.raises(ArgumentsNotChosenException):
+            Speak(mine.carry_out)(SpeakCommand(SpeechAttempt(_ALICE, OrdinaryVoice(), _UNWORDED)))
 
     def test_busy_person_can_only_speak(self) -> None:
         """行っている最中の alice は、話すことだけができるに分かれ、ほかの行為はどれも共通の決まり Busy の断りの文でできないに分かれる。"""

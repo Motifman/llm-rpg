@@ -214,12 +214,15 @@ class SpeechAttempt(_BuiltInAttempt):
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return self.reach.copresence_requirements()
 
+    def take_effect(self) -> Ticks:
+        self._chosen_content()
+        return Ticks(0)
+
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
-        if isinstance(self.content, SpeechContentNotChosen):
-            raise ArgumentsNotChosenException(f"{self.actor.value} has not chosen what to say")
+        content = self._chosen_content()
         return WitnessedAct(
             perception=design.built_in_action_perceptions.speech(self.reach),
-            names={"speech": self.content},
+            names={"speech": content},
             target=self.reach.listener(),
             manner=Openly(),
             source=self.reach.voice(),
@@ -227,6 +230,11 @@ class SpeechAttempt(_BuiltInAttempt):
 
     def can_start_while_busy(self) -> bool:
         return True
+
+    def _chosen_content(self) -> SpeechContent:
+        if isinstance(self.content, SpeechContentNotChosen):
+            raise ArgumentsNotChosenException(f"{self.actor.value} has not chosen what to say")
+        return self.content
 
 
 @final
