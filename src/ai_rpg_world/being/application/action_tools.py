@@ -105,12 +105,15 @@ class ActionTools:
             return None
         picked = _picked_names(choice.values)
         hidden = {self._being_tools.inner_thought, self._being_tools.memo}
-        parts = [
-            f"{name}={json.dumps(value, ensure_ascii=False)}"
-            if name in picked and isinstance(value, str)
-            else f"{name}={HIDDEN_TEXT}"
-            for name, value in arguments.items()
-            if name not in hidden
+        # 古い run と同じく、LLM が書いた順によらない並びにする。並びが揺れると、写す手本として読みにくい。
+        order = [o.name for o in choice.outline]
+        given = sorted(
+            ((name, value) for name, value in arguments.items() if name not in hidden),
+            key=lambda item: order.index(item[0]) if item[0] in order else len(order),
+        )
+        quoted = [(name, value) for name, value in given if name in picked and isinstance(value, str)]
+        parts = [f"{name}={json.dumps(value, ensure_ascii=False)}" for name, value in quoted] + [
+            f"{name}={HIDDEN_TEXT}" for name, value in given if (name, value) not in quoted
         ]
         return f"{tool_name}({', '.join(parts)})"
 

@@ -359,6 +359,15 @@ class TestCallText:
 
         assert call == 'travel_to(destination="井戸")'
 
+    def test_quoted_values_come_first_in_the_outline_order_whatever_the_llm_wrote(self) -> None:
+        """LLM が書いた順によらず、引用する値を見取り図の順に先に並べ、伏せる文をそのあとに見取り図の順で並べる。"""
+        call = _tools(ActionChoices((_interact(SAFE),))).call_text(
+            "interact",
+            {"say_inline": "開けるぞ", "details": {"code": "1907"}, "how": "番号を合わせて開ける", "target": "金庫"},
+        )
+
+        assert call == 'interact(target="金庫", how="番号を合わせて開ける", say_inline=本文, details=本文)'
+
     def test_tool_that_was_not_offered_has_no_call_text(self) -> None:
         """出していないツールの名前なら None を返す。"""
         assert _tools(_gen_in_the_office()).call_text("gather", {}) is None
