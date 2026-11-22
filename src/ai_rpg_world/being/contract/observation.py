@@ -14,7 +14,8 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Final, Literal, Union, get_args
 
@@ -191,6 +192,11 @@ class Observation:
                 raise ContractViolation("withheld_if_subject_unknown needs a subject other than self")
             if self.body_if_subject_unknown is not None:
                 raise ContractViolation("withheld_if_subject_unknown and body_if_subject_unknown are exclusive")
+
+    def with_people_named(self, name: Callable[[TextWithPeople], str]) -> Observation:
+        if not isinstance(self.body, TextWithPeople):
+            return self
+        return replace(self, body=name(self.body))
 
     def body_without_people(self) -> str:
         if isinstance(self.body, TextWithPeople):
