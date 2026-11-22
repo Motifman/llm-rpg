@@ -20,9 +20,11 @@ from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
 from ai_rpg_world.being.domain.episode_index_selection import RecalledRisesToTop
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
+from ai_rpg_world.being.domain.visited_places import VisitedPlacesRepository
 from ai_rpg_world.being.domain.working_memory import Closing, MemoryTexts, WorkingMemory
 
 CURRENT_PLACE_LABEL = "現在地"
+FIRST_VISIT_MARK = "(初めて訪れた)"
 
 
 class BeingLookup(Protocol):
@@ -46,6 +48,7 @@ class CurrentWorkingMemory:
         acquaintances: AcquaintanceRepository,
         episodes: EpisodeRepository,
         memo_books: MemoBookRepository,
+        visited_places: VisitedPlacesRepository,
         episode_index_limit: int,
     ) -> None:
         self._beings = beings
@@ -53,6 +56,7 @@ class CurrentWorkingMemory:
         self._acquaintances = acquaintances
         self._episodes = episodes
         self._memo_books = memo_books
+        self._visited_places = visited_places
         self._episode_index_limit = episode_index_limit
 
     def of(
@@ -82,7 +86,13 @@ class CurrentWorkingMemory:
             conduct=conduct_text(being_tools),
             imposed_goal=imposed_goal,
             memory=memory,
-            scene=Scene((*_surroundings(scene.here), *_named(scene.descriptions)), notices=_named(scene.notices)),
+            scene=Scene(
+                (
+                    *self._surroundings(being_id, scene.here, environment_name=environment_name),
+                    *_named(scene.descriptions),
+                ),
+                notices=_named(scene.notices),
+            ),
             closing=closing,
         )
 
@@ -90,19 +100,20 @@ class CurrentWorkingMemory:
         """【思い出せる出来事】に並べるエピソード。目次の文と、目次に出したものの記録が同じ選び方を使う。"""
         return RecalledRisesToTop().select(self._episodes.list_by_being(being_id), limit=self._episode_index_limit)
 
+    def _surroundings(self, being_id: BeingId, here: Here | None, *, environment_name: str) -> tuple[Description, ...]:
+        if here is None:
+            return ()
+        first = not self._visited_places.get(being_id).has_visited(environment_name=environment_name, place=here.place)
+        place = f"{here.place} {FIRST_VISIT_MARK}" if first else here.place
+        text = text_naming_people(here.text) if isinstance(here.text, TextWithPeople) else here.text
+        return (Description(heading=here.heading, text=f"{CURRENT_PLACE_LABEL}: {place}\n{text}"),)
+
     def environment_name(self, being_id: BeingId) -> str:
         """Being が今いる環境の表示の名前。"""
         being = self._beings.get(being_id)
         if being.attachment is None:
             raise LookupError(f"Being {being_id.value} is not in any environment")
         return being.attachment.environment_name
-
-
-def _surroundings(here: Here | None) -> tuple[Description, ...]:
-    if here is None:
-        return ()
-    text = text_naming_people(here.text) if isinstance(here.text, TextWithPeople) else here.text
-    return (Description(heading=here.heading, text=f"{CURRENT_PLACE_LABEL}: {here.place}\n{text}"),)
 
 
 def _named(descriptions: Sequence[Description]) -> tuple[Description, ...]:

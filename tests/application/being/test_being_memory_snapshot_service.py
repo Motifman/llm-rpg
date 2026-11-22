@@ -49,6 +49,7 @@ from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMem
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
+from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
@@ -59,12 +60,14 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     being_episodes = InMemoryEpisodeRepository(handoff=discard_events)
     being_memo = InMemoryMemoBookRepository(handoff=discard_events)
     short_term = InMemoryShortTermMemoryRepository(handoff=discard_events)
+    visited = InMemoryVisitedPlacesRepository()
     svc = BeingMemorySnapshotService(
         acquaintance_store=acquaintances,
         being_episode_store=being_episodes,
         being_memo_store=being_memo,
         memory_turn_clock=InMemoryMemoryTurnClock(),
         being_short_term_memory_store=short_term,
+        being_visited_places_store=visited,
     )
     return (
         svc,
@@ -73,6 +76,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
             "being_episodes": being_episodes,
             "being_memo": being_memo,
             "short_term": short_term,
+            "visited": visited,
         },
     )
 
@@ -667,6 +671,7 @@ class TestConstructor:
                 being_memo_store=InMemoryMemoBookRepository(handoff=discard_events),
                 memory_turn_clock=InMemoryMemoryTurnClock(),
                 being_short_term_memory_store=InMemoryMemoBookRepository(handoff=discard_events),
+                being_visited_places_store=InMemoryVisitedPlacesRepository(),
             )
 
 
@@ -1102,3 +1107,50 @@ class TestOccurrenceOrderPayload:
         ]
         assert len(restored) == len(popped)
         assert all(o.order is None for o in restored)
+
+
+class TestVisitedPlacesPayload:
+    """訪れた場所の記録 (#2267) を Being の snapshot で往復させ、キーを足す前の snapshot も読めることを保証する。"""
+
+    def test_visited_places_round_trip(self) -> None:
+        """訪れた 2 つの場所は、保存して戻すと同じ順で訪れたことになる。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId("ada")
+        visited = src_stores["visited"]
+        assert isinstance(visited, InMemoryVisitedPlacesRepository)
+        places = visited.get(being)
+        places.visit(environment_name="廃坑の山村", place="南の横坑口")
+        places.visit(environment_name="廃坑の山村", place="南の坑道")
+        visited.save(places)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, src_svc.capture(being))
+
+        restored = dst_stores["visited"]
+        assert isinstance(restored, InMemoryVisitedPlacesRepository)
+        assert restored.get(being).places == places.places
+
+    def test_snapshot_saved_before_the_key_was_added_restores_no_visits(self) -> None:
+        """訪れた記録のキーを足す前に保存した snapshot は、キーが無くても落ちず、どこも訪れていないとして戻る。"""
+        (src_svc, _) = _make_service()
+        being = BeingId("ada")
+        payload = json.loads(src_svc.capture(being))
+        del payload["being_visited_places"]
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, json.dumps(payload))
+
+        restored = dst_stores["visited"]
+        assert isinstance(restored, InMemoryVisitedPlacesRepository)
+        assert restored.get(being).places == ()
+
+    def test_same_place_twice_is_rejected(self) -> None:
+        """同じ場所が 2 回書かれた payload は FormatError になる。"""
+        (src_svc, _) = _make_service()
+        being = BeingId("ada")
+        payload = json.loads(src_svc.capture(being))
+        payload["being_visited_places"] = [{"environment_name": "廃坑の山村", "place": "井戸"}] * 2
+        (svc, _) = _make_service()
+
+        with pytest.raises(BeingMemoryPayloadFormatError, match="being_visited_places"):
+            svc.restore(being, json.dumps(payload))

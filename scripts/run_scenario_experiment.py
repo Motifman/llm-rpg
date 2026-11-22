@@ -503,6 +503,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         being_memo_store=getattr(runtime, "_being_memo_store", None),
         memory_turn_clock=getattr(runtime, "_memory_turn_clock", None),
         being_short_term_memory_store=getattr(runtime, "_being_short_term_memory_store", None),
+        being_visited_places_store=getattr(runtime, "_being_visited_places_store", None),
     )
 
 

@@ -24,6 +24,7 @@ from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMem
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
+from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
@@ -39,6 +40,7 @@ def _make_environment():
         being_memo_store=InMemoryMemoBookRepository(),
         memory_turn_clock=InMemoryMemoryTurnClock(),
         being_short_term_memory_store=InMemoryShortTermMemoryRepository(),
+        being_visited_places_store=InMemoryVisitedPlacesRepository(),
     )
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(

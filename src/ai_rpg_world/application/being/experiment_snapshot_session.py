@@ -291,6 +291,7 @@ class ExperimentSnapshotSession:
             "being_memo_store",
             "memory_turn_clock",
             "being_short_term_memory_store",
+            "being_visited_places_store",
         )
         missing_required = [name for name in required_fields if getattr(wiring_result, name, None) is None]
         if missing_required:
@@ -302,6 +303,7 @@ class ExperimentSnapshotSession:
             being_memo_store=wiring_result.being_memo_store,
             memory_turn_clock=wiring_result.memory_turn_clock,
             being_short_term_memory_store=wiring_result.being_short_term_memory_store,
+            being_visited_places_store=wiring_result.being_visited_places_store,
         )
         self._memory_turn_clock = wiring_result.memory_turn_clock
         self._gateway = BeingSnapshotFileGateway()

@@ -49,6 +49,7 @@ from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemory,
     UnknownOutcome,
 )
+from ai_rpg_world.being.domain.visited_places import VisitedPlace
 from ai_rpg_world.domain.common.exception import DomainException
 
 
@@ -463,3 +464,14 @@ def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) 
         )
     except DomainException as exc:
         raise ValueError(f"invalid being short-term memory payload: {exc}") from exc
+
+
+def visited_place_to_dict(place: VisitedPlace) -> dict[str, Any]:
+    return {"environment_name": place.environment_name, "place": place.place}
+
+
+def dict_to_visited_place(data: dict[str, Any]) -> VisitedPlace:
+    try:
+        return VisitedPlace(environment_name=data["environment_name"], place=data["place"])
+    except DomainException as exc:
+        raise ValueError(f"invalid visited place payload: {exc}") from exc

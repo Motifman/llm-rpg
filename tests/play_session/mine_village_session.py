@@ -23,6 +23,7 @@ from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemo
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 from ai_rpg_world.game_world.application.accept_world_time_passage import AcceptWorldTimePassage
 from ai_rpg_world.game_world.application.brief_entering_person import BriefEnteringPerson
 from ai_rpg_world.game_world.application.check_readiness_to_act import CheckReadinessToAct
@@ -154,6 +155,7 @@ class MineVillageSession:
             distributor.register_receiver(DeliverPerceptionOfCommittedEvents(scenario.design, self.deliver_perception))
         self.episodes = InMemoryEpisodeRepository(handoff=discard_events)
         self.memo_books = InMemoryMemoBookRepository(handoff=discard_events)
+        self.visited_places = InMemoryVisitedPlacesRepository()
 
     def beings_taking_turns(
         self, completion: ActionChoosingCompletion, *, closing: str = "行動を 1 つ選んでください。"
@@ -177,6 +179,7 @@ class MineVillageSession:
                     acquaintances=self.acquaintances,
                     episodes=self.episodes,
                     memo_books=self.memo_books,
+                    visited_places=self.visited_places,
                     episode_index_limit=5,
                 ),
                 completion=completion,
@@ -184,6 +187,7 @@ class MineVillageSession:
                 turn_clock=self.clock,
                 memo_books=self.memo_books,
                 episodes=self.episodes,
+                visited_places=self.visited_places,
                 recall_limit=3,
             ),
             take_chosen_action=TakeChosenAction(self.scope, design, settle),
