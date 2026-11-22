@@ -6,11 +6,13 @@
 
 from __future__ import annotations
 
+from ai_rpg_world.being.contract import EnvironmentEntry
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingAlreadyAttachedException,
+    BeingIntroducedToItselfException,
     BeingNotAttachedException,
 )
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent
@@ -59,6 +61,13 @@ class Being(AggregateRoot[DomainEvent]):
                 f"Being({self._being_id}) is already attached to {self._attachment}; detach first to switch"
             )
         self._attachment = attachment
+
+    def enter(self, environment_id: str, entry: EnvironmentEntry) -> None:
+        if any(introduction.name == self._persona.name for introduction in entry.introductions):
+            raise BeingIntroducedToItselfException(
+                f"Being({self._being_id}) is introduced to itself as {self._persona.name!r}"
+            )
+        self.attach(BeingAttachment(environment_id=environment_id, environment_name=entry.environment_name))
 
     def detach(self) -> None:
         """入っていなければ ``BeingNotAttachedException`` で断る。離れても記憶は Being に残る。

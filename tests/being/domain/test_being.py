@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingAlreadyAttachedException,
+    BeingIntroducedToItselfException,
     BeingNotAttachedException,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -180,3 +182,28 @@ class TestBeingMoveTo:
             being.move_to("not-a-vo")  # type: ignore[arg-type]
 
         assert being.attachment == previous
+
+
+class TestBeingEnter:
+    """Being.enter が、取り決めの環境の名前で環境に入り、自分を紹介する取り決めを断ることを保証する。"""
+
+    def test_enter_attaches_with_entry_environment_name(self) -> None:
+        """取り決めの環境の名前「廃坑の山村」と識別子 mine#1 で入ると、その識別子と名前の環境に入っている。"""
+        being = Being(BeingId("being_ada"), _persona())
+
+        being.enter(
+            "mine#1", EnvironmentEntry(environment_name="廃坑の山村", introductions=(Introduction(name="ボブ"),))
+        )
+
+        assert being.attachment == BeingAttachment(environment_id="mine#1", environment_name="廃坑の山村")
+
+    def test_introduction_to_itself_is_refused_and_being_stays_outside(self) -> None:
+        """紹介に自分の名前「アダ」があると BeingIntroducedToItselfException を投げ、どの環境にも入らない。"""
+        being = Being(BeingId("being_ada"), _persona())
+
+        with pytest.raises(BeingIntroducedToItselfException):
+            being.enter(
+                "mine#1", EnvironmentEntry(environment_name="廃坑の山村", introductions=(Introduction(name="アダ"),))
+            )
+
+        assert being.attachment is None

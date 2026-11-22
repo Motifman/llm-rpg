@@ -65,3 +65,23 @@ class TestPersonaFields:
 
         with pytest.raises(dataclasses.FrozenInstanceError):
             persona.name = "ミオ"  # type: ignore[misc]
+
+
+class TestPersonaFromFields:
+    """Persona.from_fields が、欄の名前の地図から人柄を作り、人柄に無い欄や名前の無い地図を断ることを保証する。"""
+
+    def test_builds_persona_from_given_fields(self) -> None:
+        """名前・一人称・怖いものの欄を渡すと、その値を持ち、渡さなかった欄は決まっていないままの人柄になる。"""
+        persona = Persona.from_fields({"name": "サヨ", "first_person": "わたし", "fears": ("暗い坑道",)})
+
+        assert persona == Persona(name="サヨ", first_person="わたし", fears=("暗い坑道",))
+
+    def test_unknown_field_is_refused(self) -> None:
+        """人柄に無い欄 (persona) があると PersonaValidationException を投げる。"""
+        with pytest.raises(PersonaValidationException):
+            Persona.from_fields({"name": "サヨ", "persona": "物覚えのよい娘"})
+
+    def test_missing_name_is_refused(self) -> None:
+        """名前の欄が無いと PersonaValidationException を投げる。"""
+        with pytest.raises(PersonaValidationException):
+            Persona.from_fields({"first_person": "わたし"})
