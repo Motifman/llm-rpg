@@ -9,7 +9,7 @@ from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
     UnrevealedThingNotDeclaredHiddenException,
 )
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef
-from ai_rpg_world.game_world.domain.perception.surroundings import ContainedObject, ContainedPassage, PresentPerson
+from ai_rpg_world.game_world.domain.perception.surroundings import ContainedObject, ContainedPassage, PresentPerson, Up
 from ai_rpg_world.game_world.domain.value_object import DescriptionText
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from tests.game_world.domain.perception._surroundings_builders import contents, item, passage, section, thing
@@ -26,6 +26,7 @@ class TestPresentPersonItems:
                 section=OpenArea(),
                 held_items=(item("pickaxe"),),
                 all_items=(item("bread"),),
+                condition=Up(looks=None),
             )
 
 

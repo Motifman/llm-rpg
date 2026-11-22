@@ -6,6 +6,8 @@ from string import Formatter
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol, final
 
+from typing_extensions import assert_never
+
 from ai_rpg_world.being.contract import Here, Scene
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, SpotSectionDeclaration
@@ -38,12 +40,14 @@ from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageI
 if TYPE_CHECKING:
     # 実行時に import すると循環する。
     from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
+    from ai_rpg_world.game_world.domain.condition.aggregate_readings import PersonVitalsReading
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
     from ai_rpg_world.game_world.domain.declaration.time_and_weather.clock_wording import ClockWording
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.declaration.world_words import WorldWords
     from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
+    from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 
 
 @final
@@ -85,10 +89,33 @@ _RULES: Mapping[SightQuality, _SightRule] = MappingProxyType(
 
 @final
 @dataclass(frozen=True)
+class Up:
+    looks: DisplayName | None
+
+
+@final
+@dataclass(frozen=True)
+class Down:
+    pass
+
+
+@final
+@dataclass(frozen=True)
+class Dead:
+    pass
+
+
+PersonCondition = Up | Down | Dead
+
+
+@final
+@dataclass(frozen=True)
 class SeenPerson:
     person: PersonRef | Unidentified
     section: SpotSectionId | OpenArea
     visible_items: tuple[ItemInstanceId, ...]
+    condition: PersonCondition
+    items_in_sight: bool
 
 
 @final
@@ -98,6 +125,7 @@ class PresentPerson:
     section: SpotSectionId | OpenArea
     held_items: tuple[ItemInstanceId, ...]
     all_items: tuple[ItemInstanceId, ...]
+    condition: PersonCondition
 
     def __post_init__(self) -> None:
         not_carried = set(self.held_items) - set(self.all_items)
@@ -119,6 +147,8 @@ class PresentPerson:
             person=self.person if rule.identifies_people else Unidentified(),
             section=self.section,
             visible_items=items if rule.shows_items else (),
+            condition=self.condition,
+            items_in_sight=rule.shows_items,
         )
 
 
@@ -202,13 +232,15 @@ class SpotContents:
             if occupant.is_departed() or occupant.person == viewer:
                 continue
             inventory = facts.inventory(occupant.person)
+            vitals = facts.vitals(occupant.person)
             present = PresentPerson(
                 person=view.ref_of(occupant.person),
                 section=section,
                 held_items=inventory.held_items(),
                 all_items=inventory.items(),
+                condition=_condition_of(vitals, facts.rules().fatigue),
             )
-            (people if facts.vitals(occupant.person).can_act() else bodies).append(present)
+            (people if vitals.can_act() else bodies).append(present)
         passages = facts.passages()
         return cls(
             spot=spot,
@@ -339,14 +371,28 @@ class VisibleSurroundings:
         lines = [_letters(line) for line in written]
         lines += self._object_lines(wording, not_now)
         lines += _listed(wording.ground_items, _counted(self.ground_items, names, wording.count_mark))
-        holes = dict(not_now.holes)
-        if self.people or self.bodies:
-            people = texts.scene_as_seen(
-                people=tuple(seen.person for seen in self.people), bodies=tuple(seen.person for seen in self.bodies)
-            )
-            lines.append(people.template)
-            holes |= people.people
+        holes: dict[str, PersonRef | Unidentified] = dict(not_now.holes)
+        lines += self._people_lines(wording, names, holes)
         return TextWithAssignedPeople("\n".join(lines), holes)
+
+    def _people_lines(
+        self, wording: SceneTexts, names: NamesInScene, holes: dict[str, PersonRef | Unidentified]
+    ) -> list[str]:
+        everyone = (*self.people, *self.bodies)
+        if not everyone:
+            return [_letters(wording.no_people)]
+        lines = [_letters(wording.people)]
+        for seen in everyone:
+            key = f"person_{len(holes) + 1}"
+            holes[key] = seen.person
+            condition, carried = _condition_and_carried(seen, wording, names)
+            lines.append(
+                _filled(
+                    wording.person,
+                    {"person": f"{{{key}}}", "condition": _letters(condition), "carried": _letters(carried)},
+                )
+            )
+        return lines
 
     def _destination_lines(self, wording: SceneTexts, names: NamesInScene) -> list[str]:
         here = self.spot.spot_id
@@ -442,3 +488,37 @@ def _listed(heading: DisplayName, entries: tuple[str, ...]) -> list[str]:
 
 def _present(seen: Iterable[SeenPerson | None]) -> tuple[SeenPerson, ...]:
     return tuple(person for person in seen if person is not None)
+
+
+def _condition_of(vitals: PersonVitalsReading, fatigue: FatigueRule) -> PersonCondition:
+    if vitals.is_dead():
+        return Dead()
+    if not vitals.can_act():
+        return Down()
+    return Up(looks=fatigue.level_of(vitals.fatigue()).seen_as)
+
+
+def _condition_and_carried(seen: SeenPerson, wording: SceneTexts, names: NamesInScene) -> tuple[str, str]:
+    # 倒れている人が何を持ったままかは、起こしに行くか荷を引き受けるかを選ぶ材料になる。起きている人の荷は見せない
+    match seen.condition:
+        case Up(looks=DisplayName() as looks):
+            return wording.person_looks.format(looks=looks.text), ""
+        case Up():
+            return "", ""
+        case Down():
+            return wording.person_down, _carried(seen, wording, names)
+        case Dead():
+            return wording.person_dead, _carried(seen, wording, names)
+        case _:
+            assert_never(seen.condition)
+
+
+def _carried(seen: SeenPerson, wording: SceneTexts, names: NamesInScene) -> str:
+    # 暗くて持ち物が見えないときに「手ぶら」と書くと、持っていない事実と取り違えられる
+    if not seen.items_in_sight:
+        return ""
+    if not seen.visible_items:
+        return wording.carrying_nothing
+    return wording.carried.format(
+        items=wording.carried_joiner.join(names.item_name(item).text for item in seen.visible_items)
+    )

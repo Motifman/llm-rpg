@@ -857,6 +857,22 @@ class TestTimeMustBeWritten:
         assert [flaw.location for flaw in _flaws(tmp_path, text)] == [_mine("world", "world", missing or "time")]
 
 
+class TestFatigueLooks:
+    """疲れの段階に書いた見た目 seen_as が、規則の段階に読み込まれることを保証する。"""
+
+    def test_level_with_seen_as_carries_the_look_and_others_have_none(self, tmp_path: Path) -> None:
+        """疲れの段階の 60 にだけ seen_as: 疲れている を書くと、その段階は「疲れている」を持ち、書いていない 0 の段階は見た目を持たない。"""
+        text = _LIFT_LANDING + (
+            "rules:\n  fatigue:\n    levels:\n"
+            "      - { starts_at: 0, name: 元気 }\n"
+            "      - { starts_at: 60, name: 疲労, seen_as: 疲れている }\n"
+        )
+
+        levels = _load(tmp_path, text).design.world_rules.fatigue.levels
+
+        assert [level.seen_as for level in levels] == [None, DisplayName("疲れている")]
+
+
 class TestFlawsNameTheirFile:
     """誤りの場所が、シナリオか、取り込んだどの共通の部品かを持ち、文にもファイルの名前が出ることを保証する。"""
 

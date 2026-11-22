@@ -7,7 +7,7 @@ from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople, Unid
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
-from ai_rpg_world.game_world.domain.perception.surroundings import SeenObject, SeenPerson, VisibleSurroundings
+from ai_rpg_world.game_world.domain.perception.surroundings import SeenObject, SeenPerson, Up, VisibleSurroundings
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotSectionId, WorldTick
 from tests.game_world.domain.perception._surroundings_builders import (
     conditions,
@@ -58,7 +58,13 @@ class TestClearSightShowsEverythingRevealed:
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(people=(miner,)), conditions())
 
         assert surroundings.people == (
-            SeenPerson(person=miner.person, section=SpotSectionId("cage"), visible_items=()),
+            SeenPerson(
+                person=miner.person,
+                section=SpotSectionId("cage"),
+                visible_items=(),
+                condition=Up(looks=None),
+                items_in_sight=True,
+            ),
         )
 
     def test_ground_items_objects_sections_and_description_are_shown(self) -> None:

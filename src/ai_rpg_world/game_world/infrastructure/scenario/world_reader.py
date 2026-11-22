@@ -344,11 +344,18 @@ def _fatigue(node: YamlNode) -> FatigueRule:
         lambda: FatigueRule(
             per_exertion=_amount(fields.required("per_exertion"), FatigueAmount),
             limit=_amount(fields.required("limit"), FatigueAmount),
-            levels=tuple(
-                FatigueLevel(starts_at=_amount(starts_at, FatigueAmount), name=FatigueLevelName(name.text()))
-                for starts_at, name in _levels(fields.required("levels"))
-            ),
+            levels=tuple(_fatigue_level(level) for level in fields.required("levels").items()),
         )
+    )
+
+
+def _fatigue_level(node: YamlNode) -> FatigueLevel:
+    fields = node.fields("starts_at", "name", "seen_as")
+    seen_as = fields.optional("seen_as")
+    return FatigueLevel(
+        starts_at=_amount(fields.required("starts_at"), FatigueAmount),
+        name=FatigueLevelName(fields.required("name").text()),
+        seen_as=None if seen_as is None else DisplayName(seen_as.text()),
     )
 
 

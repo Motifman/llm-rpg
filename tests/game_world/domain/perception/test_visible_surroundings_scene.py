@@ -18,7 +18,7 @@ from ai_rpg_world.game_world.domain.people import (
     TextWithUnassignedPeople,
 )
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
-from ai_rpg_world.game_world.domain.perception.surroundings import VisibleSurroundings
+from ai_rpg_world.game_world.domain.perception.surroundings import Dead, Down, Up, VisibleSurroundings
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, ObjectId, PersonId, SpotId
 from tests.game_world.domain.perception._surroundings_builders import conditions, contents, item, passage, person, thing
 from tests.game_world.support.world_design_for_tests import clock_wording, surroundings_texts, world_words
@@ -63,6 +63,7 @@ def _text(surroundings: VisibleSurroundings) -> str | TextWithPeople:
 
 _TOP = "  mine_depths の説明\n雰囲気: 明るさ: 明るい / 気温: 過ごしやすい"
 _NO_OBJECTS = "オブジェクト: (ここには何も無い)"
+_NO_PEOPLE = "同じ場所にいるプレイヤー: (他のプレイヤーはこのスポットにいない)"
 
 
 class TestClearSight:
@@ -96,7 +97,8 @@ class TestClearSight:
                     "落ちている品物:",
                     "- ランプの油 ×2",
                     "- 縄",
-                    "ここには{person_1}がいる。",
+                    "同じ場所にいるプレイヤー:",
+                    '  - "{person_1}"',
                 )
             ),
             people={"person_1": PersonInText(handle=1, appearance="1 番の見た目", visible_name=None)},
@@ -116,7 +118,7 @@ class TestClearSight:
 
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(passages=(coming_in,)), conditions())
 
-        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}"
+        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}"
 
     def test_each_passage_to_the_same_spot_has_its_own_line(self) -> None:
         """同じ場所へ続く通路が 2 本あると、接続先は通路ごとに 2 行になる。古い run の接続先と同じ。"""
@@ -131,14 +133,15 @@ class TestClearSight:
                 '  - "upper の通路" → "well の名前"（通行可）',
                 '  - "lower の通路" → "well の名前"（通行可）',
                 _NO_OBJECTS,
+                _NO_PEOPLE,
             )
         )
 
     def test_scene_without_objects_says_there_is_nothing(self) -> None:
-        """明るくて物が無い場面は、オブジェクトの節を消さず「(ここには何も無い)」と書き、人がいなければ文字のまま渡る。"""
+        """明るくて物も人も無い場面は、どちらの節も消さず「(ここには何も無い)」「(他のプレイヤーはこのスポットにいない)」と書き、人の穴の無い文字のまま渡る。"""
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(), conditions())
 
-        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}"
+        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}"
 
     def test_braces_in_names_stay_as_letters(self) -> None:
         """物の名前や見た目に括弧があっても、人の穴にはならず、文字のまま出る。"""
@@ -146,7 +149,75 @@ class TestClearSight:
             SeesClearly(), contents(objects=(thing("{札}", look=DescriptionText("{読めない}")),)), conditions()
         )
 
-        assert _text(surroundings) == f'{_TOP}\nオブジェクト:\n  - "{{札}}" ({{読めない}}) — {{札}} の説明'
+        assert (
+            _text(surroundings) == f'{_TOP}\nオブジェクト:\n  - "{{札}}" ({{読めない}}) — {{札}} の説明\n{_NO_PEOPLE}'
+        )
+
+
+def _people_lines(surroundings: VisibleSurroundings) -> list[str]:
+    text = _text(surroundings)
+    assert isinstance(text, TextWithPeople)
+    lines = text.template.splitlines()
+    return lines[lines.index("同じ場所にいるプレイヤー:") :]
+
+
+class TestPeopleHere:
+    """ここにいる人が、古い run の「同じ場所にいるプレイヤー:」の節に 1 人 1 行で、世界の見た状態 (疲れの様子、倒れている、死んでいる) と、倒れた人の持ち物を添えて出ることを保証する。"""
+
+    def test_tired_person_shows_the_look_in_parentheses(self) -> None:
+        """疲れの見た目「疲れている」を持つ起きている人は、名前の行に「(疲れている)」が付き、手の持ち物は書かない。"""
+        tired = person(1, held=(item("rope"),), condition=Up(looks=DisplayName("疲れている")))
+
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(people=(tired,)), conditions())
+
+        assert _people_lines(surroundings) == ["同じ場所にいるプレイヤー:", '  - "{person_1}" (疲れている)']
+
+    def test_fallen_person_shows_what_is_still_carried(self) -> None:
+        """倒れている人は「(倒れて動かない)」に続けて、荷の中まで含めた持ち物を「〔〕」に「、」でつないで書く。"""
+        fallen = person(1, held=(item("rope"),), carried=(item("oil_1"),), condition=Down())
+
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(bodies=(fallen,)), conditions())
+
+        assert _people_lines(surroundings)[1] == '  - "{person_1}" (倒れて動かない) 〔縄、ランプの油〕'
+
+    def test_fallen_person_with_nothing_is_empty_handed(self) -> None:
+        """何も持たずに倒れている人は「〔手ぶら〕」と書く。"""
+        surroundings = VisibleSurroundings.seen_with(
+            SeesClearly(), contents(bodies=(person(1, condition=Down()),)), conditions()
+        )
+
+        assert _people_lines(surroundings)[1] == '  - "{person_1}" (倒れて動かない) 〔手ぶら〕'
+
+    def test_dead_person_says_so_with_what_is_carried(self) -> None:
+        """死んでいる人は「(死亡している)」に続けて持ち物を書く。"""
+        dead = person(1, carried=(item("rope"),), condition=Dead())
+
+        surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(bodies=(dead,)), conditions())
+
+        assert _people_lines(surroundings)[1] == '  - "{person_1}" (死亡している) 〔縄〕'
+
+    def test_fallen_person_in_the_dark_says_nothing_about_belongings(self) -> None:
+        """薄暗くて持ち物が見えないとき、倒れている人に「〔手ぶら〕」を書かない。持っていないことと取り違えないため。"""
+        fallen = person(1, carried=(item("rope"),), condition=Down())
+
+        surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(fallen,)), conditions())
+
+        assert _people_lines(surroundings)[1] == '  - "{person_1}" (倒れて動かない)'
+
+    def test_standing_people_come_before_the_fallen(self) -> None:
+        """起きている人を先に、倒れている人をあとに並べ、穴の番号もその順に振る。"""
+        surroundings = VisibleSurroundings.seen_with(
+            SeesClearly(), contents(people=(person(1),), bodies=(person(2, condition=Down()),)), conditions()
+        )
+
+        text = _text(surroundings)
+
+        assert isinstance(text, TextWithPeople)
+        assert _people_lines(surroundings)[1:] == ['  - "{person_1}"', '  - "{person_2}" (倒れて動かない) 〔手ぶら〕']
+        assert [text.people[key] for key in ("person_1", "person_2")] == [
+            PersonInText(handle=1, appearance="1 番の見た目", visible_name=None),
+            PersonInText(handle=2, appearance="2 番の見た目", visible_name=None),
+        ]
 
 
 class TestOperationsNotPossibleNow:
@@ -173,11 +244,12 @@ class TestOperationsNotPossibleNow:
                 '  - "金庫" — 金庫 の説明',
                 "      いまできない: 開ける（鍵が掛かっている。）、壊す（道具が無い。）",
                 '  - "机" — 机 の説明',
+                _NO_PEOPLE,
             )
         )
 
     def test_person_in_the_reason_stays_a_hole_apart_from_the_people_here(self) -> None:
-        """理由に出る人は、ここにいる人の穴とは別の名前の穴で渡る。"""
+        """理由に出る人は、ここにいる人の穴とは別の名前の穴で渡り、ここにいる人の穴は理由の穴のあとの番号になる。"""
         surroundings = VisibleSurroundings.seen_with(
             SeesClearly(), contents(objects=(thing("金庫"),), people=(person(1),)), conditions()
         )
@@ -190,7 +262,7 @@ class TestOperationsNotPossibleNow:
 
         assert here is not None and isinstance(here.text, TextWithPeople)
         assert "      いまできない: 開ける（{reason_1}が見張っている。）" in here.text.template.splitlines()
-        assert set(here.text.people) == {"reason_1", "person_1"}
+        assert set(here.text.people) == {"reason_1", "person_2"}
 
 
 class TestInTheDark:
@@ -205,7 +277,7 @@ class TestInTheDark:
         )
 
         assert _text(surroundings) == TextWithPeople(
-            template=f"{_TOP}\nオブジェクト: (暗くて何も見えない。灯りが要る)\nここには{{person_1}}がいる。",
+            template=f'{_TOP}\nオブジェクト: (暗くて何も見えない。灯りが要る)\n同じ場所にいるプレイヤー:\n  - "{{person_1}}"',
             people={"person_1": UnidentifiedPerson()},
         )
 
@@ -230,6 +302,7 @@ class TestInTheDark:
                 "オブジェクト:",
                 "  (暗い。灯りがなければ、見えるのはこれだけ)",
                 '  - "光る苔" — 光る苔 の説明',
+                _NO_PEOPLE,
             )
         )
 
@@ -249,4 +322,6 @@ def test_scene_is_the_place_here() -> None:
     """場面の文は「現在地と周囲」の見出しと場所の名前を持つ「いまいる場所」で渡り、ほかの説明と知らせは空のまま渡る。"""
     scene = _scene(VisibleSurroundings.seen_with(SeesClearly(), contents(), conditions()))
 
-    assert scene == Scene(here=Here(place="mine_depths", heading="現在地と周囲", text=f"{_TOP}\n{_NO_OBJECTS}"))
+    assert scene == Scene(
+        here=Here(place="mine_depths", heading="現在地と周囲", text=f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}")
+    )
