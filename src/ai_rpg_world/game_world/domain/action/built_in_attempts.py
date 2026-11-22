@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, final
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, ClassVar, TypeVar, final
 
 from typing_extensions import Self
 
 from ai_rpg_world.game_world.domain.action.acting_person import NoActingPerson, fall_cause_from
+from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import (
     ActorRequirement,
     CopresenceRequirement,
@@ -73,6 +74,7 @@ from ai_rpg_world.game_world.domain.whereabouts import AtSpot, NoRoute, Occupant
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
@@ -80,6 +82,8 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
     from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
     from ai_rpg_world.game_world.domain.people import NameInText
+
+_Reply = TypeVar("_Reply")
 
 
 class _BuiltInAttempt(TriggerAnswersNothingByDefault):
@@ -89,6 +93,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         return OfferedAction(self._CHOICE)
+
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
+        return self
 
     def kind(self) -> ActionKind:
         return self._KIND
@@ -171,6 +178,10 @@ class _OnOneItem(_BuiltInAttempt):
 class TravelAttempt(_BuiltInAttempt):
     _KIND = ActionKind.TRAVEL
     _CHOICE = ActionChoiceKind.TRAVEL_TO
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.travel(self)
+
     actor: PersonId
     destination: SpotDeclaration
 
@@ -231,6 +242,10 @@ def _open_passages(facts: WorldFacts) -> frozenset[PassageId]:
 class SpeechAttempt(_BuiltInAttempt):
     _KIND = ActionKind.SPEAK
     _CHOICE = ActionChoiceKind.SPEAK
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.speak(self)
+
     actor: PersonId
     reach: SpeechReach
     content: SpeechContent | SpeechContentNotChosen
@@ -261,6 +276,9 @@ class SpeechAttempt(_BuiltInAttempt):
     def _chosen_content(self) -> SpeechContent:
         return self.content.chosen_by(self.actor)
 
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
+        return replace(self, content=self.content.written_as(values))
+
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         return OfferedAction(self._CHOICE, self.reach.offered_steps(wording), (OfferedFreeText(CONTENT),))
 
@@ -270,7 +288,14 @@ class SpeechAttempt(_BuiltInAttempt):
 class ListeningAttempt(_BuiltInAttempt):
     _KIND = ActionKind.LISTEN
     _CHOICE = ActionChoiceKind.LISTEN
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.listen(self)
+
     actor: PersonId
+
+    def take_effect(self, facts: WorldFacts) -> Ticks:
+        return facts.rules().duration_of(self._KIND, DefaultDuration())
 
     def exertion(self) -> Exertion:
         return DoesNotUseBody()
@@ -284,8 +309,15 @@ class ListeningAttempt(_BuiltInAttempt):
 class WaitAttempt(_BuiltInAttempt):
     _KIND = ActionKind.WAIT
     _CHOICE = ActionChoiceKind.WAIT
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.wait(self)
+
     actor: PersonId
     reason: WaitReason | NoReason
+
+    def take_effect(self) -> Ticks:
+        return Ticks(0)
 
     def exertion(self) -> Exertion:
         return DoesNotUseBody()
@@ -299,6 +331,10 @@ class WaitAttempt(_BuiltInAttempt):
 class TendAttempt(_BuiltInAttempt):
     _KIND = ActionKind.TEND
     _CHOICE = ActionChoiceKind.TEND_TO_PLAYER
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.tend(self)
+
     actor: PersonId
     target: PersonId
 
@@ -329,6 +365,10 @@ class TendAttempt(_BuiltInAttempt):
 class ItemHandOverAttempt(_BuiltInAttempt):
     _KIND = ActionKind.HAND_OVER
     _CHOICE = ActionChoiceKind.GIVE_ITEM
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.hand_over(self)
+
     actor: PersonId
     to: PersonId
     items: tuple[ItemInstanceId, ...]
@@ -377,6 +417,10 @@ class ItemHandOverAttempt(_BuiltInAttempt):
 class GroundItemPickupAttempt(_OnOneItem):
     _KIND = ActionKind.PICK_UP
     _CHOICE = ActionChoiceKind.PICKUP_ITEM
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.pick_up(self)
+
     actor: PersonId
     item: ItemInstanceId
     manner: Manner
@@ -396,6 +440,10 @@ class GroundItemPickupAttempt(_OnOneItem):
 class ItemDropAttempt(_OnOneItem):
     _KIND = ActionKind.DROP
     _CHOICE = ActionChoiceKind.DROP_ITEM
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.drop(self)
+
     actor: PersonId
     item: ItemInstanceId
     manner: Manner
@@ -412,6 +460,10 @@ class ItemDropAttempt(_OnOneItem):
 class SpotSearchAttempt(_BuiltInAttempt):
     _KIND = ActionKind.SEARCH
     _CHOICE = ActionChoiceKind.EXPLORE
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.search_spot(self)
+
     actor: PersonId
 
     def exertion(self) -> Exertion:
@@ -430,6 +482,10 @@ class SpotSearchAttempt(_BuiltInAttempt):
 class ItemUseAttempt(_OnOneItem):
     _KIND = ActionKind.USE_ITEM
     _CHOICE = ActionChoiceKind.USE_ITEM
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.use_item(self)
+
     actor: PersonId
     item: ItemInstanceId
 
@@ -449,6 +505,10 @@ class ItemUseAttempt(_OnOneItem):
 class EnterSectionAttempt(_BuiltInAttempt):
     _KIND = ActionKind.ENTER_SECTION
     _CHOICE = ActionChoiceKind.SET_SUB_LOCATION
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.enter_section(self)
+
     actor: PersonId
     access: DeclaredSectionAccess
 
@@ -468,6 +528,10 @@ class EnterSectionAttempt(_BuiltInAttempt):
 class LeaveSectionAttempt(_BuiltInAttempt):
     _KIND = ActionKind.LEAVE_SECTION
     _CHOICE = ActionChoiceKind.SET_SUB_LOCATION
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.leave_section(self)
+
     actor: PersonId
     access: DeclaredSectionAccess
 
@@ -487,6 +551,10 @@ class LeaveSectionAttempt(_BuiltInAttempt):
 class HoldItemAttempt(_OnOneItem):
     _KIND = ActionKind.HOLD
     _CHOICE = ActionChoiceKind.HOLD_ITEM
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.hold(self)
+
     actor: PersonId
     item: ItemInstanceId
 
@@ -499,6 +567,10 @@ class HoldItemAttempt(_OnOneItem):
 class PutAwayItemAttempt(_OnOneItem):
     _KIND = ActionKind.PUT_AWAY
     _CHOICE = ActionChoiceKind.PUT_AWAY_ITEM
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.put_away(self)
+
     actor: PersonId
     item: ItemInstanceId
 
@@ -511,6 +583,10 @@ class PutAwayItemAttempt(_OnOneItem):
 class GroupDecisionBallotAttempt(_BuiltInAttempt):
     _KIND = ActionKind.CAST_BALLOT
     _CHOICE = ActionChoiceKind.VOTE
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.cast_ballot(self)
+
     actor: PersonId
     decision: GroupDecisionDeclaration
     choice: VoteFor | Abstain
