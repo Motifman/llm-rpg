@@ -212,7 +212,9 @@ def clock_wording(node: YamlNode) -> ClockWording:
 
 
 def world_map_wording(node: YamlNode) -> WorldMapWording:
-    fields = node.fields("place", "place_without_exits", "exit", "joiner", "minutes", "turns", "lighting")
+    fields = node.fields(
+        "place", "place_without_exits", "exit", "joiner", "minutes", "turns", "lighting", "outdoor_lighting"
+    )
     return node.build(
         lambda: WorldMapWording(
             place=fields.required("place").text(),
@@ -222,6 +224,7 @@ def world_map_wording(node: YamlNode) -> WorldMapWording:
             minutes=fields.required("minutes").text(),
             turns=fields.required("turns").text(),
             lighting=_by_enum(fields.required("lighting"), Lighting, lambda value: value.text()),
+            outdoor_lighting=fields.required("outdoor_lighting").text(),
         )
     )
 

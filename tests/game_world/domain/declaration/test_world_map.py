@@ -96,6 +96,28 @@ class TestWorldMapWrittenWith:
         assert written.splitlines()[0] == "  井戸 (明るい) → 広場 まで 3 手ぶん"
 
 
+def _outdoor(name: str) -> SpotDeclaration:
+    return dataclasses.replace(spot(name), atmosphere=dataclasses.replace(spot(name).atmosphere, outdoor=True))
+
+
+class TestOutdoorPlaces:
+    """屋外の場所の明るさが、夜や悪天候で暗くなることの分かる書き方で地図に載ることを保証する。"""
+
+    def test_outdoor_place_says_its_lighting_is_by_day(self) -> None:
+        """昼夜のある世界で、屋外の広場は「昼は明るい」と書き、屋内の井戸は「明るい」のまま書く。"""
+        written = _written(passage("p", ("井戸", "広場")), spots=(spot("井戸"), _outdoor("広場")))
+
+        assert written.splitlines() == ["  井戸 (明るい) → 広場 まで 30 分", "  広場 (昼は明るい) → 井戸 まで 30 分"]
+
+    def test_outdoor_place_in_a_world_without_day_night_keeps_its_lighting(self) -> None:
+        """昼夜の無い世界では、屋外の広場も「明るい」のまま書く。"""
+        declared = nouns(spots=(_outdoor("広場"),), passages=())
+
+        written = WorldMap.drawn_from(declared).written_with(world_map_wording(), NoDayNight())
+
+        assert written == "  広場 (明るい) — 行き来できる先は無い"
+
+
 class TestWorldMapWording:
     """WorldMapWording が、地図を描けない言い回しを作るときに断る挙動を保証する。"""
 
@@ -107,7 +129,7 @@ class TestWorldMapWording:
         with pytest.raises(ValueOutOfRangeException):
             dataclasses.replace(world_map_wording(), lighting=lighting)
 
-    @pytest.mark.parametrize("field", ["place", "place_without_exits", "exit", "minutes", "turns"])
+    @pytest.mark.parametrize("field", ["place", "place_without_exits", "exit", "minutes", "turns", "outdoor_lighting"])
     def test_unfillable_wording_is_refused(self, field: str) -> None:
         """言い回しに埋められない名前があると、ValueOutOfRangeException を投げる。"""
         fields: dict[str, object] = {field: "{unknown}"}

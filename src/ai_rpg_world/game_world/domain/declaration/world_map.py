@@ -25,6 +25,7 @@ class WorldMapWording:
     minutes: str
     turns: str
     lighting: Mapping[Lighting, str]
+    outdoor_lighting: str
 
     def __post_init__(self) -> None:
         missing = sorted(lighting.name for lighting in Lighting if lighting not in self.lighting)
@@ -38,6 +39,7 @@ class WorldMapWording:
             self.exit.format(spot="", time="")
             self.minutes.format(minutes=0)
             self.turns.format(turns=0)
+            self.outdoor_lighting.format(lighting="")
         except (KeyError, IndexError, ValueError, AttributeError, TypeError) as error:
             raise ValueOutOfRangeException(f"WorldMapWording names something it cannot fill: {error}") from error
 
@@ -92,6 +94,9 @@ class WorldMap:
         lines = []
         for spot, exits in self.places:
             lighting = wording.lighting[spot.atmosphere.lighting]
+            # 屋外は夜や悪天候で一段暗くなるので、書いた明るさが昼のものだと分かるようにする
+            if spot.atmosphere.outdoor:
+                lighting = day_night.outdoor_lighting_text(lighting, wording)
             if not exits:
                 lines.append(wording.place_without_exits.format(spot=spot.name.text, lighting=lighting))
                 continue

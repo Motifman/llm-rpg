@@ -40,6 +40,9 @@ class NoDayNight:
     def travel_time_text(self, ticks: int, wording: WorldMapWording) -> str:
         return wording.turns.format(turns=ticks)
 
+    def outdoor_lighting_text(self, lighting: str, wording: WorldMapWording) -> str:
+        return lighting
+
     def phase_names(self) -> frozenset[DayPhaseName]:
         return frozenset()
 
@@ -97,6 +100,9 @@ class DayNightDeclaration:
 
     def travel_time_text(self, ticks: int, wording: WorldMapWording) -> str:
         return wording.minutes.format(minutes=ticks * _MINUTES_PER_DAY // self.ticks_per_day.value)
+
+    def outdoor_lighting_text(self, lighting: str, wording: WorldMapWording) -> str:
+        return wording.outdoor_lighting.format(lighting=lighting)
 
     def day_and_clock_time_at(self, now: WorldTick) -> DayAndClockTime:
         minutes_since_midnight = self.time_of_day_at(now).tick_of_day * _MINUTES_PER_DAY // self.ticks_per_day.value

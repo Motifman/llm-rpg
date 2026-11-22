@@ -51,14 +51,16 @@ class TestBriefEnteringPerson:
         assert isinstance(premises.text, str) and "行動の制限" not in premises.text
 
     def test_map_lists_every_place_with_its_neighbours_in_minutes(self, scenario: LoadedScenario) -> None:
-        """世界の前提の中の「【この場所の造り】」は 21 の場所を 1 行ずつ載せ、北の竪坑口の行は、1 tick を 30 分として近い順に行き先を並べる。"""
+        """世界の前提の中の「【この場所の造り】」は 21 の場所を 1 行ずつ載せ、屋外の北の竪坑口の行は明るさを「昼は明るい」と書き、1 tick を 30 分として近い順に行き先を並べる。屋内の昇降機の乗り場の明るさには「昼は」を付けない。"""
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
         [premises] = tuple(briefing.orientation.descriptions)
         assert isinstance(premises.text, str)
         lines = premises.text.split("【この場所の造り】\n")[1].splitlines()
         assert len(lines) == 21
-        assert lines[0] == "  北の竪坑口 (明るい) → 北の竪坑の底 まで 30 分 / 集会所 まで 30 分 / 雪の峠道 まで 60 分"
+        assert (
+            lines[0] == "  北の竪坑口 (昼は明るい) → 北の竪坑の底 まで 30 分 / 集会所 まで 30 分 / 雪の峠道 まで 60 分"
+        )
         assert "  昇降機の乗り場 (暗い) → 下層の近道 まで 30 分 / 古い支柱の通路 まで 60 分" in lines
 
     def test_imposed_goal_is_only_gens_objective(self, scenario: LoadedScenario) -> None:
