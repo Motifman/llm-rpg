@@ -23,6 +23,7 @@ from ai_rpg_world.being.application.memo_arguments import read_memo_operations
 from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.names_for_people import name_for
 from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
+from ai_rpg_world.being.application.rechoose_name import NameRechoice, RechooseName
 from ai_rpg_world.being.application.unwritten_memo_text import (
     WHOLE_MEMO,
     attempted_operation,
@@ -108,6 +109,7 @@ class ChooseActionCommand:
 class ActionChosen:
     move: AgentMove
     exchange: LlmExchange
+    name_rechoices: tuple[NameRechoice, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -141,6 +143,7 @@ class ChooseAction:
         episodes: EpisodeRepository,
         visited_places: VisitedPlacesRepository,
         recall_limit: int,
+        rechoose_name: RechooseName | None = None,
     ) -> None:
         if recall_limit < 1:
             raise ValueError("recall_limit must be >= 1")
@@ -152,6 +155,7 @@ class ChooseAction:
         self._episodes = episodes
         self._visited_places = visited_places
         self._recall_limit = recall_limit
+        self._rechoose_name = rechoose_name
 
     def execute(self, command: ChooseActionCommand) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
         tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
@@ -184,6 +188,31 @@ class ChooseAction:
         outcome = self._outcome_of(call, tools, command, exchange)
         self._visit(command.being_id, command.scene.here)
         return outcome
+
+    def _names_matched(
+        self,
+        call: ToolCallReply,
+        tools: ActionTools,
+        being_tools: OfferedBeingTools,
+        rechoices: list[NameRechoice],
+    ) -> Mapping[str, object]:
+        thought = call.arguments.get(being_tools.inner_thought) if being_tools.inner_thought else None
+
+        def rechoose(written: str, label: str, candidates: Mapping[str, str | None], parent: str | None) -> str | None:
+            if self._rechoose_name is None:
+                return None
+            rechoice = self._rechoose_name.rechoose(
+                written,
+                label=label,
+                candidates=candidates,
+                parent=parent,
+                tool=call.tool_name,
+                inner_thought=thought if isinstance(thought, str) else None,
+            )
+            rechoices.append(rechoice)
+            return rechoice.replaced_with
+
+        return tools.with_names_matched(call.tool_name, call.arguments, rechoose)
 
     def _visit(self, being_id: BeingId, here: Here | None) -> None:
         if here is None:
@@ -229,7 +258,9 @@ class ChooseAction:
                 ),
             )
             return TurnSpentRecalling(move=recall, exchange=exchange)
-        move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=call.arguments)
+        rechoices: list[NameRechoice] = []
+        arguments = self._names_matched(call, tools, command.being_tools, rechoices)
+        move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=arguments)
         if move is not None:
             # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
             # 行動が世界に断られても、書いたことは本人がしたことなので残る。
@@ -239,10 +270,10 @@ class ChooseAction:
                 move,
                 turn=turn,
                 memo_rejections=rejections,
-                call_text=tools.call_text(call.tool_name, call.arguments),
+                call_text=tools.call_text(call.tool_name, arguments),
                 result=None,
             )
-            return ActionChosen(move=move, exchange=exchange)
+            return ActionChosen(move=move, exchange=exchange, name_rechoices=tuple(rechoices))
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
         body = format_unsupported_tool_message(

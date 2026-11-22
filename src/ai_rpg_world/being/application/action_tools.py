@@ -8,11 +8,13 @@ from typing import Any
 
 from ai_rpg_world.being.application.episode_recall_tool import episode_recall_description, episode_recall_parameters
 from ai_rpg_world.being.application.memo_argument import memo_field_property
+from ai_rpg_world.being.application.name_forms import name_forms
 from ai_rpg_world.being.application.people_called_apart import PeopleCalledApart
 from ai_rpg_world.being.contract import (
     ActionChoice,
     ActionChoices,
     AgentMove,
+    Candidate,
     ChoiceValue,
     Description,
     FreeText,
@@ -22,6 +24,8 @@ from ai_rpg_world.being.contract import (
     PersonPlaceholderValue,
     PickOne,
 )
+
+NameRechooser = Callable[[str, str, Mapping[str, str | None], str | None], str | None]
 
 CANDIDATE_TABLE_HEADING = "現在選べる対象引数"
 CANDIDATE_TABLE_NOTE = "※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。"
@@ -124,6 +128,43 @@ class ActionTools:
         ]
         return f"{tool_name}({', '.join(parts)})"
 
+    def with_names_matched(
+        self, tool_name: str, arguments: Mapping[str, object], rechoose: NameRechooser
+    ) -> dict[str, object]:
+        """候補から選ぶ値を、表記の崩れを直して候補の名前に合わせる。当たらない名前だけを ``rechoose`` に回し、
+        名前が返れば置き換える。出していないツールの名前なら、そのまま返す。
+        """
+        matched = {k: (dict(v) if k == DETAILS and isinstance(v, Mapping) else v) for k, v in arguments.items()}
+        choice = next((c for c in self._choices.choices if c.name == tool_name), None)
+        if choice is not None:
+            self._match(choice.values, choice.takes_details, matched, rechoose, None)
+        return matched
+
+    def _match(
+        self,
+        values: Sequence[ChoiceValue],
+        takes_details: bool,
+        arguments: dict[str, object],
+        rechoose: NameRechooser,
+        parent: str | None,
+    ) -> None:
+        for value in values:
+            if isinstance(value, FreeText):
+                continue
+            # move_from と同じ置き場所を見る。上の段が details に勝ち、details を取らない行動では details を捨てる。
+            place = arguments if value.name in arguments else (arguments.get(DETAILS) if takes_details else None)
+            written = place.get(value.name) if isinstance(place, dict) else None
+            by_label = {self._label(c.label): c for c in value.candidates}
+            if not isinstance(place, dict) or not isinstance(written, str) or not written.strip() or not by_label:
+                continue
+            name = next((form for form in name_forms(written) if form in by_label), None)
+            if name is None:
+                name = rechoose(written, value.label, {n: self._described(c) for n, c in by_label.items()}, parent)
+            if name is None or name not in by_label:
+                continue
+            place[value.name] = name
+            self._match(by_label[name].values, takes_details, arguments, rechoose, name)
+
     def candidate_table(self) -> Description | None:
         lines = [
             f"- {choice.name}.{name}{'' if parent is None else f' ({_quoted(parent)})'}: "
@@ -184,6 +225,11 @@ class ActionTools:
                 yield (value.name if value.name in outlined else f"{DETAILS}.{value.name}"), parent, labels
             for candidate in value.candidates:
                 yield from self._picks(candidate.values, outlined, self._label(candidate.label))
+
+    def _described(self, candidate: Candidate) -> str | None:
+        """候補の下で選べるものを説明にする。名前だけでは、意味を推し量る材料が無い。"""
+        labels = [self._label(c.label) for v in candidate.values if isinstance(v, PickOne) for c in v.candidates]
+        return "、".join(labels) or None
 
     def _label(self, label: str | PersonInText) -> str:
         return self._people.name_of(label) if isinstance(label, PersonInText) else label
