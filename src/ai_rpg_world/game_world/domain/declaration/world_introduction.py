@@ -10,4 +10,4 @@ from ai_rpg_world.game_world.domain.value_object import DescriptionText
 @dataclass(frozen=True)
 class WorldIntroduction:
     text: DescriptionText
-    objective: DescriptionText
+    premises: DescriptionText

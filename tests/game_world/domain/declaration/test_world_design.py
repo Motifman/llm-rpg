@@ -609,7 +609,7 @@ class TestLookingUpVerbs:
         assert design.discoverables_at(SpotId("hall")) == ()
 
     def test_introduction_is_kept(self) -> None:
-        """compose に渡した導入と目的を introduction で引ける。"""
+        """compose に渡した導入と前提を introduction で引ける。"""
         assert compose_world().introduction == introduction()
 
 

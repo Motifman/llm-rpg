@@ -277,7 +277,7 @@ def surroundings_texts() -> SurroundingsTexts:
 def introduction() -> WorldIntroduction:
     return WorldIntroduction(
         text=DescriptionText("山あいの廃坑の村で目を覚ました。"),
-        objective=DescriptionText("坑道から外へ出る。"),
+        premises=DescriptionText("昇降機は一度しか動かない。"),
     )
 
 
