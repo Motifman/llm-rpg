@@ -112,7 +112,11 @@ class _Judge:
     def __call__(
         self, attempts: tuple[_Attempt, ...], precondition: ActionPrecondition[_Attempt]
     ) -> tuple[AvailableAction, ...]:
-        return tuple(self._check.available(attempt, precondition, self._facts, self._texts) for attempt in attempts)
+        return tuple(
+            offered
+            for attempt in attempts
+            for offered in self._check.offered(attempt, precondition, self._facts, self._texts)
+        )
 
     def ballots(self, attempts: tuple[GroupDecisionBallotAttempt, ...]) -> tuple[AvailableAction, ...]:
         return tuple(self._check.available_ballot(attempt, self._facts, self._texts) for attempt in attempts)

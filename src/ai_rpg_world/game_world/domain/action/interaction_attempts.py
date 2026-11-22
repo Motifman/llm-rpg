@@ -32,6 +32,7 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
     OfferedStep,
 )
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
+from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct, item_names
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.failure_texts import people_in_text
@@ -127,6 +128,14 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
 
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
         return False
+
+    def hidden_while_unmet(self) -> bool:
+        return self.interaction.hidden_while_unmet
+
+    def unavailable_on_object(
+        self, design: WorldDesign, reason: TextAboutPeople
+    ) -> tuple[UnavailableObjectOperation, ...]:
+        return ()
 
     def person_as(self, kind: SubjectKind) -> PersonId:
         if kind is SubjectKind.ACTOR:
@@ -227,6 +236,12 @@ class ObjectInteractionAttempt(_InteractionAttempt):
 
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
         return (self.obj.object_id, self.interaction.interaction_id) == (obj, interaction)
+
+    def unavailable_on_object(
+        self, design: WorldDesign, reason: TextAboutPeople
+    ) -> tuple[UnavailableObjectOperation, ...]:
+        declared = design.interaction_on_object(self.obj.object_id, self.interaction.interaction_id)
+        return (UnavailableObjectOperation(self.obj.object_id, declared.display_label, reason),)
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         declared = wording.design.interaction_on_object(self.obj.object_id, self.interaction.interaction_id)

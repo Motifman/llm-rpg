@@ -288,6 +288,7 @@ spots:
           ticks_since_closed: { kind: count, initial: 0 }
         interactions:
           open_gate:
+            hidden_while_unmet: true
             display_label: 水門を開ける
             precondition:
               not: { flag_is_raised: gate_a_open }
@@ -304,6 +305,7 @@ spots:
               witness: { clear: "{actor}が水門の把手を回している。" }
               sound: { loudness: loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
           close_gate:
+            hidden_while_unmet: true
             display_label: 水門を閉じる
             precondition:
               flag_is_raised: gate_a_open
@@ -322,6 +324,7 @@ spots:
         description: 防火扉に渡す太い鉄の閂。
         interactions:
           bar_fire_door:
+            hidden_while_unmet: true
             display_label: 閂を掛ける
             precondition:
               not: { flag_is_raised: fire_door_barred_north }
@@ -333,6 +336,7 @@ spots:
               witness: { clear: "{actor}が防火扉に閂を掛けた。" }
               sound: { loudness: loud, clear: 鉄の閂が扉に掛かる重い音がした。, muffled: 鉄のぶつかる鈍い音がした。 }
           unbar_fire_door:
+            hidden_while_unmet: true
             display_label: 閂を外す
             precondition:
               flag_is_raised: fire_door_barred_north
@@ -365,6 +369,7 @@ spots:
           ticks_since_closed: { kind: count, initial: 0 }
         interactions:
           open_gate:
+            hidden_while_unmet: true
             display_label: 水門を開ける
             precondition:
               not: { flag_is_raised: gate_b_open }
@@ -381,6 +386,7 @@ spots:
               witness: { clear: "{actor}が水門の把手を回している。" }
               sound: { loudness: loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
           close_gate:
+            hidden_while_unmet: true
             display_label: 水門を閉じる
             precondition:
               flag_is_raised: gate_b_open
@@ -399,6 +405,7 @@ spots:
         description: 防火扉に渡す太い鉄の閂。
         interactions:
           bar_fire_door:
+            hidden_while_unmet: true
             display_label: 閂を掛ける
             precondition:
               not: { flag_is_raised: fire_door_barred_south }
@@ -410,6 +417,7 @@ spots:
               witness: { clear: "{actor}が防火扉に閂を掛けた。" }
               sound: { loudness: loud, clear: 鉄の閂が扉に掛かる重い音がした。, muffled: 鉄のぶつかる鈍い音がした。 }
           unbar_fire_door:
+            hidden_while_unmet: true
             display_label: 閂を外す
             precondition:
               flag_is_raised: fire_door_barred_south
@@ -476,6 +484,7 @@ spots:
           ticks_since_closed: { kind: count, initial: 0 }
         interactions:
           open_gate:
+            hidden_while_unmet: true
             display_label: 水門を開ける
             precondition:
               not: { flag_is_raised: gate_c_open }
@@ -492,6 +501,7 @@ spots:
               witness: { clear: "{actor}が水門の把手を回している。" }
               sound: { loudness: loud, clear: 水がどっと流れ出す音がした。, muffled: 遠くで水の流れる音がした。 }
           close_gate:
+            hidden_while_unmet: true
             display_label: 水門を閉じる
             precondition:
               flag_is_raised: gate_c_open

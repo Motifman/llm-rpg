@@ -45,8 +45,14 @@ def explains(failure_text: TextWithUnassignedPeople | NoText) -> bool:
     return failure_text.explains()
 
 
-def own_failure(failure_text: TextWithUnassignedPeople | NoText, trigger: Trigger) -> FailureReason:
-    return FailureReason(failed_part=ConditionPath.root(), text=text_about_people(failure_text, trigger))
+def own_failure(
+    failure_text: TextWithUnassignedPeople | NoText, trigger: Trigger, *, about_object_state: bool = False
+) -> FailureReason:
+    return FailureReason(
+        failed_part=ConditionPath.root(),
+        text=text_about_people(failure_text, trigger),
+        about_object_state=about_object_state,
+    )
 
 
 def failure_of_child(
@@ -59,8 +65,12 @@ def failure_of_child(
     if isinstance(reason, HiddenFailure):
         return HiddenFailure(failed_part=failed_part)
     if not reason.text.explains():
-        return FailureReason(failed_part=failed_part, text=text_about_people(failure_text, trigger))
-    return FailureReason(failed_part=failed_part, text=reason.text)
+        return FailureReason(
+            failed_part=failed_part,
+            text=text_about_people(failure_text, trigger),
+            about_object_state=reason.about_object_state,
+        )
+    return FailureReason(failed_part=failed_part, text=reason.text, about_object_state=reason.about_object_state)
 
 
 def failure_of_all_children(
@@ -71,4 +81,8 @@ def failure_of_all_children(
     # どの子のせいかは 1 つに決まらないので自分の文を使うが、子が 1 つでも伏せていれば、偽であること自体が所属を漏らす。
     if any(isinstance(reason, HiddenFailure) for reason in reasons):
         return HiddenFailure(failed_part=ConditionPath.root())
-    return own_failure(failure_text, trigger)
+    return own_failure(
+        failure_text,
+        trigger,
+        about_object_state=any(isinstance(r, FailureReason) and r.about_object_state for r in reasons),
+    )

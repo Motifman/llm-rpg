@@ -186,6 +186,9 @@ surroundings_texts:
     no_objects: "オブジェクト: (ここには何も無い)"
     no_objects_in_dark: "オブジェクト: (暗くて何も見えない。灯りが要る)"
     objects_in_dark: "  (暗い。灯りがなければ、見えるのはこれだけ)"
+    unavailable: "      いまできない: {operations}"
+    unavailable_operation: "{label}（{reason}）"
+    unavailable_joiner: 、
     ground_items: "落ちている品物:"
     count_mark: ×
     pitch_dark: 真っ暗で、何も見えない。
@@ -219,6 +222,7 @@ defaults:
     duration: default
     allows_stealth: false
     arguments: {}
+    hidden_while_unmet: false
   passage:
     two_way: true
     states: { open: { display_name: 開いている, traversable: true, sound_loss: 0 } }

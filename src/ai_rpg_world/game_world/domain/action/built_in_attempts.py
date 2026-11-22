@@ -84,6 +84,7 @@ from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
+    from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -144,6 +145,14 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
 
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
         return False
+
+    def hidden_while_unmet(self) -> bool:
+        return False
+
+    def unavailable_on_object(
+        self, design: WorldDesign, reason: TextAboutPeople
+    ) -> tuple[UnavailableObjectOperation, ...]:
+        return ()
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
         return ()

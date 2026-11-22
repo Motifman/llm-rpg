@@ -6,15 +6,41 @@
 from __future__ import annotations
 
 from ai_rpg_world.being.contract import Here, PersonInText, Scene, TextWithPeople, UnidentifiedPerson
+from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.people import (
+    NoVisibleName,
+    PeopleAsSeen,
+    PersonHandle,
+    PersonRef,
+    TextAboutPeople,
+    TextWithUnassignedPeople,
+)
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.surroundings import VisibleSurroundings
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, SpotId
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, ObjectId, PersonId, SpotId
 from tests.game_world.domain.perception._surroundings_builders import conditions, contents, item, passage, person, thing
 from tests.game_world.support.world_design_for_tests import clock_wording, surroundings_texts, world_words
 
 _ITEM_NAMES = {"oil_1": "ランプの油", "oil_2": "ランプの油", "rope": "縄"}
+
+
+class _NoOneSeen(PeopleAsSeen):
+    def ref_of(self, person: PersonId) -> PersonRef:
+        raise AssertionError(f"looked at {person.value}")
+
+
+class _SeesOnlyPerson2(PeopleAsSeen):
+    def ref_of(self, person: PersonId) -> PersonRef:
+        assert person == PersonId("p2")
+        return PersonRef(
+            handle=PersonHandle(2), appearance=DescriptionText("2 番の見た目"), visible_name=NoVisibleName()
+        )
+
+
+def _reason(text: str) -> TextAboutPeople:
+    return TextWithUnassignedPeople(text).about({})
 
 
 class _Names:
@@ -26,7 +52,7 @@ class _Names:
 
 
 def _scene(surroundings: VisibleSurroundings) -> Scene:
-    return surroundings.scene_with(surroundings_texts(), _Names(), world_words(), clock_wording())
+    return surroundings.scene_with(surroundings_texts(), _Names(), world_words(), clock_wording(), (), _NoOneSeen())
 
 
 def _text(surroundings: VisibleSurroundings) -> str | TextWithPeople:
@@ -123,6 +149,50 @@ class TestClearSight:
         assert _text(surroundings) == f'{_TOP}\nオブジェクト:\n  - "{{札}}" ({{読めない}}) — {{札}} の説明'
 
 
+class TestOperationsNotPossibleNow:
+    """物のいまできない操作が、古い run と同じく、その物の行のすぐ下に理由つきで出ることを保証する。"""
+
+    def test_unavailable_operations_follow_their_object(self) -> None:
+        """金庫のいまできない操作 2 つは、金庫の行の下の 1 行に「、」でつないで並び、机の行の下には何も出ない。"""
+        surroundings = VisibleSurroundings.seen_with(
+            SeesClearly(), contents(objects=(thing("金庫"), thing("机"))), conditions()
+        )
+        unavailable = (
+            UnavailableObjectOperation(ObjectId("金庫"), DisplayName("開ける"), _reason("鍵が掛かっている。")),
+            UnavailableObjectOperation(ObjectId("金庫"), DisplayName("壊す"), _reason("道具が無い。")),
+        )
+
+        text = surroundings.scene_with(
+            surroundings_texts(), _Names(), world_words(), clock_wording(), unavailable, _NoOneSeen()
+        ).here
+
+        assert text is not None and text.text == "\n".join(
+            (
+                _TOP,
+                "オブジェクト:",
+                '  - "金庫" — 金庫 の説明',
+                "      いまできない: 開ける（鍵が掛かっている。）、壊す（道具が無い。）",
+                '  - "机" — 机 の説明',
+            )
+        )
+
+    def test_person_in_the_reason_stays_a_hole_apart_from_the_people_here(self) -> None:
+        """理由に出る人は、ここにいる人の穴とは別の名前の穴で渡る。"""
+        surroundings = VisibleSurroundings.seen_with(
+            SeesClearly(), contents(objects=(thing("金庫"),), people=(person(1),)), conditions()
+        )
+        reason = TextWithUnassignedPeople("{owner}が見張っている。").about({"owner": PersonId("p2")})
+        unavailable = (UnavailableObjectOperation(ObjectId("金庫"), DisplayName("開ける"), reason),)
+
+        here = surroundings.scene_with(
+            surroundings_texts(), _Names(), world_words(), clock_wording(), unavailable, _SeesOnlyPerson2()
+        ).here
+
+        assert here is not None and isinstance(here.text, TextWithPeople)
+        assert "      いまできない: 開ける（{reason_1}が見張っている。）" in here.text.template.splitlines()
+        assert set(here.text.people) == {"reason_1", "person_1"}
+
+
 class TestInTheDark:
     """暗いときに場面に出るものが、VisibleSurroundings の見え方の規則どおりになることを保証する。"""
 
@@ -169,7 +239,10 @@ class TestNothingInView:
 
     def test_nothing_in_view_gives_an_empty_scene(self) -> None:
         """何も見えていない人には、説明の無い空の場面を渡す。"""
-        assert NothingInView().scene_with(surroundings_texts(), _Names(), world_words(), clock_wording()) == Scene()
+        assert (
+            NothingInView().scene_with(surroundings_texts(), _Names(), world_words(), clock_wording(), (), _NoOneSeen())
+            == Scene()
+        )
 
 
 def test_scene_is_the_place_here() -> None:

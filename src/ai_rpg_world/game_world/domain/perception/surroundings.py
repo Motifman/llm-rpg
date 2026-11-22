@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from string import Formatter
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol, final
 
@@ -25,6 +26,7 @@ from ai_rpg_world.game_world.domain.perception.scene_conditions import SceneCond
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
+    ObjectId,
     PersonId,
     SpotId,
     SpotSectionId,
@@ -35,6 +37,7 @@ from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageI
 
 if TYPE_CHECKING:
     # 実行時に import すると循環する。
+    from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
     from ai_rpg_world.game_world.domain.declaration.time_and_weather.clock_wording import ClockWording
@@ -311,8 +314,10 @@ class VisibleSurroundings:
         names: NamesInScene,
         words: WorldWords,
         clock: ClockWording,
+        unavailable: Sequence[UnavailableObjectOperation],
+        view: PeopleAsSeen,
     ) -> Scene:
-        described = self._described_with(texts, names, words, clock).for_being()
+        described = self._described_with(texts, names, words, clock, _NotNowOnObjects(unavailable, view)).for_being()
         return Scene(here=Here(place=self.spot.name.text, heading=texts.scene.heading.text, text=described))
 
     def _described_with(
@@ -321,6 +326,7 @@ class VisibleSurroundings:
         names: NamesInScene,
         words: WorldWords,
         clock: ClockWording,
+        not_now: _NotNowOnObjects,
     ) -> TextWithAssignedPeople:
         # 名前は行動の選択肢の候補と同じものを使う。場面の文で見た名前を、そのまま候補から選べるようにするため (D2226)。
         wording = texts.scene
@@ -329,16 +335,18 @@ class VisibleSurroundings:
             wording.description.format(description=description),
             *self.conditions.lines(wording, words, clock),
             *self._destination_lines(wording, names),
-            *self._object_lines(wording),
         ]
         lines = [_letters(line) for line in written]
+        lines += self._object_lines(wording, not_now)
         lines += _listed(wording.ground_items, _counted(self.ground_items, names, wording.count_mark))
-        if not self.people and not self.bodies:
-            return TextWithAssignedPeople("\n".join(lines), {})
-        people = texts.scene_as_seen(
-            people=tuple(seen.person for seen in self.people), bodies=tuple(seen.person for seen in self.bodies)
-        )
-        return TextWithAssignedPeople("\n".join((*lines, people.template)), people.people)
+        holes = dict(not_now.holes)
+        if self.people or self.bodies:
+            people = texts.scene_as_seen(
+                people=tuple(seen.person for seen in self.people), bodies=tuple(seen.person for seen in self.bodies)
+            )
+            lines.append(people.template)
+            holes |= people.people
+        return TextWithAssignedPeople("\n".join(lines), holes)
 
     def _destination_lines(self, wording: SceneTexts, names: NamesInScene) -> list[str]:
         here = self.spot.spot_id
@@ -356,16 +364,52 @@ class VisibleSurroundings:
             )
         return [wording.destinations, *lines] if lines else []
 
-    def _object_lines(self, wording: SceneTexts) -> list[str]:
+    def _object_lines(self, wording: SceneTexts, not_now: _NotNowOnObjects) -> list[str]:
         # 何も無いのと、暗くて見えないのとを、同じ沈黙に潰さない。暗さで消えた物があるかもしれないと分からないと、探し回って時間を使うため
         dark = not _RULES[self.sight].shows_objects_unseen_in_dark
         if not self.objects:
-            return [wording.no_objects_in_dark if dark else wording.no_objects]
-        return [
-            wording.objects,
-            *([wording.objects_in_dark] if dark else []),
-            *map(_object_line_in(wording), self.objects),
+            return [_letters(wording.no_objects_in_dark if dark else wording.no_objects)]
+        lines = [_letters(wording.objects), *([_letters(wording.objects_in_dark)] if dark else [])]
+        for seen in self.objects:
+            lines.append(_letters(_object_line_in(wording)(seen)))
+            lines += not_now.line_for(seen.declaration.object_id, wording)
+        return lines
+
+
+class _NotNowOnObjects:
+    def __init__(self, unavailable: Sequence[UnavailableObjectOperation], view: PeopleAsSeen) -> None:
+        self._by_object: dict[ObjectId, list[UnavailableObjectOperation]] = {}
+        for operation in unavailable:
+            self._by_object.setdefault(operation.obj, []).append(operation)
+        self._view = view
+        self.holes: dict[str, PersonRef | Unidentified] = {}
+
+    def line_for(self, obj: ObjectId, wording: SceneTexts) -> list[str]:
+        operations = self._by_object.get(obj, [])
+        if not operations:
+            return []
+        written = [
+            _filled(wording.unavailable_operation, {"label": _letters(op.label.text), "reason": self._reason(op)})
+            for op in operations
         ]
+        return [_filled(wording.unavailable, {"operations": _letters(wording.unavailable_joiner).join(written)})]
+
+    def _reason(self, operation: UnavailableObjectOperation) -> str:
+        # 理由に出る人は、場面のほかの人の穴と重ならない名前の穴に移す
+        seen = operation.reason.seen_by(self._view)
+        renamed = {key: f"reason_{len(self.holes) + i}" for i, key in enumerate(seen.people, start=1)}
+        for key, hole in renamed.items():
+            self.holes[hole] = seen.people[key]
+        return "".join(
+            TextWithUnassignedPeople.literal(literal).template + ("" if name is None else f"{{{renamed[name]}}}")
+            for literal, name, _, _ in Formatter().parse(seen.template)
+        )
+
+
+def _filled(text: str, values: Mapping[str, str]) -> str:
+    return "".join(
+        _letters(literal) + ("" if name is None else values[name]) for literal, name, _, _ in Formatter().parse(text)
+    )
 
 
 def _letters(text: str) -> str:
