@@ -7,6 +7,7 @@ import pytest
 
 from ai_rpg_world.eventing import DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator, UntranslatedEventKindError
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
@@ -460,7 +461,7 @@ class TestStimulusTranslatorDeclaredInteractions:
         lever = design.nouns.object_of(ObjectId("lever"))
         interaction = design.interaction_on_object(ObjectId("lever"), InteractionId("pull_lever"))
 
-        stimulus = _sight(ObjectInteractionAttempt(_HAL, lever, interaction, {}, Openly()))
+        stimulus = _sight(ObjectInteractionAttempt(_HAL, lever, interaction, ChosenArguments(), Openly()))
 
         assert stimulus.witness.clear.template.template == "{actor}がレバーを引いた。"
 
@@ -469,7 +470,7 @@ class TestStimulusTranslatorDeclaredInteractions:
         design = _acts_design()
         polish = design.interaction_on_item(ItemSpecId("pickaxe"), InteractionId("polish"))
 
-        stimulus = _sight(CarriedItemInteractionAttempt(_HAL, _PICKAXE, polish, {}, Openly()))
+        stimulus = _sight(CarriedItemInteractionAttempt(_HAL, _PICKAXE, polish, ChosenArguments(), Openly()))
 
         assert stimulus.witness.clear.template.template == "{actor}がつるはしを磨いた。"
 
@@ -477,7 +478,7 @@ class TestStimulusTranslatorDeclaredInteractions:
         """ハルがミナに会釈すると、ミナには相手の文「{actor}があなたに会釈した。」が当たる。"""
         greet = _acts_design().person_interaction(InteractionId("greet"))
 
-        stimulus = _sight(PersonInteractionAttempt(_HAL, _MINA, greet, {}, Openly()))
+        stimulus = _sight(PersonInteractionAttempt(_HAL, _MINA, greet, ChosenArguments(), Openly()))
 
         assert isinstance(stimulus.target, SightTarget)
         assert (stimulus.target.person, stimulus.target.texts.clear.template.template) == (
@@ -492,14 +493,16 @@ class TestStimulusTranslatorDeclaredInteractions:
 
         with pytest.raises(PerceptionTargetNotGivenException):
             StimulusTranslator().stimuli_of(
-                _acted(PersonInteractionAttempt(_HAL, SomeoneInTheDark(), greet, {}, Openly())), design
+                _acted(PersonInteractionAttempt(_HAL, SomeoneInTheDark(), greet, ChosenArguments(), Openly())), design
             )
 
     def test_carried_item_whose_kind_was_not_read_is_refused(self) -> None:
         """種類を読めなかった品物への操作は、どの種類の宣言かを引けないので PerceivedItemSpecNotGivenException を投げる。"""
         design = _acts_design()
         polish = design.interaction_on_item(ItemSpecId("pickaxe"), InteractionId("polish"))
-        event = replace(_acted(CarriedItemInteractionAttempt(_HAL, _PICKAXE, polish, {}, Openly())), item_specs={})
+        event = replace(
+            _acted(CarriedItemInteractionAttempt(_HAL, _PICKAXE, polish, ChosenArguments(), Openly())), item_specs={}
+        )
 
         with pytest.raises(PerceivedItemSpecNotGivenException):
             StimulusTranslator().stimuli_of(event, design)

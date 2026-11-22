@@ -33,7 +33,6 @@ from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import 
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import (
-    ArgumentsNotChosenException,
     HandOverToSelfException,
     NothingToHandOverException,
 )
@@ -232,9 +231,7 @@ class SpeechAttempt(_BuiltInAttempt):
         return True
 
     def _chosen_content(self) -> SpeechContent:
-        if isinstance(self.content, SpeechContentNotChosen):
-            raise ArgumentsNotChosenException(f"{self.actor.value} has not chosen what to say")
-        return self.content
+        return self.content.chosen_by(self.actor)
 
 
 @final

@@ -41,7 +41,11 @@ from ai_rpg_world.game_world.application.list_available_actions import (
 )
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
-from ai_rpg_world.game_world.domain.action.action_arguments import ArgumentsNotChosen, TextArgumentValue
+from ai_rpg_world.game_world.domain.action.action_arguments import (
+    ArgumentsNotChosen,
+    ChosenArguments,
+    TextArgumentValue,
+)
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, TextArgument
@@ -452,13 +456,13 @@ class TestListAvailableActions:
                 ItemHandOverAttempt(_ALICE, _CAROL, (lamp,), Openly()),
                 ItemHandOverAttempt(_ALICE, _CAROL, (rock,), Openly()),
                 EnterSectionAttempt(_ALICE, cart),
-                ObjectInteractionAttempt(_ALICE, door, _KNOCK, {}, Openly()),
-                CarriedItemInteractionAttempt(_ALICE, lamp, _RUB, {}, Openly()),
-                PersonInteractionAttempt(_ALICE, _CAROL, _WAVE, {}, Openly()),
-                PersonInteractionAttempt(_ALICE, _BOB, _WAVE, {}, Openly()),
+                ObjectInteractionAttempt(_ALICE, door, _KNOCK, ChosenArguments(), Openly()),
+                CarriedItemInteractionAttempt(_ALICE, lamp, _RUB, ChosenArguments(), Openly()),
+                PersonInteractionAttempt(_ALICE, _CAROL, _WAVE, ChosenArguments(), Openly()),
+                PersonInteractionAttempt(_ALICE, _BOB, _WAVE, ChosenArguments(), Openly()),
             ]
         )
-        assert _not_now(actions) == [ObjectInteractionAttempt(_ALICE, door, _UNLOCK, {}, Openly())]
+        assert _not_now(actions) == [ObjectInteractionAttempt(_ALICE, door, _UNLOCK, ChosenArguments(), Openly())]
 
     def test_every_doable_action_goes_through_when_tried(self) -> None:
         """明るい坑道でできるに分けた行為のうち、値を選ぶ必要の無いものは、1 つずつ新しい坑道で試すと、どれも断られずに通る。"""
@@ -484,14 +488,14 @@ class TestListAvailableActions:
     def test_action_with_hidden_failure_is_listed_as_doable(self) -> None:
         """誰にも見えない陣営の所属を前提にする操作 (人狼と遠吠えする) は、相手が仲間でない carol でもできるに出る。試すと、伏せた理由で断られる。"""
         mine = _Mine(person_interactions=(_HOWL_WITH,))
-        toward_carol = PersonInteractionAttempt(_ALICE, _CAROL, _HOWL_WITH, {}, Openly())
+        toward_carol = PersonInteractionAttempt(_ALICE, _CAROL, _HOWL_WITH, ChosenArguments(), Openly())
 
         actions = mine.lists()
         reply = mine.tries(toward_carol)
 
         assert [a for a in _doable(actions) if isinstance(a, PersonInteractionAttempt)] == [
             toward_carol,
-            PersonInteractionAttempt(_ALICE, _BOB, _HOWL_WITH, {}, Openly()),
+            PersonInteractionAttempt(_ALICE, _BOB, _HOWL_WITH, ChosenArguments(), Openly()),
         ]
         assert isinstance(reply, ActionRefused)
         assert reply.refusal.text.template.template != _NOT_A_WOLF_TEXT
@@ -553,7 +557,7 @@ class TestListAvailableActions:
 
         attempts = [a.attempt for a in mine.lists() if isinstance(a.attempt, PersonInteractionAttempt)]
 
-        assert attempts == [PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), _TAP, {}, Openly())]
+        assert attempts == [PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), _TAP, ChosenArguments(), Openly())]
 
     def test_someone_in_the_dark_is_judged_by_common_rules_only(self) -> None:
         """暗がりの誰かへの操作は、行為ごとの前提 (鍵が要る) を満たしていなくてもできるに出る。相手を選ばないので、相手を引くくじも進まない。"""
@@ -562,7 +566,7 @@ class TestListAvailableActions:
         actions = listed.lists()
 
         assert [a for a in _doable(actions) if isinstance(a, PersonInteractionAttempt)] == [
-            PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), _GREET_BY_KEY, {}, Openly())
+            PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), _GREET_BY_KEY, ChosenArguments(), Openly())
         ]
         assert listed.next_fraction() == untouched.next_fraction()
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
@@ -36,7 +37,7 @@ _PULL_LEVER = InteractionId("pull_lever")
 _ALICE_SEARCHES = ActionAttemptForTests(actor_id=_ALICE, action_kind=ActionKind.SEARCH)
 _BOB_SEARCHES = ActionAttemptForTests(actor_id=_BOB, action_kind=ActionKind.SEARCH)
 _ALICE_PULLS_LEVER = ObjectInteractionAttempt(
-    _ALICE, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), {}, Openly()
+    _ALICE, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), ChosenArguments(), Openly()
 )
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 

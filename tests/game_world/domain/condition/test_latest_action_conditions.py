@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, NoText
@@ -38,7 +39,7 @@ _BY_ALICE = ActionAttemptForTests(actor_id=ALICE)
 _ALICE_SEARCHES = ActionAttemptForTests(actor_id=ALICE, action_kind=ActionKind.SEARCH)
 _BOB_SEARCHES = ActionAttemptForTests(actor_id=BOB, action_kind=ActionKind.SEARCH)
 _BOB_PULLS_LEVER = ObjectInteractionAttempt(
-    BOB, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), {}, Openly()
+    BOB, thing("lever", "lift_landing"), InteractionForTests(_PULL_LEVER), ChosenArguments(), Openly()
 )
 
 

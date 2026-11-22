@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt, LivingOrDeparted
 from ai_rpg_world.game_world.domain.action.action_prerequisite_check import ActionPrerequisiteCheck, CommonRulesOnly
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal
@@ -159,7 +160,7 @@ class TestReach:
 
     def test_object_reachable_only_from_section_is_out_of_reach_from_outside(self) -> None:
         """籠の中からしか届かないレバーに、同じ場所の籠の外から触ろうとすると OutOfReach で断る。"""
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, {}, Openly())
+        attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, ChosenArguments(), Openly())
 
         assert _reason(attempt, _world()) == OutOfReach()
 
@@ -167,7 +168,7 @@ class TestReach:
         """籠の中にいれば、籠の中からしか届かないレバーに触れる。"""
         world = _world()
         world.aggregates().whereabouts().enter_section(PersonBody(ALICE), CAGE, frozenset())
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, {}, Openly())
+        attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, ChosenArguments(), Openly())
 
         assert _reason(attempt, world) is None
 
@@ -175,7 +176,7 @@ class TestReach:
         """別の場所にある物に触ろうとすると、区画より先に NotTogether で断る。"""
         world = _world()
         world.aggregates().whereabouts().teleport(PersonBody(ALICE), SHORE, _NOW)
-        attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, {}, Openly())
+        attempt = ObjectInteractionAttempt(ALICE, LEVER, PULL, ChosenArguments(), Openly())
 
         assert _reason(attempt, world) == NotTogether()
 
@@ -227,8 +228,12 @@ class TestStage:
     def test_interaction_is_checked_by_interaction_id(self) -> None:
         """段階が InteractionId("bite") だけを許すとき、噛む操作は断らず、INTERACT_WITH_PERSON だけでは殴る操作を NotAllowedInThisStage で断る。"""
         world = _world_in_stage(_stage(frozenset({InteractionId("bite"), ActionKind.INTERACT_WITH_PERSON})))
-        bite = PersonInteractionAttempt(ALICE, BOB, InteractionForTests(InteractionId("bite")), {}, Openly())
-        hit = PersonInteractionAttempt(ALICE, BOB, InteractionForTests(InteractionId("hit")), {}, Openly())
+        bite = PersonInteractionAttempt(
+            ALICE, BOB, InteractionForTests(InteractionId("bite")), ChosenArguments(), Openly()
+        )
+        hit = PersonInteractionAttempt(
+            ALICE, BOB, InteractionForTests(InteractionId("hit")), ChosenArguments(), Openly()
+        )
 
         assert _reason(bite, world) is None
         assert _reason(hit, world) == NotAllowedInThisStage()
@@ -254,7 +259,9 @@ class TestActorCannotAct:
         world.aggregates().whereabouts().place(DepartedPerson(ALICE), SHORE)
         haunt = InteractionForTests(InteractionId("haunt"), actor_requirement=LivingOrDeparted())
 
-        assert _reason(ObjectInteractionAttempt(ALICE, LEVER, haunt, {}, Openly()), world) == NotTogether()
+        assert (
+            _reason(ObjectInteractionAttempt(ALICE, LEVER, haunt, ChosenArguments(), Openly()), world) == NotTogether()
+        )
 
     def test_dead_person_cannot_act_where_departed_persons_do_not_act(self) -> None:
         """departed_persons_act が偽の世界では、死んだ人は移動も ActorCannotAct で断る。"""
@@ -351,7 +358,7 @@ _TAP = InteractionForTests(InteractionId("tap"), reaches_unseen=True)
 
 
 def _tap_in_the_dark() -> PersonInteractionAttempt:
-    return PersonInteractionAttempt(ALICE, SomeoneInTheDark(), _TAP, {}, Openly())
+    return PersonInteractionAttempt(ALICE, SomeoneInTheDark(), _TAP, ChosenArguments(), Openly())
 
 
 def _world_of_three(fractions: tuple[float, ...] = (), **overrides: object) -> WorldSession:
@@ -371,7 +378,7 @@ class TestCleared:
     def test_attempt_with_named_target_is_returned_as_it_is(self) -> None:
         """相手を名指しした人への操作は、そのままの試みが返る。"""
         world = _world()
-        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, ChosenArguments(), Openly())
 
         assert _CHECK.cleared(attempt, CommonRulesOnly(), world.facts(), TEXTS) == attempt
 
@@ -416,7 +423,7 @@ class TestCleared:
         world.aggregates().whereabouts().place(DepartedPerson(ALICE), SHORE)
         world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
         tap = InteractionForTests(InteractionId("tap"), reaches_unseen=True, actor_requirement=LivingOrDeparted())
-        attempt = PersonInteractionAttempt(ALICE, SomeoneInTheDark(), tap, {}, Openly())
+        attempt = PersonInteractionAttempt(ALICE, SomeoneInTheDark(), tap, ChosenArguments(), Openly())
 
         assert _CHECK.cleared(attempt, CommonRulesOnly(), world.facts(), TEXTS).target == BOB
 
@@ -448,14 +455,14 @@ class TestClearedPrecondition:
     def test_met_precondition_returns_attempt(self) -> None:
         """行為ごとの前提が欠けていなければ、試みがそのまま返る。"""
         world = _world()
-        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, ChosenArguments(), Openly())
 
         assert _CHECK.cleared(attempt, _PreconditionForTests(None), world.facts(), TEXTS) == attempt
 
     def test_failure_with_text_raises_precondition_refusal_with_that_text(self) -> None:
         """前提が理由の文つきで欠けると、その FailureReason を持つ PreconditionRefusal と、理由の文そのままの断りを持つ ActionRefusedException を投げる。"""
         world = _world()
-        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, ChosenArguments(), Openly())
         text = TextAboutPeople(TextWithUnassignedPeople("{actor}はつるはしを持っていない。"), {"actor": ALICE})
         failure = FailureReason(ConditionPath.root(), text)
 
@@ -467,7 +474,7 @@ class TestClearedPrecondition:
     def test_hidden_failure_raises_precondition_refusal_with_hidden_text(self) -> None:
         """前提が伏せた理由で欠けると、その HiddenFailure を持つ PreconditionRefusal と、伏せた理由の共通の文「今はできない。」の断りを投げる。"""
         world = _world()
-        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())
+        attempt = PersonInteractionAttempt(ALICE, BOB, _TAP, ChosenArguments(), Openly())
         failure = HiddenFailure(ConditionPath.root())
 
         with pytest.raises(ActionRefusedException) as refused:
@@ -486,7 +493,7 @@ class TestClearedPrecondition:
 
         _CHECK.cleared(_tap_in_the_dark(), precondition, world.facts(), TEXTS)
 
-        assert precondition.asked == [PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly())]
+        assert precondition.asked == [PersonInteractionAttempt(ALICE, BOB, _TAP, ChosenArguments(), Openly())]
 
     def test_broken_common_rule_refuses_without_asking_precondition(self) -> None:
         """共通の決まり Busy に当たると、行為ごとの前提を確かめずに Busy の断りを投げる。"""
@@ -495,7 +502,12 @@ class TestClearedPrecondition:
         precondition = _PreconditionForTests(HiddenFailure(ConditionPath.root()))
 
         with pytest.raises(ActionRefusedException) as refused:
-            _CHECK.cleared(PersonInteractionAttempt(ALICE, BOB, _TAP, {}, Openly()), precondition, world.facts(), TEXTS)
+            _CHECK.cleared(
+                PersonInteractionAttempt(ALICE, BOB, _TAP, ChosenArguments(), Openly()),
+                precondition,
+                world.facts(),
+                TEXTS,
+            )
 
         assert refused.value.refusal.reason == Busy()
         assert precondition.asked == []

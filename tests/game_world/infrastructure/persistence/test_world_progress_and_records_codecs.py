@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.action.refusal_code import NoRefusal
@@ -103,7 +104,9 @@ def _latest_actions() -> LatestActionsMemento:
         WorldTick(4),
     )
     latest.note(
-        ObjectInteractionAttempt(_BOB, thing("lever", "landing"), InteractionForTests(_PULL_LEVER), {}, Openly()),
+        ObjectInteractionAttempt(
+            _BOB, thing("lever", "landing"), InteractionForTests(_PULL_LEVER), ChosenArguments(), Openly()
+        ),
         situation_for_tests(),
         PeopleWhoWereThere(),
         WorldTick(6),
@@ -169,7 +172,11 @@ def _scenario_progress() -> ScenarioProgressMemento:
     )
     for who, lever, at in ((_ALICE, "left_lever", 5), (_BOB, "right_lever", 6)):
         attempt = ObjectInteractionAttempt(
-            actor=who, obj=thing(lever, "shaft"), interaction=InteractionForTests(_PUSH), arguments={}, manner=Openly()
+            actor=who,
+            obj=thing(lever, "shaft"),
+            interaction=InteractionForTests(_PUSH),
+            arguments=ChosenArguments(),
+            manner=Openly(),
         )
         progress.note_joint_action_part_done(attempt, (levers,), WorldTick(at))
     return progress.memento()
