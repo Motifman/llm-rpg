@@ -203,6 +203,7 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 - 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つのコマンドの確定が 1 つの `CommandScope`。終わっていないかの確かめと `SettleWorldConditions` は、それぞれ別の範囲) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
 - `SettleWorldConditions` は、1 つのコマンドが確定するたびと、時間を進めるたびに回す
 - Being が世界に入るとき、外側は問い合わせ `BriefEnteringPerson` に、その人と立場 (`CharacterBriefing.known_facts`)・目的 (`CharacterBriefing.objective`) を渡す。世界は、導入 (`WorldIntroduction.text`)、世界の前提 (`WorldIntroduction.premises`)、立場を、`BriefingHeadings` の見出しの違う `Description` にした案内 (`Orientation`) と、課す目的の文と、最初から知っている人 (`knows_at_start`) を返す。外側は、知っている人を Being の名前に変えて紹介 (`EnvironmentEntry.introductions`) にし、目的を課された目的 (`EnvironmentEntry.imposed_goal`) で渡す。世界は Being の名前を知らないため (D2222、#2229)
+- 外側は、Being を世界に入れる前に、入口 `NamePerson` で Being の名前を世界の名簿 (`PeopleRegister`) に付ける。名前を付けていない人が出てくる観測は作れない (D2229-3)
 - 昼夜を宣言しない世界 (`NoDayNight`) は、ステージ 8 では run の入口で `is_declared()` を確かめて止め、知らせる。観測の時刻を割り出せないため (D2222)
 - 誰がいつ考えて行動を送るか (手番、目立つ知らせで考え直す、しばらく何も無ければ考える) は世界の外側 (エージェントを動かす側) が決める。今の実験のターン制は、外側の進め方の 1 つ
 

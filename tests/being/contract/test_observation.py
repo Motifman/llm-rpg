@@ -99,6 +99,20 @@ class TestBodyWithPeople:
         with pytest.raises(ContractViolation):
             observation.body_without_people()
 
+    def test_with_people_named_fills_the_people_and_keeps_the_rest(self) -> None:
+        """with_people_named は、本文の人を渡した呼び方で埋めた文にし、本文のほかの欄は変えない。"""
+        observation = Observation(**_fields(body=self._KICKED))
+
+        named = observation.with_people_named(lambda text: text.template.format(actor="背の高い男"))
+
+        assert named == dataclasses.replace(observation, body="背の高い男が扉を蹴り破った")
+
+    def test_with_people_named_leaves_a_text_body_unchanged(self) -> None:
+        """本文が文字列なら、with_people_named は呼び方を使わず、同じ観測を返す。"""
+        observation = Observation(**_fields())
+
+        assert observation.with_people_named(lambda text: "使われない") == observation
+
 
 class TestKnownIfPossibleFields:
     """「分かるなら書く」の欄が「不明」を受け付け、空と区別されることを保証する。"""
