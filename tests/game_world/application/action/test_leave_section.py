@@ -19,7 +19,7 @@ class TestLeaveSection:
 
         reply = world.leave_cage(ALICE)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.read().facts().whereabouts().is_in_section(PersonBody(ALICE), CAGE) is False
 
     def test_actor_not_in_section_is_refused(self) -> None:

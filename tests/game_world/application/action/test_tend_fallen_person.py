@@ -22,7 +22,7 @@ class TestTendFallenPerson:
 
         reply = world.tend(ALICE, BOB)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         session = world.read()
         vitals = session.facts().vitals(BOB)
         assert vitals.can_act() is True

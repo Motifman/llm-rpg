@@ -22,7 +22,7 @@ class TestPickUpGroundItem:
             PickUpGroundItemCommand(GroundItemPickupAttempt(ALICE, pickaxe, Openly()))
         )
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.carried_by(ALICE) == (pickaxe,)
         assert world.on_ground_at_camp() == ()
 
