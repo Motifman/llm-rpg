@@ -110,7 +110,7 @@ class ActionTools:
         order = [o.name for o in choice.outline]
         given = sorted(
             ((name, value) for name, value in arguments.items() if name not in hidden),
-            key=lambda item: order.index(item[0]) if item[0] in order else len(order),
+            key=lambda item: (0, order.index(item[0]), "") if item[0] in order else (1, 0, item[0]),
         )
         quoted = [(name, value) for name, value in given if name in picked and isinstance(value, str)]
         hidden_as = {o.name: o.hidden_as for o in choice.outline if o.hidden_as is not None}

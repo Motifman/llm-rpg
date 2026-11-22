@@ -471,6 +471,7 @@ class TestRecallingEpisodes:
         )
         assert (attempt.result.call_id, attempt.result.time) == ("call_r", NOW)
         assert attempt.result.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
+        assert attempt.call_text == f'episode_recall(handles=["{handle}"])'
 
     def test_recalling_counts_the_recall_at_the_new_turn(self) -> None:
         """思い出すと、そのエピソードの思い出した回数が 1 増え、記憶のターンが 1 進む。"""

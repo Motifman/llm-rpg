@@ -14,6 +14,7 @@ from ai_rpg_world.being.application.current_working_memory import CurrentWorking
 from ai_rpg_world.being.application.episode_recall_tool import (
     MALFORMED_HANDLES_TEXT,
     read_handles,
+    recall_call_text,
     recalled_text,
     too_many_handles_text,
 )
@@ -195,6 +196,7 @@ class ChooseAction:
                 being_id,
                 recall,
                 turn=turn,
+                call_text=recall_call_text(call.tool_name, call.arguments),
                 result=MemoryOperationOutcome(
                     call_id=call_id,
                     body=body,

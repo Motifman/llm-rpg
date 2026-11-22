@@ -383,6 +383,12 @@ class TestCallText:
 
         assert call == "wait(say_inline=発言, note=本文)"
 
+    def test_arguments_outside_the_outline_follow_in_name_order(self) -> None:
+        """見取り図に無い引数は、見取り図の引数のあとに、名前の順で並ぶ。"""
+        call = _tools(_gen_in_the_office()).call_text("travel_to", {"zeta": "1", "destination": "井戸", "alpha": "2"})
+
+        assert call == 'travel_to(destination="井戸", alpha=本文, zeta=本文)'
+
     def test_tool_that_was_not_offered_has_no_call_text(self) -> None:
         """出していないツールの名前なら None を返す。"""
         assert _tools(_gen_in_the_office()).call_text("gather", {}) is None
