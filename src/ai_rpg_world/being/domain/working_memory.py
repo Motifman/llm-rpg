@@ -170,5 +170,6 @@ def _present(candidates: Sequence[tuple[str, str, Steadiness]]) -> tuple[Section
 
 def _from_descriptions(descriptions: Sequence[Description], steadiness: Steadiness) -> tuple[Section, ...]:
     return tuple(
-        Section(heading=d.heading, lines=tuple(d.text.split("\n")), steadiness=steadiness) for d in descriptions
+        Section(heading=d.heading, lines=tuple(d.text_without_people().split("\n")), steadiness=steadiness)
+        for d in descriptions
     )

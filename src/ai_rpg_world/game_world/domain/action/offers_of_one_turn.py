@@ -10,11 +10,8 @@ from ai_rpg_world.being.contract import (
     ChoiceValue,
     FreeText,
     PersonInText,
-    PersonPlaceholderValue,
     PickOne,
-    TextWithPeople,
     UnavailableAction,
-    UnidentifiedPerson,
 )
 from ai_rpg_world.game_world.domain.action.available_actions import AvailableActions, Doable, NotNow
 from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
@@ -28,8 +25,7 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
     OfferedValue,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.people import NoVisibleName, PeopleAsSeen, PersonRef, Unidentified
-from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
+from ai_rpg_world.game_world.domain.people import PeopleAsSeen, PersonRef
 from ai_rpg_world.game_world.domain.value_object import DisplayName
 
 _Label = DisplayName | PersonRef
@@ -64,7 +60,7 @@ class OffersOfOneTurn:
         unavailable = dict.fromkeys(
             UnavailableAction(
                 picked=tuple(_label(step.candidate) for step in offered.steps),
-                reason=_reason(standing.reason.seen_by(self._people)),
+                reason=standing.reason.seen_by(self._people).for_being(),
             )
             for offered, standing in not_now
             if not root.reaches(tuple(_key(step.candidate) for step in offered.steps))
@@ -144,19 +140,4 @@ def _key(label: _Label) -> object:
 
 
 def _label(label: _Label) -> str | PersonInText:
-    return _person(label) if isinstance(label, PersonRef) else label.text
-
-
-def _person(person: PersonRef) -> PersonInText:
-    visible = None if isinstance(person.visible_name, NoVisibleName) else person.visible_name.text
-    return PersonInText(handle=person.handle.value, appearance=person.appearance.text, visible_name=visible)
-
-
-def _reason(text: TextWithAssignedPeople) -> str | TextWithPeople:
-    if not text.people:
-        return text.template
-    return TextWithPeople(template=text.template, people={key: _placeholder(p) for key, p in text.people.items()})
-
-
-def _placeholder(person: PersonRef | Unidentified) -> PersonPlaceholderValue:
-    return UnidentifiedPerson() if isinstance(person, Unidentified) else _person(person)
+    return label.for_being() if isinstance(label, PersonRef) else label.text

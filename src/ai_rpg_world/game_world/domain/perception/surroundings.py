@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Protocol, final
 
+from ai_rpg_world.being.contract import Description, Scene
 from ai_rpg_world.game_world.domain.declaration.object_and_item.object_declaration import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, SpotSectionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.object_looks_declaration import NoLook
@@ -15,11 +16,19 @@ from ai_rpg_world.game_world.domain.exception.surroundings_exception import (
 )
 from ai_rpg_world.game_world.domain.lighting import Lighting, SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.people import PersonRef, Unidentified
+from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedPeople, Unidentified
+from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotId, SpotSectionId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import (
+    DescriptionText,
+    DisplayName,
+    PersonId,
+    SpotId,
+    SpotSectionId,
+    WorldTick,
+)
 from ai_rpg_world.game_world.domain.whereabouts.location import OpenArea
 from ai_rpg_world.game_world.domain.whereabouts.passage_in_state import PassageInState
 
@@ -217,6 +226,12 @@ class SpotContents:
         )
 
 
+class NamesInScene(Protocol):
+    def spot_name(self, spot: SpotId) -> DisplayName: ...
+
+    def item_name(self, item: ItemInstanceId) -> DisplayName: ...
+
+
 class SurroundingsSenses(Protocol):
     def lighting_at(self, spot: SpotId) -> Lighting: ...
 
@@ -272,6 +287,57 @@ class VisibleSurroundings:
                 calls_attention=False,
             ),
         )
+
+    def destinations(self) -> tuple[SpotId, ...]:
+        here = self.spot.spot_id
+        return tuple(
+            dict.fromkeys(
+                far for far in (shown.passage.far_end_from(here) for shown in self.passages) if far is not None
+            )
+        )
+
+    def scene_with(self, texts: SurroundingsTexts, names: NamesInScene) -> Scene:
+        return Scene(
+            [Description(heading=texts.scene.heading.text, text=self._described_with(texts, names).for_being())]
+        )
+
+    def _described_with(self, texts: SurroundingsTexts, names: NamesInScene) -> TextWithAssignedPeople:
+        # 名前は行動の選択肢の候補と同じものを使う。場面の文で見た名前を、そのまま候補から選べるようにするため (D2226)。
+        wording = texts.scene
+        lines = [_letters(self.spot.name.text)]
+        lines.append(_letters(self.spot.description.text if self.shows_description else wording.pitch_dark.text))
+        lines += _listed(wording.objects, tuple(_object_line(seen) for seen in self.objects))
+        lines += _listed(wording.destinations, tuple(names.spot_name(spot).text for spot in self.destinations()))
+        lines += _listed(wording.ground_items, _counted(self.ground_items, names, wording.count_mark))
+        if not self.people and not self.bodies:
+            return TextWithAssignedPeople("\n".join(lines), {})
+        people = texts.scene_as_seen(
+            people=tuple(seen.person for seen in self.people), bodies=tuple(seen.person for seen in self.bodies)
+        )
+        return TextWithAssignedPeople("\n".join((*lines, people.template)), people.people)
+
+
+def _letters(text: str) -> str:
+    return TextWithUnassignedPeople.literal(text).template
+
+
+def _object_line(seen: SeenObject) -> str:
+    name = seen.declaration.name.text
+    return name if isinstance(seen.look, NoLook) else f"{name}: {seen.look.text}"
+
+
+def _counted(items: tuple[ItemInstanceId, ...], names: NamesInScene, mark: DisplayName) -> tuple[str, ...]:
+    counts: dict[str, int] = {}
+    for item in items:
+        name = names.item_name(item).text
+        counts[name] = counts.get(name, 0) + 1
+    return tuple(name if count == 1 else f"{name} {mark.text}{count}" for name, count in counts.items())
+
+
+def _listed(heading: DisplayName, entries: tuple[str, ...]) -> list[str]:
+    if not entries:
+        return []
+    return [_letters(heading.text), *(_letters(f"- {entry}") for entry in entries)]
 
 
 def _present(seen: Iterable[SeenPerson | None]) -> tuple[SeenPerson, ...]:

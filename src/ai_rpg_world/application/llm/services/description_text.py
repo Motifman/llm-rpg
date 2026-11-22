@@ -11,7 +11,7 @@ from ai_rpg_world.being.contract import Description
 
 
 def description_text(description: Description) -> str:
-    return f"【{description.heading}】\n{description.text}"
+    return f"【{description.heading}】\n{description.text_without_people()}"
 
 
 def descriptions_text(descriptions: Iterable[Description]) -> str:

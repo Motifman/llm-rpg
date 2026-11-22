@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from ai_rpg_world.being.contract.errors import ContractViolation, require_text
+from ai_rpg_world.being.contract.text_with_people import TextWithPeople
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -13,16 +14,25 @@ class Description:
     """``heading`` は【】で囲まない語。囲むのは、Being が文にするときの書き方。
 
     Being は中身を読まず、どの並びで届いたかだけで置き場所を決める。
+    人の名前は ``TextWithPeople`` の人の穴で渡し、呼び名は Being が決める (D1928)。
     """
 
     heading: str
-    text: str
+    text: str | TextWithPeople
 
     def __post_init__(self) -> None:
         require_text(self.heading, "heading")
-        require_text(self.text, "text")
+        if not isinstance(self.text, TextWithPeople):
+            require_text(self.text, "text")
         if any(c in self.heading for c in "【】\n"):
             raise ContractViolation("heading must not contain brackets or line breaks")
+
+    def text_without_people(self) -> str:
+        if isinstance(self.text, TextWithPeople):
+            raise ContractViolation(
+                "a description with people placeholders cannot be read as text before the people are filled in"
+            )
+        return self.text
 
 
 def _descriptions(items: Sequence[Description]) -> tuple[Description, ...]:

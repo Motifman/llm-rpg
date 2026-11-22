@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from ai_rpg_world.being.application.backstory_text import backstory_text
@@ -9,8 +10,9 @@ from ai_rpg_world.being.application.conduct_text import conduct_text
 from ai_rpg_world.being.application.episode_index_text import format_episode_index
 from ai_rpg_world.being.application.known_people import render_known_people
 from ai_rpg_world.being.application.memo_book_text import format_memo_book
+from ai_rpg_world.being.application.names_for_people import text_naming_people
 from ai_rpg_world.being.application.recent_events_text import recent_events_text
-from ai_rpg_world.being.contract import OfferedBeingTools, Orientation, Scene
+from ai_rpg_world.being.contract import Description, OfferedBeingTools, Orientation, Scene, TextWithPeople
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -74,11 +76,11 @@ class CurrentWorkingMemory:
             memo=format_memo_book(self._memo_books.get(being_id), current_environment_name=environment_name),
         )
         return WorkingMemory.compose(
-            orientation=orientation,
+            orientation=Orientation(_named(orientation.descriptions)),
             conduct=conduct_text(being_tools),
             imposed_goal=imposed_goal,
             memory=memory,
-            scene=scene,
+            scene=Scene(_named(scene.descriptions), notices=_named(scene.notices)),
             closing=closing,
         )
 
@@ -91,6 +93,13 @@ class CurrentWorkingMemory:
         if being is None or being.attachment is None:
             raise LookupError(f"Being {being_id.value} is not in any environment")
         return being.attachment.environment_name
+
+
+def _named(descriptions: Sequence[Description]) -> tuple[Description, ...]:
+    return tuple(
+        Description(heading=d.heading, text=text_naming_people(d.text)) if isinstance(d.text, TextWithPeople) else d
+        for d in descriptions
+    )
 
 
 __all__ = ["CurrentWorkingMemory"]

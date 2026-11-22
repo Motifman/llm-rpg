@@ -175,6 +175,13 @@ surroundings_texts:
   joiner: 、
   waking: 目が覚めた。
   darkening: 辺りが暗くなった。
+  scene:
+    heading: 現在地と周囲
+    objects: "物:"
+    destinations: "行き先:"
+    ground_items: "落ちている品物:"
+    count_mark: ×
+    pitch_dark: 真っ暗で、何も見えない。
 
 briefing_headings:
   introduction: この世界について

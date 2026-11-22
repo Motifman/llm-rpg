@@ -40,7 +40,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     SpotSectionDeclaration,
     Temperature,
 )
-from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
+from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
     NoDayNight,
@@ -272,6 +272,18 @@ def surroundings_texts() -> SurroundingsTexts:
         joiner="、",
         waking=TextWithUnassignedPeople("目が覚めた。"),
         darkening=TextWithUnassignedPeople("辺りが暗くなった。"),
+        scene=scene_texts(),
+    )
+
+
+def scene_texts() -> SceneTexts:
+    return SceneTexts(
+        heading=DisplayName("現在地と周囲"),
+        objects=DisplayName("物:"),
+        destinations=DisplayName("行き先:"),
+        ground_items=DisplayName("落ちている品物:"),
+        count_mark=DisplayName("×"),
+        pitch_dark=DisplayName("真っ暗で、何も見えない。"),
     )
 
 
