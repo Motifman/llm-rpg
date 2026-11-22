@@ -14,8 +14,10 @@ from ai_rpg_world.being.contract import (
     ObservedTime,
     OfferedBeingTools,
     Orientation,
+    PersonInText,
     Scene,
     SeenOrHeard,
+    TextWithPeople,
 )
 from ai_rpg_world.being.domain.acquaintance import Acquaintance
 from ai_rpg_world.being.domain.being import Being
@@ -69,14 +71,18 @@ def stores() -> dict[str, object]:
     }
 
 
-def _of(stores: dict[str, object], being_id: BeingId = HAL) -> WorkingMemory:
+def _of(
+    stores: dict[str, object],
+    being_id: BeingId = HAL,
+    scene: Scene = Scene([Description(heading="現在地と周囲", text="北の竪坑口")]),
+) -> WorkingMemory:
     current = CurrentWorkingMemory(episode_index_limit=5, **stores)  # type: ignore[arg-type]
     return current.of(
         being_id,
         orientation=Orientation([Description(heading="ペルソナ", text="あなたはハル。")]),
         being_tools=OfferedBeingTools(),
         imposed_goal="外へ出る",
-        scene=Scene([Description(heading="現在地と周囲", text="北の竪坑口")]),
+        scene=scene,
         closing=Closing(instruction="行動を 1 つ選んでください。"),
     )
 
@@ -89,6 +95,22 @@ class TestGathering:
         known = next(s for s in _of(stores).message if s.heading == "知っている人")
 
         assert known.lines == ("- ミオ",)
+
+    def test_people_in_the_scene_are_filled_with_names_the_being_calls_them(self, stores: dict[str, object]) -> None:
+        """場面の文の人の穴は、Being の呼び名 (見えている名前、無ければ見た目) で埋まって【現在地と周囲】に出る。"""
+        seen = TextWithPeople(
+            template="北の竪坑口\nここには{person_1}、{person_2}がいる。",
+            people={
+                "person_1": PersonInText(handle=1, appearance="小柄な女", visible_name="ミオ"),
+                "person_2": PersonInText(handle=4, appearance="背の高い男", visible_name=None),
+            },
+        )
+
+        memory = _of(stores, scene=Scene([Description(heading="現在地と周囲", text=seen)]))
+
+        surroundings = memory.section("現在地と周囲")
+        assert surroundings is not None
+        assert surroundings.lines == ("北の竪坑口", "ここにはミオ、背の高い男がいる。")
 
     def test_events_in_short_term_memory_appear_in_recent_events(self, stores: dict[str, object]) -> None:
         """短期記憶に積んだ出来事が【直近の出来事】に出る。"""

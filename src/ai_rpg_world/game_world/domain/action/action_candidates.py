@@ -178,14 +178,10 @@ def _arguments_of(interaction: InteractionDeclaration) -> ChosenArguments | Argu
 
 
 def _in_view(actor: PersonId, seen: VisibleSurroundings, facts: WorldFacts) -> _InView:
-    here = seen.spot.spot_id
     occupant = facts.vitals(actor).occupant_in_world(facts.rules().departed_persons_act)
-    destinations = dict.fromkeys(
-        far for far in (shown.passage.far_end_from(here) for shown in seen.passages) if far is not None
-    )
     people = (*seen.people, *seen.bodies)
     return _InView(
-        destinations=tuple(facts.nouns().spot_of(spot) for spot in destinations),
+        destinations=tuple(facts.nouns().spot_of(spot) for spot in seen.destinations()),
         sections=seen.sections,
         objects=tuple(shown.declaration for shown in seen.objects),
         ground_items=seen.ground_items,

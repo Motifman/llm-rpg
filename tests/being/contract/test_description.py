@@ -4,7 +4,19 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.being.contract import ContractViolation, Description, Orientation, Scene
+from ai_rpg_world.being.contract import (
+    ContractViolation,
+    Description,
+    Orientation,
+    PersonInText,
+    Scene,
+    TextWithPeople,
+)
+
+_SAYO_IS_HERE = TextWithPeople(
+    template="ここには{person_1}がいる。",
+    people={"person_1": PersonInText(handle=2, appearance="小柄な女", visible_name="サヨ")},
+)
 
 
 class TestDescription:
@@ -30,6 +42,21 @@ class TestDescription:
         """見出しを【】で囲んだり、改行を含めたりすると拒む。囲むのは文にする側の書き方。"""
         with pytest.raises(ContractViolation, match="heading"):
             Description(heading=heading, text="雪の山村")
+
+    def test_text_with_people_is_kept_with_its_placeholders(self) -> None:
+        """人の穴を持つ文を渡すと、穴と人の印を持ったまま読める。呼び名で埋めるのは Being。"""
+        description = Description(heading="現在地と周囲", text=_SAYO_IS_HERE)
+
+        assert description.text == _SAYO_IS_HERE
+
+    def test_text_without_people_reads_plain_text(self) -> None:
+        """人の穴の無い文は、text_without_people で文字のまま読める。"""
+        assert Description(heading="世界の前提", text="雪の山村").text_without_people() == "雪の山村"
+
+    def test_text_with_people_cannot_be_read_as_plain_text(self) -> None:
+        """人の穴を持つ文を text_without_people で読むと、穴が埋まらないまま渡らないよう拒む。"""
+        with pytest.raises(ContractViolation, match="people"):
+            Description(heading="現在地と周囲", text=_SAYO_IS_HERE).text_without_people()
 
 
 @pytest.mark.parametrize("kind", [Orientation, Scene])
