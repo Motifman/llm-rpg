@@ -138,6 +138,11 @@ built_in_action_perceptions:
   put_away: *quiet
   cast_ballot: *quiet
 
+clock:
+  day: "Day {day}"
+  late_night: "深夜 "
+  late_night_before_hour: 6
+
 surroundings_texts:
   people_here: "ここには{people}がいる。"
   bodies_here: "{people}が倒れている。"

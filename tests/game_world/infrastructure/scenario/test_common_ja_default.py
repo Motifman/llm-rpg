@@ -113,6 +113,7 @@ class TestCommonJaDefaultReads:
             "built_in_action_perceptions",
             "action_texts",
             "surroundings_texts",
+            "clock",
             "briefing_headings",
             "perception_defaults",
             "defaults",

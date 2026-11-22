@@ -88,6 +88,7 @@ from tests.game_world.domain.whereabouts._builders import CLOSED, door
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.world_design_for_tests import (
     character,
+    clock_wording,
     compose_world,
     half_hour_ticks_from_midnight,
     item_spec,
@@ -557,7 +558,7 @@ class TestPassWorldTimeDayPhase:
 
         DeliverPerception(
             world.scope,
-            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), _NoOneListening()),
+            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), _NoOneListening()),
             PerceptionReportsReceived(),
         )(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli))
 
@@ -580,7 +581,7 @@ class TestPassWorldTimeDayPhase:
 
         DeliverPerception(
             world.scope,
-            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), _NoOneListening()),
+            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), _NoOneListening()),
             PerceptionReportsReceived(),
         )(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli))
 

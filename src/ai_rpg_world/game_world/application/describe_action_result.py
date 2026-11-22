@@ -27,6 +27,7 @@ class DescribeActionResult:
         self._scope = scope
         self._design = design
         self._day_night = day_night
+        self._clock = design.clock_wording
 
     def __call__(self, command: DescribeActionResultCommand) -> Observation:
         # 本文と要約の呼び名と時刻を、同じ時点の世界から作る
@@ -47,5 +48,5 @@ class DescribeActionResult:
     ) -> tuple[str | TextWithPeople, TextWithPeople | None, ObservedTime]:
         facts = session.facts()
         view = WorldPerceptionSenses(facts).view_for(reply.actor())
-        time = observed_time_of(self._day_night.day_and_clock_time_at(session.clock().now()))
+        time = observed_time_of(self._day_night.day_and_clock_time_at(session.clock().now()), self._clock)
         return reply.result_for_actor(view), reply.summary_for_actor(self._design, facts, view), time

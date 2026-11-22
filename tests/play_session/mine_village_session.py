@@ -147,7 +147,7 @@ class MineVillageSession:
         )
         self.deliver_perception = DeliverPerception(
             scope,
-            ObservationExit(WORLD, day_night, receiver),
+            ObservationExit(WORLD, day_night, scenario.design.clock_wording, receiver),
             PerceptionReportsReceived(),
         )
         if delivers_world_events:
@@ -169,7 +169,7 @@ class MineVillageSession:
             closing=Closing(instruction=closing),
             describe_scene=DescribeScene(self.scope, design),
             offer_choices=OfferActionChoices(self.scope, design),
-            tell_time=TellCurrentTime(self.scope, day_night),
+            tell_time=TellCurrentTime(self.scope, day_night, _scenario().design.clock_wording),
             choose_action=ChooseAction(
                 working_memory=CurrentWorkingMemory(
                     beings=self.beings,
