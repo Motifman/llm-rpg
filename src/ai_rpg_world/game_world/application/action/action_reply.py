@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.application.observation_exit import text_with_peopl
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
+from ai_rpg_world.game_world.domain.people import TextAboutPeople
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import PersonId
@@ -17,6 +18,7 @@ from ai_rpg_world.game_world.domain.value_object import PersonId
 @dataclass(frozen=True)
 class ActionDone:
     attempt: ActionAttempt
+    done_text: TextAboutPeople
 
     def was_waiting(self) -> bool:
         return self.attempt.kind() is ActionKind.WAIT
@@ -28,7 +30,7 @@ class ActionDone:
         return self.attempt.actor
 
     def result_for_actor(self, texts: RefusalTexts, view: PeopleAsSeen) -> str | TextWithPeople:
-        return text_with_people(texts.done_text(self.attempt.actor).seen_by(view))
+        return text_with_people(self.done_text.seen_by(view))
 
 
 @final

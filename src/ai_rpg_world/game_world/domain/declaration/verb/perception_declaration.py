@@ -60,6 +60,7 @@ class PerceptionDeclaration:
         manner: Manner,
         source: SoundSource,
         present: PeoplePresent,
+        withheld_from: frozenset[PersonId] = frozenset(),
     ) -> tuple[Stimulus, ...]:
         people = {"actor": actor.person} | ({"target": target} if isinstance(target, PersonId) else {})
         involved = tuple(people.values())
@@ -76,10 +77,12 @@ class PerceptionDeclaration:
             always_delivered=False,
             at=at,
             present=present,
+            withheld_from=withheld_from,
         )
         if isinstance(self.sound, Silent):
             return (sight,)
-        return (sight, replace(self.sound.heard_at(where, people, names, source, self.salience, at), present=present))
+        heard = self.sound.heard_at(where, people, names, source, self.salience, at)
+        return (sight, replace(heard, present=present, withheld_from=withheld_from))
 
     def failure_seen_at(
         self,
@@ -107,6 +110,7 @@ class PerceptionDeclaration:
                 salience=self.salience,
                 always_delivered=False,
                 at=at,
+                withheld_from=frozenset({actor.person}),
             ),
         )
 

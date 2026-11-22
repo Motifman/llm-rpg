@@ -81,6 +81,7 @@ class SightStimulus:
     always_delivered: bool
     at: WorldTick
     present: PeoplePresent = field(default_factory=WhoeverIsThere)
+    withheld_from: frozenset[PersonId] = frozenset()
 
     def __post_init__(self) -> None:
         self.target.require_among(self.involved)
@@ -98,6 +99,8 @@ class SightStimulus:
         )
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
+        if perceiver.person in self.withheld_from:
+            return NotPerceived(NotPerceivedReason.OWN_ACT)
         return self.perceived_by(
             self.present.position(perceiver),
             senses.lighting_at(self.where),

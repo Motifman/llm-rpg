@@ -8,6 +8,7 @@ from typing import Any, final
 
 from ai_rpg_world.game_world.domain.action.offered_action import offered_value_name_problems
 from ai_rpg_world.game_world.domain.condition.condition import Condition
+from ai_rpg_world.game_world.domain.condition.failure_texts import placeholder_requirements
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.progress import (
     FlagDeclaration,
@@ -147,6 +148,7 @@ class WorldDesignReview:
         ]
         self.precondition(placement.at_field("precondition"), interaction.precondition)
         self.effect(placement.at_field("effect"), interaction.effect)
+        self.requirements(placement.at_field("success_text"), placeholder_requirements(interaction.success_text))
         self.perception(placement, interaction.perceived_as)
 
     def flags(self, declared: Iterable[FlagDeclaration]) -> None:

@@ -34,6 +34,7 @@ from ai_rpg_world.game_world.domain.exception.trigger_exception import (
     SubjectNotInTriggerException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.people import TextAboutPeople
 from ai_rpg_world.game_world.domain.person import FallCause
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, ObjectId, PersonId, SpotId
@@ -119,6 +120,9 @@ class ActionAttemptForTests(ActionAttempt):
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
         raise NotImplementedError(f"{self!r} is not witnessed in tests that use it")
+
+    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        return design.refusal_texts.done_text(self.actor)
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         raise NotImplementedError(f"{self!r} is not offered in tests that use it")
