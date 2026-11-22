@@ -23,3 +23,7 @@ class UnfillableSceneTextException(GameWorldDomainException):
 
 class MissingWorldWordException(GameWorldDomainException):
     error_code = "GAME_WORLD.SURROUNDINGS_TEXTS.MISSING_WORLD_WORD"
+
+
+class BodyTierLadderException(GameWorldDomainException):
+    error_code = "GAME_WORLD.SURROUNDINGS_TEXTS.BODY_TIER_LADDER"

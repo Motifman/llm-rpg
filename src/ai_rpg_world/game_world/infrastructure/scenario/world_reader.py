@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRule
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
+from ai_rpg_world.game_world.domain.declaration.body_tiers import HitPointsTier, HitPointsTiers, NeedTier, NeedTiers
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
@@ -244,15 +245,35 @@ _SCENE_LINES = tuple(SCENE_LINE_NAMES)
 
 
 def scene_texts(node: YamlNode) -> SceneTexts:
-    fields = node.fields("heading", *_SCENE_LINES, "ground_items", "count_mark", "pitch_dark")
+    fields = node.fields(
+        "heading", *_SCENE_LINES, "need_tiers", "hit_points_tiers", "ground_items", "count_mark", "pitch_dark"
+    )
+    need_tiers = tuple(_need_tier(tier) for tier in fields.required("need_tiers").items())
+    hit_points_tiers = tuple(_hit_points_tier(tier) for tier in fields.required("hit_points_tiers").items())
     return node.build(
         lambda: SceneTexts(
             heading=DisplayName(fields.required("heading").text()),
             **{line: fields.required(line).text() for line in _SCENE_LINES},
+            need_tiers=NeedTiers(need_tiers),
+            hit_points_tiers=HitPointsTiers(hit_points_tiers),
             ground_items=DisplayName(fields.required("ground_items").text()),
             count_mark=DisplayName(fields.required("count_mark").text()),
             pitch_dark=DisplayName(fields.required("pitch_dark").text()),
         )
+    )
+
+
+def _need_tier(node: YamlNode) -> NeedTier:
+    fields = node.fields("from_percent", "name")
+    return node.build(
+        lambda: NeedTier(fields.required("from_percent").integer(), DisplayName(fields.required("name").text()))
+    )
+
+
+def _hit_points_tier(node: YamlNode) -> HitPointsTier:
+    fields = node.fields("up_to_percent", "name")
+    return node.build(
+        lambda: HitPointsTier(fields.required("up_to_percent").integer(), DisplayName(fields.required("name").text()))
     )
 
 
@@ -350,12 +371,14 @@ def _fatigue(node: YamlNode) -> FatigueRule:
 
 
 def _fatigue_level(node: YamlNode) -> FatigueLevel:
-    fields = node.fields("starts_at", "name", "seen_as")
+    fields = node.fields("starts_at", "name", "seen_as", "felt_as")
     seen_as = fields.optional("seen_as")
+    felt_as = fields.optional("felt_as")
     return FatigueLevel(
         starts_at=_amount(fields.required("starts_at"), FatigueAmount),
         name=FatigueLevelName(fields.required("name").text()),
         seen_as=None if seen_as is None else DisplayName(seen_as.text()),
+        felt_as=None if felt_as is None else DisplayName(felt_as.text()),
     )
 
 

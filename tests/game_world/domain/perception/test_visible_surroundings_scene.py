@@ -18,8 +18,18 @@ from ai_rpg_world.game_world.domain.people import (
     TextWithUnassignedPeople,
 )
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
+from ai_rpg_world.game_world.domain.perception.oneself import Oneself
 from ai_rpg_world.game_world.domain.perception.surroundings import Dead, Down, Up, VisibleSurroundings
-from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, ObjectId, PersonId, SpotId
+from ai_rpg_world.game_world.domain.value_object import (
+    DescriptionText,
+    DisplayName,
+    FatigueAmount,
+    HitPoints,
+    HungerAmount,
+    ObjectId,
+    PersonId,
+    SpotId,
+)
 from tests.game_world.domain.perception._surroundings_builders import conditions, contents, item, passage, person, thing
 from tests.game_world.support.world_design_for_tests import clock_wording, surroundings_texts, world_words
 
@@ -52,7 +62,9 @@ class _Names:
 
 
 def _scene(surroundings: VisibleSurroundings) -> Scene:
-    return surroundings.scene_with(surroundings_texts(), _Names(), world_words(), clock_wording(), (), _NoOneSeen())
+    return surroundings.scene_with(
+        surroundings_texts(), _Names(), world_words(), clock_wording(), (), _NoOneSeen(), _ONESELF
+    )
 
 
 def _text(surroundings: VisibleSurroundings) -> str | TextWithPeople:
@@ -64,6 +76,16 @@ def _text(surroundings: VisibleSurroundings) -> str | TextWithPeople:
 _TOP = "  mine_depths の説明\n雰囲気: 明るさ: 明るい / 気温: 過ごしやすい"
 _NO_OBJECTS = "オブジェクト: (ここには何も無い)"
 _NO_PEOPLE = "同じ場所にいるプレイヤー: (他のプレイヤーはこのスポットにいない)"
+_BODY = "身体の状態:\n  HP: 良好（100/100）\n  空腹: 問題なし（0/100）\n  疲労: 問題なし（0/100）"
+_ONESELF = Oneself(
+    belongings=(),
+    hp=HitPoints(current=100, maximum=100),
+    hunger=HungerAmount(0),
+    hunger_limit=HungerAmount(100),
+    fatigue=FatigueAmount(0),
+    fatigue_limit=FatigueAmount(100),
+    fatigue_felt=None,
+)
 
 
 class TestClearSight:
@@ -99,6 +121,7 @@ class TestClearSight:
                     "- 縄",
                     "同じ場所にいるプレイヤー:",
                     '  - "{person_1}"',
+                    _BODY,
                 )
             ),
             people={"person_1": PersonInText(handle=1, appearance="1 番の見た目", visible_name=None)},
@@ -118,7 +141,7 @@ class TestClearSight:
 
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(passages=(coming_in,)), conditions())
 
-        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}"
+        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}\n{_BODY}"
 
     def test_each_passage_to_the_same_spot_has_its_own_line(self) -> None:
         """同じ場所へ続く通路が 2 本あると、接続先は通路ごとに 2 行になる。古い run の接続先と同じ。"""
@@ -134,6 +157,7 @@ class TestClearSight:
                 '  - "lower の通路" → "well の名前"（通行可）',
                 _NO_OBJECTS,
                 _NO_PEOPLE,
+                _BODY,
             )
         )
 
@@ -141,7 +165,7 @@ class TestClearSight:
         """明るくて物も人も無い場面は、どちらの節も消さず「(ここには何も無い)」「(他のプレイヤーはこのスポットにいない)」と書き、人の穴の無い文字のまま渡る。"""
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(), conditions())
 
-        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}"
+        assert _text(surroundings) == f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}\n{_BODY}"
 
     def test_braces_in_names_stay_as_letters(self) -> None:
         """物の名前や見た目に括弧があっても、人の穴にはならず、文字のまま出る。"""
@@ -150,7 +174,8 @@ class TestClearSight:
         )
 
         assert (
-            _text(surroundings) == f'{_TOP}\nオブジェクト:\n  - "{{札}}" ({{読めない}}) — {{札}} の説明\n{_NO_PEOPLE}'
+            _text(surroundings)
+            == f'{_TOP}\nオブジェクト:\n  - "{{札}}" ({{読めない}}) — {{札}} の説明\n{_NO_PEOPLE}\n{_BODY}'
         )
 
 
@@ -158,7 +183,7 @@ def _people_lines(surroundings: VisibleSurroundings) -> list[str]:
     text = _text(surroundings)
     assert isinstance(text, TextWithPeople)
     lines = text.template.splitlines()
-    return lines[lines.index("同じ場所にいるプレイヤー:") :]
+    return lines[lines.index("同じ場所にいるプレイヤー:") : lines.index("身体の状態:")]
 
 
 class TestPeopleHere:
@@ -234,7 +259,7 @@ class TestOperationsNotPossibleNow:
         )
 
         text = surroundings.scene_with(
-            surroundings_texts(), _Names(), world_words(), clock_wording(), unavailable, _NoOneSeen()
+            surroundings_texts(), _Names(), world_words(), clock_wording(), unavailable, _NoOneSeen(), _ONESELF
         ).here
 
         assert text is not None and text.text == "\n".join(
@@ -245,6 +270,7 @@ class TestOperationsNotPossibleNow:
                 "      いまできない: 開ける（鍵が掛かっている。）、壊す（道具が無い。）",
                 '  - "机" — 机 の説明',
                 _NO_PEOPLE,
+                _BODY,
             )
         )
 
@@ -257,7 +283,7 @@ class TestOperationsNotPossibleNow:
         unavailable = (UnavailableObjectOperation(ObjectId("金庫"), DisplayName("開ける"), reason),)
 
         here = surroundings.scene_with(
-            surroundings_texts(), _Names(), world_words(), clock_wording(), unavailable, _SeesOnlyPerson2()
+            surroundings_texts(), _Names(), world_words(), clock_wording(), unavailable, _SeesOnlyPerson2(), _ONESELF
         ).here
 
         assert here is not None and isinstance(here.text, TextWithPeople)
@@ -277,7 +303,7 @@ class TestInTheDark:
         )
 
         assert _text(surroundings) == TextWithPeople(
-            template=f'{_TOP}\nオブジェクト: (暗くて何も見えない。灯りが要る)\n同じ場所にいるプレイヤー:\n  - "{{person_1}}"',
+            template=f'{_TOP}\nオブジェクト: (暗くて何も見えない。灯りが要る)\n同じ場所にいるプレイヤー:\n  - "{{person_1}}"\n{_BODY}',
             people={"person_1": UnidentifiedPerson()},
         )
 
@@ -303,6 +329,7 @@ class TestInTheDark:
                 "  (暗い。灯りがなければ、見えるのはこれだけ)",
                 '  - "光る苔" — 光る苔 の説明',
                 _NO_PEOPLE,
+                _BODY,
             )
         )
 
@@ -313,7 +340,9 @@ class TestNothingInView:
     def test_nothing_in_view_gives_an_empty_scene(self) -> None:
         """何も見えていない人には、説明の無い空の場面を渡す。"""
         assert (
-            NothingInView().scene_with(surroundings_texts(), _Names(), world_words(), clock_wording(), (), _NoOneSeen())
+            NothingInView().scene_with(
+                surroundings_texts(), _Names(), world_words(), clock_wording(), (), _NoOneSeen(), _ONESELF
+            )
             == Scene()
         )
 
@@ -323,5 +352,5 @@ def test_scene_is_the_place_here() -> None:
     scene = _scene(VisibleSurroundings.seen_with(SeesClearly(), contents(), conditions()))
 
     assert scene == Scene(
-        here=Here(place="mine_depths", heading="現在地と周囲", text=f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}")
+        here=Here(place="mine_depths", heading="現在地と周囲", text=f"{_TOP}\n{_NO_OBJECTS}\n{_NO_PEOPLE}\n{_BODY}")
     )

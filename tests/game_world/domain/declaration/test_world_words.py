@@ -65,8 +65,8 @@ class TestSceneTexts:
             dataclasses.replace(scene_texts(), **fields)  # type: ignore[arg-type]
 
     def test_every_line_field_is_checked(self) -> None:
-        """言い回しの欄は、宣言の文 (見出し・品物・数の印・真っ暗の文) を除いて、すべて検証の一覧に載っている。"""
-        declared_words = {"heading", "ground_items", "count_mark", "pitch_dark"}
+        """言い回しの欄は、宣言の文 (見出し・品物・数の印・真っ暗の文) と段階の梯子を除いて、すべて検証の一覧に載っている。"""
+        declared_words = {"heading", "ground_items", "count_mark", "pitch_dark", "need_tiers", "hit_points_tiers"}
 
         assert set(SCENE_LINE_NAMES) == {field.name for field in dataclasses.fields(SceneTexts)} - declared_words
 

@@ -7,6 +7,7 @@ import pytest
 from ai_rpg_world.game_world.domain.action.action_attempt import DoesNotUseBody
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
+from ai_rpg_world.game_world.domain.declaration.body_tiers import HitPointsTier, HitPointsTiers, NeedTier, NeedTiers
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.character import (
     CharacterDeclaration,
@@ -385,6 +386,28 @@ def scene_texts() -> SceneTexts:
         carried=" 〔{items}〕",
         carrying_nothing=" 〔手ぶら〕",
         carried_joiner="、",
+        belongings="所持アイテム:",
+        belonging='  - "{item}"{count}{description}{held}',
+        belonging_count=" x{count}",
+        belonging_description=" — {description}",
+        belonging_held=" (手に持っている)",
+        body="身体の状態:",
+        hit_points="  HP: {tier}（{current}/{maximum}）",
+        hunger="  空腹: {tier}（{amount}/{limit}）",
+        fatigue="  疲労: {tier}（{amount}/{limit}）",
+        fatigue_felt="  → {feel}",
+        need_tiers=NeedTiers(
+            tuple(
+                NeedTier(percent, DisplayName(name))
+                for percent, name in ((0, "問題なし"), (20, "少し"), (40, "やや感じる"), (60, "高い"), (80, "危険"))
+            )
+        ),
+        hit_points_tiers=HitPointsTiers(
+            tuple(
+                HitPointsTier(percent, DisplayName(name))
+                for percent, name in ((15, "瀕死"), (35, "危険"), (60, "消耗"), (100, "良好"))
+            )
+        ),
         ground_items=DisplayName("落ちている品物:"),
         count_mark=DisplayName("×"),
         pitch_dark=DisplayName("真っ暗で、何も見えない。"),

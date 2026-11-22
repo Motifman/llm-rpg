@@ -205,6 +205,27 @@ surroundings_texts:
     carried: " 〔{items}〕"
     carrying_nothing: " 〔手ぶら〕"
     carried_joiner: 、
+    belongings: "所持アイテム:"
+    belonging: '  - "{item}"{count}{description}{held}'
+    belonging_count: " x{count}"
+    belonging_description: " — {description}"
+    belonging_held: " (手に持っている)"
+    body: "身体の状態:"
+    hit_points: "  HP: {tier}（{current}/{maximum}）"
+    hunger: "  空腹: {tier}（{amount}/{limit}）"
+    fatigue: "  疲労: {tier}（{amount}/{limit}）"
+    fatigue_felt: "  → {feel}"
+    need_tiers:
+      - { from_percent: 0, name: 問題なし }
+      - { from_percent: 20, name: 少し }
+      - { from_percent: 40, name: やや感じる }
+      - { from_percent: 60, name: 高い }
+      - { from_percent: 80, name: 危険 }
+    hit_points_tiers:
+      - { up_to_percent: 15, name: 瀕死 }
+      - { up_to_percent: 35, name: 危険 }
+      - { up_to_percent: 60, name: 消耗 }
+      - { up_to_percent: 100, name: 良好 }
     ground_items: "落ちている品物:"
     count_mark: ×
     pitch_dark: 真っ暗で、何も見えない。

@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
+from ai_rpg_world.game_world.domain.perception.oneself import Oneself
 from ai_rpg_world.game_world.domain.perception.surroundings import VisibleSurroundings
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, SpotId
 
@@ -42,6 +43,7 @@ class DescribeScene:
             self._design.clock_wording,
             self._list.available_in(session, person).unavailable_on_objects(self._design),
             WorldPerceptionSenses(facts).view_for(person),
+            Oneself.of(person, facts),
         )
 
 

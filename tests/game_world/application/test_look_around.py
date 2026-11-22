@@ -28,6 +28,7 @@ from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople, Unidentified
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
+from ai_rpg_world.game_world.domain.perception.oneself import Oneself
 from ai_rpg_world.game_world.domain.perception.surroundings import Dead, Down, Up, VisibleSurroundings
 from ai_rpg_world.game_world.domain.person import DeclaredOutcome
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
@@ -38,6 +39,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
     FatigueAmount,
+    HungerAmount,
     ObjectId,
     OutcomeId,
     PersonId,
@@ -397,3 +399,45 @@ class TestHowPeopleLook:
         surroundings = _seen(world.looks_around(_ALICE))
 
         assert [seen.condition for seen in surroundings.bodies] == [Dead()]
+
+
+def test_oneself_takes_each_limit_from_its_own_rule() -> None:
+    """疲れの上限が 50 の世界で alice の身体を読むと、疲労の上限は 50、空腹の上限は空腹の規則の 100 になる。"""
+    world = _World(Lighting.BRIGHT, fatigue=FatigueRule(FatigueAmount(2), FatigueAmount(50), _TIRING.levels[:1]))
+    read: list[Oneself] = []
+
+    world.change(lambda s: read.append(Oneself.of(_ALICE, s.facts())))
+
+    assert (read[0].fatigue_limit, read[0].hunger_limit) == (FatigueAmount(50), HungerAmount(100))
+
+
+def test_oneself_feels_the_fatigue_level_reached() -> None:
+    """一言「重い」を持つ段階まで疲れた alice の身体は、その一言を持つ。"""
+    felt = FatigueRule(
+        per_exertion=FatigueAmount(60),
+        limit=FatigueAmount(100),
+        levels=(
+            FatigueLevel(FatigueAmount(0), FatigueLevelName("元気")),
+            FatigueLevel(FatigueAmount(50), FatigueLevelName("疲労"), felt_as=DisplayName("重い")),
+        ),
+    )
+    world = _World(Lighting.BRIGHT, fatigue=felt)
+    world.change(lambda s: s.aggregates().vitals(_ALICE).exert(felt))
+    read: list[Oneself] = []
+
+    world.change(lambda s: read.append(Oneself.of(_ALICE, s.facts())))
+
+    assert read[0].fatigue_felt == DisplayName("重い")
+
+
+def test_oneself_lists_the_held_rope_apart_from_the_packed_one() -> None:
+    """ロープを 2 本持ち 1 本を手に持つ bob の持ち物は、手の 1 本と荷の 1 本の 2 つの種類に分かれ、手の物が先に来る。"""
+    world = _World(Lighting.BRIGHT)
+    read: list[Oneself] = []
+
+    world.change(lambda s: read.append(Oneself.of(_BOB, s.facts())))
+
+    assert [(kind.name, kind.count, kind.held) for kind in read[0].belongings] == [
+        (_ROPE.name, 1, True),
+        (_ROPE.name, 1, False),
+    ]
