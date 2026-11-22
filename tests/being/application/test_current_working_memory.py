@@ -122,7 +122,7 @@ class TestGathering:
             people={"person_1": PersonInText(handle=1, appearance="小柄な女", visible_name="ミオ")},
         )
         scene = Scene(
-            [Description(heading="現在選べる対象引数", text="- travel_to.destination: \"井戸\"")],
+            [Description(heading="現在選べる対象引数", text='- travel_to.destination: "井戸"')],
             here=Here(place="南の坑道", heading="現在地と周囲", text=text),
         )
 
