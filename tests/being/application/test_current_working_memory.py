@@ -122,14 +122,14 @@ class TestGathering:
             people={"person_1": PersonInText(handle=1, appearance="小柄な女", visible_name="ミオ")},
         )
         scene = Scene(
-            [Description(heading="行動の候補", text="travel_to（行く）")],
+            [Description(heading="現在選べる対象引数", text='- travel_to.destination: "井戸"')],
             here=Here(place="南の坑道", heading="現在地と周囲", text=text),
         )
 
         memory = _of(stores, scene=scene)
 
         headings = [s.heading for s in memory.message]
-        assert headings.index("現在地と周囲") + 1 == headings.index("行動の候補")
+        assert headings.index("現在地と周囲") + 1 == headings.index("現在選べる対象引数")
         surroundings = memory.section("現在地と周囲")
         assert surroundings is not None
         assert surroundings.lines == ("現在地: 南の坑道 (初めて訪れた)", "  上層の南の坑道。", "ここにはミオがいる。")

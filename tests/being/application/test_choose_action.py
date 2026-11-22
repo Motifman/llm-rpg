@@ -219,21 +219,21 @@ class TestChooseAction:
         assert outcome.move.inner_thought == "あの番号を試す"
 
     def test_llm_sees_the_tools_and_the_candidate_table(self) -> None:
-        """LLM には、行動の種類ごとのツールと、場面の後ろに【行動の候補】を置いたメッセージが渡る。"""
+        """LLM には、行動の種類ごとのツールと、場面の後ろに【現在選べる対象引数】を置いたメッセージが渡る。"""
         _, completion = _choose(_reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}))
 
         [call] = completion.calls
         assert [t["function"]["name"] for t in call.tools] == ["interact", "speak", "pickup_item"]
-        assert "【行動の候補】" in call.messages[1]["content"]
+        assert "【現在選べる対象引数】" in call.messages[1]["content"]
         assert call.messages[0]["role"] == "system" and not call.reasoning_off
 
     def test_llm_reads_the_current_place_before_the_candidate_table(self) -> None:
-        """LLM には、現在地の区画が「現在地: 場所」の行つきで、行動の候補より先に見える。"""
+        """LLM には、現在地の区画が「現在地: 場所」の行つきで、候補表より先に見える。"""
         _, completion = _choose(_reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}))
 
         message = completion.calls[0].messages[1]["content"]
         assert "【現在地と周囲】\n現在地: 鉱山会社の事務所 (初めて訪れた)\n  埃をかぶった机と金庫がある。" in message
-        assert message.index("【現在地と周囲】") < message.index("【行動の候補】")
+        assert message.index("【現在地と周囲】") < message.index("【現在選べる対象引数】")
 
     def test_first_visit_mark_is_shown_until_the_being_acts_there(self) -> None:
         """着いた場所は、そこで 1 手を選ぶまで (初めて訪れた) が付き、1 手を選んだあとは付かない。ツールを呼ばなかったターンは数えない。"""

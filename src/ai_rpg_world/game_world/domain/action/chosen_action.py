@@ -72,7 +72,7 @@ class ChosenActionReading:
         offers = [(attempt, offered) for attempt, offered in self._offers if offered.kind is kind]
         if not offers:
             return MisfitChosenAction(f"いまは「{kind.label}」で選べるものが無い。")
-        # 同じ名前の品物は数を添えた 1 つの候補なので、世界が並べた順で先のもの (古いもの) を使う (D2226)。
+        # 同じ名前の品物は 1 つの候補なので、世界が並べた順で先のもの (古いもの) を使う (D2226)。
         chosen = next(
             ((attempt, offered) for attempt, offered in offers if _picks_every_step(offered.steps, arguments)), None
         )

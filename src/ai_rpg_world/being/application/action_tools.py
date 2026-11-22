@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from itertools import product
 from typing import Any
 
 from ai_rpg_world.being.application.episode_recall_tool import episode_recall_description, episode_recall_parameters
@@ -14,7 +13,6 @@ from ai_rpg_world.being.contract import (
     ActionChoice,
     ActionChoices,
     AgentMove,
-    Candidate,
     ChoiceValue,
     Description,
     FreeText,
@@ -23,16 +21,13 @@ from ai_rpg_world.being.contract import (
     PersonInText,
     PersonPlaceholderValue,
     PickOne,
-    TextWithPeople,
-    UnavailableAction,
 )
 
-CANDIDATE_TABLE_HEADING = "行動の候補"
+CANDIDATE_TABLE_HEADING = "現在選べる対象引数"
+CANDIDATE_TABLE_NOTE = "※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。"
 DETAILS = "details"
 HIDDEN_TEXT = "本文"
 _INNER_THOUGHT_MAX_LENGTH = 500
-
-_Pairs = tuple[tuple[str, str], ...]
 
 
 class ActionTools:
@@ -50,7 +45,17 @@ class ActionTools:
     ) -> None:
         self._choices = choices
         self._being_tools = being_tools
-        self._people = PeopleCalledApart(name_for, choices.people())
+        # 番号は表に出る候補の人だけで数える。いまはできない理由にだけ出る人を数えると、表に 1 人しか出ないのに番号が付く。
+        self._people = PeopleCalledApart(
+            name_for,
+            tuple(
+                p
+                for choice in choices.choices
+                for value in choice.values
+                if isinstance(value, PickOne)
+                for p in value.people()
+            ),
+        )
         self._recall_limit = recall_limit
 
     def definitions(self) -> tuple[dict[str, Any], ...]:
@@ -119,11 +124,16 @@ class ActionTools:
         ]
         return f"{tool_name}({', '.join(parts)})"
 
-    def candidate_table(self) -> Description:
-        return Description(
-            heading=CANDIDATE_TABLE_HEADING,
-            text="\n".join(line for choice in self._choices.choices for line in self._table_lines(choice)),
-        )
+    def candidate_table(self) -> Description | None:
+        lines = [
+            f"- {choice.name}.{name}{'' if parent is None else f' ({_quoted(parent)})'}: "
+            + ", ".join(_quoted(label) for label in labels)
+            for choice in self._choices.choices
+            for name, parent, labels in self._picks(choice.values, frozenset(o.name for o in choice.outline), None)
+        ]
+        if not lines:
+            return None
+        return Description(heading=CANDIDATE_TABLE_HEADING, text="\n".join((*lines, CANDIDATE_TABLE_NOTE)))
 
     def _definition(self, choice: ActionChoice) -> dict[str, Any]:
         properties: dict[str, Any] = {o.name: {"type": "string", "description": o.label} for o in choice.outline}
@@ -136,7 +146,7 @@ class ActionTools:
         if choice.takes_details:
             properties[DETAILS] = {
                 "type": "object",
-                "description": f"操作が求める引数。要るものは【{CANDIDATE_TABLE_HEADING}】に {DETAILS}.名前 の形で出る。",
+                "description": "操作が求める引数。",
                 "additionalProperties": {"type": "string"},
             }
         if inner_thought is not None:
@@ -151,51 +161,22 @@ class ActionTools:
             properties[memo] = memo_field_property(episode_source_offered=self._being_tools.episode_index_shown)
         return _function(
             choice.name,
-            f"{choice.label}。候補のある引数には【{CANDIDATE_TABLE_HEADING}】の文字をそのまま書く。"
-            f"いまはできないことも【{CANDIDATE_TABLE_HEADING}】に出る。",
+            f"{choice.label}。候補のある引数には【{CANDIDATE_TABLE_HEADING}】の文字をそのまま書く。",
             {"type": "object", "properties": properties, "required": required},
         )
 
-    def _table_lines(self, choice: ActionChoice) -> Iterator[str]:
-        yield f"{choice.name}（{choice.label}）"
-        if choice.can_be_chosen():
-            outlined = frozenset(o.name for o in choice.outline)
-            for pairs in self._alternatives(choice.values, outlined):
-                yield "- " + (", ".join(f"{name}: {text}" for name, text in pairs) or "選ぶ値は無い")
-        elif not any(u.covers_whole_action() for u in choice.unavailable):
-            yield "- いまは候補が無い"
-        for unavailable in choice.unavailable:
-            yield self._unavailable_line(unavailable)
-
-    def _alternatives(self, values: Sequence[ChoiceValue], outlined: frozenset[str]) -> Iterator[_Pairs]:
-        per_value = [list(self._value_alternatives(value, outlined)) for value in values]
-        for combination in product(*per_value):
-            yield tuple(pair for pairs in combination for pair in pairs)
-
-    def _value_alternatives(self, value: ChoiceValue, outlined: frozenset[str]) -> Iterator[_Pairs]:
-        name = value.name if value.name in outlined else f"{DETAILS}.{value.name}"
-        if isinstance(value, FreeText):
-            yield ((name, f"（{value.label}を書く）"),)
-            return
-        if all(not c.values for c in value.candidates):
-            yield ((name, " / ".join(self._candidate_text(c) for c in value.candidates)),)
-            return
-        for candidate in value.candidates:
-            head = ((name, self._candidate_text(candidate)),)
-            for rest in self._alternatives(candidate.values, outlined):
-                yield head + rest
-
-    def _candidate_text(self, candidate: Candidate) -> str:
-        label = self._label(candidate.label)
-        return label if candidate.count == 1 else f"{label} ×{candidate.count}"
-
-    def _unavailable_line(self, unavailable: UnavailableAction) -> str:
-        reason = unavailable.reason
-        reason_text = self._people.text_of(reason) if isinstance(reason, TextWithPeople) else reason
-        if unavailable.covers_whole_action():
-            return f"- いまはできない: {reason_text}"
-        path = " / ".join(self._label(label) for label in unavailable.picked)
-        return f"- いまはできない: {path} — {reason_text}"
+    def _picks(
+        self, values: Sequence[ChoiceValue], outlined: frozenset[str], parent: str | None
+    ) -> Iterator[tuple[str, str | None, tuple[str, ...]]]:
+        """候補から選ぶ値ごとに (引数の名前, どの候補の下か, 候補)。自由に書く値は候補が無いので出さない。"""
+        for value in values:
+            if isinstance(value, FreeText):
+                continue
+            labels = tuple(dict.fromkeys(self._label(c.label) for c in value.candidates))
+            if labels:
+                yield (value.name if value.name in outlined else f"{DETAILS}.{value.name}"), parent, labels
+            for candidate in value.candidates:
+                yield from self._picks(candidate.values, outlined, self._label(candidate.label))
 
     def _label(self, label: str | PersonInText) -> str:
         return self._people.name_of(label) if isinstance(label, PersonInText) else label
@@ -203,6 +184,10 @@ class ActionTools:
     def _person_or_value(self, value: object) -> object:
         person = self._people.person_named(value) if isinstance(value, str) else None
         return value if person is None else {"person": person.handle}
+
+
+def _quoted(text: str) -> str:
+    return json.dumps(text, ensure_ascii=False)
 
 
 def _function(name: str, description: str, parameters: dict[str, Any]) -> dict[str, Any]:

@@ -114,7 +114,7 @@ class TestBeingsTakingTurnsOneByOne:
             assert len({call.messages[0]["content"] for call in round_calls}) == 4
         for call in completion.calls:
             assert "【現在地と周囲】" in call.messages[1]["content"]
-            assert "【行動の候補】" in call.messages[1]["content"]
+            assert "【現在選べる対象引数】" in call.messages[1]["content"]
             assert "listen" in {tool["function"]["name"] for tool in call.tools}
 
     def test_result_of_the_chosen_action_answers_the_attempt(self) -> None:
