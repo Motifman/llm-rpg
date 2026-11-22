@@ -54,7 +54,11 @@ class TestActionChoice:
 
         [target] = choice.values
         assert isinstance(target, PickOne)
+        safe, _ = target.candidates
+        [how] = safe.values
+        assert isinstance(how, PickOne)
         assert [c.label for c in target.candidates] == ["金庫", _SAYO]
+        assert how.candidates[0].values == (_CODE,)
         assert choice.can_be_chosen()
 
     def test_holding_the_lamp_is_unavailable_with_a_reason(self) -> None:
@@ -81,13 +85,59 @@ class TestActionChoice:
 
         assert not choice.can_be_chosen()
 
-    def test_reason_may_name_people(self) -> None:
-        """理由には、人のプレースホルダーを持つ文を使える。"""
+    def test_reason_may_name_people_and_a_blank_reason_is_rejected(self) -> None:
+        """理由には、人のプレースホルダーを持つ文を使える。空白だけの文字の理由は拒む。"""
         reason = TextWithPeople(template="{target}は眠っている", people={"target": _SAYO})
 
-        unavailable = UnavailableAction(picked=(_SAYO,), reason=reason)
+        UnavailableAction(picked=(_SAYO,), reason=reason)
+        with pytest.raises(ContractViolation, match="reason"):
+            UnavailableAction(picked=(_SAYO,), reason="  ")
 
-        assert unavailable.reason == reason
+    def test_unavailable_path_that_is_also_a_candidate_is_rejected(self) -> None:
+        """いまはできない道筋が、候補としても並んでいると拒む。"""
+        with pytest.raises(ContractViolation, match="unavailable"):
+            ActionChoice(
+                name="travel_to",
+                label="行く",
+                values=_travel("井戸").values,
+                unavailable=(UnavailableAction(picked=("井戸",), reason="道が埋まっている"),),
+            )
+
+    def test_same_unavailable_action_twice_is_rejected(self) -> None:
+        """同じ道筋と理由の「いまはできない」が 2 回並ぶと拒む。"""
+        blocked = UnavailableAction(picked=("北の坑道",), reason="道が通じていない")
+
+        with pytest.raises(ContractViolation, match="unavailable"):
+            ActionChoice(name="travel_to", label="行く", values=_travel().values, unavailable=(blocked, blocked))
+
+    def test_value_name_repeated_along_a_path_is_rejected_but_siblings_may_share_it(self) -> None:
+        """候補の下の値が、外側の値と同じ名前だと拒む。別々の候補の下で同じ名前 (how) を使うのはよい。"""
+        how = PickOne(name="how", label="操作", candidates=(Candidate(label="叩く"),))
+        siblings = PickOne(
+            name="target",
+            label="相手",
+            candidates=(Candidate(label="扉", values=(how,)), Candidate(label="箱", values=(how,))),
+        )
+        repeated = PickOne(
+            name="target",
+            label="相手",
+            candidates=(Candidate(label="扉", values=(FreeText(name="target", label="宛先"),)),),
+        )
+
+        ActionChoice(name="interact", label="操作する", values=(siblings,))
+        with pytest.raises(ContractViolation, match="path"):
+            ActionChoice(name="interact", label="操作する", values=(repeated,))
+
+    def test_nested_pick_without_candidates_is_rejected(self) -> None:
+        """候補の下の「候補から選ぶ値」が空だと、選んでも行き止まりになるので拒む。いちばん上の空は、選べない選択肢として通す。"""
+        dead_end = PickOne(
+            name="target",
+            label="相手",
+            candidates=(Candidate(label="金庫", values=(PickOne(name="how", label="操作", candidates=()),)),),
+        )
+
+        with pytest.raises(ContractViolation, match="nested"):
+            ActionChoice(name="interact", label="操作する", values=(dead_end,))
 
     def test_whole_action_unavailable_with_candidates_is_rejected(self) -> None:
         """行動ごと選べない理由を持ちながら、候補を持つ選択肢は拒む。"""
@@ -99,13 +149,15 @@ class TestActionChoice:
                 unavailable=(UnavailableAction(picked=(), reason="手が離せない"),),
             )
 
-    @pytest.mark.parametrize("name", ["行く", "travel to", "", "1st"])
-    def test_name_must_be_an_ascii_identifier(self, name: str) -> None:
-        """選択肢と値の名前は、LLM のツールと引数の名前になるので、ASCII の識別子でないと拒む。"""
+    @pytest.mark.parametrize("name", ["行く", "travel to", "", "1st", "a" * 65])
+    def test_name_must_be_a_short_ascii_identifier(self, name: str) -> None:
+        """選択肢と値の名前は、LLM のツールと引数の名前になるので、64 文字までの ASCII の識別子でないと拒む。"""
         with pytest.raises(ContractViolation, match="name"):
             ActionChoice(name=name, label="行く")
         with pytest.raises(ContractViolation, match="name"):
             FreeText(name=name, label="番号")
+        with pytest.raises(ContractViolation, match="name"):
+            PickOne(name=name, label="行き先", candidates=())
 
     def test_same_text_candidate_twice_is_rejected(self) -> None:
         """1 つの候補の並びに、同じ文字の候補が 2 つあると拒む。同じ名前の品物は数を添えた 1 つの候補にする。"""

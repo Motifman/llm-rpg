@@ -1,8 +1,4 @@
-"""環境が毎ターン渡す、行動の選択肢 (design_decisions D2226)。
-
-行動の種類ごとに 1 つの選択肢にし、相手は候補から選ぶ。値は、自由に書く文字 (``FreeText``) と、
-候補から選ぶもの (``PickOne``) の 2 種類。いまはできない行動は候補に入れず、理由を付けて渡す。
-"""
+"""環境が毎ターン渡す、行動の選択肢 (design_decisions D2226)。"""
 
 from __future__ import annotations
 
@@ -13,9 +9,12 @@ from typing import Union
 from ai_rpg_world.being.contract.errors import ContractViolation, require_text
 from ai_rpg_world.being.contract.text_with_people import PersonInText, TextWithPeople
 
+_NAME_LIMIT = 64
+
 
 def _require_name(value: object, field_name: str) -> None:
-    if not isinstance(value, str) or not value.isascii() or not value.isidentifier():
+    # 名前は LLM のツールと引数の名前になる。provider の多くは ASCII の識別子で 64 文字までに限る。
+    if not isinstance(value, str) or not value.isascii() or not value.isidentifier() or len(value) > _NAME_LIMIT:
         raise ContractViolation(f"{field_name} must be an ASCII identifier, got {value!r}")
 
 
@@ -40,8 +39,6 @@ class FreeText:
 
 @dataclass(frozen=True, kw_only=True)
 class Candidate:
-    """人の候補は ``PersonInText`` で渡す。呼び方と、呼び方が重なったときの呼び分けは Being が決める。"""
-
     label: str | PersonInText
     values: Sequence[ChoiceValue] = field(default_factory=tuple)
     count: int = 1
@@ -105,8 +102,6 @@ class UnavailableAction:
 
 @dataclass(frozen=True, kw_only=True)
 class ActionChoice:
-    """``name`` は LLM のツールの名前になる。環境は、選べるものが無いターンも同じ顔ぶれで渡す。"""
-
     name: str
     label: str
     values: Sequence[ChoiceValue] = field(default_factory=tuple)
@@ -121,6 +116,12 @@ class ActionChoice:
             raise ContractViolation("unavailable must be UnavailableAction items")
         if any(u.covers_whole_action() for u in unavailable) and _offers_candidates(values):
             raise ContractViolation(f"{self.name!r} is unavailable as a whole but still offers candidates")
+        if len(set(unavailable)) != len(unavailable):
+            raise ContractViolation(f"{self.name!r} repeats an unavailable action")
+        for u in unavailable:
+            if u.picked and _leads_to_a_candidate(values, tuple(_label_key(label) for label in u.picked)):
+                raise ContractViolation(f"{self.name!r} offers {u.picked!r} as a candidate and as unavailable")
+        _require_paths(values, frozenset(), nested=False)
         object.__setattr__(self, "values", values)
         object.__setattr__(self, "unavailable", unavailable)
 
@@ -132,6 +133,32 @@ class ActionChoice:
 
 def _offers_candidates(values: tuple[ChoiceValue, ...]) -> bool:
     return any(v.candidates for v in values if isinstance(v, PickOne))
+
+
+def _require_paths(values: Sequence[ChoiceValue], outer_names: frozenset[str], *, nested: bool) -> None:
+    # 兄弟の候補が同じ名前 (how) を持つのはよいが、道筋に沿って重なると、引数を平らに並べたときに衝突する。
+    names = outer_names | {v.name for v in values}
+    for value in values:
+        if value.name in outer_names:
+            raise ContractViolation(f"values must not repeat {value.name!r} along a path")
+        if not isinstance(value, PickOne):
+            continue
+        if nested and not value.candidates:
+            raise ContractViolation(f"nested values must offer candidates: {value.name!r}")
+        for candidate in value.candidates:
+            _require_paths(candidate.values, names, nested=True)
+
+
+def _leads_to_a_candidate(values: Sequence[ChoiceValue], picked: tuple[object, ...]) -> bool:
+    if not picked:
+        return True
+    return any(
+        _leads_to_a_candidate(c.values, picked[1:])
+        for v in values
+        if isinstance(v, PickOne)
+        for c in v.candidates
+        if _label_key(c.label) == picked[0]
+    )
 
 
 @dataclass(frozen=True)
