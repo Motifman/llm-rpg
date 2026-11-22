@@ -466,6 +466,48 @@ class TestSurroundingsTexts:
         assert "people_here" in flaws[0].reason
 
 
+class TestBriefingHeadings:
+    """入るときの案内の見出し (briefing_headings) が、共通の部品から読まれ、欠けと誤りが読み込みで DesignFlaw になることを保証する。"""
+
+    def test_scenario_overrides_one_heading_of_the_common_part(self, tmp_path: Path) -> None:
+        """シナリオが premises だけを書くと、その見出しに置き換わり、ほかの見出しは共通の部品のまま残る。"""
+        text = _LIFT_LANDING + "briefing_headings:\n  premises: この村の決まり\n"
+
+        headings = _load(tmp_path, text).design.briefing_headings
+
+        assert (headings.introduction, headings.premises, headings.known_facts) == (
+            "この世界について",
+            "この村の決まり",
+            "あなたが知っていること",
+        )
+
+    def test_missing_heading_is_a_flaw_naming_the_field(self, tmp_path: Path) -> None:
+        """共通の部品にもシナリオにも known_facts が無いと、briefing_headings.known_facts の場所を付けた DesignFlaw になる。"""
+        path = _scenario(tmp_path, _LIFT_LANDING)
+        common = tmp_path / "common.yaml"
+        common.write_text(
+            common.read_text(encoding="utf-8").replace("  known_facts: あなたが知っていること\n", ""), encoding="utf-8"
+        )
+
+        with pytest.raises(WorldDesignFlawsException) as raised:
+            load_scenario(path)
+
+        assert [flaw.location for flaw in raised.value.flaws] == [
+            DesignLocation("world", "world", "briefing_headings.known_facts").in_file(ScenarioFile("common.yaml"))
+        ]
+
+    @pytest.mark.parametrize(
+        "line",
+        ["  premises: この世界について\n", '  premises: "【前提】"\n', "  sequel: 続き\n"],
+        ids=["repeated", "brackets", "unknown_key"],
+    )
+    def test_malformed_headings_are_a_flaw(self, tmp_path: Path, line: str) -> None:
+        """見出しの重なり・【】を含む見出し・知らない鍵は、briefing_headings の場所の DesignFlaw になる。"""
+        flaws = _flaws(tmp_path, _LIFT_LANDING + "briefing_headings:\n" + line)
+
+        assert [flaw.location.field.split(".")[0] for flaw in flaws] == ["briefing_headings"]
+
+
 class TestBuiltInTargetTexts:
     """built_in_action_perceptions の相手が見る文 (target) を、相手のいる行為にだけ書けることを保証する。"""
 

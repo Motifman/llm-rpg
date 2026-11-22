@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.game_world.application.brief_entering_person import BriefEnteringPerson, BriefEnteringPersonCommand
+from ai_rpg_world.game_world.domain.exception.action_exception import UndeclaredNounException
 from ai_rpg_world.game_world.domain.value_object import PersonId
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 
@@ -46,3 +47,13 @@ class TestBriefEnteringPerson:
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
         assert briefing.known_people == (PersonId("sayo"),)
+
+    def test_undeclared_person_is_refused(self, scenario: LoadedScenario) -> None:
+        """シナリオに無い人 (kuro) を渡すと UndeclaredNounException を投げる。"""
+        briefing = scenario.briefings[_GEN]
+        command = BriefEnteringPersonCommand(
+            person=PersonId("kuro"), known_facts=briefing.known_facts, objective=briefing.objective
+        )
+
+        with pytest.raises(UndeclaredNounException):
+            BriefEnteringPerson(scenario.design)(command)

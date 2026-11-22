@@ -15,6 +15,8 @@ _INTRODUCTION = WorldIntroduction(
     text=DescriptionText("冬が近い山あいの廃村。"), premises=DescriptionText("昇降機は一度しか動かない。")
 )
 
+_HEADINGS = {"introduction": "この世界について", "premises": "この世界の前提", "known_facts": "あなたが知っていること"}
+
 
 class TestBriefingHeadings:
     """BriefingHeadings が、導入・前提・知っていることを見出しの違う 3 つの説明にし、使えない見出しを宣言のときに断ることを保証する。"""
@@ -33,15 +35,18 @@ class TestBriefingHeadings:
             Description(heading="あなたが知っていること", text="金庫の番号は 1907。"),
         )
 
+    @pytest.mark.parametrize("field", ["introduction", "premises", "known_facts"])
     @pytest.mark.parametrize("heading", ["", "  ", "【前提】", "この世界の\n前提"])
-    def test_malformed_heading_is_refused(self, heading: str) -> None:
-        """空白だけ・【】を含む・2 行にわたる見出しは MalformedBriefingHeadingException で断る。"""
+    def test_malformed_heading_is_refused(self, field: str, heading: str) -> None:
+        """どの欄でも、空白だけ・【】を含む・2 行にわたる見出しは MalformedBriefingHeadingException で断る。"""
         with pytest.raises(MalformedBriefingHeadingException):
-            BriefingHeadings(introduction="この世界について", premises=heading, known_facts="あなたが知っていること")
+            BriefingHeadings(**{**_HEADINGS, field: heading})
 
-    def test_repeated_heading_is_refused(self) -> None:
-        """2 つの見出しが同じなら RepeatedBriefingHeadingException で断る。案内は見出しの重なりを許さないため。"""
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [("introduction", "premises"), ("premises", "known_facts"), ("introduction", "known_facts")],
+    )
+    def test_repeated_heading_is_refused(self, first: str, second: str) -> None:
+        """どの 2 つの見出しが同じでも RepeatedBriefingHeadingException で断る。案内は見出しの重なりを許さないため。"""
         with pytest.raises(RepeatedBriefingHeadingException):
-            BriefingHeadings(
-                introduction="この世界について", premises="この世界について", known_facts="あなたが知っていること"
-            )
+            BriefingHeadings(**{**_HEADINGS, second: _HEADINGS[first]})
