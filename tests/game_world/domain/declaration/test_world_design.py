@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 
+from ai_rpg_world.being.contract import Description
 from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, TextArgument
 from ai_rpg_world.game_world.domain.action.trigger import Trigger
@@ -1532,3 +1533,23 @@ class TestWorldWideIdsAreUnique:
     def test_distinct_ids_are_allowed(self) -> None:
         """ID の違う出来事 2 つなら compose は断らない。"""
         compose_world(happenings=(_happening("cave_in"), _happening("flood")))
+
+
+class TestWorldMapSection:
+    """WorldDesign.world_map_text が、地図を見せる世界でだけ地図の文を返すことを保証する。"""
+
+    def test_world_that_hides_the_map_returns_none(self) -> None:
+        """導入で地図を見せないとした世界は、None を返す。"""
+        design = compose_world(
+            nouns(spots=(spot("井戸"),)), introduction_=replace(introduction(), shows_world_map=False)
+        )
+
+        assert design.world_map_text() is None
+
+    def test_world_that_shows_the_map_returns_its_lines(self) -> None:
+        """導入で地図を見せるとした世界は、場所の行を返す。"""
+        design = compose_world(
+            nouns(spots=(spot("井戸"),)), introduction_=replace(introduction(), shows_world_map=True)
+        )
+
+        assert design.world_map_text() == "  井戸 (明るい) — 行き来できる先は無い"

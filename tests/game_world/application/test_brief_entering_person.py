@@ -26,16 +26,32 @@ def _brief_gen(scenario: LoadedScenario) -> BriefEnteringPersonCommand:
 class TestBriefEnteringPerson:
     """BriefEnteringPerson が、廃坑の山村 v2 に入るゲンに、案内・課す目的・最初から知っている人を返すことを保証する。"""
 
-    def test_orientation_has_introduction_premises_and_what_gen_knows(self, scenario: LoadedScenario) -> None:
-        """ゲンの案内には「この世界について」「この世界の前提」「あなたが知っていること」がこの順に並び、知っていることに金庫の番号 1907 がある。"""
+    def test_orientation_has_introduction_premises_map_and_what_gen_knows(self, scenario: LoadedScenario) -> None:
+        """ゲンの案内には「この世界について」「この世界の前提」「この場所の造り」「あなたが知っていること」がこの順に並び、知っていることに金庫の番号 1907 がある。"""
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
         descriptions = tuple(briefing.orientation.descriptions)
-        introduction, premises, known_facts = (d.text for d in descriptions)
-        assert [d.heading for d in descriptions] == ["この世界について", "この世界の前提", "あなたが知っていること"]
+        introduction, premises, _, known_facts = (d.text for d in descriptions)
+        assert [d.heading for d in descriptions] == [
+            "この世界について",
+            "この世界の前提",
+            "この場所の造り",
+            "あなたが知っていること",
+        ]
         assert isinstance(introduction, str) and introduction.startswith("冬が近い山あいの廃村。")
         assert isinstance(premises, str) and "昇降機は一度しか動かない。" in premises
         assert isinstance(known_facts, str) and "1907" in known_facts
+
+    def test_map_lists_every_place_with_its_neighbours_in_minutes(self, scenario: LoadedScenario) -> None:
+        """「この場所の造り」は 21 の場所を 1 行ずつ載せ、北の竪坑口の行は、1 tick を 30 分として近い順に行き先を並べる。"""
+        briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
+
+        world_map = tuple(briefing.orientation.descriptions)[2].text
+        assert isinstance(world_map, str)
+        lines = world_map.splitlines()
+        assert len(lines) == 21
+        assert lines[0] == "  北の竪坑口 (明るい) → 北の竪坑の底 まで 30 分 / 集会所 まで 30 分 / 雪の峠道 まで 60 分"
+        assert "  昇降機の乗り場 (暗い) → 下層の近道 まで 30 分 / 古い支柱の通路 まで 60 分" in lines
 
     def test_imposed_goal_is_only_gens_objective(self, scenario: LoadedScenario) -> None:
         """ゲンに課す目的は、ゲンの objective「サヨと二人そろって、坑道の奥の昇降機で外へ出る。」だけになる。"""

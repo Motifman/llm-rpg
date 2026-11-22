@@ -38,6 +38,7 @@ from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import Sqli
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.world_design_for_tests import (
     character,
+    clock_wording,
     compose_world,
     half_hour_ticks_from_midnight,
     nouns,
@@ -116,7 +117,7 @@ class _World:
         OpenWorld(self._store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self._scope = CommandScope(self._store, CommittedEventsDistributor())
         self.observations = _Observations()
-        exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.observations)
+        exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), self.observations)
         self._deliver_perception = DeliverPerception(self._scope, exit, PerceptionReportsReceived())
         self.deliver = DeliverNoticesOnLeaving(self._scope, exit)
         self._scope.run(lambda session: session.people_register().name(_AKI, DisplayName("アキ")))

@@ -11,3 +11,4 @@ from ai_rpg_world.game_world.domain.value_object import DescriptionText
 class WorldIntroduction:
     text: DescriptionText
     premises: DescriptionText
+    shows_world_map: bool

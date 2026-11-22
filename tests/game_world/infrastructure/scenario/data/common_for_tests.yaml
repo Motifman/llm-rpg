@@ -138,6 +138,20 @@ built_in_action_perceptions:
   put_away: *quiet
   cast_ballot: *quiet
 
+clock:
+  day: "Day {day}"
+  late_night: "深夜 "
+  late_night_before_hour: 6
+
+world_map:
+  place: "  {spot} ({lighting}) → {exits}"
+  place_without_exits: "  {spot} ({lighting}) — 行き来できる先は無い"
+  exit: "{spot} まで {time}"
+  joiner: " / "
+  minutes: "{minutes} 分"
+  turns: "{turns} 手ぶん"
+  lighting: { bright: 明るい, dusky: 薄暗い, dark: 暗い, pitch_dark: 真っ暗 }
+
 surroundings_texts:
   people_here: "ここには{people}がいる。"
   bodies_here: "{people}が倒れている。"
@@ -156,6 +170,7 @@ briefing_headings:
   introduction: この世界について
   premises: この世界の前提
   known_facts: あなたが知っていること
+  world_map: この場所の造り
 
 perception_defaults:
   witness: { clear: "{actor}が何かをした。" }
