@@ -11,7 +11,7 @@ from ai_rpg_world.being.contract.action_choice import (
     UnavailableAction,
 )
 from ai_rpg_world.being.contract.agent_move import AgentMove, FrozenJsonObject, JsonValue
-from ai_rpg_world.being.contract.description import Description, Orientation, Scene
+from ai_rpg_world.being.contract.description import Description, Here, Orientation, Scene
 from ai_rpg_world.being.contract.environment_entry import EnvironmentEntry, Introduction
 from ai_rpg_world.being.contract.errors import ContractViolation
 from ai_rpg_world.being.contract.observation import (
@@ -49,6 +49,7 @@ __all__ = [
     "ChoiceValue",
     "ContractViolation",
     "Description",
+    "Here",
     "EnvironmentEntry",
     "EnvironmentNotice",
     "FreeText",

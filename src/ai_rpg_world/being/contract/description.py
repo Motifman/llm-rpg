@@ -56,6 +56,22 @@ class Orientation:
         object.__setattr__(self, "descriptions", _descriptions(self.descriptions))
 
 
+@dataclass(frozen=True, kw_only=True)
+class Here:
+    """今いる場所の区画。``text`` は現在地の行より下の本文 (雰囲気、接続先、物など)。
+
+    現在地の行は Being が書く。初めて訪れたかは Being の記憶から決まるため。``place`` はその鍵になる。
+    """
+
+    place: str
+    heading: str
+    text: str | TextWithPeople
+
+    def __post_init__(self) -> None:
+        require_text(self.place, "place")
+        Description(heading=self.heading, text=self.text)
+
+
 @dataclass(frozen=True)
 class Scene:
     """毎ターン置き換わる、今見えている場面。
@@ -67,10 +83,14 @@ class Scene:
 
     descriptions: Sequence[Description] = field(default_factory=tuple)
     notices: Sequence[Description] = field(default_factory=tuple)
+    here: Here | None = None
 
     def __post_init__(self) -> None:
         descriptions = _descriptions(self.descriptions)
         notices = _descriptions(self.notices)
-        _descriptions((*descriptions, *notices))
+        if self.here is not None and not isinstance(self.here, Here):
+            raise ContractViolation("here must be Here or None")
+        here = () if self.here is None else (Description(heading=self.here.heading, text=self.here.text),)
+        _descriptions((*here, *descriptions, *notices))
         object.__setattr__(self, "descriptions", descriptions)
         object.__setattr__(self, "notices", notices)

@@ -10,6 +10,7 @@ from ai_rpg_world.being.application.working_memory_text import message_text, sec
 from ai_rpg_world.being.contract import (
     UNKNOWN,
     Description,
+    Here,
     Observation,
     ObservedTime,
     OfferedBeingTools,
@@ -111,6 +112,25 @@ class TestGathering:
         surroundings = memory.section("現在地と周囲")
         assert surroundings is not None
         assert surroundings.lines == ("北の竪坑口", "ここにはミオ、背の高い男がいる。")
+
+    def test_here_comes_first_with_the_current_place_line(self, stores: dict[str, object]) -> None:
+        """現在地の区画は、場面のほかの説明より先に出て、「現在地: 場所」の行の下に世界の本文が続く。人の穴は呼び名で埋まる。"""
+        text = TextWithPeople(
+            template="  上層の南の坑道。\nここには{person_1}がいる。",
+            people={"person_1": PersonInText(handle=1, appearance="小柄な女", visible_name="ミオ")},
+        )
+        scene = Scene(
+            [Description(heading="行動の候補", text="travel_to（行く）")],
+            here=Here(place="南の坑道", heading="現在地と周囲", text=text),
+        )
+
+        memory = _of(stores, scene=scene)
+
+        headings = [s.heading for s in memory.message]
+        assert headings.index("現在地と周囲") + 1 == headings.index("行動の候補")
+        surroundings = memory.section("現在地と周囲")
+        assert surroundings is not None
+        assert surroundings.lines == ("現在地: 南の坑道", "  上層の南の坑道。", "ここにはミオがいる。")
 
     def test_events_in_short_term_memory_appear_in_recent_events(self, stores: dict[str, object]) -> None:
         """短期記憶に積んだ出来事が【直近の出来事】に出る。"""
