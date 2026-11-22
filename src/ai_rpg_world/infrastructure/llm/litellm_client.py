@@ -40,6 +40,15 @@ from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolC
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemorySummaryCompletionPort,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.truncated_output_retry import (
+    RETRY_REASONING_EFFORT,
+    CallOutcomeWatch,
+)
+from ai_rpg_world.being.application.choose_action import (
+    ActionChoosingCompletion,
+    ActionChoosingReply,
+    ToolCallReply,
+)
 from ai_rpg_world.being.infrastructure.llm_episode_writer import EpisodeWritingCompletion
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
@@ -291,6 +300,7 @@ class LiteLLMClient(
     ILLMClient,
     IShortTermMemorySummaryCompletionPort,
     EpisodeWritingCompletion,
+    ActionChoosingCompletion,
 ):
     """
     LiteLLM の completion API で messages + tools を送り、1 つの tool_call を返す実装。
@@ -1100,6 +1110,24 @@ class LiteLLMClient(
         prompt 構築や parse は ``LlmBackstoryWriter`` 側の責務。
         """
         return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_SUMMARY)
+
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        watch = CallOutcomeWatch(None)
+        call = self.invoke(
+            messages,
+            tools,
+            "required",
+            metrics_sink=watch,
+            reasoning_effort=RETRY_REASONING_EFFORT if reasoning_off else None,
+        )
+        tool_call = (
+            None
+            if call is None
+            else ToolCallReply(tool_name=call["name"], arguments=call["arguments"], call_id=call.get("tool_call_id"))
+        )
+        return ActionChoosingReply(tool_call=tool_call, cut_off_while_reasoning=watch.cut_off_while_reasoning)
 
     def complete_episode_writing_json(
         self,

@@ -241,3 +241,43 @@ class TestCandidateTable:
     def test_action_without_values_says_there_is_nothing_to_pick(self) -> None:
         """値の無い行動は、選ぶ値が無いことを 1 行で示す。"""
         assert _table(ActionChoices((ActionChoice(name="wait", label="待つ"),))) == ["wait（待つ）", "- 選ぶ値は無い"]
+
+
+class TestMoveFrom:
+    """ActionTools.move_from が、LLM のツールの呼び出しを、世界に返す AgentMove に変える決まりを保証する。"""
+
+    def test_unknown_tool_name_gives_no_move(self) -> None:
+        """出していないツールの名前なら None を返す。"""
+        assert _tools(_gen_in_the_office()).move_from(call_id="c1", tool_name="gather", arguments={}) is None
+
+    def test_top_level_wins_over_the_same_name_in_details(self) -> None:
+        """details の中に上の段と同じ名前があれば、上の段の値を使う。"""
+        move = _tools(ActionChoices((_interact(SAFE),))).move_from(
+            call_id="c1", tool_name="interact", arguments={"target": "金庫", "details": {"target": "机", "code": "1"}}
+        )
+
+        assert move is not None and dict(move.arguments) == {"target": "金庫", "code": "1"}
+
+    def test_details_of_a_choice_without_details_is_kept_as_it_is(self) -> None:
+        """details を受けない選択肢に details が来ても、外さずにそのまま世界に渡す。"""
+        move = _tools(_gen_in_the_office()).move_from(
+            call_id="c1", tool_name="travel_to", arguments={"destination": "井戸", "details": {"x": "1"}}
+        )
+
+        assert move is not None and dict(move.arguments) == {"destination": "井戸", "details": {"x": "1"}}
+
+    def test_name_not_called_this_turn_stays_text(self) -> None:
+        """このターンに出ていない呼び方 (ミオ) は、人の印に戻さず文字のまま渡す。"""
+        move = _tools(_gen_in_the_office()).move_from(
+            call_id="c1", tool_name="speak", arguments={"reach": "ささやく", "to": "ミオ", "content": "やあ"}
+        )
+
+        assert move is not None and move.arguments["to"] == "ミオ"
+
+    def test_blank_inner_thought_is_dropped(self) -> None:
+        """独白が空白だけなら、AgentMove の独白は None になり、引数にも残らない。"""
+        move = _tools(_gen_in_the_office()).move_from(
+            call_id="c1", tool_name="travel_to", arguments={"destination": "井戸", "inner_thought": "  "}
+        )
+
+        assert move is not None and move.inner_thought is None and "inner_thought" not in move.arguments
