@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from ai_rpg_world.being.application.action_tools import ActionTools
 from ai_rpg_world.being.application.closest_tool_name import suggest_closest_tool_name
-from ai_rpg_world.being.application.current_working_memory import BeingLookup, CurrentWorkingMemory
+from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.episode_recall_tool import (
     MALFORMED_HANDLES_TEXT,
     read_handles,
@@ -125,7 +125,6 @@ class ChooseAction:
         completion: ActionChoosingCompletion,
         short_term_memories: ShortTermMemoryRepository,
         turn_clock: MemoryTurnClock,
-        beings: BeingLookup,
         memo_books: MemoBookRepository,
         episodes: EpisodeRepository,
         recall_limit: int,
@@ -136,7 +135,6 @@ class ChooseAction:
         self._completion = completion
         self._short_term_memories = short_term_memories
         self._turn_clock = turn_clock
-        self._beings = beings
         self._memo_books = memo_books
         self._episodes = episodes
         self._recall_limit = recall_limit
@@ -236,17 +234,11 @@ class ChooseAction:
             book,
             read.operations,
             turn=turn,
-            environment_name=self._environment_name(being_id),
+            environment_name=self._working_memory.environment_name(being_id),
             new_memo_id=lambda: str(uuid4()),
             known_episode_handles=known_episode_handles,
         )
         self._memo_books.save(book)
-
-    def _environment_name(self, being_id: BeingId) -> str:
-        being = self._beings.find_by_id(being_id)
-        if being is None or being.attachment is None:
-            raise LookupError(f"Being {being_id.value} is not in any environment")
-        return being.attachment.environment_name
 
     def _act(self, being_id: BeingId, move: AgentMove, *, turn: int, result: Outcome | None) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。

@@ -168,7 +168,6 @@ def _choose(
         completion=completion,
         short_term_memories=short_term_memories,
         turn_clock=clock,
-        beings=_Beings(),
         memo_books=memo_books,
         episodes=episodes,
         recall_limit=2,
