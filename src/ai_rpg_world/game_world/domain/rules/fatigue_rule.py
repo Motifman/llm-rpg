@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_rpg_world.game_world.domain.rules._level_ladder import require_level_ladder, require_level_name
-from ai_rpg_world.game_world.domain.value_object import FatigueAmount
+from ai_rpg_world.game_world.domain.value_object import DisplayName, FatigueAmount
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class FatigueLevelName:
 class FatigueLevel:
     starts_at: FatigueAmount
     name: FatigueLevelName
+    seen_as: DisplayName | None = None
 
 
 @dataclass(frozen=True)

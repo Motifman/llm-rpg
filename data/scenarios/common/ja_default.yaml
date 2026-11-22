@@ -6,9 +6,9 @@ rules:
     levels:
       - { starts_at: 0, name: 元気 }
       - { starts_at: 30, name: 少し疲れている }
-      - { starts_at: 60, name: 疲れている }
-      - { starts_at: 85, name: ぐったりしている }
-      - { starts_at: 100, name: 疲れ切って動けない }
+      - { starts_at: 60, name: 疲れている, seen_as: 疲れている }
+      - { starts_at: 85, name: ぐったりしている, seen_as: ぐったりしている }
+      - { starts_at: 100, name: 疲れ切って動けない, seen_as: 限界。動けず座り込んでいる }
   hunger:
     per_tick: 1
     limit: 100
@@ -290,6 +290,15 @@ surroundings_texts:
     unavailable: "      いまできない: {operations}"
     unavailable_operation: "{label}（{reason}）"
     unavailable_joiner: 、
+    people: "同じ場所にいるプレイヤー:"
+    no_people: "同じ場所にいるプレイヤー: (他のプレイヤーはこのスポットにいない)"
+    person: '  - "{person}"{condition}{carried}'
+    person_looks: " ({looks})"
+    person_down: " (倒れて動かない)"
+    person_dead: " (死亡している)"
+    carried: " 〔{items}〕"
+    carrying_nothing: " 〔手ぶら〕"
+    carried_joiner: 、
     ground_items: "落ちている品物:"
     count_mark: ×
     pitch_dark: 真っ暗で、何も見えない。

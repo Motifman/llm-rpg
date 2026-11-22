@@ -95,7 +95,8 @@ def test_gen_in_the_office_sees_the_safe_the_ways_out_and_sayo(mine_village: Wor
                         '  - "金庫" (扉は固く閉じている) — 壁際に据えられた重い鉄の金庫。'
                         "四桁の番号を合わせるダイヤルが付いている。",
                         '  - "事務机" — 埃をかぶった事務机。引き出しが半分開いている。',
-                        "ここには{person_1}がいる。",
+                        "同じ場所にいるプレイヤー:",
+                        '  - "{person_1}"',
                     )
                 ),
                 people={"person_1": PersonInText(handle=3, appearance="綿入れを着込んだ若い娘", visible_name="サヨ")},
@@ -110,7 +111,7 @@ def test_being_fills_the_hole_with_the_name_it_sees(mine_village: WorldDesign) -
     assert surroundings is not None
     assert isinstance(surroundings.text, TextWithPeople)
 
-    assert text_naming_people(surroundings.text).endswith("ここにはサヨがいる。")
+    assert text_naming_people(surroundings.text).endswith('同じ場所にいるプレイヤー:\n  - "サヨ"')
 
 
 def test_gen_at_the_south_adit_mouth_sees_the_snow_and_the_night_like_the_old_run(mine_village: WorldDesign) -> None:

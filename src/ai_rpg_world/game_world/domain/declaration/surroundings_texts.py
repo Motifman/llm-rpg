@@ -43,6 +43,15 @@ SCENE_LINE_NAMES = {
     "unavailable": ("operations",),
     "unavailable_operation": ("label", "reason"),
     "unavailable_joiner": (),
+    "people": (),
+    "no_people": (),
+    "person": ("person", "condition", "carried"),
+    "person_looks": ("looks",),
+    "person_down": (),
+    "person_dead": (),
+    "carried": ("items",),
+    "carrying_nothing": (),
+    "carried_joiner": (),
 }
 
 
@@ -74,6 +83,15 @@ class SceneTexts:
     unavailable: str
     unavailable_operation: str
     unavailable_joiner: str
+    people: str
+    no_people: str
+    person: str
+    person_looks: str
+    person_down: str
+    person_dead: str
+    carried: str
+    carrying_nothing: str
+    carried_joiner: str
     ground_items: DisplayName
     count_mark: DisplayName
     pitch_dark: DisplayName

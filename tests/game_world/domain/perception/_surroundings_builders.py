@@ -26,9 +26,11 @@ from ai_rpg_world.game_world.domain.perception.scene_conditions import SceneCond
 from ai_rpg_world.game_world.domain.perception.surroundings import (
     ContainedObject,
     ContainedPassage,
+    PersonCondition,
     PresentPerson,
     SeenObject,
     SpotContents,
+    Up,
 )
 from ai_rpg_world.game_world.domain.sound.sound_level import SoundLoss
 from ai_rpg_world.game_world.domain.value_object import (
@@ -138,6 +140,7 @@ def person(
     held: tuple[ItemInstanceId, ...] = (),
     carried: tuple[ItemInstanceId, ...] = (),
     section: SpotSectionId | OpenArea = OpenArea(),
+    condition: PersonCondition = Up(looks=None),
 ) -> PresentPerson:
     return PresentPerson(
         person=PersonRef(
@@ -148,6 +151,7 @@ def person(
         section=section,
         held_items=held,
         all_items=held + carried,
+        condition=condition,
     )
 
 

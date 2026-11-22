@@ -28,14 +28,16 @@ from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople, Unidentified
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
-from ai_rpg_world.game_world.domain.perception.surroundings import VisibleSurroundings
+from ai_rpg_world.game_world.domain.perception.surroundings import Dead, Down, Up, VisibleSurroundings
 from ai_rpg_world.game_world.domain.person import DeclaredOutcome
 from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
+from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueLevel, FatigueLevelName, FatigueRule
 from ai_rpg_world.game_world.domain.value_object import (
     Damage,
     DescriptionText,
     DisplayName,
+    FatigueAmount,
     ObjectId,
     OutcomeId,
     PersonId,
@@ -98,7 +100,13 @@ def _cave(lighting: Lighting) -> SpotDeclaration:
 class _World:
     """洞窟に alice・bob・carol がいて、宝箱と隠れた壁龕がある。小屋には棚と dave。洞窟と小屋が道でつながる。bob はロープを 2 本持ち、1 本を手に持つ。"""
 
-    def __init__(self, lighting: Lighting = Lighting.BRIGHT, *, departed_persons_act: bool = False) -> None:
+    def __init__(
+        self,
+        lighting: Lighting = Lighting.BRIGHT,
+        *,
+        departed_persons_act: bool = False,
+        fatigue: FatigueRule = world_rules_for_tests().fatigue,
+    ) -> None:
         bob = replace(
             character("bob", "cave"),
             initial_items=(_ROPE.item_spec_id, _ROPE.item_spec_id),
@@ -114,7 +122,7 @@ class _World:
                 outcomes=[_RESCUED],
             ),
             object_looks=[_CHEST_LOOKS],
-            world_rules=replace(world_rules_for_tests(), departed_persons_act=departed_persons_act),
+            world_rules=replace(world_rules_for_tests(), departed_persons_act=departed_persons_act, fatigue=fatigue),
         )
         self.store = SqliteWorldStore.create(
             ":memory:",
@@ -340,3 +348,52 @@ class TestLookAround:
         surroundings = _seen(world.looks_around(_ALICE))
 
         assert (len(surroundings.people), len(surroundings.bodies)) == (1, 0)
+
+
+_TIRING = FatigueRule(
+    per_exertion=FatigueAmount(60),
+    limit=FatigueAmount(100),
+    levels=(
+        FatigueLevel(FatigueAmount(0), FatigueLevelName("元気")),
+        FatigueLevel(FatigueAmount(50), FatigueLevelName("疲労"), seen_as=DisplayName("疲れている")),
+    ),
+)
+
+
+class TestHowPeopleLook:
+    """LookAround が、ここにいる人の状態 (起きているか、倒れているか、死んでいるか、疲れの様子) を、身体の状態と疲れの規則から決める挙動を保証する。"""
+
+    def test_rested_person_has_no_look(self) -> None:
+        """疲れの段階に見た目の無い bob は、見た目の無い起きている人として出る。"""
+        world = _World(Lighting.BRIGHT, fatigue=_TIRING)
+
+        surroundings = _seen(world.looks_around(_ALICE))
+
+        assert {seen.condition for seen in surroundings.people} == {Up(looks=None)}
+
+    def test_tired_person_shows_the_look_of_the_fatigue_level(self) -> None:
+        """bob の疲れが「疲れている」の見た目を持つ段階に入ると、bob は「疲れている」見た目の起きている人として出る。"""
+        world = _World(Lighting.BRIGHT, fatigue=_TIRING)
+        world.change(lambda s: s.aggregates().vitals(_BOB).exert(_TIRING))
+
+        surroundings = _seen(world.looks_around(_ALICE))
+
+        assert Up(looks=DisplayName("疲れている")) in {seen.condition for seen in surroundings.people}
+
+    def test_fallen_person_is_down(self) -> None:
+        """倒れた bob は、倒れている人として出る。"""
+        world = _World(Lighting.BRIGHT)
+        world.change(_falls(_BOB))
+
+        surroundings = _seen(world.looks_around(_ALICE))
+
+        assert [seen.condition for seen in surroundings.bodies] == [Down()]
+
+    def test_dead_person_is_dead(self) -> None:
+        """死んだ carol は、死んでいる人として出る。"""
+        world = _World(Lighting.BRIGHT, departed_persons_act=True)
+        world.change(_dies(_CAROL))
+
+        surroundings = _seen(world.looks_around(_ALICE))
+
+        assert [seen.condition for seen in surroundings.bodies] == [Dead()]

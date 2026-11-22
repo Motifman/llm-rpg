@@ -196,6 +196,15 @@ surroundings_texts:
     unavailable: "      いまできない: {operations}"
     unavailable_operation: "{label}（{reason}）"
     unavailable_joiner: 、
+    people: "同じ場所にいるプレイヤー:"
+    no_people: "同じ場所にいるプレイヤー: (他のプレイヤーはこのスポットにいない)"
+    person: '  - "{person}"{condition}{carried}'
+    person_looks: " ({looks})"
+    person_down: " (倒れて動かない)"
+    person_dead: " (死亡している)"
+    carried: " 〔{items}〕"
+    carrying_nothing: " 〔手ぶら〕"
+    carried_joiner: 、
     ground_items: "落ちている品物:"
     count_mark: ×
     pitch_dark: 真っ暗で、何も見えない。
