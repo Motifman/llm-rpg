@@ -58,13 +58,18 @@ class TestStartPlaySession:
         }
 
     def test_gens_orientation_has_introduction_premises_and_what_he_knows(self) -> None:
-        """ゲンの案内には導入・前提・「あなたが知っていること」が並び、知っていることに金庫の番号 1907 がある。"""
+        """ゲンの案内には導入・前提・「この場所の造り」・「あなたが知っていること」が並び、知っていることに金庫の番号 1907 がある。"""
         session = MineVillageSession().started()
 
         descriptions = tuple(session.casts.get(WORLD).orientation_of(_GEN).descriptions)
 
-        assert [d.heading for d in descriptions] == ["この世界について", "この世界の前提", "あなたが知っていること"]
-        known_facts = descriptions[2].text
+        assert [d.heading for d in descriptions] == [
+            "この世界について",
+            "この世界の前提",
+            "この場所の造り",
+            "あなたが知っていること",
+        ]
+        known_facts = descriptions[3].text
         assert isinstance(known_facts, str) and "1907" in known_facts
 
     def test_gens_imposed_goal_is_only_his_objective(self) -> None:
@@ -102,6 +107,7 @@ class TestStartPlaySession:
         assert [d.heading for d in gen.orientation.descriptions] == [
             "この世界について",
             "この世界の前提",
+            "この場所の造り",
             "あなたが知っていること",
         ]
 

@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.being.contract import Description
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
@@ -50,6 +51,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design_review import (
     one_per_noun_flaws,
 )
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
+from ai_rpg_world.game_world.domain.declaration.world_map import WorldMap, WorldMapWording
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, DesignWarning
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import ItemNotUsableException
@@ -117,6 +119,7 @@ class WorldDesign:
         action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
         clock_wording: ClockWording,
+        world_map_wording: WorldMapWording,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -151,6 +154,7 @@ class WorldDesign:
         self._action_texts = action_texts
         self._surroundings_texts = surroundings_texts
         self._clock_wording = clock_wording
+        self._world_map_wording = world_map_wording
         self._weather = weather
         self._day_night = day_night
         self._initial_stage = initial_stage
@@ -182,6 +186,7 @@ class WorldDesign:
         action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
         clock_wording: ClockWording,
+        world_map_wording: WorldMapWording,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -432,6 +437,7 @@ class WorldDesign:
             action_texts=action_texts,
             surroundings_texts=surroundings_texts,
             clock_wording=clock_wording,
+            world_map_wording=world_map_wording,
             weather=weather,
             day_night=day_night,
             initial_stage=initial_stage,
@@ -475,6 +481,11 @@ class WorldDesign:
     @property
     def surroundings_texts(self) -> SurroundingsTexts:
         return self._surroundings_texts
+
+    def world_map_text(self) -> str | None:
+        if not self._introduction.shows_world_map:
+            return None
+        return WorldMap.drawn_from(self._nouns).written_with(self._world_map_wording, self._day_night)
 
     @property
     def clock_wording(self) -> ClockWording:

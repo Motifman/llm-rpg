@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_and_clock_time import DayAndClockTime
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_declaration import DayPhaseDeclaration
@@ -18,6 +18,9 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
 )
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
 
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.world_map import WorldMapWording
+
 _MINUTES_PER_DAY = 24 * 60
 
 
@@ -33,6 +36,9 @@ class DayPhaseChange:
 class NoDayNight:
     def is_declared(self) -> bool:
         return False
+
+    def travel_time_text(self, ticks: int, wording: WorldMapWording) -> str:
+        return wording.turns.format(turns=ticks)
 
     def phase_names(self) -> frozenset[DayPhaseName]:
         return frozenset()
@@ -88,6 +94,9 @@ class DayNightDeclaration:
 
     def time_of_day_at(self, now: WorldTick) -> TimeOfDay:
         return TimeOfDay((self.starts_at.tick_of_day + now.value) % self.ticks_per_day.value)
+
+    def travel_time_text(self, ticks: int, wording: WorldMapWording) -> str:
+        return wording.minutes.format(minutes=ticks * _MINUTES_PER_DAY // self.ticks_per_day.value)
 
     def day_and_clock_time_at(self, now: WorldTick) -> DayAndClockTime:
         minutes_since_midnight = self.time_of_day_at(now).tick_of_day * _MINUTES_PER_DAY // self.ticks_per_day.value
