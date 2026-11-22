@@ -763,6 +763,7 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
                 body="[行動] メモを書いた → [結果] メモを追加しました",
                 time=ObservedTime(display="1日目 昼", seconds=43200.0),
                 order=OccurrenceOrder(environment="廃坑の山村", value=1729000002.0),
+                succeeded=False,
             ),
         ),
         Attempt(turn=14, move=AgentMove(call_id="call-4", tool_name="interact", arguments={"target": "弁"})),
@@ -848,7 +849,7 @@ class TestShortTermMemoryPayload:
         assert _state(dst_stores["short_term"].get(being)) == _state(_every_field_short_term_memory())
 
     def test_attempts_saved_before_memo_rejections_and_call_text_restore_without_them(self) -> None:
-        """書けなかったメモの理由と呼び出しの文を足す前に保存した試み (結果のある試み・待っている 1 手) は、どちらも無しで戻る。"""
+        """書けなかったメモの理由・呼び出しの文・記憶の道具の成否を足す前に保存した試みは、理由と呼び出しの文が無く、記憶の道具は成功として戻る。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId("ada")
         src_stores["short_term"].save(_every_field_short_term_memory())
@@ -857,6 +858,8 @@ class TestShortTermMemoryPayload:
         for item in [*memory_payload["experiences"], memory_payload["awaiting"]]:
             item.pop("memo_rejections", None)
             item.pop("call_text", None)
+            if item.get("result") and "memory_operation" in item["result"]:
+                item["result"]["memory_operation"].pop("succeeded")
         (dst_svc, dst_stores) = _make_service()
 
         dst_svc.restore(being, json.dumps(payload))
@@ -865,6 +868,8 @@ class TestShortTermMemoryPayload:
         attempts = [e for e in restored.experiences if isinstance(e, Attempt)]
         assert attempts and restored.awaiting is not None
         assert all(a.memo_rejections == () and a.call_text is None for a in [*attempts, restored.awaiting])
+        operations = [a.result for a in attempts if isinstance(a.result, MemoryOperationOutcome)]
+        assert operations and all(o.succeeded for o in operations)
 
     def test_more_than_one_memory_is_rejected(self) -> None:
         """1 つの Being に短期記憶が 2 つ書かれた payload は FormatError。"""

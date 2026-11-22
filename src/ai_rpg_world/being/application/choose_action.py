@@ -182,9 +182,12 @@ class ChooseAction:
         turn = self._turn_clock.current_turn(being_id) + 1
         if call.tool_name == command.being_tools.episode_recall:
             recall = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
-            body = self._recall(being_id, call.arguments, turn=turn)
+            body, succeeded = self._recall(being_id, call.arguments, turn=turn)
             self._act(
-                being_id, recall, turn=turn, result=MemoryOperationOutcome(call_id=call_id, body=body, time=command.now)
+                being_id,
+                recall,
+                turn=turn,
+                result=MemoryOperationOutcome(call_id=call_id, body=body, time=command.now, succeeded=succeeded),
             )
             return TurnSpentRecalling(move=recall, exchange=exchange)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=call.arguments)
@@ -213,14 +216,15 @@ class ChooseAction:
         )
         return ActionNotChosen(requested_tool=call.tool_name, suggestion=suggestion, exchange=exchange)
 
-    def _recall(self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int) -> str:
+    def _recall(self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int) -> tuple[str, bool]:
+        """知らない呼び名は、古い run と同じく、思い出せないと答える成功にする。"""
         handles = read_handles(arguments)
         if handles is None:
-            return MALFORMED_HANDLES_TEXT
+            return MALFORMED_HANDLES_TEXT, False
         # 一部だけ思い出すと、どれを落としたかを本人が知らないまま 1 手が終わる (D1623-2)。
         if len(set(handles)) > self._recall_limit:
-            return too_many_handles_text(self._recall_limit)
-        return recalled_text(recall_episodes(self._episodes, being_id, handles, turn=turn))
+            return too_many_handles_text(self._recall_limit), False
+        return recalled_text(recall_episodes(self._episodes, being_id, handles, turn=turn)), True
 
     def _write_memo(
         self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int

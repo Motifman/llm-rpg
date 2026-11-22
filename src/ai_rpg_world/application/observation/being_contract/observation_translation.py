@@ -221,7 +221,7 @@ def result_from_action_result(
     if not _is_agent_side_tool(entry.tool_name):
         return ObservedOutcome(observation_from_action_result(entry, call_id=call_id, observer=observer, order=order))
     body, time = _body_and_time(entry, observer=observer)
-    return MemoryOperationOutcome(call_id=call_id, body=body, time=time, order=order)
+    return MemoryOperationOutcome(call_id=call_id, body=body, time=time, order=order, succeeded=entry.success)
 
 
 def lapse_body_and_time(entry: ActionResultEntry, *, observer: Observer) -> tuple[str, ObservedTime]:

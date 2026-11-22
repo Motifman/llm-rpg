@@ -622,6 +622,12 @@ class TestResultFromActionResult:
             time=ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick),  # type: ignore[operator]
         )
 
+    def test_failed_memory_operation_keeps_that_it_failed(self) -> None:
+        """記憶の道具が失敗した行は、記憶の結果でも失敗として写す。"""
+        result = result_from_action_result(self._entry("episode_recall", success=False), call_id="c", observer=_NOAH)
+
+        assert isinstance(result, MemoryOperationOutcome) and not result.succeeded
+
     @pytest.mark.parametrize(
         ("overrides", "reason"),
         [

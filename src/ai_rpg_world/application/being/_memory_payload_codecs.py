@@ -317,6 +317,7 @@ class _ExperienceToDict:
                     "body": result.body,
                     "time": _time_to_dict(result.time),
                     "order": _order_to_dict(result.order),
+                    "succeeded": result.succeeded,
                 }
             },
         }
@@ -345,6 +346,8 @@ def _dict_to_attempt_result(data: dict[str, Any] | None) -> Outcome:
         body=operation["body"],
         time=_dict_to_time(operation["time"]),
         order=_dict_to_order(operation["order"]),
+        # 成否を足す前 (D2240) の記憶の道具の結果は、成功として読む。
+        succeeded=operation["succeeded"] if "succeeded" in operation else True,
     )
 
 

@@ -454,17 +454,17 @@ class TestRecallingEpisodes:
         assert clock.current_turn(GEN) == 1
 
     def test_unknown_handle_is_answered_as_not_remembered(self) -> None:
-        """目次に無い呼び名は、思い出せないと結果に残る。"""
+        """目次に無い呼び名は、思い出せないと結果に残る。古い run と同じく、失敗ではない。"""
         memories = InMemoryShortTermMemoryRepository()
 
         _choose(_reply("episode_recall", {"handles": ["ep_ffffff"]}), being_tools=WITH_MEMORY, memories=memories)
 
         [attempt] = memories.get(GEN).unsummarized()
         assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert attempt.result.body == "[ep_ffffff] そのような記憶は思い出せない。"
+        assert attempt.result.body == "[ep_ffffff] そのような記憶は思い出せない。" and attempt.result.succeeded
 
     def test_more_handles_than_the_limit_recall_nothing(self) -> None:
-        """一度に思い出せる件数 (2) を超えて渡すと、どれも思い出さず、件数を減らすよう結果に残る。"""
+        """一度に思い出せる件数 (2) を超えて渡すと、どれも思い出さず、件数を減らすよう失敗の結果に残る。"""
         episodes, handle = _episodes_with_the_safe_story()
         memories = InMemoryShortTermMemoryRepository()
 
@@ -479,10 +479,11 @@ class TestRecallingEpisodes:
         recalled = episodes.find_by_handle(GEN, handle)
         assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
         assert attempt.result.body == "一度に思い出せるのは 2 件までです。呼び名を減らしてください。"
+        assert not attempt.result.succeeded
         assert recalled is not None and recalled.recall_count == 0
 
     def test_handles_not_written_as_a_list_are_answered_with_how_to_write_them(self) -> None:
-        """呼び名を配列で渡さなければ、書き方を結果に残す。"""
+        """呼び名を配列で渡さなければ、書き方を失敗の結果に残す。"""
         memories = InMemoryShortTermMemoryRepository()
 
         _choose(_reply("episode_recall", {"handles": "ep_1"}), being_tools=WITH_MEMORY, memories=memories)
@@ -490,6 +491,7 @@ class TestRecallingEpisodes:
         [attempt] = memories.get(GEN).unsummarized()
         assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
         assert attempt.result.body.startswith("handles には、【思い出せる出来事】に並ぶ")
+        assert not attempt.result.succeeded
 
     def test_recall_tool_not_offered_is_an_unknown_tool(self) -> None:
         """思い出すツールを出していなければ、episode_recall は無いツールとして選べなかったを返す。"""

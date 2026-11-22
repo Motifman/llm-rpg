@@ -162,6 +162,7 @@ class MemoryOperationOutcome(Outcome):
     body: str
     time: ObservedTime
     order: OccurrenceOrder | None = None
+    succeeded: bool = True
 
     def __post_init__(self) -> None:
         _require_text(self.call_id, "call_id")
@@ -169,6 +170,8 @@ class MemoryOperationOutcome(Outcome):
         if not isinstance(self.time, ObservedTime):
             raise ShortTermMemoryValidationException("time must be ObservedTime")
         _require_order(self.order)
+        if not isinstance(self.succeeded, bool):
+            raise ShortTermMemoryValidationException("succeeded must be bool")
 
     def answers(self, call_id: str) -> bool:
         return self.call_id == call_id
