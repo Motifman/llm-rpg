@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ai_rpg_world.being.application.perceive_observation import PerceiveObservation, PerceiveObservationCommand
 import dataclasses
 
+from ai_rpg_world.being.application.perceive_observation import PerceiveObservation, PerceiveObservationCommand
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, PersonInText, SeenOrHeard, TextWithPeople
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import Perception

@@ -31,6 +31,19 @@ class TestStartPlaySession:
 
         assert (persona.name, persona.first_person) == ("ゲン", "俺")
 
+    def test_every_being_name_is_given_to_the_world(self) -> None:
+        """世界の名簿で、4 人の登場人物にそれぞれ Being の名前 (ゲン・サヨ・ハル・ミオ) が付く。"""
+        session = MineVillageSession().started()
+
+        names = session.scope.run(
+            lambda world: {
+                person: world.facts().people_register().name_of(PersonId(person)).text
+                for person in ("gen", "sayo", "haru", "mio")
+            }
+        )
+
+        assert names == {"gen": "ゲン", "sayo": "サヨ", "haru": "ハル", "mio": "ミオ"}
+
     def test_every_being_enters_the_world(self) -> None:
         """4 人の Being がどれも、世界の識別子と環境の名前「廃坑の山村」の環境に入っている。"""
         session = MineVillageSession().started()

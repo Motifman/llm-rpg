@@ -58,7 +58,7 @@ class MineVillageSession:
         self.clock = InMemoryMemoryTurnClock()
         self.cast_events: list[BeingCastInWorldEvent] = []
         self.casts = InMemoryCastRepository(handoff=self.cast_events.extend)
-        scope = CommandScope(self.store, CommittedEventsDistributor())
+        self.scope = scope = CommandScope(self.store, CommittedEventsDistributor())
         self.start = StartPlaySession(
             open_world=OpenWorld(self.store),
             name_person=NamePerson(scope),
@@ -75,9 +75,7 @@ class MineVillageSession:
         )
 
         self.short_term_memories = InMemoryShortTermMemoryRepository()
-        receiver = HandObservationToBeing(
-            WORLD, self.casts, PerceiveObservation(self.short_term_memories, self.clock)
-        )
+        receiver = HandObservationToBeing(WORLD, self.casts, PerceiveObservation(self.short_term_memories, self.clock))
         self.deliver_perception = DeliverPerception(
             scope,
             ObservationExit(WORLD, receiver),

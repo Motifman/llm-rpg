@@ -78,7 +78,7 @@ class StartPlaySession:
                 PrepareBeingCommand(being_id=cast.being_of(role.person), persona_fields=role.persona_fields)
             )
         self._open_world(command.open_world)
-        # 世界は Being の名前を知らないので、入る前に名乗る名前を名簿に付ける (D1928-3)
+        # 世界は Being の名前を知らないので、入る前に名乗る名前を名簿に付ける (D2229-3)
         for name in names:
             self._name_person(name)
         for role in command.roles:
