@@ -102,6 +102,7 @@ refusal_texts:
     GAME_WORLD.WHEREABOUTS.OCCUPANT_NOT_AT_ROUTE_START: 今は道の途中だ。
   hidden: 今はできない。
   unlisted: うまくいかなかった。
+  done: できた。
 
 built_in_action_perceptions:
   item_joiner: と

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
-from ai_rpg_world.being.contract import AgentMove
+from ai_rpg_world.being.contract import AgentMove, TextWithPeople
 from ai_rpg_world.game_world.application.accept_action import AcceptAction, AcceptActionCommand
 from ai_rpg_world.game_world.application.action.action_reply import ActionReply
 from ai_rpg_world.game_world.application.action.carry_out_action import CarryOutAction
@@ -66,7 +66,9 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     ObjectInteractionAttempt,
     PersonInteractionAttempt,
 )
+from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.value_object import PersonId
 from ai_rpg_world.game_world.domain.value_object.world_tick import WorldTick
 
@@ -77,6 +79,18 @@ class TurnGuidance:
     person: PersonId
     text: str
     at: WorldTick
+
+    def was_waiting(self) -> bool:
+        return False
+
+    def succeeded(self) -> bool:
+        return False
+
+    def actor(self) -> PersonId:
+        return self.person
+
+    def result_for_actor(self, texts: RefusalTexts, view: PeopleAsSeen) -> str | TextWithPeople:
+        return self.text
 
 
 @final

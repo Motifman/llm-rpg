@@ -25,12 +25,13 @@ class RefusalTexts:
     world_state: Mapping[RefusalCode, TextWithUnassignedPeople]
     hidden: TextWithUnassignedPeople
     unlisted: TextWithUnassignedPeople
+    done: TextWithUnassignedPeople
 
     def __post_init__(self) -> None:
         missing = sorted(kind.name for kind in set(CommonRuleRefusalKind) - self.common_rules.keys())
         if missing:
             raise MissingCommonRuleRefusalTextException(f"RefusalTexts.common_rules lacks {missing}")
-        for text in (*self.common_rules.values(), *self.world_state.values(), self.hidden, self.unlisted):
+        for text in (*self.common_rules.values(), *self.world_state.values(), self.hidden, self.unlisted, self.done):
             unknown = sorted(text.placeholders() - {_ACTOR})
             if unknown:
                 raise UnknownPersonInRefusalTextException(
@@ -44,6 +45,9 @@ class RefusalTexts:
 
     def world_state_text(self, code: RefusalCode, actor: PersonId) -> TextAboutPeople:
         return _about_actor(self.world_state.get(code, self.unlisted), actor)
+
+    def done_text(self, actor: PersonId) -> TextAboutPeople:
+        return _about_actor(self.done, actor)
 
     def precondition_text(self, failure: FailureReason | HiddenFailure, actor: PersonId) -> TextAboutPeople:
         if isinstance(failure, FailureReason) and isinstance(failure.text, TextAboutPeople):
