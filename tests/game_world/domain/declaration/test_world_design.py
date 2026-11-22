@@ -173,7 +173,12 @@ _NO_TRIGGER = cast(Trigger, None)
 
 
 def _strike(precondition: Condition) -> InteractionDeclaration:
-    return replace(pull_lever(arguments=()), interaction_id=InteractionId("strike"), precondition=precondition)
+    return replace(
+        pull_lever(arguments=()),
+        interaction_id=InteractionId("strike"),
+        display_label=DisplayName("strike"),
+        precondition=precondition,
+    )
 
 
 class TestSubjectsByPlacement:
@@ -195,6 +200,7 @@ class TestSubjectsByPlacement:
                 replace(
                     _strike(IsDownCondition(who=Actor(), failure_text=_REFUSED)),
                     interaction_id=InteractionId("kick"),
+                    display_label=DisplayName("kick"),
                 ),
             )
         )
@@ -206,6 +212,7 @@ def _open_door(
     interaction = replace(
         pull_lever(arguments=arguments),
         interaction_id=InteractionId("open"),
+        display_label=DisplayName("open"),
         precondition=precondition if precondition is not None else AlwaysHolds(),
     )
     return ObjectInteractionDeclaration(obj=obj("door", "hall"), interaction=interaction)
@@ -308,6 +315,39 @@ class TestArgumentsRead:
         flaws = flaws_of_composing(happenings=(_happening("echo", condition=_password_is("ひらけ")),))
 
         assert [flaw.location for flaw in flaws] == [DesignLocation("happening", "echo", "condition")]
+
+
+class TestNamesShownInActionChoices:
+    """行動の選択肢で名前から選べなくなる宣言を、compose が読み込みの時点で誤りにすることを保証する (design_decisions D2226)。"""
+
+    @pytest.mark.parametrize("name", ["番号", "1st", "target", "how"])
+    def test_argument_name_that_cannot_be_a_choice_value_is_a_flaw(self, name: str) -> None:
+        """引数の名前が ASCII の識別子でないか、操作の道筋に並ぶ target・how と同じだと、操作の arguments を指す DesignFlaw になる。"""
+        argument = ArgumentDeclaration(name=ArgumentName(name), kind=TextArgument())
+
+        flaws = flaws_of_composing(object_interactions=(_open_door(arguments=(argument,)),))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object_interaction", "door/open", "arguments")]
+
+    def test_two_interactions_on_one_object_with_the_same_label_are_a_flaw(self) -> None:
+        """扉 door の 2 つの操作の表示名がどちらも「開ける」だと、後の操作の display_label を指す DesignFlaw になる。"""
+        opening = replace(
+            _open_door(), interaction=replace(_open_door().interaction, display_label=DisplayName("開ける"))
+        )
+        prying = replace(opening, interaction=replace(opening.interaction, interaction_id=InteractionId("pry")))
+
+        flaws = flaws_of_composing(object_interactions=(opening, prying))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object_interaction", "door/pry", "display_label")]
+
+    def test_person_interactions_with_the_same_label_are_a_flaw(self) -> None:
+        """人への操作 strike と kick の表示名がどちらも「殴る」だと、kick の display_label を指す DesignFlaw になる。"""
+        strike = replace(_strike(AlwaysHolds()), display_label=DisplayName("殴る"))
+        kick = replace(strike, interaction_id=InteractionId("kick"))
+
+        flaws = flaws_of_composing(person_interactions=(strike, kick))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("person_interaction", "kick", "display_label")]
 
 
 class TestFlawsAreCollected:
@@ -471,7 +511,12 @@ def _composed_village() -> tuple[WorldDesign, dict[str, object]]:
     exile = group_decision("exile")
     lamp = item_spec("lamp")
     open_door = _open_door()
-    close_door = replace(open_door, interaction=replace(open_door.interaction, interaction_id=InteractionId("close")))
+    close_door = replace(
+        open_door,
+        interaction=replace(
+            open_door.interaction, interaction_id=InteractionId("close"), display_label=DisplayName("close")
+        ),
+    )
     light_lamp = ItemInteractionDeclaration(item_spec=lamp, interaction=open_door.interaction)
     use_lamp = ItemUseDeclaration(item_spec=lamp, effect=ChangesNothing())
     cage_access = access_to(cage)

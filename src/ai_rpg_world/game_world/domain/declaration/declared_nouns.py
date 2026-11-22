@@ -135,6 +135,7 @@ class DeclaredNouns:
             *self._duplicated_name_flaws(),
             *self._passage_flaws(),
             *self._object_flaws(),
+            *self._spots_named_alike_flaws(),
             *self._section_flaws(),
             *self._group_flaws(),
             *self._character_flaws(),
@@ -295,11 +296,39 @@ class DeclaredNouns:
         ]
 
     def _object_flaws(self) -> list[DesignFlaw]:
-        return [
+        unknown_spots = [
             flaw
             for obj in self._objects
             for flaw in self._spots.flaws_if_unknown(obj.spot_id.value, self._objects.location(obj, "spot_id"))
         ]
+        return unknown_spots + self._objects_named_alike_flaws()
+
+    def _spots_named_alike_flaws(self) -> list[DesignFlaw]:
+        # 行き先は名前で選ぶので、世界の中で場所の名前が重なると見分けられない (D2226)。
+        first_named: dict[str, SpotId] = {}
+        return [
+            DesignFlaw(
+                self._spots.location(spot, "name"),
+                f"spot {spot.name.text!r} is named the same as spot {first_named[spot.name.text].value!r}",
+            )
+            for spot in self._spots
+            if first_named.setdefault(spot.name.text, spot.spot_id) != spot.spot_id
+        ]
+
+    def _objects_named_alike_flaws(self) -> list[DesignFlaw]:
+        # 行動の選択肢では物を名前で選ぶので、同じ場所で名前が重なると見分けられない (D2226)。
+        first_named: dict[tuple[SpotId, str], ObjectId] = {}
+        flaws: list[DesignFlaw] = []
+        for obj in self._objects:
+            key = (obj.spot_id, obj.name.text)
+            if first_named.setdefault(key, obj.object_id) != obj.object_id:
+                flaws.append(
+                    DesignFlaw(
+                        self._objects.location(obj, "name"),
+                        f"object {obj.name.text!r} is named the same as another object in spot {obj.spot_id.value!r}",
+                    )
+                )
+        return flaws
 
     def _section_flaws(self) -> list[DesignFlaw]:
         flaws: list[DesignFlaw] = []

@@ -93,6 +93,19 @@ class TestActionChoice:
         with pytest.raises(ContractViolation, match="reason"):
             UnavailableAction(picked=(_SAYO,), reason="  ")
 
+    def test_same_reason_naming_people_twice_is_rejected_as_a_contract_violation(self) -> None:
+        """人のプレースホルダーを持つ同じ理由の「いまはできない」が 2 回並ぶと、型の誤りではなく ContractViolation で拒む。"""
+        reason = TextWithPeople(template="{target}は眠っている", people={"target": _SAYO})
+        asleep = UnavailableAction(picked=(_SAYO,), reason=reason)
+
+        with pytest.raises(ContractViolation, match="unavailable"):
+            ActionChoice(
+                name="tend_to_player",
+                label="介抱する",
+                values=(PickOne(name="target", label="相手", candidates=()),),
+                unavailable=(asleep, asleep),
+            )
+
     def test_unavailable_path_that_is_also_a_candidate_is_rejected(self) -> None:
         """いまはできない道筋が、候補としても並んでいると拒む。"""
         with pytest.raises(ContractViolation, match="unavailable"):

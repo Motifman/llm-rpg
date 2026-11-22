@@ -67,6 +67,7 @@ def _push(effect: Effect) -> InteractionDeclaration:
     return replace(
         pull_lever(()),
         interaction_id=InteractionId("push_off_the_cliff"),
+        display_label=DisplayName("push_off_the_cliff"),
         effect=effect,
         perceived_as=replace(
             lever_pulled_quietly(),

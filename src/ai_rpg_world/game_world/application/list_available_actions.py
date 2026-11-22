@@ -70,9 +70,9 @@ class ListAvailableActions:
         self._interact_with_person = InteractWithPerson(carry_out, design)
 
     def __call__(self, command: ListAvailableActionsCommand) -> AvailableActions:
-        return self._scope.run(lambda session: self._list(session, command.person))
+        return self._scope.run(lambda session: self.available_in(session, command.person))
 
-    def _list(self, session: WorldSession, person: PersonId) -> AvailableActions:
+    def available_in(self, session: WorldSession, person: PersonId) -> AvailableActions:
         facts = session.facts()
         seen = VisibleSurroundings.seen_by(perceiver_of(facts, person), SurroundingsOf(person, facts, self._design))
         candidates = ActionCandidates(person, seen, facts, self._design)

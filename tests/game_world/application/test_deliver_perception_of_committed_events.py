@@ -94,6 +94,7 @@ def _text(template: str) -> TextWithUnassignedPeople:
 _BREAK_DOOR = replace(
     pull_lever(()),
     interaction_id=InteractionId("break_door"),
+    display_label=DisplayName("break_door"),
     perceived_as=replace(
         lever_pulled_quietly(),
         witness=seen_clearly_only("{actor}が扉を壊した。"),
