@@ -63,8 +63,8 @@ class CarryOutAction:
         # 使い切った品物は効果のあとで種類を引けないので、文は効果の前に引く
         done = ActionDone(
             attempt,
-            done_text=attempt.done_text_in(self._design, situation.item_specs),
-            summary=attempt.summary_in(self._design, situation.item_specs),
+            done_text=attempt.done_text_in(self._design, situation),
+            summary=attempt.summary_in(self._design, situation),
         )
         present = PeopleWhoWereThere.before_the_effect(facts)
         world = session.aggregates()

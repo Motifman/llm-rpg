@@ -106,8 +106,11 @@ refusal_texts:
 # 区画の出入りと操作の done は、作者が区画 (enter_text / leave_text) と操作 (success_text) に書く。
 action_texts:
   travel:
-    summary: "{destination}へ移動した"
+    summary: 「{origin}」から「{destination}」へ向かって出発した
     done: 「{destination}」へ移動中。到着までは他の行動はできない。
+  arrival:
+    summary: 「{destination}」に着いた
+    done: 「{destination}」に到着した。ここから次の行動を選べる。
   whisper:
     summary: "「{target}」に囁いた: 「{speech}」"
     done: 「{speech}」とささやいた。

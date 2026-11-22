@@ -31,17 +31,6 @@ from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, No
 from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, WorldId
 
-_ROUTES: Final[dict[type, Route]] = {
-    SeesClearly: SeenOrHeard(),
-    SeesShapes: SeenOrHeard(),
-    HearsClearly: SeenOrHeard(),
-    HearsMuffled: SeenOrHeard(),
-    HearsFaintly: SeenOrHeard(),
-    Felt: OwnBodyState(),
-    Told: EnvironmentNotice(),
-    NoticedOnWaking: EnvironmentNotice(),
-}
-
 
 class ObservationReceiver(Protocol):
     def receive(self, person: PersonId, observation: Observation) -> None: ...
@@ -62,7 +51,7 @@ class ObservationExit:
             perceived.perceiver,
             Observation(
                 body=text_with_people(perceived.text),
-                route=_ROUTES[type(perceived.quality)],
+                route=perceived.route(),
                 time=observed_time_of(self._day_night.day_and_clock_time_at(perceived.happened_at), self._clock),
                 subject_is_self=False,
                 subject_name=UNKNOWN,

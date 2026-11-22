@@ -55,6 +55,7 @@ from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
+    from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
@@ -145,15 +146,15 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     def acting_person(self) -> PersonId | NoActingPerson:
         return self.actor
 
-    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
-        return people_in_text(self._declared(design, item_specs).success_text, self)
+    def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return people_in_text(self._declared(design, situation.item_specs).success_text, self)
 
-    def summary_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
-        how = {"how": self._declared(design, item_specs).display_label}
+    def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        how = {"how": self._declared(design, situation.item_specs).display_label}
         target = self._witnessed_target()
         people = {"actor": self.actor} | ({"target": target} if isinstance(target, PersonId) else {})
         summary = design.action_texts.summary_of(self._summary_key())
-        return summary.about_named(people, {**self._things_named(design, item_specs), **how})
+        return summary.about_named(people, {**self._things_named(design, situation.item_specs), **how})
 
     @abstractmethod
     def _summary_key(self) -> ActionTextKey: ...

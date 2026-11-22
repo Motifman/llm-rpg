@@ -62,7 +62,7 @@ class ActionRefused:
         # 断られるあいだに品物を使い切られると、品物の名前を引けないので要約を出さない
         if not situation.knows_every_item_of(attempt):
             return None
-        return text_with_people(attempt.summary_in(design, situation.item_specs).seen_by(view))
+        return text_with_people(attempt.summary_in(design, situation).seen_by(view))
 
 
 ActionReply = ActionDone | ActionRefused

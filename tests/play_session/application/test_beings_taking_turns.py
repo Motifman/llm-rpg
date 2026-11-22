@@ -58,12 +58,14 @@ class _AnswersByPerson(ActionChoosingCompletion):
         self._session = session
         self._answers = answers
         self.asked: list[PersonId] = []
+        self.prompts: list[tuple[PersonId, str]] = []
 
     def choose_action(
         self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
     ) -> ActionChoosingReply:
         person = self._session.turn_rounds.get(WORLD).due_turns()[0]
         self.asked.append(person)
+        self.prompts.append((person, messages[-1]["content"]))
         planned = self._answers.get(person, [])
         return planned.pop(0) if planned else _reply("listen", f"listen_{len(self.asked)}")
 
@@ -215,3 +217,25 @@ class TestBeingsTakingTurnsOneByOne:
         assert gens.outcome == ChoiceFailed("TimeoutError: no reply in 95 seconds")
         assert len(finished) == 4
         assert _answered_attempts(session, _GEN) == []
+
+
+class TestArrivalComesBackAsOwnAction:
+    """移動して着いたことが、着いた本人には目撃の文ではなく、自分の行動の行として届くことを保証する。"""
+
+    def test_gen_reads_setting_off_and_arriving_as_his_own_action_lines(self) -> None:
+        """ゲンが南の横坑口から暗い南の横坑の奥へ移ると、次のターンの【直近の出来事】に、古い run と同じ出発の行と着いた行が並び、自分を見分けられない「誰かがどこからかやって来た。」は無い。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=3).started()
+        answers = _AnswersByPerson(session, {_GEN: [_reply("travel_to", "t1", destination="南の横坑の奥")]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        last_prompt = [prompt for person, prompt in answers.prompts if person == _GEN][-1]
+        recent = last_prompt[last_prompt.index("【直近の出来事】") : last_prompt.index("【思い出せる出来事】")]
+        assert (
+            "[行動] 「南の横坑口」から「南の横坑の奥」へ向かって出発した → [結果] 「南の横坑の奥」へ移動中。" in recent
+        )
+        assert (
+            "[行動] 「南の横坑の奥」に着いた → [結果] 「南の横坑の奥」に到着した。ここから次の行動を選べる。" in recent
+        )
+        assert "  呼び出し: travel_to()" in recent
+        assert "やって来た" not in recent
