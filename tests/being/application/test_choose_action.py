@@ -380,6 +380,61 @@ class TestWritingMemoWithTheMove:
         assert memories.get(GEN).unsummarized() == () and clock.current_turn(GEN) == 0
 
 
+class TestHowTheBeingReadsItsOwnMove:
+    """ChooseAction が、自分の 1 手を読む見出しと、書けなかったメモの理由を試みに添えることを保証する。"""
+
+    def test_chosen_move_carries_its_heading(self) -> None:
+        """金庫を番号で開けると、試みに「操作する: 金庫 / 番号を合わせて開ける (番号: 1907)」の見出しが付く。"""
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(
+            _reply("interact", {"target": "金庫", "how": "番号を合わせて開ける", "details": {"code": "1907"}}),
+            memories=memories,
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt)
+        assert attempt.action_heading == "操作する: 金庫 / 番号を合わせて開ける (番号: 1907)"
+
+    def test_memo_operations_that_could_not_be_written_stay_with_the_attempt(self) -> None:
+        """書けたメモはメモ帳に入り、書けなかった操作の理由は、配列の位置を添えて試みに残る。"""
+        memories = InMemoryShortTermMemoryRepository()
+        memo_books = InMemoryMemoBookRepository(handoff=discard_events)
+        memo = [{"do": "add", "kind": "todo", "text": "鍵を取る"}, {"do": "remove", "id": "m_3f2a7b"}, {"do": "fly"}]
+
+        _choose(
+            _reply("interact", {"target": "金庫", "memo": memo}),
+            being_tools=WITH_MEMORY,
+            memories=memories,
+            memo_books=memo_books,
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert [m.text for m in memo_books.get(GEN).memos] == ["鍵を取る"]
+        assert isinstance(attempt, Attempt) and attempt.memo_rejections == (
+            "2 件目: m_3f2a7b というメモはありません。",
+            "3 件目: do は add / edit / remove のどれかです。",
+        )
+
+    def test_recall_reads_as_recalling_the_handles(self) -> None:
+        """思い出すツールの試みは「思い出す: 呼び名」の見出しになる。"""
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(_reply("episode_recall", {"handles": ["ep_ffffff"]}), being_tools=WITH_MEMORY, memories=memories)
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and attempt.action_heading == "思い出す: ep_ffffff"
+
+    def test_unknown_tool_reads_as_its_name(self) -> None:
+        """出していないツールの試みは、呼んだツールの名前が見出しになる。"""
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(_reply("pickup", {"item": "ランプ"}), memories=memories)
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and attempt.action_heading == "pickup"
+
+
 class TestRecallingEpisodes:
     """ChooseAction が、思い出すツールを選ばれたら世界に行為を渡さず、思い出した本文を自分の 1 手の結果として残すことを保証する。"""
 

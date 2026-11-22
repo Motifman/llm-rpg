@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Final, Protocol, TypeVar
 
@@ -197,16 +197,28 @@ class UnknownOutcome(Outcome):
 
 @dataclass(frozen=True, kw_only=True)
 class Attempt(Experience):
-    """Being が選んだ 1 手と、その結果。"""
+    """Being が選んだ 1 手と、その結果。
+
+    ``action_heading`` は、Being が自分の選んだ行動を読む見出し。``memo_rejections`` は、行動と一緒に書こうとして
+    書けなかったメモの操作の理由。どちらも Being が選んだときに決まり、結果を受け取っても変わらない。
+    """
 
     turn: int
     move: AgentMove
     result: Outcome = UnknownOutcome()
+    action_heading: str | None = None
+    memo_rejections: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_turn(self.turn, "turn")
         if not isinstance(self.move, AgentMove):
             raise ShortTermMemoryValidationException("move must be AgentMove")
+        if self.action_heading is not None:
+            _require_text(self.action_heading, "action_heading")
+        if not isinstance(self.memo_rejections, tuple):
+            raise ShortTermMemoryValidationException("memo_rejections must be a tuple")
+        for rejection in self.memo_rejections:
+            _require_text(rejection, "memo_rejections")
         if not isinstance(self.result, Outcome):
             raise ShortTermMemoryValidationException("result must be Outcome")
         if not self.result.fits(self.move.call_id):
@@ -224,7 +236,7 @@ class Attempt(Experience):
             raise ShortTermMemoryUnpairedResultException(
                 f"{result!r} does not answer the awaiting move {self.move.call_id!r}"
             )
-        return Attempt(turn=turn, move=self.move, result=result)
+        return replace(self, turn=turn, result=result)
 
     def show_to(self, reader: ExperienceReader[_T_co]) -> _T_co:
         return self.result.show_to(self, reader)
@@ -410,9 +422,21 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         experiences = self._with(Perception(turn=turn, observation=observation))
         self._become(experiences, self._backstories, self._recent_from, self._awaiting, self._awaited)
 
-    def act(self, move: AgentMove, *, current_turn: int) -> None:
+    def act(
+        self,
+        move: AgentMove,
+        *,
+        current_turn: int,
+        action_heading: str | None = None,
+        memo_rejections: tuple[str, ...] = (),
+    ) -> None:
         """前の 1 手の結果がまだ来ていなければ、前の 1 手を結果の分からない試みとして残す。"""
-        attempt = Attempt(turn=_require_turn(current_turn, "current_turn"), move=move)
+        attempt = Attempt(
+            turn=_require_turn(current_turn, "current_turn"),
+            move=move,
+            action_heading=action_heading,
+            memo_rejections=memo_rejections,
+        )
         experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
         self._become(experiences, self._backstories, self._recent_from, attempt, self._awaited)
 

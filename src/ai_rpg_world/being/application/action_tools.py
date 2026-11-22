@@ -80,8 +80,7 @@ class ActionTools:
         thought = given.pop(self._being_tools.inner_thought, None) if self._being_tools.inner_thought else None
         if self._being_tools.memo is not None:
             given.pop(self._being_tools.memo, None)
-        details = given.pop(DETAILS, None) if choice.takes_details else None
-        flat = {**(details if isinstance(details, Mapping) else {}), **given}
+        flat = _flat(choice, given)
         picked = _picked_names(choice.values)
         return AgentMove(
             call_id=call_id,
@@ -91,6 +90,36 @@ class ActionTools:
             ),
             inner_thought=thought if isinstance(thought, str) and thought.strip() else None,
         )
+
+    def action_heading(self, tool_name: str, arguments: Mapping[str, object]) -> str | None:
+        """候補表と同じ並べ方の、選んだ行動の見出し。出していないツールの名前なら None。
+
+        選んだ候補を道筋の順に「 / 」でつなぎ、書いた値は括弧に入れる。選択肢の値でない引数 (行動しながらの一言など) は
+        出さない。
+        """
+        choice = next((c for c in self._choices.choices if c.name == tool_name), None)
+        if choice is None:
+            return None
+        picks: list[str] = []
+        written: list[str] = []
+        self._read_heading(choice.values, _flat(choice, dict(arguments)), picks, written)
+        heading = choice.label + (f": {' / '.join(picks)}" if picks else "")
+        return heading + (f" ({', '.join(written)})" if written else "")
+
+    def _read_heading(
+        self, values: Sequence[ChoiceValue], flat: Mapping[str, object], picks: list[str], written: list[str]
+    ) -> None:
+        for value in values:
+            given = flat.get(value.name)
+            if not isinstance(given, str) or not given.strip():
+                continue
+            if isinstance(value, FreeText):
+                written.append(f"{value.label}: {given}")
+                continue
+            picks.append(given)
+            candidate = next((c for c in value.candidates if self._label(c.label) == given), None)
+            if candidate is not None:
+                self._read_heading(candidate.values, flat, picks, written)
 
     def candidate_table(self) -> Description:
         return Description(
@@ -176,6 +205,11 @@ class ActionTools:
     def _person_or_value(self, value: object) -> object:
         person = self._people.person_named(value) if isinstance(value, str) else None
         return value if person is None else {"person": person.handle}
+
+
+def _flat(choice: ActionChoice, given: dict[str, object]) -> dict[str, object]:
+    details = given.pop(DETAILS, None) if choice.takes_details else None
+    return {**(details if isinstance(details, Mapping) else {}), **given}
 
 
 def _function(name: str, description: str, parameters: dict[str, Any]) -> dict[str, Any]:

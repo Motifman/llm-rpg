@@ -18,7 +18,7 @@ from ai_rpg_world.being.application.episode_recall_tool import (
     too_many_handles_text,
 )
 from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
-from ai_rpg_world.being.application.memo_arguments import read_memo_operations
+from ai_rpg_world.being.application.memo_arguments import read_memo_operations, rejection_lines, rejection_text
 from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.names_for_people import name_for
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
@@ -46,6 +46,8 @@ from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemoryRepository,
 )
 from ai_rpg_world.being.domain.working_memory import Closing
+
+RECALL_HEADING = "思い出す"
 
 
 @dataclass(frozen=True)
@@ -184,17 +186,24 @@ class ChooseAction:
         turn = self._turn_clock.current_turn(being_id) + 1
         if call.tool_name == command.being_tools.episode_recall:
             recall = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
-            body = self._recall(being_id, call.arguments, turn=turn)
+            handles = read_handles(call.arguments)
             self._act(
-                being_id, recall, turn=turn, result=MemoryOperationOutcome(call_id=call_id, body=body, time=command.now)
+                being_id,
+                recall,
+                turn=turn,
+                heading=RECALL_HEADING + (f": {' / '.join(handles)}" if handles else ""),
+                result=MemoryOperationOutcome(
+                    call_id=call_id, body=self._recall(being_id, handles, turn=turn), time=command.now
+                ),
             )
             return TurnSpentRecalling(move=recall, exchange=exchange)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=call.arguments)
-        if move is not None:
+        heading = tools.action_heading(call.tool_name, call.arguments)
+        if move is not None and heading is not None:
             # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
             # 行動が世界に断られても、書いたことは本人がしたことなので残る。
-            self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
-            self._act(being_id, move, turn=turn, result=None)
+            rejections = self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
+            self._act(being_id, move, turn=turn, heading=heading, memo_rejections=rejections, result=None)
             return ActionChosen(move=move, exchange=exchange)
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
@@ -204,12 +213,12 @@ class ChooseAction:
             being_id,
             AgentMove(call_id=call_id, tool_name=call.tool_name, arguments={}),
             turn=turn,
+            heading=call.tool_name,
             result=ObservedOutcome(_own_failure(body, call_id=call_id, now=command.now)),
         )
         return ActionNotChosen(requested_tool=call.tool_name, suggestion=suggestion, exchange=exchange)
 
-    def _recall(self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int) -> str:
-        handles = read_handles(arguments)
+    def _recall(self, being_id: BeingId, handles: list[str] | None, *, turn: int) -> str:
         if handles is None:
             return MALFORMED_HANDLES_TEXT
         # 一部だけ思い出すと、どれを落としたかを本人が知らないまま 1 手が終わる (D1623-2)。
@@ -219,9 +228,10 @@ class ChooseAction:
 
     def _write_memo(
         self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int
-    ) -> None:
+    ) -> tuple[str, ...]:
+        """書けなかった操作の理由を、配列の位置の順に返す。"""
         if being_tools.memo is None or being_tools.memo not in arguments:
-            return
+            return ()
         episode_source_offered = being_tools.episode_index_shown
         read = read_memo_operations(
             {MEMO_FIELD_NAME: arguments[being_tools.memo]}, episode_source_offered=episode_source_offered
@@ -232,7 +242,7 @@ class ChooseAction:
             else frozenset()
         )
         book = self._memo_books.get(being_id)
-        apply_memo_operations(
+        outcome = apply_memo_operations(
             book,
             read.operations,
             turn=turn,
@@ -241,6 +251,10 @@ class ChooseAction:
             known_episode_handles=known_episode_handles,
         )
         self._memo_books.save(book)
+        rejected = [(r.index, rejection_text(r.reason)) for r in read.rejected] + [
+            (r.index, rejection_text(r.reason, kind=r.kind, detail=r.detail)) for r in outcome.rejected
+        ]
+        return rejection_lines(sorted(rejected, key=lambda r: -1 if r[0] is None else r[0]))
 
     def _environment_name(self, being_id: BeingId) -> str:
         being = self._beings.find_by_id(being_id)
@@ -248,10 +262,19 @@ class ChooseAction:
             raise LookupError(f"Being {being_id.value} is not in any environment")
         return being.attachment.environment_name
 
-    def _act(self, being_id: BeingId, move: AgentMove, *, turn: int, result: Outcome | None) -> None:
+    def _act(
+        self,
+        being_id: BeingId,
+        move: AgentMove,
+        *,
+        turn: int,
+        heading: str,
+        result: Outcome | None,
+        memo_rejections: tuple[str, ...] = (),
+    ) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。
         memory = self._short_term_memories.get(being_id)
-        memory.act(move, current_turn=turn)
+        memory.act(move, current_turn=turn, action_heading=heading, memo_rejections=memo_rejections)
         if result is not None:
             memory.receive_result(result, current_turn=turn)
         self._short_term_memories.save(memory)

@@ -194,12 +194,17 @@ def rejection_text(reason: str, *, kind: MemoKind | None = None, detail: str | N
     return _REASON_TEXTS.get(reason, _REASON_TEXTS[REJECTED_INVALID])
 
 
+def rejection_lines(rejections: Iterable[tuple[int | None, str]]) -> tuple[str, ...]:
+    """``rejections`` は (配列の中の位置, 理由の文)。位置は 1 から数えて「n 件目」と添え、引数ごと崩れていれば「memo」と添える。"""
+    return tuple(f"{'memo' if index is None else f'{index + 1} 件目'}: {text}" for index, text in rejections)
+
+
 def feedback_text(rejections: Iterable[tuple[int | None, str]]) -> str:
     """``rejections`` は (配列の中の位置, 理由の文)。無ければ空文字。"""
-    lines = [f"- {'memo' if index is None else f'{index + 1} 件目'}: {text}" for index, text in rejections]
+    lines = rejection_lines(rejections)
     if not lines:
         return ""
-    return "\n\n[メモ] 次の操作は書けませんでした。\n" + "\n".join(lines)
+    return "\n\n[メモ] 次の操作は書けませんでした。\n" + "\n".join(f"- {line}" for line in lines)
 
 
 __all__ = [
@@ -216,6 +221,7 @@ __all__ = [
     "ReadMemoOperations",
     "RejectedMemoArgument",
     "feedback_text",
+    "rejection_lines",
     "read_memo_operations",
     "rejection_text",
 ]

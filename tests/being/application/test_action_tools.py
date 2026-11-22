@@ -332,3 +332,47 @@ class TestMoveFrom:
         )
 
         assert move is not None and move.inner_thought is None and "inner_thought" not in move.arguments
+
+
+class TestActionHeading:
+    """ActionTools.action_heading が、選んだ行動を候補表と同じ並べ方の見出しにすることを保証する。"""
+
+    def test_safe_with_a_code_reads_picks_then_written_values(self) -> None:
+        """金庫を番号で開けると、見出し・選んだ候補を「 / 」でつないだもの・(書いた値の見出し: 値) の順になる。"""
+        heading = _tools(ActionChoices((_interact(SAFE),))).action_heading(
+            "interact", {"target": "金庫", "how": "番号を合わせて開ける", "details": {"code": "1907"}}
+        )
+
+        assert heading == "操作する: 金庫 / 番号を合わせて開ける (番号: 1907)"
+
+    def test_action_without_values_is_its_label(self) -> None:
+        """選ぶ値の無い行動は、見出しだけになる。"""
+        heading = _tools(ActionChoices((ActionChoice(name="listen", label="耳を澄ます"),))).action_heading("listen", {})
+
+        assert heading == "耳を澄ます"
+
+    def test_whisper_names_the_listener_as_the_being_calls_her(self) -> None:
+        """サヨにささやくと、相手は呼び方のまま並び、中身は括弧に入る。"""
+        heading = _tools(_gen_in_the_office()).action_heading(
+            "speak", {"reach": "ささやく", "to": "サヨ", "content": "鍵はどこ?"}
+        )
+
+        assert heading == "話す: ささやく / サヨ (中身: 鍵はどこ?)"
+
+    def test_inline_speech_is_left_out(self) -> None:
+        """行動しながらの一言 (say_inline) は、選択肢の値ではないので見出しに出さない。"""
+        heading = _tools(_gen_in_the_office()).action_heading(
+            "travel_to", {"destination": "井戸", "say_inline": "行くぞ"}
+        )
+
+        assert heading == "行く: 井戸"
+
+    def test_value_that_is_not_a_candidate_is_shown_as_written(self) -> None:
+        """候補に無い値を選んでも、書いたとおりに見出しへ並べる。断るかどうかは世界が決める。"""
+        heading = _tools(_gen_in_the_office()).action_heading("travel_to", {"destination": "天守閣"})
+
+        assert heading == "行く: 天守閣"
+
+    def test_tool_that_was_not_offered_has_no_heading(self) -> None:
+        """出していないツールの名前なら None を返す。"""
+        assert _tools(_gen_in_the_office()).action_heading("gather", {}) is None
