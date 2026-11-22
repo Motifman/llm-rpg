@@ -49,6 +49,7 @@ _TOP_FIELDS = (
     "refusal_texts",
     "built_in_action_perceptions",
     "surroundings_texts",
+    "briefing_headings",
     "defaults",
     "perception_defaults",
 )
@@ -152,6 +153,9 @@ class _ScenarioLoading:
             lambda: world_reader.surroundings_texts(self._fields.required("surroundings_texts"))
         )
         introduction = collector.attempt(lambda: world_reader.introduction(self._fields.required("introduction")))
+        briefing_headings = collector.attempt(
+            lambda: world_reader.briefing_headings(self._fields.required("briefing_headings"))
+        )
         ending = collector.attempt(lambda: world_reader.ending(self._fields.required("ending"), self._conditions))
         initial_stage = collector.attempt(self._initial_stage)
         day_night = (
@@ -173,6 +177,7 @@ class _ScenarioLoading:
             or built_in is None
             or surroundings_texts is None
             or introduction is None
+            or briefing_headings is None
             or ending is None
             or initial_stage is None
             or day_night is None
@@ -204,6 +209,7 @@ class _ScenarioLoading:
                 day_night=day_night,
                 initial_stage=initial_stage,
                 introduction=introduction,
+                briefing_headings=briefing_headings,
             )
         except WorldDesignFlawsException as flawed:
             raise WorldDesignFlawsException(self._origins.located(flaw) for flaw in flawed.flaws) from flawed

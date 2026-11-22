@@ -6,6 +6,7 @@ import pytest
 
 from ai_rpg_world.game_world.domain.action.action_attempt import DoesNotUseBody
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.character import (
     CharacterDeclaration,
     GroupDeclaration,
@@ -293,6 +294,12 @@ def introduction() -> WorldIntroduction:
     )
 
 
+def briefing_headings() -> BriefingHeadings:
+    return BriefingHeadings(
+        introduction="この世界について", premises="この世界の前提", known_facts="あなたが知っていること"
+    )
+
+
 def compose_world(
     nouns_: DeclaredNouns | None = None,
     object_interactions: Iterable[ObjectInteractionDeclaration] = (),
@@ -344,6 +351,7 @@ def compose_world(
         day_night=day_night,
         initial_stage=initial_stage,
         introduction=introduction(),
+        briefing_headings=briefing_headings(),
     )
 
 

@@ -89,6 +89,11 @@ surroundings_texts:
     count_mark: ×
     pitch_dark: 真っ暗で、何も見えない。
 
+briefing_headings:
+  introduction: この世界について
+  premises: この世界の前提
+  known_facts: あなたが知っていること
+
 perception_defaults:
   witness: { clear: "{actor}が何かをした。" }
   target: { clear: "{actor}があなたに何かをした。" }

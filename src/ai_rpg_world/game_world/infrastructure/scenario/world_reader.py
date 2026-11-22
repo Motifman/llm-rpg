@@ -7,6 +7,7 @@ from typing import TypeVar
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
@@ -189,6 +190,17 @@ def scene_texts(node: YamlNode) -> SceneTexts:
             ground_items=DisplayName(fields.required("ground_items").text()),
             count_mark=DisplayName(fields.required("count_mark").text()),
             pitch_dark=DisplayName(fields.required("pitch_dark").text()),
+        )
+    )
+
+
+def briefing_headings(node: YamlNode) -> BriefingHeadings:
+    fields = node.fields("introduction", "premises", "known_facts")
+    return node.build(
+        lambda: BriefingHeadings(
+            introduction=fields.required("introduction").text(),
+            premises=fields.required("premises").text(),
+            known_facts=fields.required("known_facts").text(),
         )
     )
 

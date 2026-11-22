@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
+from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.initial_world import InitialWorld
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
@@ -116,6 +117,7 @@ class WorldDesign:
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
         introduction: WorldIntroduction,
+        briefing_headings: BriefingHeadings,
         warnings: tuple[DesignWarning, ...],
     ) -> None:
         self._nouns = nouns
@@ -147,6 +149,7 @@ class WorldDesign:
         self._day_night = day_night
         self._initial_stage = initial_stage
         self._introduction = introduction
+        self._briefing_headings = briefing_headings
         self._warnings = warnings
 
     @classmethod
@@ -175,6 +178,7 @@ class WorldDesign:
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
         introduction: WorldIntroduction,
+        briefing_headings: BriefingHeadings,
     ) -> WorldDesign:
         object_interactions = tuple(object_interactions)
         item_interactions = tuple(item_interactions)
@@ -420,6 +424,7 @@ class WorldDesign:
             day_night=day_night,
             initial_stage=initial_stage,
             introduction=introduction,
+            briefing_headings=briefing_headings,
             warnings=tuple(review.warnings),
         )
 
@@ -438,6 +443,10 @@ class WorldDesign:
     @property
     def introduction(self) -> WorldIntroduction:
         return self._introduction
+
+    @property
+    def briefing_headings(self) -> BriefingHeadings:
+        return self._briefing_headings
 
     @property
     def refusal_texts(self) -> RefusalTexts:

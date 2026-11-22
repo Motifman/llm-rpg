@@ -718,6 +718,17 @@ class WorldIntroduction:                    # 全員に同じ、世界の導入�
 
 @final
 @dataclass(frozen=True)
+class BriefingHeadings:                     # 入るときの案内の見出し。シナリオが世界全体で 1 つ書き、ふつうは共通の部品から取り込む (#2229)
+    introduction: str                       # 導入の見出し (「この世界について」)
+    premises: str                           # 前提の見出し (「この世界の前提」)
+    known_facts: str                        # その人の立場の見出し (「あなたが知っていること」)
+    # どれも空白だけでない 1 行で、【】を書けない。3 つは違う見出しにする (Orientation は見出しの重なりを許さない)
+
+    def orientation(self, introduction: WorldIntroduction, known_facts: DescriptionText) -> Orientation: ...
+    # 導入・前提・立場の順に、見出しの違う 3 つの Description を並べた案内
+
+@final
+@dataclass(frozen=True)
 class Route:
     start: SpotId                               # 両方向に通れる通路は、passages だけではどちらの端から出るかが決まらない
     passages: tuple[PassageDeclaration, ...]    # 1 本以上。start から順にたどれる (片道は ends の前の端から)
@@ -783,6 +794,7 @@ class WorldDesign:
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
         introduction: WorldIntroduction,
+        briefing_headings: BriefingHeadings,                # 入るときの案内の見出し (#2229)
     ) -> "WorldDesign": ...
 
     @property
@@ -793,6 +805,8 @@ class WorldDesign:
     def ending(self) -> EndingDeclaration: ...
     @property
     def introduction(self) -> WorldIntroduction: ...
+    @property
+    def briefing_headings(self) -> BriefingHeadings: ...
     @property
     def refusal_texts(self) -> RefusalTexts: ...
     @property
