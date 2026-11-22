@@ -34,6 +34,7 @@ from ai_rpg_world.game_world.domain.world_records import LatestActions, MissedNo
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
 from tests.game_world.support.world_design_for_tests import (
+    briefing_headings,
     built_in_action_perceptions,
     introduction,
     refusal_texts,
@@ -179,6 +180,7 @@ def _design(
             else next(stage for stage in stage_declarations if stage.stage_id == world_stage.current())
         ),
         introduction=introduction(),
+        briefing_headings=briefing_headings(),
         warnings=(),
     )
 
