@@ -16,7 +16,8 @@ from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 class ActionTextKey(Enum):
     """``done_by_author`` の行は、成功の文を作者が行為ごとに書くので、ここには要約だけを置く。"""
 
-    TRAVEL = ("travel", ("destination",), False, False)
+    TRAVEL = ("travel", ("origin", "destination"), False, False)
+    ARRIVAL = ("arrival", ("destination",), False, False)
     WHISPER = ("whisper", ("speech",), True, False)
     SPEAK = ("speak", ("speech",), False, False)
     SHOUT = ("shout", ("speech",), False, False)

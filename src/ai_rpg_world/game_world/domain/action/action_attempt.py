@@ -26,6 +26,7 @@ from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Occupant, PersonB
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
+    from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
     from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
@@ -175,9 +176,9 @@ class ActionAttempt(Protocol):
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct: ...
 
-    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople: ...
+    def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople: ...
 
-    def summary_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople: ...
+    def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople: ...
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark: ...
 

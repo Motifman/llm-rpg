@@ -85,6 +85,7 @@ from ai_rpg_world.game_world.domain.perception import (
     SoundStimulus,
     Voice,
 )
+from ai_rpg_world.game_world.domain.perception.own_action_completion import OwnActionCompletion
 from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
 from ai_rpg_world.game_world.domain.person import DeclaredOutcome, Died, Outcome, PersonOutcomeDecidedEvent
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
@@ -186,14 +187,26 @@ class TestStimulusTranslatorArrival:
     """StimulusTranslator が、場所に着いたイベントを、シナリオの arrival の文の刺激に変えることを保証する。"""
 
     def test_walking_in_becomes_the_arrival_sight_at_the_spot(self) -> None:
-        """ハルが広場から井戸に着くと、井戸の見える刺激が 1 つでき、文は「{actor}が広場からやって来た。」でハルを指す。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_entered(SpotId("plaza")), _design())
+        """ハルが広場から井戸に着くと、ハル自身には届けない井戸の見える刺激ができ、文は「{actor}が広場からやって来た。」でハルを指す。"""
+        [completion, stimulus] = StimulusTranslator().stimuli_of(_entered(SpotId("plaza")), _design())
 
-        assert isinstance(stimulus, SightStimulus)
+        assert isinstance(completion, OwnActionCompletion) and isinstance(stimulus, SightStimulus)
+        assert stimulus.withheld_from == frozenset({_HAL})
         assert (stimulus.where, stimulus.witness.clear.template.template, dict(stimulus.witness.clear.people)) == (
             SpotId("well"),
             "{actor}が広場からやって来た。",
             {"actor": _HAL},
+        )
+
+    def test_walking_in_tells_the_arriver_it_arrived_as_its_own_action(self) -> None:
+        """ハルが広場から井戸に着くと、ハルにだけ、行く (travel_to) の続きとして、着いたことの要約と結果の文が届く刺激ができる。"""
+        completion = StimulusTranslator().stimuli_of(_entered(SpotId("plaza")), _design())[0]
+
+        assert isinstance(completion, OwnActionCompletion)
+        assert (completion.person, completion.tool, completion.summary.template.template) == (
+            _HAL,
+            "travel_to",
+            "arrivalした well",
         )
 
     def test_teleporting_in_makes_no_stimulus(self) -> None:

@@ -118,12 +118,12 @@ class TestDescribeActionResult:
         assert _template(result.body) == "耳を澄まし、周囲の音や人の気配を確かめた。"
 
     def test_names_of_things_are_filled_into_the_summary_and_the_text(self, mine_village: WorldDesign) -> None:
-        """ゲンが井戸へ移動を始めると、要約と本文の行き先に「井戸」が入る。"""
+        """ゲンが事務所から井戸へ移動を始めると、要約は古い run と同じ「「鉱山会社の事務所」から「井戸」へ向かって出発した」になり、本文の行き先に「井戸」が入る。"""
         gen = _GenInTheOffice(mine_village)
 
         result = gen.result_of("travel_to", destination="井戸")
 
-        assert _succeeded_and_summary(result) == (True, "井戸へ移動した")
+        assert _succeeded_and_summary(result) == (True, "「鉱山会社の事務所」から「井戸」へ向かって出発した")
         assert _template(result.body) == "「井戸」へ移動中。到着までは他の行動はできない。"
 
     def test_spoken_words_are_filled_into_the_summary_and_the_text(self, mine_village: WorldDesign) -> None:

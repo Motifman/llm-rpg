@@ -11,6 +11,7 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
+    OwnActionCompleted,
     OwnBodyState,
     PersonInText,
     SeenOrHeard,
@@ -23,7 +24,13 @@ from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception import Perceived
-from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, NoticedOnWaking, PerceivedQuality, Told
+from ai_rpg_world.game_world.domain.perception.perceived_quality import (
+    Completed,
+    Felt,
+    NoticedOnWaking,
+    PerceivedQuality,
+    Told,
+)
 from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
@@ -34,6 +41,9 @@ _MINE_VILLAGE_V2 = Path(__file__).parents[3] / "data" / "scenarios" / "mine_vill
 _ALICE = PersonId("alice")
 _KAI = PersonRef(handle=PersonHandle(2), appearance=DescriptionText("日に焼けた若者"), visible_name=DisplayName("カイ"))
 _STRANGER = PersonRef(handle=PersonHandle(5), appearance=DescriptionText("背の高い男"), visible_name=NoVisibleName())
+
+
+_ARRIVED = Completed(summary=TextWithAssignedPeople("「井戸」に着いた", {}), tool="travel_to")
 
 
 class _Received:
@@ -122,12 +132,21 @@ class TestObservationExit:
 
         assert observation.route == route
 
-    @pytest.mark.parametrize("quality", [kind() for kind in get_args(PerceivedQuality)])
+    @pytest.mark.parametrize(
+        "quality",
+        [_ARRIVED if kind is Completed else kind() for kind in get_args(PerceivedQuality)],
+    )
     def test_every_kind_of_perceived_quality_has_a_route(self, quality: PerceivedQuality) -> None:
         """知覚の質のどの種類にも、観測の経路が決まっている。"""
         _, observation = _handed_over(_perceived(quality=quality))
 
-        assert observation.route in (SeenOrHeard(), OwnBodyState(), EnvironmentNotice())
+        assert isinstance(observation.route, (SeenOrHeard, OwnBodyState, EnvironmentNotice, OwnActionCompleted))
+
+    def test_completion_of_own_action_becomes_own_action_completed_route(self) -> None:
+        """着いたことのように、あとから届く自分の行動の結果は、要約とツールの名前を持つ OwnActionCompleted の経路で渡る。"""
+        _, observation = _handed_over(_perceived(quality=_ARRIVED))
+
+        assert observation.route == OwnActionCompleted(action_summary="「井戸」に着いた", tool="travel_to")
 
     @pytest.mark.parametrize("calls_attention", [True, False])
     def test_wants_wake_follows_whether_it_calls_attention(self, calls_attention: bool) -> None:
