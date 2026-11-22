@@ -13,6 +13,7 @@ from ai_rpg_world.being.application.choose_action import (
 )
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
+from ai_rpg_world.being.application.rechoose_name import NameChoiceAnswer, RechooseName
 from ai_rpg_world.being.contract import (
     UNKNOWN,
     ActionChoice,
@@ -55,6 +56,7 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
 )
 from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
+from ai_rpg_world.being.infrastructure.scripted_name_choosing import ScriptedNameChoosing
 from tests.event_handoff_helpers import discard_events
 
 GEN = BeingId("being_gen")
@@ -155,6 +157,7 @@ def _choose(
     episodes: EpisodeRepository | None = None,
     memo_books: MemoBookRepository | None = None,
     visited_places: VisitedPlacesRepository | None = None,
+    name_choosing: ScriptedNameChoosing | None = None,
 ) -> tuple[ActionChosen | ActionNotChosen | TurnSpentRecalling, ScriptedActionChoosing]:
     short_term_memories = memories or InMemoryShortTermMemoryRepository()
     clock = clock or InMemoryMemoryTurnClock()
@@ -180,6 +183,7 @@ def _choose(
         episodes=episodes,
         visited_places=visited_places,
         recall_limit=2,
+        rechoose_name=None if name_choosing is None else RechooseName(name_choosing, min_confidence=0.85),
     )
     return choose.execute(_command(being_tools)), completion
 
@@ -613,3 +617,74 @@ class TestReceiveActionResult:
         [attempt] = memories.get(GEN).unsummarized()
         assert isinstance(attempt, Attempt) and attempt.is_answered()
         assert isinstance(attempt.result, ObservedOutcome) and attempt.result.observation.body == "金庫の扉が開いた。"
+
+
+def _confident(name: str) -> NameChoiceAnswer:
+    return NameChoiceAnswer(value=name, probabilities={name: 0.93}, confidence=0.9, source="scripted", latency_ms=12.0)
+
+
+class TestNamesRechosenBeforeTheMove:
+    """ChooseAction が、候補に当たらない名前を選び直してから世界に渡し、選び直したことを返すことを保証する。"""
+
+    def test_unmatched_target_is_rechosen_and_the_move_carries_the_candidate_name(self) -> None:
+        """target に「safe」と書き、判断が確率 0.93・確信 0.9 で「金庫」を選ぶと、行為の target は「金庫」になり、
+        採った選び直しが 1 件返る。"""
+        name_choosing = ScriptedNameChoosing([_confident("金庫")])
+
+        outcome, _ = _choose(
+            _reply("interact", {"target": "safe", "how": "番号を合わせて開ける"}), name_choosing=name_choosing
+        )
+
+        assert isinstance(outcome, ActionChosen)
+        assert dict(outcome.move.arguments) == {"target": "金庫", "how": "番号を合わせて開ける"}
+        assert [(r.original, r.replaced_with, r.accepted) for r in outcome.name_rechoices] == [("safe", "金庫", True)]
+
+    def test_rechosen_name_is_what_the_attempt_remembers_as_called(self) -> None:
+        """選び直したとき、短期記憶の試みに残る呼び出しの文は、選び直したあとの名前で書かれる。"""
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(
+            _reply("interact", {"target": "safe", "how": "番号を合わせて開ける"}),
+            memories=memories,
+            name_choosing=ScriptedNameChoosing([_confident("金庫")]),
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        call_text = attempt.call_text or ""
+        assert "金庫" in call_text
+        assert "safe" not in call_text
+
+    def test_matching_names_are_not_asked_about(self) -> None:
+        """名前がどれも候補に当たるとき、判断には問わず、選び直しは空で返る。"""
+        name_choosing = ScriptedNameChoosing([])
+
+        outcome, _ = _choose(
+            _reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}), name_choosing=name_choosing
+        )
+
+        assert isinstance(outcome, ActionChosen)
+        assert name_choosing.questions == []
+        assert outcome.name_rechoices == ()
+
+    def test_quoted_name_is_fixed_even_without_rechoosing(self) -> None:
+        """選び直しをつないでいなくても、「"金庫"」のように引用符で囲んだ名前は外して候補の名前にする。"""
+        outcome, _ = _choose(_reply("interact", {"target": '"金庫"', "how": "番号を合わせて開ける"}))
+
+        assert isinstance(outcome, ActionChosen)
+        assert outcome.move.arguments["target"] == "金庫"
+
+    def test_rejected_rechoice_leaves_the_name_as_written_and_is_still_returned(self) -> None:
+        """判断が「該当なし」を選ぶと、名前は書いたまま世界に渡り、採らなかった選び直しも返る。"""
+        no_match = NameChoiceAnswer(
+            value="__no_match__",
+            probabilities={"__no_match__": 0.97},
+            confidence=0.95,
+            source="scripted",
+            latency_ms=8.0,
+        )
+
+        outcome, _ = _choose(_reply("interact", {"target": "ドア"}), name_choosing=ScriptedNameChoosing([no_match]))
+
+        assert isinstance(outcome, ActionChosen)
+        assert outcome.move.arguments["target"] == "ドア"
+        assert [(r.original, r.accepted) for r in outcome.name_rechoices] == [("ドア", False)]
