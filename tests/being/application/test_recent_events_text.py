@@ -9,6 +9,7 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
+    OwnActionCompleted,
     OwnActionResult,
     SeenOrHeard,
 )
@@ -178,6 +179,32 @@ class TestRecentEventsText:
             '- [1日目 昼] [行動] episode_recall({"handles": ["ep_1"]}) を実行しました。 → [結果] [ep_1] 金庫の話\n'
             '  呼び出し: episode_recall(handles=["ep_1"])\n'
             '- [1日目 昼] [行動] episode_recall({"handles": ["ep_1"]}) を実行しました。 → [失敗] | 減らしてください。'
+        )
+
+    def test_arrival_reads_as_an_own_move_with_an_empty_call(self) -> None:
+        """あとから届いた自分の行動の結果 (着いた) は、古い run と同じく「[行動] 要約 → [結果] 文」の下に「呼び出し: ツール名()」が付き、心の声は付かない。"""
+        memory = ShortTermMemory.empty(ADA)
+        route = OwnActionCompleted(action_summary="「南の横坑の奥」に着いた", tool="travel_to")
+
+        memory.perceive(
+            _observation("「南の横坑の奥」に到着した。ここから次の行動を選べる。", route=route), current_turn=1
+        )
+
+        assert recent_events_text(memory) == (
+            "- [1日目 朝] [行動] 「南の横坑の奥」に着いた → [結果] 「南の横坑の奥」に到着した。ここから次の行動を選べる。\n"
+            "  呼び出し: travel_to()"
+        )
+
+    def test_blocked_travel_reads_as_a_failed_own_move_without_a_call(self) -> None:
+        """着けなかったことは「[行動] 要約 → [失敗] | 理由」になり、呼び出しの行は付かない。"""
+        memory = ShortTermMemory.empty(ADA)
+        route = OwnActionCompleted(action_summary="「南の坑道」へ向かった", tool="travel_to", succeeded=False)
+
+        memory.perceive(_observation("道がふさがっていて進めない。", route=route), current_turn=1)
+
+        assert (
+            recent_events_text(memory)
+            == "- [1日目 朝] [行動] 「南の坑道」へ向かった → [失敗] | 道がふさがっていて進めない。"
         )
 
     def test_lapse_is_a_line_without_inner_thought(self) -> None:

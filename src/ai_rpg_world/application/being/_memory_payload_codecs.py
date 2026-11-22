@@ -21,6 +21,7 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
+    OwnActionCompleted,
     OwnActionResult,
     OwnBodyState,
     SeenOrHeard,
@@ -184,6 +185,7 @@ _ROUTE_KINDS: dict[type, str] = {
     ToldOrWritten: "told_or_written",
     OwnBodyState: "own_body_state",
     OwnActionResult: "own_action_result",
+    OwnActionCompleted: "own_action_completed",
     EnvironmentNotice: "environment_notice",
 }
 _ROUTES_WITHOUT_FIELDS: dict[str, Any] = {
@@ -200,6 +202,10 @@ def _route_to_dict(route: Any) -> dict[str, Any]:
         out["call_id"] = route.call_id
         out["succeeded"] = route.succeeded
         out["action_summary"] = route.action_summary
+    if isinstance(route, OwnActionCompleted):
+        out["action_summary"] = route.action_summary
+        out["tool"] = route.tool
+        out["succeeded"] = route.succeeded
     return out
 
 
@@ -209,6 +215,8 @@ def _dict_to_route(data: dict[str, Any]) -> Any:
         # 要約を足す前 (#2232) に保存した snapshot の結果には要約が無いので、要約の無い結果として読む
         summary = data["action_summary"] if "action_summary" in data else None
         return OwnActionResult(call_id=data["call_id"], succeeded=data["succeeded"], action_summary=summary)
+    if kind == "own_action_completed":
+        return OwnActionCompleted(action_summary=data["action_summary"], tool=data["tool"], succeeded=data["succeeded"])
     return _ROUTES_WITHOUT_FIELDS[kind]()
 
 
