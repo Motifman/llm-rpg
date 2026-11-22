@@ -56,7 +56,69 @@ refusal_texts:
   world_state: {}
   hidden: 今はできない。
   unlisted: うまくいかなかった。
-  done: できた。
+
+# 区画の出入りと操作の done は、作者が区画 (enter_text / leave_text) と操作 (success_text) に書く。
+action_texts:
+  travel:
+    summary: "{destination}へ移動した"
+    done: 「{destination}」へ移動中。到着までは他の行動はできない。
+  whisper:
+    summary: "「{target}」に囁いた: 「{speech}」"
+    done: 「{speech}」とささやいた。
+  speak:
+    summary: "あなたは言った: 「{speech}」"
+    done: 「{speech}」と言った。
+  shout:
+    summary: "あなたは叫んだ: 「{speech}」"
+    done: 「{speech}」と叫んだ。
+  listen:
+    summary: 耳を澄ました
+    done: 耳を澄まし、周囲の音や人の気配を確かめた。
+  wait:
+    summary: その場で待機した
+    done: しばらく行動を控えて、様子を見た
+  tend:
+    summary: 「{target}」を介抱した
+    done: "{target}を介抱した。"
+  hand_over:
+    summary: 「{target}」に「{item}」を渡した
+    done: "{item}を{target}に渡した。"
+  pick_up:
+    summary: 「{item}」を拾った
+    done: "{item}を拾い上げた。"
+  drop:
+    summary: 「{item}」を地面に置いた
+    done: "{item}を地面に置いた。"
+  search:
+    summary: この場所を探索した
+    done: 辺りを探した。
+  use_item:
+    summary: 「{item}」を使った
+    done: "{item}を使った。"
+  hold:
+    summary: 「{item}」を手に持った
+    done: "{item}を手に持った。"
+  put_away:
+    summary: 「{item}」をしまった
+    done: "{item}をしまった。"
+  cast_ballot:
+    summary: 投票した
+    done: 投票した。
+  vote_for:
+    summary: 「{target}」へ投票した
+    done: 投票した。
+  enter_section:
+    summary: "{section}へ位置を移した"
+  leave_section:
+    summary: 「{section}」から出た
+  interact_with_object:
+    summary: 「{object}」で{how}
+  interact_with_carried_item:
+    summary: 「{item}」で{how}
+  interact_with_person:
+    summary: 「{target}」に対して{how}
+  interact_with_someone_in_the_dark:
+    summary: 暗がりで誰かに対して{how}
 
 built_in_action_perceptions:
   item_joiner: と

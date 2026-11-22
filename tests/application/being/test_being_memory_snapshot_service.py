@@ -746,7 +746,7 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
             move=AgentMove(call_id="call-2", tool_name="speak", arguments={}),
             result=ObservedOutcome(
                 observation(
-                    OwnActionResult(call_id="call-2", succeeded=True),
+                    OwnActionResult(call_id="call-2", succeeded=True, action_summary="あなたは言った: 「やあ」"),
                     body="挨拶した",
                     subject_is_self=True,
                     order=OccurrenceOrder(environment="廃坑の山村", value=1729000001.5),

@@ -30,8 +30,10 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     NoNotice,
     PerceptionDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, DesignWarning
 from ai_rpg_world.game_world.domain.effect.effect import Effect
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 
 
@@ -139,6 +141,13 @@ class WorldDesignReview:
 
     def notice(self, placement: RulePlacement, notice: HappeningNotice | NoNotice) -> None:
         self.requirements(placement, notice.requirements())
+
+    def author_text(self, placement: RulePlacement, text: TextWithUnassignedPeople, key: ActionTextKey) -> None:
+        unfilled = sorted(text.placeholders() - key.nameable)
+        if unfilled:
+            self.flaws.append(
+                DesignFlaw(placement.location, f"can name only {sorted(key.nameable)}, but names {unfilled}")
+            )
 
     def interaction(self, placement: RulePlacement, interaction: InteractionDeclaration) -> None:
         self.flaws += [

@@ -25,15 +25,15 @@ class DescribeActionResultCommand:
 class DescribeActionResult:
     def __init__(self, scope: CommandScope, design: WorldDesign, day_night: DayNightDeclaration) -> None:
         self._scope = scope
-        self._texts = design.refusal_texts
+        self._design = design
         self._day_night = day_night
 
     def __call__(self, command: DescribeActionResultCommand) -> Observation:
-        # 本文の呼び名と時刻を、同じ時点の世界から作る
-        body, time = self._scope.run(lambda session: self._body_and_time(session, command.reply))
+        # 本文と要約の呼び名と時刻を、同じ時点の世界から作る
+        body, summary, time = self._scope.run(lambda session: self._read(session, command.reply))
         return Observation(
             body=body,
-            route=OwnActionResult(call_id=command.call_id, succeeded=command.reply.succeeded()),
+            route=OwnActionResult(call_id=command.call_id, succeeded=command.reply.succeeded(), action_summary=summary),
             time=time,
             subject_is_self=True,
             subject_name=UNKNOWN,
@@ -42,9 +42,10 @@ class DescribeActionResult:
             addressed_to_self=True,
         )
 
-    def _body_and_time(
+    def _read(
         self, session: WorldSession, reply: ActionReply | TurnGuidance
-    ) -> tuple[str | TextWithPeople, ObservedTime]:
-        view = WorldPerceptionSenses(session.facts()).view_for(reply.actor())
+    ) -> tuple[str | TextWithPeople, TextWithPeople | None, ObservedTime]:
+        facts = session.facts()
+        view = WorldPerceptionSenses(facts).view_for(reply.actor())
         time = observed_time_of(self._day_night.day_and_clock_time_at(session.clock().now()))
-        return reply.result_for_actor(self._texts, view), time
+        return reply.result_for_actor(view), reply.summary_for_actor(self._design, facts, view), time

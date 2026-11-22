@@ -70,6 +70,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     SectionAccessDeclaration,
     WorldStageEffectsDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey, ActionTexts
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
@@ -255,7 +256,22 @@ def refusal_texts() -> RefusalTexts:
         world_state={},
         hidden=TextWithUnassignedPeople("今はできない。"),
         unlisted=TextWithUnassignedPeople("うまくいかなかった。"),
-        done=TextWithUnassignedPeople("できた。"),
+    )
+
+
+def action_texts() -> ActionTexts:
+    """要約は「{行の書き方}した」、成功の文は「{行の書き方}できた。」に、その行で書ける名前を (人も含めて) 並べた文にする。"""
+
+    def names(key: ActionTextKey) -> str:
+        return "".join(f" {{{name}}}" for name in sorted(key.nameable - {"actor"}))
+
+    return ActionTexts(
+        summaries={key: TextWithUnassignedPeople(f"{key.written_as}した{names(key)}") for key in ActionTextKey},
+        done={
+            key: TextWithUnassignedPeople(f"{key.written_as}できた。{names(key)}")
+            for key in ActionTextKey
+            if not key.done_by_author
+        },
     )
 
 
@@ -368,6 +384,7 @@ def compose_world(
             if built_in_action_perceptions_ is not None
             else built_in_action_perceptions(without=(ActionKind.TEND,))
         ),
+        action_texts=action_texts(),
         surroundings_texts=surroundings_texts(),
         weather=weather,
         day_night=day_night,

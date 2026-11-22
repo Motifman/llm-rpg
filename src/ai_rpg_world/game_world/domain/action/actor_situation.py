@@ -36,6 +36,9 @@ class ActorSituation:
             },
         )
 
+    def knows_every_item_of(self, attempt: ActionAttempt) -> bool:
+        return all(item in self.item_specs for item in attempt.items_handled())
+
 
 def _spec_in_world(item: ItemInstanceId, facts: WorldFacts) -> ItemSpecId | None:
     # 断られた試みは、使い切って世界から出た品物を指していることがある

@@ -37,7 +37,14 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
     OfferedFreeText,
     OfferedStep,
 )
-from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechContentNotChosen, SpeechReach
+from ai_rpg_world.game_world.domain.action.speech import (
+    OrdinaryVoice,
+    Shout,
+    SpeechContent,
+    SpeechContentNotChosen,
+    SpeechReach,
+    Whisper,
+)
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct, item_names
@@ -46,6 +53,7 @@ from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.progress import GroupDecisionDeclaration, WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
+from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey
 from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     HandOverToSelfException,
@@ -81,7 +89,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
     from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
-    from ai_rpg_world.game_world.domain.people import NameInText, TextAboutPeople
+    from ai_rpg_world.game_world.domain.people import NameInText, TextAboutPeople, TextWithUnassignedPeople
 
 _Reply = TypeVar("_Reply")
 
@@ -98,7 +106,23 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
         return self
 
     def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
-        return design.refusal_texts.done_text(self.actor)
+        return self._about_this_act(design.action_texts.done_of(self._text_key()), design, item_specs)
+
+    def summary_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        return self._about_this_act(design.action_texts.summary_of(self._text_key()), design, item_specs)
+
+    def _text_key(self) -> ActionTextKey:
+        return _TEXT_KEY_OF_KIND[self._KIND]
+
+    def _about_this_act(
+        self, text: TextWithUnassignedPeople, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]
+    ) -> TextAboutPeople:
+        target = self._target_in_texts()
+        people = {"actor": self.actor} | ({"target": target} if isinstance(target, PersonId) else {})
+        return text.about_named(people, self._names(design, item_specs))
+
+    def _target_in_texts(self) -> PersonId | NoTarget:
+        return self._witnessed_target()
 
     def kind(self) -> ActionKind:
         return self._KIND
@@ -275,6 +299,15 @@ class SpeechAttempt(_BuiltInAttempt):
 
     def can_start_while_busy(self) -> bool:
         return True
+
+    def _text_key(self) -> ActionTextKey:
+        return _TEXT_KEY_OF_REACH[type(self.reach)]
+
+    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+        return {"speech": self._chosen_content()}
+
+    def _witnessed_target(self) -> PersonId | NoTarget:
+        return self.reach.listener()
 
     def _chosen_content(self) -> SpeechContent:
         return self.content.chosen_by(self.actor)
@@ -521,6 +554,13 @@ class EnterSectionAttempt(_BuiltInAttempt):
     def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
         return design.section_access(self.access.section.section_id).perceived_as
 
+    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        written = design.section_access(self.access.section.section_id).enter_text
+        return self._about_this_act(written, design, item_specs)
+
+    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+        return {"section": self.access.section.name}
+
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         label = wording.design.section_access(self.access.section.section_id).enter_label
         return OfferedAction(self._CHOICE, (OfferedStep(SECTION_MOVE, label),))
@@ -543,6 +583,13 @@ class LeaveSectionAttempt(_BuiltInAttempt):
 
     def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
         return design.section_access(self.access.section.section_id).perceived_as
+
+    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        written = design.section_access(self.access.section.section_id).leave_text
+        return self._about_this_act(written, design, item_specs)
+
+    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+        return {"section": self.access.section.name}
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         label = wording.design.section_access(self.access.section.section_id).leave_label
@@ -607,3 +654,33 @@ class GroupDecisionBallotAttempt(_BuiltInAttempt):
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         choice = wording.person(self.choice.person) if isinstance(self.choice, VoteFor) else wording.abstain()
         return OfferedAction(self._CHOICE, (OfferedStep(DECISION, self.decision.name), OfferedStep(BALLOT, choice)))
+
+    def _text_key(self) -> ActionTextKey:
+        return ActionTextKey.VOTE_FOR if isinstance(self.choice, VoteFor) else ActionTextKey.CAST_BALLOT
+
+    # 投票先は本人の要約にだけ書く。見ていた人への知らせには出さない (伏せた投票があるため)
+    def _target_in_texts(self) -> PersonId | NoTarget:
+        return self.choice.person if isinstance(self.choice, VoteFor) else NoTarget()
+
+
+_TEXT_KEY_OF_KIND: Mapping[ActionKind, ActionTextKey] = {
+    ActionKind.TRAVEL: ActionTextKey.TRAVEL,
+    ActionKind.LISTEN: ActionTextKey.LISTEN,
+    ActionKind.WAIT: ActionTextKey.WAIT,
+    ActionKind.TEND: ActionTextKey.TEND,
+    ActionKind.HAND_OVER: ActionTextKey.HAND_OVER,
+    ActionKind.PICK_UP: ActionTextKey.PICK_UP,
+    ActionKind.DROP: ActionTextKey.DROP,
+    ActionKind.SEARCH: ActionTextKey.SEARCH,
+    ActionKind.USE_ITEM: ActionTextKey.USE_ITEM,
+    ActionKind.HOLD: ActionTextKey.HOLD,
+    ActionKind.PUT_AWAY: ActionTextKey.PUT_AWAY,
+    ActionKind.CAST_BALLOT: ActionTextKey.CAST_BALLOT,
+    ActionKind.ENTER_SECTION: ActionTextKey.ENTER_SECTION,
+    ActionKind.LEAVE_SECTION: ActionTextKey.LEAVE_SECTION,
+}
+_TEXT_KEY_OF_REACH: Mapping[type[SpeechReach], ActionTextKey] = {
+    Whisper: ActionTextKey.WHISPER,
+    OrdinaryVoice: ActionTextKey.SPEAK,
+    Shout: ActionTextKey.SHOUT,
+}

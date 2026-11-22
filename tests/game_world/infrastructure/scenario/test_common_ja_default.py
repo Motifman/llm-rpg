@@ -111,6 +111,7 @@ class TestCommonJaDefaultReads:
             "rules",
             "refusal_texts",
             "built_in_action_perceptions",
+            "action_texts",
             "surroundings_texts",
             "briefing_headings",
             "perception_defaults",

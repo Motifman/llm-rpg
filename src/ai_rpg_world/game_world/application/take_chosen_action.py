@@ -66,7 +66,7 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     ObjectInteractionAttempt,
     PersonInteractionAttempt,
 )
-from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.value_object import PersonId
@@ -89,8 +89,11 @@ class TurnGuidance:
     def actor(self) -> PersonId:
         return self.person
 
-    def result_for_actor(self, texts: RefusalTexts, view: PeopleAsSeen) -> str | TextWithPeople:
+    def result_for_actor(self, view: PeopleAsSeen) -> str | TextWithPeople:
         return self.text
+
+    def summary_for_actor(self, design: WorldDesign, facts: WorldFacts, view: PeopleAsSeen) -> None:
+        return None
 
 
 @final
