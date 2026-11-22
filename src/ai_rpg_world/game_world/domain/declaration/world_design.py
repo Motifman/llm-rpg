@@ -16,6 +16,7 @@ from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalText
 from ai_rpg_world.game_world.domain.declaration.rule_placement import RulePlacement
 from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    ClockWording,
     DayNightDeclaration,
     NoDayNight,
     NoWeather,
@@ -115,6 +116,7 @@ class WorldDesign:
         built_in_action_perceptions: BuiltInActionPerceptions,
         action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
+        clock_wording: ClockWording,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -148,6 +150,7 @@ class WorldDesign:
         self._built_in_action_perceptions = built_in_action_perceptions
         self._action_texts = action_texts
         self._surroundings_texts = surroundings_texts
+        self._clock_wording = clock_wording
         self._weather = weather
         self._day_night = day_night
         self._initial_stage = initial_stage
@@ -178,6 +181,7 @@ class WorldDesign:
         built_in_action_perceptions: BuiltInActionPerceptions,
         action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
+        clock_wording: ClockWording,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -427,6 +431,7 @@ class WorldDesign:
             built_in_action_perceptions=built_in_action_perceptions,
             action_texts=action_texts,
             surroundings_texts=surroundings_texts,
+            clock_wording=clock_wording,
             weather=weather,
             day_night=day_night,
             initial_stage=initial_stage,
@@ -470,6 +475,10 @@ class WorldDesign:
     @property
     def surroundings_texts(self) -> SurroundingsTexts:
         return self._surroundings_texts
+
+    @property
+    def clock_wording(self) -> ClockWording:
+        return self._clock_wording
 
     @property
     def weather(self) -> WeatherDeclaration | NoWeather:

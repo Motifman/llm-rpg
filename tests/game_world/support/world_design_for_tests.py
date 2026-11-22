@@ -43,6 +43,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
 )
 from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    ClockWording,
     DayNightDeclaration,
     DayPhaseDeclaration,
     DayPhaseName,
@@ -287,6 +288,10 @@ def built_in_action_perceptions(without: Iterable[ActionKind] = ()) -> BuiltInAc
     )
 
 
+def clock_wording() -> ClockWording:
+    return ClockWording(day="Day {day}", late_night="深夜 ", late_night_before_hour=6)
+
+
 def surroundings_texts() -> SurroundingsTexts:
     return SurroundingsTexts(
         people_here=TextWithUnassignedPeople("ここには{people}がいる。"),
@@ -386,6 +391,7 @@ def compose_world(
         ),
         action_texts=action_texts(),
         surroundings_texts=surroundings_texts(),
+        clock_wording=clock_wording(),
         weather=weather,
         day_night=day_night,
         initial_stage=initial_stage,

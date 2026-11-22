@@ -43,6 +43,7 @@ from tests.game_world.support.verb_declarations_for_tests import lever_pulled_qu
 from tests.game_world.support.world_design_for_tests import (
     built_in_action_perceptions,
     character,
+    clock_wording,
     compose_world,
     half_hour_ticks_from_midnight,
     nouns,
@@ -148,7 +149,7 @@ class _Cliff:
         self.scope = CommandScope(self.store, distributor)
         self.observations = _Observations()
         self.reports = PerceptionReportsReceived()
-        exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.observations)
+        exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), self.observations)
         distributor.register_receiver(
             DeliverPerceptionOfCommittedEvents(self.design, DeliverPerception(self.scope, exit, self.reports))
         )
