@@ -85,6 +85,9 @@ def _build_stack(
     from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
         InMemoryShortTermMemoryRepository,
     )
+    from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import (
+        InMemoryVisitedPlacesRepository,
+    )
 
     memory_snapshot = BeingMemorySnapshotService(
         acquaintance_store=InMemoryAcquaintanceRepository(),
@@ -92,6 +95,7 @@ def _build_stack(
         being_memo_store=InMemoryMemoBookRepository(),
         memory_turn_clock=InMemoryMemoryTurnClock(),
         being_short_term_memory_store=InMemoryShortTermMemoryRepository(),
+        being_visited_places_store=InMemoryVisitedPlacesRepository(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
 

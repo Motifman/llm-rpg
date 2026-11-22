@@ -65,6 +65,8 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_being_episode,
     dict_to_being_memo,
     dict_to_being_short_term_memory,
+    dict_to_visited_place,
+    visited_place_to_dict,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -75,7 +77,11 @@ from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemory,
     ShortTermMemoryRepository,
 )
-from ai_rpg_world.domain.being.exception.being_exceptions import MemoValidationException
+from ai_rpg_world.being.domain.visited_places import VisitedPlaces, VisitedPlacesRepository
+from ai_rpg_world.domain.being.exception.being_exceptions import (
+    MemoValidationException,
+    VisitedPlacesValidationException,
+)
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
 SUPPORTED_PAYLOAD_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
@@ -169,12 +175,14 @@ class BeingMemorySnapshotService:
             "being_episodes",
             "being_memo_book",
             "being_short_term_memory",
+            "being_visited_places",
         }
     )
     # 後から足したキー。足す前に保存した snapshot には無いので、無ければ空として読む。
     ADDED_PAYLOAD_KEYS: frozenset[str] = frozenset(
         {
             "being_short_term_memory",
+            "being_visited_places",
         }
     )
 
@@ -186,6 +194,7 @@ class BeingMemorySnapshotService:
         being_memo_store: MemoBookRepository,
         memory_turn_clock: MemoryTurnClock,
         being_short_term_memory_store: ShortTermMemoryRepository,
+        being_visited_places_store: VisitedPlacesRepository,
     ) -> None:
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
@@ -197,11 +206,14 @@ class BeingMemorySnapshotService:
             raise TypeError("memory_turn_clock must be MemoryTurnClock")
         if not isinstance(being_short_term_memory_store, ShortTermMemoryRepository):
             raise TypeError("being_short_term_memory_store must be ShortTermMemoryRepository")
+        if not isinstance(being_visited_places_store, VisitedPlacesRepository):
+            raise TypeError("being_visited_places_store must be VisitedPlacesRepository")
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
         self._memory_turn_clock = memory_turn_clock
         self._being_short_term_memory = being_short_term_memory_store
+        self._being_visited_places = being_visited_places_store
 
     def capture(self, being_id: BeingId) -> str:
         """各 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -219,6 +231,9 @@ class BeingMemorySnapshotService:
         payload["being_short_term_memory"] = (
             [] if short_term_memory.is_empty() else [being_short_term_memory_to_dict(short_term_memory)]
         )
+        payload["being_visited_places"] = [
+            visited_place_to_dict(p) for p in self._being_visited_places.get(being_id).places
+        ]
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
         # 足したが capture() の dict 生成を忘れた状態を即時に止める。
@@ -316,11 +331,19 @@ class BeingMemorySnapshotService:
             "being_short_term_memory",
         )
         short_term_memory = short_term_memories[0] if short_term_memories else ShortTermMemory.empty(being_id)
+        visited = _decode_list(payload["being_visited_places"], dict_to_visited_place, "being_visited_places")
+        try:
+            visited_places = VisitedPlaces(being_id, tuple(visited))
+        except VisitedPlacesValidationException as exc:
+            raise BeingMemoryPayloadFormatError(
+                f"payload['being_visited_places'] is not a valid record of visits: {exc}"
+            ) from exc
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)
         self._being_memo.replace_all_by_being(being_memo_book)
         self._being_short_term_memory.replace_all_by_being(short_term_memory)
+        self._being_visited_places.replace_all_by_being(visited_places)
 
 
 __all__ = [

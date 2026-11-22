@@ -36,6 +36,7 @@ from ai_rpg_world.being.contract import (
     ActionChoices,
     AgentMove,
     FrozenJsonObject,
+    Here,
     Observation,
     ObservedTime,
     OfferedBeingTools,
@@ -54,6 +55,7 @@ from ai_rpg_world.being.domain.short_term_memory import (
     Outcome,
     ShortTermMemoryRepository,
 )
+from ai_rpg_world.being.domain.visited_places import VisitedPlacesRepository
 from ai_rpg_world.being.domain.working_memory import Closing
 
 
@@ -136,6 +138,7 @@ class ChooseAction:
         turn_clock: MemoryTurnClock,
         memo_books: MemoBookRepository,
         episodes: EpisodeRepository,
+        visited_places: VisitedPlacesRepository,
         recall_limit: int,
     ) -> None:
         if recall_limit < 1:
@@ -146,6 +149,7 @@ class ChooseAction:
         self._turn_clock = turn_clock
         self._memo_books = memo_books
         self._episodes = episodes
+        self._visited_places = visited_places
         self._recall_limit = recall_limit
 
     def execute(self, command: ChooseActionCommand) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
@@ -173,7 +177,17 @@ class ChooseAction:
         call = replies[-1].tool_call
         if call is None:
             return ActionNotChosen(requested_tool=None, suggestion=None, exchange=exchange)
-        return self._outcome_of(call, tools, command, exchange)
+        outcome = self._outcome_of(call, tools, command, exchange)
+        # 1 手を選んだ場所は訪れたことになる。選ぶまでは、組み直したプロンプトにも (初めて訪れた) が付く (#1596)。
+        self._visit(command.being_id, command.scene.here)
+        return outcome
+
+    def _visit(self, being_id: BeingId, here: Here | None) -> None:
+        if here is None:
+            return
+        places = self._visited_places.get(being_id)
+        places.visit(environment_name=self._working_memory.environment_name(being_id), place=here.place)
+        self._visited_places.save(places)
 
     def _replies(
         self, messages: list[dict[str, str]], definitions: list[dict[str, Any]]

@@ -89,6 +89,9 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
             InMemoryShortTermMemoryRepository,
         )
+        from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import (
+            InMemoryVisitedPlacesRepository,
+        )
         from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
         from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -107,6 +110,7 @@ class TestExpectedPayloadKeysCoverage:
             _being_episode_store=InMemoryEpisodeRepository(),
             _being_memo_store=InMemoryMemoBookRepository(),
             _being_short_term_memory_store=InMemoryShortTermMemoryRepository(),
+            _being_visited_places_store=InMemoryVisitedPlacesRepository(),
         )
 
     def test_runtime_with_all_stores_builds_a_session(self, tmp_path: Path) -> None:
@@ -129,6 +133,7 @@ class TestExpectedPayloadKeysCoverage:
             ("_being_memo_store", "being_memo_store"),
             ("_memory_turn_clock", "memory_turn_clock"),
             ("_being_short_term_memory_store", "being_short_term_memory_store"),
+            ("_being_visited_places_store", "being_visited_places_store"),
         ],
     )
     def test_runtime_missing_one_store_stops_the_session(

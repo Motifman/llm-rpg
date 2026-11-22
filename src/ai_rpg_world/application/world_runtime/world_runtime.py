@@ -323,6 +323,7 @@ from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
+from ai_rpg_world.being.domain.visited_places import VisitedPlacesRepository
 from ai_rpg_world.being.domain.working_memory import WorkingMemory
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
@@ -339,6 +340,7 @@ from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -638,6 +640,11 @@ class WorldRuntime:
     # プロンプトの【直近の出来事】と【ここまでのいきさつ】はここから作る。
     _being_short_term_memory_store: ShortTermMemoryRepository = field(
         default_factory=InMemoryShortTermMemoryRepository, repr=False
+    )
+    # #2267: Being が訪れた場所。世界の snapshot には入らない。古い run の場面は現在地の欄 (Scene.here) を
+    # 持たないので記録は増えないが、Being の snapshot が読み書きするので持つ。
+    _being_visited_places_store: VisitedPlacesRepository = field(
+        default_factory=InMemoryVisitedPlacesRepository, repr=False
     )
     # create_world_runtime が組む。phase_b が 1 手を書き留める。
     _being_short_term_memory_copy: PlayerShortTermMemoryCopy | None = field(default=None, repr=False)
@@ -1726,6 +1733,7 @@ class WorldRuntime:
             acquaintances=self._acquaintance_store,
             episodes=self._being_episode_store,
             memo_books=self._being_memo_store,
+            visited_places=self._being_visited_places_store,
             episode_index_limit=cfg.being_episode_index_limit,
         )
 

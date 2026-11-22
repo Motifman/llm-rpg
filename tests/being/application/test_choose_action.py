@@ -44,6 +44,7 @@ from ai_rpg_world.being.domain.short_term_memory import (
     ShortTermMemory,
     ShortTermMemoryRepository,
 )
+from ai_rpg_world.being.domain.visited_places import VisitedPlacesRepository
 from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
@@ -52,6 +53,7 @@ from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemo
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
 from tests.event_handoff_helpers import discard_events
 
@@ -150,11 +152,13 @@ def _choose(
     being_tools: OfferedBeingTools = OfferedBeingTools(inner_thought="inner_thought"),
     episodes: EpisodeRepository | None = None,
     memo_books: MemoBookRepository | None = None,
+    visited_places: VisitedPlacesRepository | None = None,
 ) -> tuple[ActionChosen | ActionNotChosen | TurnSpentRecalling, ScriptedActionChoosing]:
     short_term_memories = memories or InMemoryShortTermMemoryRepository()
     clock = clock or InMemoryMemoryTurnClock()
     episodes = episodes or InMemoryEpisodeRepository(handoff=discard_events)
     memo_books = memo_books or InMemoryMemoBookRepository(handoff=discard_events)
+    visited_places = visited_places or InMemoryVisitedPlacesRepository()
     completion = ScriptedActionChoosing(replies)
     working_memory = CurrentWorkingMemory(
         beings=_Beings(),
@@ -162,6 +166,7 @@ def _choose(
         acquaintances=InMemoryAcquaintanceRepository(),
         episodes=episodes,
         memo_books=memo_books,
+        visited_places=visited_places,
         episode_index_limit=5,
     )
     choose = ChooseAction(
@@ -171,6 +176,7 @@ def _choose(
         turn_clock=clock,
         memo_books=memo_books,
         episodes=episodes,
+        visited_places=visited_places,
         recall_limit=2,
     )
     return choose.execute(_command(being_tools)), completion
@@ -226,8 +232,25 @@ class TestChooseAction:
         _, completion = _choose(_reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}))
 
         message = completion.calls[0].messages[1]["content"]
-        assert "【現在地と周囲】\n現在地: 鉱山会社の事務所\n  埃をかぶった机と金庫がある。" in message
+        assert "【現在地と周囲】\n現在地: 鉱山会社の事務所 (初めて訪れた)\n  埃をかぶった机と金庫がある。" in message
         assert message.index("【現在地と周囲】") < message.index("【行動の候補】")
+
+    def test_first_visit_mark_is_shown_until_the_being_acts_there(self) -> None:
+        """着いた場所は、そこで 1 手を選ぶまで (初めて訪れた) が付き、1 手を選んだあとは付かない。ツールを呼ばなかったターンは数えない。"""
+        visited = InMemoryVisitedPlacesRepository()
+        mark = "現在地: 鉱山会社の事務所 (初めて訪れた)"
+
+        _, before_acting = _choose(ActionChoosingReply(tool_call=None), visited_places=visited)
+        _, acting = _choose(
+            _reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}), visited_places=visited
+        )
+        _, after_acting = _choose(
+            _reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}), visited_places=visited
+        )
+
+        assert mark in before_acting.calls[0].messages[1]["content"]
+        assert mark in acting.calls[0].messages[1]["content"]
+        assert "現在地: 鉱山会社の事務所\n" in after_acting.calls[0].messages[1]["content"]
 
     def test_whisper_to_sayo_returns_her_mark_not_her_name(self) -> None:
         """サヨへのささやきは、呼び方「サヨ」ではなく人の印 {"person": 2} で返り、中身の文字はそのまま返る。"""

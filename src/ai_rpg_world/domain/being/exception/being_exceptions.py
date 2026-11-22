@@ -125,6 +125,12 @@ class MemoValidationException(BeingDomainException, ValidationException):
     error_code = "BEING.MEMO_VALIDATION"
 
 
+class VisitedPlacesValidationException(BeingDomainException, ValidationException):
+    """訪れた場所の記録が決まり (空でない名前、同じ場所を重ねない) を満たさない。"""
+
+    error_code = "BEING.VISITED_PLACES_VALIDATION"
+
+
 class MemoLimitReachedException(BeingDomainException, BusinessRuleException):
     """分類ごとの件数の上限に達したメモ帳に、同じ分類のメモを足そうとした。"""
 
@@ -177,6 +183,7 @@ __all__ = [
     "MemoLimitReachedException",
     "MemoNotFoundException",
     "MemoValidationException",
+    "VisitedPlacesValidationException",
     "PersonaValidationException",
     "ShortTermMemoryStaleBackstoryException",
     "ShortTermMemoryUnpairedResultException",
