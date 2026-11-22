@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, final
+from typing import TYPE_CHECKING, Protocol, TypeVar, final
 
 from typing_extensions import Self
 
@@ -25,6 +25,9 @@ from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentNa
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Occupant, PersonBody
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
+    from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
+    from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
     from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
     from ai_rpg_world.game_world.domain.condition.aggregate_readings import PersonVitalsReading
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -127,6 +130,9 @@ class DoesNotUseBody:
 Exertion = UsesBody | DoesNotUseBody
 
 
+_Reply = TypeVar("_Reply")
+
+
 class ActionAttempt(Protocol):
     @property
     def actor(self) -> PersonId: ...
@@ -162,3 +168,9 @@ class ActionAttempt(Protocol):
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct: ...
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark: ...
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction: ...
+
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self: ...
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply: ...

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import final
+from typing import TypeVar, final
 
 from typing_extensions import Self
 
@@ -17,8 +17,11 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     LivingOnly,
     UsesBody,
 )
+from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
+from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
+from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -36,6 +39,8 @@ from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import InteractionId, ItemSpecId, ObjectId, PersonId, SpotId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
+
+_Reply = TypeVar("_Reply")
 
 
 @final
@@ -114,6 +119,15 @@ class ActionAttemptForTests(ActionAttempt):
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
         raise NotImplementedError(f"{self!r} is not witnessed in tests that use it")
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        raise NotImplementedError(f"{self!r} is not offered in tests that use it")
+
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
+        raise NotImplementedError(f"{self!r} is not chosen in tests that use it")
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        raise NotImplementedError(f"{self!r} is not entered in tests that use it")
 
 
 def situation_for_tests() -> ActorSituation:

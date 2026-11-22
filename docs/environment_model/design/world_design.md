@@ -27,6 +27,7 @@ class SpotDeclaration:
     name: DisplayName
     description: DescriptionText
     atmosphere: SpotAtmosphere
+    allows_shops: bool                      # 人が店を出せる場所か。書かなければ偽 (共通の部品の defaults.spot) (D2224)
 
 class Temperature(Enum):                    # 寒い順。比べられる
     FREEZING
@@ -190,6 +191,7 @@ class CharacterDeclaration:
     knows_at_start: tuple[PersonId, ...]     # 重ならない。自分を含んでもよい
     max_hp: HitPoints | UsesWorldDefault     # UsesWorldDefault なら WorldRules.person_max_hp で始まる (#2055)
     pack_capacity: Capacity | UsesWorldDefault   # UsesWorldDefault なら WorldRules.pack_capacity
+    initial_gold: Gold                       # 初めの所持金。書かなければ 0 (共通の部品の defaults.character) (D2224)
 
     def starting_hp(self, world_default: HitPoints) -> HitPoints: ...
     def starting_pack_capacity(self, world_default: Capacity) -> Capacity: ...
@@ -220,6 +222,26 @@ class OutcomeDeclaration:
     name: DisplayName                               # 「救出」
     announcement: TextWithUnassignedPeople # 「{each_person}は昇降機で外へ出た。」結末が決まった本人だけに、世界から外れていても、目立つ世界の知らせとして届ける。死んだ結末には知らせが無い (D2203)
 
+@final
+@dataclass(frozen=True)
+class ScenarioShopDeclaration:              # 作者が持ち主の店 (D2224)。人の店と同じ Shop 集約になり、エージェントは同じ行為で売り買いする
+    shop_id: ScenarioShopId
+    spot_id: SpotId                         # 店を出せる場所 (allows_shops) でなくてよい
+    keeper_name: DisplayName                # 持ち主の呼び名 (「グスタフ」)。世界の人ではないので、名前を文字のまま出す
+    look: ShopLook
+    selling: tuple[ScenarioShopLineDeclaration, ...]
+    buying: tuple[ScenarioShopLineDeclaration, ...]
+    gold: Gold | UnlimitedSupply            # 買い取りに払うお金。売れた代金はここに足す
+
+@final
+@dataclass(frozen=True)
+class ScenarioShopLineDeclaration:
+    item_spec: ItemSpecId
+    count: Count | UnlimitedSupply          # 売りは在庫、買い取りは買い取る数。尽きない (UnlimitedSupply) と書ける
+    unit_price: Gold
+    note: ShopLineNote | NoNote
+    # 売りと買い取りのそれぞれで、同じ品物の種類を 2 つ書けば作れない
+
 
 class DeclaredNouns:
     """名詞の宣言を集め、名前から宣言を引く。"""
@@ -240,6 +262,7 @@ class DeclaredNouns:
         outcomes: Iterable[OutcomeDeclaration],
         monster_specs: Iterable[MonsterSpecDeclaration],     # monster.md
         monster_spawns: Iterable[MonsterSpawnDeclaration],
+        scenario_shops: Iterable[ScenarioShopDeclaration],   # D2224
     ) -> None: ...
 
     def flag(self, name: str, at: DesignLocation) -> FlagDeclaration: ...
@@ -260,6 +283,9 @@ class DeclaredNouns:
     def outcome(self, name: str, at: DesignLocation) -> OutcomeDeclaration: ...
     def monster_spec(self, name: str, at: DesignLocation) -> MonsterSpecDeclaration: ...
     def monster_spawn(self, name: str, at: DesignLocation) -> MonsterSpawnDeclaration: ...
+    def scenario_shops(self) -> tuple[ScenarioShopDeclaration, ...]: ...
+    def has_shop_sites(self) -> bool: ...   # 人が店を出せる場所 (allows_shops) が 1 つでもあるか。無ければ持ち主の行為のツールを消す (ToolExposure)
+    def has_shops(self) -> bool: ...        # 店を出せる場所か作者の店が 1 つでもあるか。無ければ買う・売るのツールと、店の行為の知覚の行を求めない
     # 引けなかった名前は UnknownNameFlaw を投げる。読む側はその宣言 1 つを諦めて DesignFlaw を記録し、次へ進む
 
 
@@ -531,7 +557,8 @@ class WorldRules:
     stealth: StealthRule
     action_durations: Mapping[ActionKind, Ticks]   # 行っているあいだの既定。耳を澄ます 1、拾う・置く・渡す・区画・投票・持ち替え 1、操作・品物を使う 2、探す・介抱 3
     # 移動は通路の時間で決まり、待つこと・話すこと・モンスターへの攻撃は行っているあいだを作らない (#1971)
-    # action_durations は上の 15 種類をすべて持ち、移動・待つ・話す・モンスターへの攻撃を持たなければ作れない
+    # 店の行為 (開く・閉じる・品目を編集する・見た目を書き直す・買う・売る・引き取る) は 1 (D2224)
+    # action_durations は上の 22 種類をすべて持ち、移動・待つ・話す・モンスターへの攻撃を持たなければ作れない
     person_max_hp: HitPoints                # 人の最初の体力の世界の既定。登場人物が上書きできる (#2055)
     pack_capacity: Capacity                 # 荷に持てる数の世界の既定
     person_attack_damage: Damage            # 人がモンスターに与える痛手。共通の部品の既定 10。武器・防御・命中は持たない (#1971)
@@ -613,6 +640,7 @@ class BuiltInActionPerceptions:             # どの世界にもある行為 (�
     shout: PerceptionDeclaration
     arrival: PerceptionDeclaration          # 着いた場所にいた人へ。行為ではなく OccupantEnteredSpotEvent から作り、着いた本人には届けない (#2061)
     item_joiner: ItemNameJoiner             # 渡す行為で品物が 2 つ以上のとき、{item} の呼び名をつなぐ言葉 (共通の部品では「と」)。1 つのときは使わない。書かなければ読み込みで止める。つなぐ言葉をコードに持たないため (#2152)
+    gold_label: GoldLabel                   # お金の呼び名 (共通の部品では「{amount}G」)。渡す行為では、お金を品物の後ろに item_joiner でつないで {item} に入れる。店の文の {gold} にも使う (D2224)
 
     def speech(self, reach: Whisper | OrdinaryVoice | Shout) -> PerceptionDeclaration: ...
     def rows(self) -> tuple[tuple[BuiltInPerceptionRow, PerceptionDeclaration], ...]: ...
@@ -650,6 +678,7 @@ class SurroundingsTexts:                    # 行為ではなく、本人に直�
     joiner: str                             # {people} に 2 人以上入るとき、人の穴どうしをつなぐ言葉 (共通の部品では「、」)。1 人のときは使わない。空でない 1 行
     waking: TextWithUnassignedPeople        # 「目が覚めた。」。介抱されて起きた本人へ。穴は書けない
     darkening: TextWithUnassignedPeople     # 「辺りが暗くなった。」。明るさが下がった場所の人へ。穴は書けない
+    scene: SceneTexts                       # 毎ターン渡す場面の文の見出しと決まった言い回し (「現在地と周囲」「物:」「行き先:」「落ちている品物:」「×」「真っ暗で、何も見えない。」、D2241)
 
     def scene_as_seen(self, *, people: tuple[PersonRef | Unidentified, ...], bodies: tuple[PersonRef | Unidentified, ...]) -> TextWithAssignedPeople: ...
     # {people} を 1 人ずつの穴 ({person_1}、{person_2} ...) に広げ、渡した順に joiner でつなぐ。穴の番号は people_here から bodies_here へ通しで付ける
@@ -658,6 +687,20 @@ class SurroundingsTexts:                    # 行為ではなく、本人に直�
     # 1 つの穴に入るのは 1 人で、名前は見る人の側で埋まる (perception.md)。item_joiner は呼び名の文字をつなぐが、joiner はまだ名前の決まっていない穴どうしをつなぐ
     # 行為の知覚の表 (BuiltInActionPerceptions) に入れないのは、どの行も見る人と音を持つ「ある人の行為の見え方」で、場面と知らせはそのどちらも持たないため
     # 明るさが上がったときの文は持たない。上がったときは場面を届け直す (perception.md)
+
+@final
+@dataclass(frozen=True)
+class ShopTexts:                            # 店の呼び名と、店で起きたことの知らせの文。シナリオが世界全体で 1 つ書く (D2224)
+    person_shop_label: TextWithUnassignedPeople   # 「{owner}の店」。{owner} は持ち主で、見る人ごとの呼び方で埋まる
+    scenario_shop_label: str                      # 「{keeper}の店」。{keeper} は作者の店の keeper_name で埋める
+    closed_mark: str                              # 閉じた店に添える文 (「閉まっている」)
+    sold_out_mark: str                            # 数が 0 になった売りの品目に添える文 (「売り切れ」)
+    filled_mark: str                              # 残りが 0 になった買い取りの品目に添える文 (「買い取り終了」)
+    sold_notice: str                              # 留守でも持ち主に届く知らせ。「店で{item}が{count}つ売れ、{gold}が入った。」
+    bought_notice: str                            # 「店が{item}を{count}つ買い取り、{gold}を払った。」
+    ran_out_notice: str                           # 店の品が時間で消えたとき。「店の{item}が{count}つ駄目になった。{ended_text}」。{ended_text} は品物の Lasts.ended_text
+    # 知らせの文には人のプレースホルダーを書けない。誰が買ったかは持ち主に伝えない
+    # {item} は品物の名前、{count} は数、{gold} は gold_label で埋める。ran_out_notice だけは {gold} の代わりに {ended_text} を書ける。ほかの穴は書けない
 
 @final
 @dataclass(frozen=True)
@@ -672,6 +715,17 @@ class RefusalTexts:                         # 作者の条件に付かない、�
 class WorldIntroduction:                    # 全員に同じ、世界の導入。ステージ 8 で案内 (being.contract の Orientation) に渡す。人ごとの目的は持たない (D2222)
     text: DescriptionText
     premises: DescriptionText               # 世界の前提の箇条 (「昇降機は一度しか動かない」)。目的ではない
+
+@final
+@dataclass(frozen=True)
+class BriefingHeadings:                     # 入るときの案内の見出し。シナリオが世界全体で 1 つ書き、ふつうは共通の部品から取り込む (#2229)
+    introduction: str                       # 導入の見出し (「この世界について」)
+    premises: str                           # 前提の見出し (「この世界の前提」)
+    known_facts: str                        # その人の立場の見出し (「あなたが知っていること」)
+    # どれも空白だけでない 1 行で、【】を書けない。3 つは違う見出しにする (Orientation は見出しの重なりを許さない)
+
+    def orientation(self, introduction: WorldIntroduction, known_facts: DescriptionText) -> Orientation: ...
+    # 導入・前提・立場の順に、見出しの違う 3 つの Description を並べた案内
 
 @final
 @dataclass(frozen=True)
@@ -696,6 +750,7 @@ class StartingPerson:                           # 登場人物の始まり。名
     knows: tuple[PersonId, ...]
     hp: HitPoints                               # 登場人物の値か、無ければ WorldRules の既定
     pack_capacity: Capacity
+    gold: Gold                                  # CharacterDeclaration.initial_gold
 
 @final
 @dataclass(frozen=True)
@@ -731,6 +786,7 @@ class WorldDesign:
         refusal_texts: RefusalTexts,
         built_in_action_perceptions: BuiltInActionPerceptions,
         surroundings_texts: SurroundingsTexts,              # 場面と知らせの文 (#2174)
+        shop_texts: ShopTexts,                              # 店の呼び名と知らせの文 (D2224)
         monster_perceptions: MonsterPerceptions,            # 種類ごとに書き換えなかったときの既定
         monster_health: MonsterHealthTexts,                 # 傷の具合の境と文
         monster_doing: MonsterDoingTexts,                   # 状態ごとの、いましていることの文
@@ -738,6 +794,7 @@ class WorldDesign:
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
         introduction: WorldIntroduction,
+        briefing_headings: BriefingHeadings,                # 入るときの案内の見出し (#2229)
     ) -> "WorldDesign": ...
 
     @property
@@ -749,11 +806,15 @@ class WorldDesign:
     @property
     def introduction(self) -> WorldIntroduction: ...
     @property
+    def briefing_headings(self) -> BriefingHeadings: ...
+    @property
     def refusal_texts(self) -> RefusalTexts: ...
     @property
     def built_in_action_perceptions(self) -> BuiltInActionPerceptions: ...
     @property
     def surroundings_texts(self) -> SurroundingsTexts: ...
+    @property
+    def shop_texts(self) -> ShopTexts: ...
     @property
     def weather(self) -> WeatherDeclaration | NoWeather: ...
     @property
@@ -842,5 +903,6 @@ infrastructure: YAML を読む (scenario_format.md)
 - 区画ごとの出入り (`SectionAccessDeclaration`) と、集団の決定ごとの決まり (`GroupDecisionRulesDeclaration`) が 1 つずつ無ければ `DesignFlaw`。二人で合わせる操作が求める物体の操作が宣言に無ければ `DesignFlaw`
 - 組み込みの行為の知覚の文は、世界で行える組み込みの行為 (介抱は `TendRule` があるときだけ) をすべて持たなければ `DesignFlaw`。知らせの相手の選び方は、行為の中に置いた条件として、ほかの宣言と同じく照らし合わせる。`Actor` はどの行でも、`Target` は相手のいる行 (`BuiltInPerceptionRow.has_target`) でだけ使える (#2076)。断りの文の表の `world_state` は、起きうる `RefusalCode` をドメインで列挙できないので compose では確かめない
 - compose が照らし合わせに使う材料 (主語、読む引数、段階・昼夜・天候を読むか、立てる旗、締める決定、伏せられうる所属、読む出来事) は、条件と効果の `requirements()` が答える。根に文があるかは `Condition.explains_failure()` が答える
+- 作者の店 (`ScenarioShopDeclaration`) の品目が、宣言に無い品物の種類を指せば `DesignFlaw`。作者の店の置き場所が宣言に無い場所なら `DesignFlaw`。店の行為の知覚の文は、店を出せる場所か作者の店がある世界でだけ求める (D2224)
 - 物の見え方の宣言 (`ObjectLooksDeclaration`) は物ごとに 1 つまで。宣言に無い物を指せば `DesignFlaw`。見え方 (`ObjectLook.when`) の条件は、世界の状態だけで決まるものに限る。`requirements()` が、きっかけから人を引く主語 (名指しした人 `NAMED_PERSON` は除く)・`uses_chance`・`uses_action_arguments` のどれかを持てば `DesignFlaw`。人によって変わる見え方や、見渡すたびに変わる見え方になるため。名指しした人の状態は見る人で変わらないので使える (#2067、#2070)
 - 宣言に無い通路の状態の名前、呼び名 (`display_name`) の無い値が文に出るときは、`DesignFlaw` で止める

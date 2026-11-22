@@ -247,6 +247,7 @@ SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 | 知らせ | 元のイベント | 相手 (`audience`) | 目立ち方 | 倒れている人 |
 |---|---|---|---|---|
 | 結末 (`OutcomeDeclaration.announcement`) | `PersonOutcomeDecidedEvent` | 結末が決まった本人だけ。世界から外れていても届ける (居場所を問わない)。文の `{each_person}` も本人。死んだ結末 (`Died`) には出さない | `Notable` | `NoticedLater` でためて、目が覚めたとき、または気を失ったまま世界から外れるときに、たまった知らせと同じ順で届く |
+| 店の売り買いと、店の品が傷んだこと (`ShopTexts.sold_notice` / `bought_notice` / `ran_out_notice`、D2224) | `ShopSoldItemsEvent` / `ShopBoughtItemsEvent` / `ShopItemsRanOutEvent` | 人の店の持ち主だけ。居場所を問わず、留守でも届く。作者の店では作らない | `Background` | `NoticedLater` でためて、目が覚めたときに届く。世界から外れた持ち主には届けない |
 | 時間帯 (`DayPhaseDeclaration.announcement`) | `TimeOfDayChangedEvent` | 宣言の `audience` で選んだ人。`EveryoneAwake` なら起きている全員で、死んで去った人として動く人と移動中の人を含む。どちらでも倒れている人と、結末が決まって世界から外れた人は外す。`PassWorldTime` が時計を進めるときに選んで `TimeOfDayChangedEvent` に載せる | `Background` | 相手に入れないので、届かず、ためもしない |
 
 - 例: 籠が上がってハルとサヨが外へ出たとき、坑道の奥のゲンには「ゲンは坑道に取り残された」だけが届き、ハルの結末は届かない。籠が上がる様子は、作者が出来事の知らせに書いて周りに伝える。結末の知らせは数えないので、同じ発火の籠の音を聞いたゲンにも両方届く
@@ -254,6 +255,10 @@ SurroundingsAwareness = Aware | AwareOnWaking | Unaware
 - 時間帯の知らせをためないのは、目が覚めたときに何時間も前の「夜になった」が届くと、いまの時刻と食い違うため。目が覚めたときの場面で分かれば足りる
 - 気を失ったまま結末が決まった人は、世界から外れて目覚めない。外れるときに、たまった知らせ (結末の知らせを含む) を、目が覚めたときと同じくためた順で渡す。結末が後で必ず本人に届くようにするため
 - 屋外の場所にいる人に限るときは、屋外の場所を並べて選ぶ (`is_at_spot` の `any_of`)。移動中の人はどの場所にもいないので選ばれない
+- 例: トムが坑道にいるあいだにレナがパンを 3 つ買うと、トムに「店でパンが3つ売れ、30Gが入った。」が届く。誰が買ったかは書かない。トムがその場にいて見ていても、買う行為の目撃 (「レナが店でパンを3つ買った。」) と重ねて届ける。知らせは代金という別のことを伝えるので、結末の知らせと同じく数えない (D2224)
+- 持ち主が世界から外れたあとに起きた売り買いと傷みは、知らせを作らない。倒れているあいだにためた店の知らせは、ほかのためた知らせと同じく、気を失ったまま外れるときに渡す
+- 店の品が傷んだことは、地面の品物と違い、その場の人には届けない。場面の在庫の数が減って分かる。持ち主には留守でも届く (D2224)
+- 店の知らせを目立たない知らせにするのは、売れるたびに持ち主の手番を考え直させないため
 - 本人の体の刺激 (`BodilyStimulus`) にしないのは、倒れていても届いてしまい、結末を目が覚めたときに届ける決まりと食い違うため
 
 ## 知覚の結果
@@ -461,6 +466,7 @@ class SpotContents:                       # その場所にあるもの。ユー
     sections: tuple[SpotSectionDeclaration, ...]
     objects: tuple[ContainedObject, ...]
     ground_items: tuple[ItemInstanceId, ...]
+    shops: tuple[ContainedShop, ...]
     people: tuple[PresentPerson, ...]
     bodies: tuple[PresentPerson, ...]
 
@@ -479,6 +485,26 @@ class SeenObject:
 
 @final
 @dataclass(frozen=True)
+class ContainedShop:                      # その場所の店。ユースケースが Shop から集める (D2224)
+    shop: ShopId
+    keeper: PersonRef | ScenarioShopkeeper # 人の店は持ち主。作者の店は ScenarioShopkeeper(name: DisplayName) で、宣言の keeper_name を持つ
+    look: ShopLook
+    is_open: bool
+    selling: tuple[ShopLine, ...]
+    buying: tuple[ShopLine, ...]
+
+@final
+@dataclass(frozen=True)
+class SeenShop:                           # 場面に出す店。「トムの店: 焼きたてのパンが並ぶ小さな露店」と品目
+    shop: ShopId
+    label: TextWithAssignedPeople         # ShopTexts の person_shop_label / scenario_shop_label。持ち主の呼び名は見る人ごとに当てる
+    look: ShopLook
+    is_open: bool                         # 閉じた店は closed_mark を添え、品目を出さない
+    selling: tuple[ShopLine, ...]         # 品物の名前は宣言の名前、続けて数・単価・説明
+    buying: tuple[ShopLine, ...]
+
+@final
+@dataclass(frozen=True)
 class ContainedPassage:
     passage: PassageInState
     revealed: bool
@@ -493,6 +519,7 @@ class VisibleSurroundings:
     sections: tuple[SpotSectionDeclaration, ...]
     objects: tuple[SeenObject, ...]
     ground_items: tuple[ItemInstanceId, ...]
+    shops: tuple[SeenShop, ...]           # SeesClearly のときだけ。店は暗くても見える物体にならない (D2224)
     people: tuple[SeenPerson, ...]
     bodies: tuple[SeenPerson, ...]        # 倒れている人と死んだ人
 
@@ -508,10 +535,11 @@ class VisibleSurroundings:
 - 見渡す (`LookAround`) と、見渡す人のいる場所の場面を返す。見渡す本人は場面の人に入れない。去った人 (`DepartedPerson`) は誰の場面にも出さない。倒れた体は、その場所の体 (`PersonBody`) のうち倒れた人と死んだ人。去った人が見渡すと、明るさに関わらず `SeesClearly` で見る。移動中の人、倒れている人、去った人として動かない世界の死んだ人には場面が無い (`NothingInView`) (#2154)
 - モンスター (`SeenMonster`) は [monster.md](monster.md)。遠くの場所が見える仕組み (`DistantSight`) は #2040 で決めてから足す
 - 持ち物、体の状態、時刻は、見えているものではなく自分が知っていること。場面に入れず、知覚を通さずに集約から読む。複数の集約にまたがるものはドメインサービスにする
+- 店は物と同じ見え方の決まりに従う。明るい・薄暗いときだけ場面に出し、暗い・真っ暗では出さない。物の `seen_in_dark` にあたる例外は店に無い。場面に出ない店とは売り買いできない ([action.md](action.md))。店に預けた品は地面の品物でも人の持ち物でもないので、`ground_items` や `visible_items` に入れず、品目の数としてだけ出す (D2224)
 - 場面は「何が見えるか」だけを持つ。「何ができるか」は `AvailableActions` ([action.md](action.md)) が持ち、行為の対象の候補は場面に出ているものに限る
 - 人が着いたことは、行為ではなく `OccupantEnteredSpotEvent` から、`BuiltInActionPerceptions.arrival` の文で、着いた場所にいた人へ刺激を作る。文には `{origin}` (来た場所の名前) を書ける。着いた本人には届けない (本人には場面が渡る) (#2061)
 - 話すことは、声の大きさ (`Whisper` / `OrdinaryVoice` / `Shout`) ごとの宣言 (`BuiltInActionPerceptions.speech`) で刺激を作る。音の大きさも、その宣言の `loudness` を使う (#2061)
-- 品物の時間が切れて消えたこと (`ItemRanOutEvent`) は、持っていた本人には本人の体の刺激、地面にあったときはその場所の見える刺激として、`Lasts.ended_text` で作る。暗くなったことは `DeliverDarkeningHandler` が別に届ける (#2068)
+- 品物の時間が切れて消えたこと (`ItemRanOutEvent`) は、持っていた本人には本人の体の刺激、地面にあったときはその場所の見える刺激として、`Lasts.ended_text` で作る。店にあったとき (`KeptInShop`) はこのイベントから刺激を作らず、`ShopItemsRanOutEvent` から持ち主への知らせだけを作る。`ItemRanOutNotice` は刺激の並び (`tuple`) を返し、`when_kept_in_shop` は空を返す (D2224)。暗くなったことは `DeliverDarkeningHandler` が別に届ける (#2068)
 - 着いたとき、起き上がったとき、その場所の明るさが上がったとき (灯した、夜が明けた、明かりを持った人が来た) は、場面の人、倒れた体、モンスターを 1 つの観測にして渡す (`DeliverSurroundings`)。明るさが上がったかは、出来事の前後の `LightingConditions` を比べて決める
 - 場面の観測は、いる側の文だけを people_here、bodies_here の順につなぐ。人も倒れた体もいなければ (真っ暗も含む) 観測を出さない。品質は見え方 (`SeesClearly` / `SeesShapes`) のまま、目立つ知らせにはしない (#2154)
 - 起き上がった人には、「目が覚めた」(`SurroundingsTexts.waking`、本人の体の刺激、目立つ) → たまった知らせ (ためた順、`NoticedOnWaking`、目立たない) → 場面 の順に渡す。たまった知らせも目が覚めた時刻の観測にする。Being の短期記憶は同じ環境の観測を時刻で安定に並べ直すので、倒れている間の時刻で渡すと「目が覚めた」より前に記憶に入るため。いつ起きたかは作者の `noticed_later` の文が表す (#2154)

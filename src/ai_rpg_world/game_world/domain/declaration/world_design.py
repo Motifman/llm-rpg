@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
+from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.initial_world import InitialWorld
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
@@ -43,6 +44,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design_review import (
     WorldDesignReview,
     design_location,
     duplicate_flaws,
+    labels_alike_flaws,
     one_per_noun_flaws,
 )
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
@@ -115,6 +117,7 @@ class WorldDesign:
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
         introduction: WorldIntroduction,
+        briefing_headings: BriefingHeadings,
         warnings: tuple[DesignWarning, ...],
     ) -> None:
         self._nouns = nouns
@@ -146,6 +149,7 @@ class WorldDesign:
         self._day_night = day_night
         self._initial_stage = initial_stage
         self._introduction = introduction
+        self._briefing_headings = briefing_headings
         self._warnings = warnings
 
     @classmethod
@@ -174,6 +178,7 @@ class WorldDesign:
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
         introduction: WorldIntroduction,
+        briefing_headings: BriefingHeadings,
     ) -> WorldDesign:
         object_interactions = tuple(object_interactions)
         item_interactions = tuple(item_interactions)
@@ -308,6 +313,34 @@ class WorldDesign:
             [decision.decision_id for decision in nouns.all_group_decisions()],
             [rules.decision.decision_id for rules in group_decision_rules],
         )
+        review.flaws += labels_alike_flaws(
+            (
+                design_location(
+                    "object_interaction", d.obj.object_id, d.interaction.interaction_id, field="display_label"
+                ),
+                d.obj.object_id,
+                d.interaction.display_label.text,
+            )
+            for d in object_interactions
+        )
+        review.flaws += labels_alike_flaws(
+            (
+                design_location(
+                    "item_interaction", d.item_spec.item_spec_id, d.interaction.interaction_id, field="display_label"
+                ),
+                d.item_spec.item_spec_id,
+                d.interaction.display_label.text,
+            )
+            for d in item_interactions
+        )
+        review.flaws += labels_alike_flaws(
+            (
+                design_location("person_interaction", i.interaction_id, field="display_label"),
+                "person",
+                i.display_label.text,
+            )
+            for i in person_interactions
+        )
         review.flaws += duplicate_flaws(
             "object_interaction",
             [(declared.obj.object_id, declared.interaction.interaction_id) for declared in object_interactions],
@@ -391,6 +424,7 @@ class WorldDesign:
             day_night=day_night,
             initial_stage=initial_stage,
             introduction=introduction,
+            briefing_headings=briefing_headings,
             warnings=tuple(review.warnings),
         )
 
@@ -409,6 +443,10 @@ class WorldDesign:
     @property
     def introduction(self) -> WorldIntroduction:
         return self._introduction
+
+    @property
+    def briefing_headings(self) -> BriefingHeadings:
+        return self._briefing_headings
 
     @property
     def refusal_texts(self) -> RefusalTexts:

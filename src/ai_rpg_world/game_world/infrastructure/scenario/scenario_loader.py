@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.design_flaw import DesignWarning
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.value_object import PersonId
 from ai_rpg_world.game_world.infrastructure.scenario import world_reader
+from ai_rpg_world.game_world.infrastructure.scenario.character_briefing import CharacterBriefing
 from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import ConditionReader
 from ai_rpg_world.game_world.infrastructure.scenario.declared_names import DeclaredNames
 from ai_rpg_world.game_world.infrastructure.scenario.effect_reader import EffectReader
@@ -48,6 +49,7 @@ _TOP_FIELDS = (
     "refusal_texts",
     "built_in_action_perceptions",
     "surroundings_texts",
+    "briefing_headings",
     "defaults",
     "perception_defaults",
 )
@@ -58,6 +60,7 @@ _TOP_FIELDS = (
 class LoadedScenario:
     design: WorldDesign
     beings: Mapping[PersonId, Mapping[str, object]]
+    briefings: Mapping[PersonId, CharacterBriefing]
     warnings: tuple[DesignWarning, ...]
 
 
@@ -90,6 +93,7 @@ def _loaded(value: object, origins: ScenarioOrigins, collector: FlawCollector) -
     return LoadedScenario(
         design=design,
         beings=MappingProxyType({person: MappingProxyType(being) for person, being in read_nouns.beings.items()}),
+        briefings=MappingProxyType(dict(read_nouns.briefings)),
         warnings=(*loading.warnings, *(origins.located_warning(warning) for warning in design.warnings())),
     )
 
@@ -149,6 +153,9 @@ class _ScenarioLoading:
             lambda: world_reader.surroundings_texts(self._fields.required("surroundings_texts"))
         )
         introduction = collector.attempt(lambda: world_reader.introduction(self._fields.required("introduction")))
+        briefing_headings = collector.attempt(
+            lambda: world_reader.briefing_headings(self._fields.required("briefing_headings"))
+        )
         ending = collector.attempt(lambda: world_reader.ending(self._fields.required("ending"), self._conditions))
         initial_stage = collector.attempt(self._initial_stage)
         day_night = (
@@ -170,6 +177,7 @@ class _ScenarioLoading:
             or built_in is None
             or surroundings_texts is None
             or introduction is None
+            or briefing_headings is None
             or ending is None
             or initial_stage is None
             or day_night is None
@@ -201,6 +209,7 @@ class _ScenarioLoading:
                 day_night=day_night,
                 initial_stage=initial_stage,
                 introduction=introduction,
+                briefing_headings=briefing_headings,
             )
         except WorldDesignFlawsException as flawed:
             raise WorldDesignFlawsException(self._origins.located(flaw) for flaw in flawed.flaws) from flawed

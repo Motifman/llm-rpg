@@ -17,6 +17,7 @@ class PassWorldTime:
         # WorldClock.advance → Whereabouts.advance_travels → PersonVitals.pass_time(now, death, hunger) (世界にいる人。PersonOutcomes.people_in_world)
         # → 品物の時間 (Lasts の時間が過ぎた品物を、持っている人の PersonInventory か置かれた場所の GroundItems から手放させ、Item.run_out)
         #   荷の品物は、世界にいる人の分だけ。結末が決まって世界から外れた人は、体も荷の品物も時間が止まる (D2211)
+        #   店に預けた品と受け取った品も進める (Shop.let_run_out)。持ち主が世界から外れた店は止める (D2224)
         # → 天候 (Weather.pass_time。ChangesEvery の N の倍数の時刻だけ facts.random() から 1 回引く) → モンスター (湧きを確かめ、個体ごとに感じて動き、SoundsThisTick を空にする。monster.md)
         # 状態効果は #2014 で決めてから足す
         ...
@@ -138,6 +139,34 @@ class SearchSpot:
 class AttackMonster:
     def __call__(self, command: AttackMonsterCommand) -> None: ...
 
+# 店 (D2224)。どれも行為の共通の前提を通ってから集約を呼ぶ
+class OpenShop:
+    def __call__(self, command: OpenShopCommand) -> ActionReply: ...        # 店が無ければ Shop.open_at、あれば Shop.reopen
+
+class CloseShop:
+    def __call__(self, command: CloseShopCommand) -> ActionReply: ...
+
+class EditShopLine:
+    def __call__(self, command: EditShopLineCommand) -> ActionReply:
+        # 売り: 増やす分を PersonInventory.items_to_give_up で選んで give_up → Shop.stock。減らす分は Shop.unstock → 戻る品を receive
+        # 買い取り: 足すお金を PersonInventory.pay → Shop.post_wanted。戻るお金は earn
+        ...
+
+class RewriteShopLook:
+    def __call__(self, command: RewriteShopLookCommand) -> ActionReply: ...
+
+class BuyFromShop:
+    def __call__(self, command: BuyFromShopCommand) -> ActionReply: ...      # ShopTrade.buy。代金を持ち主に入れるのも手順の中 (売り買いが果たせないため)
+
+class SellToShop:
+    def __call__(self, command: SellToShopCommand) -> ActionReply: ...       # ShopTrade.sell
+
+class CollectFromShop:
+    def __call__(self, command: CollectFromShopCommand) -> ActionReply: ...  # Shop.hand_over_received → 品を荷へ receive
+
+class CloseShopOfGoneOwnerHandler:      # PersonDiedEvent / PersonOutcomeDecidedEvent (世界から外れた) を受け、その人の店を close_for_gone_owner
+    ...
+
 class StartTravel:
     def __call__(self, command: StartTravelCommand) -> ActionReply: ...
 
@@ -173,7 +202,8 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 - 世界が終わったあとに届いた行為と時間を進める要求は、どちらも断り、世界を変えない。規則は `WorldEnding.admit_change` が持つ。行為には「世界はもう終わった」の文 (`RefusalTexts.world_state`) で `ActionRefused` を返し、断られた試みは記録しない。時間には `WorldTimePassageRefused` を返す。外側は、返事か `WorldHasEnded` で終わりを知る (D2218)
 - 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つのコマンドの確定が 1 つの `CommandScope`。終わっていないかの確かめと `SettleWorldConditions` は、それぞれ別の範囲) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
 - `SettleWorldConditions` は、1 つのコマンドが確定するたびと、時間を進めるたびに回す
-- Being が世界に入るとき、外側は導入 (`WorldIntroduction.text`)、世界の前提 (`WorldIntroduction.premises`)、その人の立場 (`CharacterBriefing.known_facts`、見出し「あなたが知っていること」) を案内 (`Orientation`) の見出しの違う `Description` にし、その人の目的 (`CharacterBriefing.objective`) を課された目的 (`EnvironmentEntry.imposed_goal`) で渡す (D2222)
+- Being が世界に入るとき、外側は問い合わせ `BriefEnteringPerson` に、その人と立場 (`CharacterBriefing.known_facts`)・目的 (`CharacterBriefing.objective`) を渡す。世界は、導入 (`WorldIntroduction.text`)、世界の前提 (`WorldIntroduction.premises`)、立場を、`BriefingHeadings` の見出しの違う `Description` にした案内 (`Orientation`) と、課す目的の文と、最初から知っている人 (`knows_at_start`) を返す。外側は、知っている人を Being の名前に変えて紹介 (`EnvironmentEntry.introductions`) にし、目的を課された目的 (`EnvironmentEntry.imposed_goal`) で渡す。世界は Being の名前を知らないため (D2222、#2229)
+- 外側は、Being を世界に入れる前に、入口 `NamePerson` で Being の名前を世界の名簿 (`PeopleRegister`) に付ける。名前を付けていない人が出てくる観測は作れない (D2229-3)
 - 昼夜を宣言しない世界 (`NoDayNight`) は、ステージ 8 では run の入口で `is_declared()` を確かめて止め、知らせる。観測の時刻を割り出せないため (D2222)
 - 誰がいつ考えて行動を送るか (手番、目立つ知らせで考え直す、しばらく何も無ければ考える) は世界の外側 (エージェントを動かす側) が決める。今の実験のターン制は、外側の進め方の 1 つ
 

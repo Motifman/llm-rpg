@@ -46,14 +46,14 @@ _SMALLEST_SCENARIO = """
 includes: [common/ja_default.yaml]
 introduction:
   text: 坑道の奥で目を覚ました。
-  objective: 外へ出る。
+  premises: 外へ出る。
 spots:
   tunnel:
     name: 坑道
     description: 狭い坑道。
     atmosphere: { lighting: dark }
 characters:
-  haru: { appearance: 年かさの男, spawn_spot: tunnel }
+  haru: { appearance: 年かさの男, spawn_spot: tunnel, known_facts: 坑道は暗い。, objective: 外へ出る。, being: { name: ハル } }
 ending:
   ends_when: all_outcomes_decided
 time:
@@ -112,6 +112,7 @@ class TestCommonJaDefaultReads:
             "refusal_texts",
             "built_in_action_perceptions",
             "surroundings_texts",
+            "briefing_headings",
             "perception_defaults",
             "defaults",
         }
@@ -214,6 +215,20 @@ class TestSurroundingsTexts:
         texts = _load_smallest_scenario(tmp_path).design.surroundings_texts
 
         assert (texts.waking.template, texts.darkening.template) == ("目が覚めた。", "辺りが暗くなった。")
+
+
+class TestBriefingHeadings:
+    """ja_default.yaml の、入るときの案内の見出しが、読み込んだ設計図から使えることを保証する。"""
+
+    def test_headings_are_about_the_world_premises_and_what_you_know(self, tmp_path: Path) -> None:
+        """見出しは、導入が「この世界について」、前提が「この世界の前提」、知っていることが「あなたが知っていること」になる。"""
+        headings = _load_smallest_scenario(tmp_path).design.briefing_headings
+
+        assert (headings.introduction, headings.premises, headings.known_facts) == (
+            "この世界について",
+            "この世界の前提",
+            "あなたが知っていること",
+        )
 
 
 class TestPlaceholders:

@@ -42,6 +42,12 @@ class HiddenFailure:
     failed_part: ConditionPath
 
 
+@final
+@dataclass(frozen=True)
+class AwaitsArguments:
+    pass
+
+
 class Condition(Protocol):
     def holds(self, facts: WorldFacts, trigger: Trigger) -> bool: ...
 
@@ -50,3 +56,7 @@ class Condition(Protocol):
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None: ...
 
     def explains_failure(self) -> bool: ...
+
+    def failure_reason_before_arguments(
+        self, facts: WorldFacts, trigger: Trigger
+    ) -> FailureReason | HiddenFailure | AwaitsArguments | None: ...

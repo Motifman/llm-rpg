@@ -6,6 +6,7 @@ import pytest
 
 from ai_rpg_world.game_world.domain.action.action_attempt import DoesNotUseBody
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.character import (
     CharacterDeclaration,
     GroupDeclaration,
@@ -40,7 +41,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
     SpotSectionDeclaration,
     Temperature,
 )
-from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
+from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
     DayPhaseDeclaration,
@@ -276,13 +277,31 @@ def surroundings_texts() -> SurroundingsTexts:
         joiner="、",
         waking=TextWithUnassignedPeople("目が覚めた。"),
         darkening=TextWithUnassignedPeople("辺りが暗くなった。"),
+        scene=scene_texts(),
+    )
+
+
+def scene_texts() -> SceneTexts:
+    return SceneTexts(
+        heading=DisplayName("現在地と周囲"),
+        objects=DisplayName("物:"),
+        destinations=DisplayName("行き先:"),
+        ground_items=DisplayName("落ちている品物:"),
+        count_mark=DisplayName("×"),
+        pitch_dark=DisplayName("真っ暗で、何も見えない。"),
     )
 
 
 def introduction() -> WorldIntroduction:
     return WorldIntroduction(
         text=DescriptionText("山あいの廃坑の村で目を覚ました。"),
-        objective=DescriptionText("坑道から外へ出る。"),
+        premises=DescriptionText("昇降機は一度しか動かない。"),
+    )
+
+
+def briefing_headings() -> BriefingHeadings:
+    return BriefingHeadings(
+        introduction="この世界について", premises="この世界の前提", known_facts="あなたが知っていること"
     )
 
 
@@ -353,6 +372,7 @@ def compose_world(
         day_night=day_night,
         initial_stage=initial_stage,
         introduction=introduction(),
+        briefing_headings=briefing_headings(),
     )
 
 

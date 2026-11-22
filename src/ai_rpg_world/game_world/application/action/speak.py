@@ -30,4 +30,4 @@ class Speak:
         return None
 
     def change_world(self, attempt: SpeechAttempt, facts: WorldFacts, world: WorldAggregates) -> Ticks:
-        return Ticks(0)
+        return attempt.take_effect()

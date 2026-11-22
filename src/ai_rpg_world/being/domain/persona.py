@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
 
 from ai_rpg_world.domain.being.exception.being_exceptions import PersonaValidationException
 
@@ -53,6 +54,15 @@ class Persona:
             object.__setattr__(self, field_name, _optional_text(field_name, getattr(self, field_name)))
         for field_name in ("traits", "values", "fears"):
             object.__setattr__(self, field_name, _texts(field_name, getattr(self, field_name)))
+
+    @classmethod
+    def from_fields(cls, persona_fields: Mapping[str, object]) -> Persona:
+        unknown = sorted(set(persona_fields) - {f.name for f in fields(cls)})
+        if unknown:
+            raise PersonaValidationException(f"Persona has no fields {unknown}")
+        if "name" not in persona_fields:
+            raise PersonaValidationException("Persona.name must be given")
+        return cls(**persona_fields)  # type: ignore[arg-type]
 
 
 __all__ = ["Persona"]

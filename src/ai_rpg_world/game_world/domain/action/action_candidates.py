@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.game_world.domain.action.action_arguments import ArgumentsNotChosen, ChosenArguments
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
     GroundItemPickupAttempt,
@@ -14,6 +15,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     LeaveSectionAttempt,
     ListeningAttempt,
     PutAwayItemAttempt,
+    SpeechAttempt,
     SpotSearchAttempt,
     TendAttempt,
     TravelAttempt,
@@ -26,6 +28,7 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     SomeoneInTheDark,
 )
 from ai_rpg_world.game_world.domain.action.manner import Openly
+from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechContentNotChosen, Whisper
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration, SpotSectionDeclaration
@@ -74,6 +77,14 @@ class ActionCandidates:
 
     def listening_and_waiting(self) -> tuple[ListeningAttempt | WaitAttempt, ...]:
         return (ListeningAttempt(self._actor), WaitAttempt(self._actor, NoReason()))
+
+    def speeches(self) -> tuple[SpeechAttempt, ...]:
+        words = SpeechContentNotChosen()
+        return (
+            SpeechAttempt(self._actor, OrdinaryVoice(), words),
+            SpeechAttempt(self._actor, Shout(), words),
+            *(SpeechAttempt(self._actor, Whisper(person), words) for person in self._in_view.awake),
+        )
 
     def travels(self) -> tuple[TravelAttempt, ...]:
         return tuple(TravelAttempt(self._actor, destination) for destination in self._in_view.destinations)
@@ -125,23 +136,23 @@ class ActionCandidates:
 
     def object_interactions(self) -> tuple[ObjectInteractionAttempt, ...]:
         return tuple(
-            ObjectInteractionAttempt(self._actor, declared, interaction, {}, Openly())
+            ObjectInteractionAttempt(self._actor, declared, interaction, _arguments_of(interaction), Openly())
             for declared in self._in_view.objects
-            for interaction in _without_words(self._design.interactions_on_object(declared.object_id))
+            for interaction in self._design.interactions_on_object(declared.object_id)
         )
 
     def carried_item_interactions(self) -> tuple[CarriedItemInteractionAttempt, ...]:
         return tuple(
-            CarriedItemInteractionAttempt(self._actor, item, interaction, {}, Openly())
+            CarriedItemInteractionAttempt(self._actor, item, interaction, _arguments_of(interaction), Openly())
             for item in self._inventory.items()
-            for interaction in _without_words(self._design.interactions_on_item(self._facts.item(item).spec_id))
+            for interaction in self._design.interactions_on_item(self._facts.item(item).spec_id)
         )
 
     def person_interactions(self) -> tuple[PersonInteractionAttempt, ...]:
         return tuple(
-            PersonInteractionAttempt(self._actor, person, interaction, {}, Openly())
+            PersonInteractionAttempt(self._actor, person, interaction, _arguments_of(interaction), Openly())
             for person in (*self._in_view.awake, *self._in_view.down)
-            for interaction in _without_words(self._design.person_interactions())
+            for interaction in self._design.person_interactions()
         )
 
     def ballots(self) -> tuple[GroupDecisionBallotAttempt, ...]:
@@ -156,25 +167,21 @@ class ActionCandidates:
         if not self._in_view.someone_unidentified:
             return ()
         return tuple(
-            PersonInteractionAttempt(self._actor, SomeoneInTheDark(), interaction, {}, Openly())
-            for interaction in _without_words(self._design.person_interactions())
+            PersonInteractionAttempt(self._actor, SomeoneInTheDark(), interaction, _arguments_of(interaction), Openly())
+            for interaction in self._design.person_interactions()
             if interaction.reaches_unseen
         )
 
 
-def _without_words(interactions: tuple[InteractionDeclaration, ...]) -> tuple[InteractionDeclaration, ...]:
-    return tuple(interaction for interaction in interactions if not interaction.arguments)
+def _arguments_of(interaction: InteractionDeclaration) -> ChosenArguments | ArgumentsNotChosen:
+    return ArgumentsNotChosen() if interaction.arguments else ChosenArguments()
 
 
 def _in_view(actor: PersonId, seen: VisibleSurroundings, facts: WorldFacts) -> _InView:
-    here = seen.spot.spot_id
     occupant = facts.vitals(actor).occupant_in_world(facts.rules().departed_persons_act)
-    destinations = dict.fromkeys(
-        far for far in (shown.passage.far_end_from(here) for shown in seen.passages) if far is not None
-    )
     people = (*seen.people, *seen.bodies)
     return _InView(
-        destinations=tuple(facts.nouns().spot_of(spot) for spot in destinations),
+        destinations=tuple(facts.nouns().spot_of(spot) for spot in seen.destinations()),
         sections=seen.sections,
         objects=tuple(shown.declaration for shown in seen.objects),
         ground_items=seen.ground_items,

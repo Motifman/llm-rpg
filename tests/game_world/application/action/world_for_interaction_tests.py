@@ -22,6 +22,7 @@ from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.built_in_attempts import ItemUseAttempt
 from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     CarriedItemInteractionAttempt,
@@ -52,6 +53,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Count,
     Damage,
     DescriptionText,
+    DisplayName,
     FlagId,
     InteractionId,
     PersonId,
@@ -88,18 +90,26 @@ PULL = replace(pull_lever(()), effect=RaiseFlagEffect(GATE_CLOSED), duration=Tic
 PUSH_BUTTON = replace(
     pull_lever(()),
     interaction_id=InteractionId("push_button"),
+    display_label=DisplayName("push_button"),
     precondition=FlagIsRaisedCondition(GATE_CLOSED, TextWithUnassignedPeople(GATE_OPEN_TEXT)),
     effect=RaiseFlagEffect(POWERED),
 )
 JAM_WITH_KEY = replace(
     pull_lever(()),
     interaction_id=InteractionId("jam_with_key"),
+    display_label=DisplayName("jam_with_key"),
     effect=SequenceEffect((RaiseFlagEffect(GATE_CLOSED), TakeItemEffect(Actor(), KEY, Count(1)))),
 )
-RUB = replace(pull_lever(()), interaction_id=InteractionId("rub"), effect=RaiseFlagEffect(LAMP_RUBBED))
+RUB = replace(
+    pull_lever(()),
+    interaction_id=InteractionId("rub"),
+    display_label=DisplayName("rub"),
+    effect=RaiseFlagEffect(LAMP_RUBBED),
+)
 TAP_SHOULDER: InteractionDeclaration = replace(
     pull_lever(()),
     interaction_id=InteractionId("tap_shoulder"),
+    display_label=DisplayName("tap_shoulder"),
     effect=DamageEffect(Target(), Damage(1)),
     perceived_as=replace(
         lever_pulled_quietly(),
@@ -112,10 +122,14 @@ TAP_SHOULDER: InteractionDeclaration = replace(
 PUSH_IN_THE_DARK = replace(
     TAP_SHOULDER,
     interaction_id=InteractionId("push_in_the_dark"),
+    display_label=DisplayName("push_in_the_dark"),
     precondition=FlagIsRaisedCondition(GATE_CLOSED, TextWithUnassignedPeople(GATE_OPEN_TEXT)),
 )
 TAKE_KEY_IN_THE_DARK = replace(
-    TAP_SHOULDER, interaction_id=InteractionId("take_key_in_the_dark"), effect=TakeItemEffect(Target(), KEY, Count(1))
+    TAP_SHOULDER,
+    interaction_id=InteractionId("take_key_in_the_dark"),
+    display_label=DisplayName("take_key_in_the_dark"),
+    effect=TakeItemEffect(Target(), KEY, Count(1)),
 )
 
 
@@ -141,11 +155,11 @@ class WorldForInteractions:
         self.events_received.extend(events)
 
     def interact_with_lever(self, actor: PersonId, interaction: InteractionDeclaration) -> ActionReply:
-        attempt = ObjectInteractionAttempt(actor, LEVER, interaction, {}, Openly())
+        attempt = ObjectInteractionAttempt(actor, LEVER, interaction, ChosenArguments(), Openly())
         return InteractWithObject(self.carry_out, self.design)(InteractWithObjectCommand(attempt))
 
     def rub(self, actor: PersonId, item: ItemInstanceId) -> ActionReply:
-        attempt = CarriedItemInteractionAttempt(actor, item, RUB, {}, Openly())
+        attempt = CarriedItemInteractionAttempt(actor, item, RUB, ChosenArguments(), Openly())
         return InteractWithCarriedItem(self.carry_out, self.design)(InteractWithCarriedItemCommand(attempt))
 
     def use(self, actor: PersonId, item: ItemInstanceId) -> ActionReply:
@@ -157,7 +171,7 @@ class WorldForInteractions:
         target: PersonId | SomeoneInTheDark,
         interaction: InteractionDeclaration = TAP_SHOULDER,
     ) -> ActionReply:
-        attempt = PersonInteractionAttempt(actor, target, interaction, {}, Openly())
+        attempt = PersonInteractionAttempt(actor, target, interaction, ChosenArguments(), Openly())
         return InteractWithPerson(self.carry_out, self.design)(InteractWithPersonCommand(attempt))
 
     def item_of(self, person: PersonId, spec: ItemSpecDeclaration) -> ItemInstanceId:

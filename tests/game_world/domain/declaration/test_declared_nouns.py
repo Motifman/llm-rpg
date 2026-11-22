@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -501,6 +502,42 @@ class TestCollectingFlaws:
             _flaw("character", "aki", "spawn_spot", "spot 'cellar' is not declared"),
             _flaw("object", "lift_lever", "object_id", "object 'lift_lever' is declared more than once"),
         }
+
+
+class TestObjectsSharingASpot:
+    """同じ場所の物が、行動の選択肢で名前から見分けられることを、宣言の時点で保証する (design_decisions D2226)。"""
+
+    def test_two_objects_with_the_same_name_in_one_spot_are_a_flaw(self) -> None:
+        """事務所に「机」という名前の物が 2 つあると、後の物の名前の欄を指す DesignFlaw を持つ WorldDesignFlawsException を投げる。"""
+        first, second = _object("desk_a", "office"), _object("desk_b", "office")
+        desk = DisplayName("机")
+
+        flaws = _flaws_of(
+            lambda: _nouns(spots=[_spot("office")], objects=[replace(first, name=desk), replace(second, name=desk)])
+        )
+
+        assert flaws == (
+            _flaw("object", "desk_b", "name", "object '机' is named the same as another object in spot 'office'"),
+        )
+
+    def test_two_spots_with_the_same_name_are_a_flaw(self) -> None:
+        """「井戸」という名前の場所が 2 つあると、行き先を名前で選べないので、後の場所の名前の欄を指す DesignFlaw を投げる。"""
+        well = DisplayName("井戸")
+
+        flaws = _flaws_of(
+            lambda: _nouns(spots=[replace(_spot("well_a"), name=well), replace(_spot("well_b"), name=well)])
+        )
+
+        assert flaws == (_flaw("spot", "well_b", "name", "spot '井戸' is named the same as spot 'well_a'"),)
+
+    def test_objects_with_the_same_name_in_different_spots_are_allowed(self) -> None:
+        """事務所と鍛冶場に「机」が 1 つずつあるのは誤りにしない。"""
+        desk = DisplayName("机")
+
+        _nouns(
+            spots=[_spot("office"), _spot("smithy")],
+            objects=[replace(_object("desk_a", "office"), name=desk), replace(_object("desk_b", "smithy"), name=desk)],
+        )
 
 
 class TestDuplicatedNames:

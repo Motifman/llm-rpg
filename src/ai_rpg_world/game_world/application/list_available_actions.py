@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.application.action.leave_section import LeaveSectio
 from ai_rpg_world.game_world.application.action.pick_up_ground_item import PickUpGroundItem
 from ai_rpg_world.game_world.application.action.put_away_item import PutAwayItem
 from ai_rpg_world.game_world.application.action.search_spot import SearchSpot
+from ai_rpg_world.game_world.application.action.speak import Speak
 from ai_rpg_world.game_world.application.action.start_travel import StartTravel
 from ai_rpg_world.game_world.application.action.tend_fallen_person import TendFallenPerson
 from ai_rpg_world.game_world.application.action.use_item import UseItem
@@ -53,6 +54,7 @@ class ListAvailableActions:
         self._design = design
         carry_out = CarryOutAction(scope, design)
         self._search_spot = SearchSpot(carry_out, design)
+        self._speak = Speak(carry_out)
         self._start_travel = StartTravel(carry_out, design)
         self._pick_up = PickUpGroundItem(carry_out)
         self._drop = DropItem(carry_out)
@@ -68,9 +70,9 @@ class ListAvailableActions:
         self._interact_with_person = InteractWithPerson(carry_out, design)
 
     def __call__(self, command: ListAvailableActionsCommand) -> AvailableActions:
-        return self._scope.run(lambda session: self._list(session, command.person))
+        return self._scope.run(lambda session: self.available_in(session, command.person))
 
-    def _list(self, session: WorldSession, person: PersonId) -> AvailableActions:
+    def available_in(self, session: WorldSession, person: PersonId) -> AvailableActions:
         facts = session.facts()
         seen = VisibleSurroundings.seen_by(perceiver_of(facts, person), SurroundingsOf(person, facts, self._design))
         candidates = ActionCandidates(person, seen, facts, self._design)
@@ -79,6 +81,7 @@ class ListAvailableActions:
             actions=(
                 *judge(candidates.spot_searches(), self._search_spot),
                 *judge(candidates.listening_and_waiting(), CommonRulesOnly()),
+                *judge(candidates.speeches(), self._speak),
                 *judge(candidates.travels(), self._start_travel),
                 *judge(candidates.pickups(), self._pick_up),
                 *judge(candidates.drops(), self._drop),
