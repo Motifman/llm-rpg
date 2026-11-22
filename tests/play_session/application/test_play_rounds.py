@@ -6,12 +6,20 @@ from ai_rpg_world.game_world.application.deliver_perception import DeliverPercep
 from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
 from ai_rpg_world.play_session.application.play_rounds import (
+    ChoosingKeptFailing,
     FinishedTurn,
     PlayRoundsCommand,
     RoundLimitReached,
     WorldEnded,
 )
-from ai_rpg_world.play_session.domain.turn_rounds import Acted, RoundClosedEvent, TurnFinishedEvent, TurnOutcome, Waited
+from ai_rpg_world.play_session.domain.turn_rounds import (
+    Acted,
+    ChoiceFailed,
+    RoundClosedEvent,
+    TurnFinishedEvent,
+    TurnOutcome,
+    Waited,
+)
 from tests.play_session.mine_village_session import WORLD, MineVillageSession, door_breaks_at
 
 _HARU, _SAYO, _GEN, _MIO = PersonId("haru"), PersonId("sayo"), PersonId("gen"), PersonId("mio")
@@ -85,6 +93,33 @@ class TestPlayRoundsStops:
 
         assert stopped == WorldEnded()
         assert takers.asked == []
+
+    def test_choosing_that_keeps_failing_stops_the_play(self) -> None:
+        """4 人とも LLM の呼び出しに失敗し続けると、8 件目 (2 巡り目の最後) で、8 件の理由を持つ ChoosingKeptFailing で止まり、時間は 1 しか進まない。"""
+        session = MineVillageSession().started()
+        before = _now(session)
+        failed = ChoiceFailed("Timeout: no reply")
+        takers = _TurnTakersForTests(outcomes={person: failed for person in _EVERYONE})
+
+        stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
+
+        assert stopped == ChoosingKeptFailing(("Timeout: no reply",) * 8)
+        assert len(takers.finished) == 8
+        assert _now(session).value - before.value == 1
+
+    def test_play_given_up_on_choosing_asks_nobody_when_called_again(self) -> None:
+        """選ぶことを諦めて止まった遊びをもう一度回すと、誰にも頼まずに ChoosingKeptFailing で止まる。"""
+        session = MineVillageSession().started()
+        failed = ChoiceFailed("Timeout: no reply")
+        session.play_rounds(_TurnTakersForTests(outcomes={person: failed for person in _EVERYONE}))(
+            PlayRoundsCommand(WORLD)
+        )
+        again = _TurnTakersForTests()
+
+        stopped = session.play_rounds(again)(PlayRoundsCommand(WORLD))
+
+        assert isinstance(stopped, ChoosingKeptFailing)
+        assert again.asked == []
 
 
 class TestPlayRoundsTurns:

@@ -46,7 +46,20 @@ class Waited:
     pass
 
 
-TurnOutcome = Union[Acted, Waited]
+@final
+@dataclass(frozen=True)
+class ChoiceFailed:
+    reason: str
+
+
+TurnOutcome = Union[Acted, Waited, ChoiceFailed]
+
+# 同じ人がこの回数続けて選べなかったら、待つ人と同じ扱いにする (D1595、D2232 の 7 節)
+_FAILURES_BEFORE_WAITING = 3
+# 人を問わず失敗がこの件数続き、この巡りの数にまたがったら止める。健全な run の最長連続は 4、壊れた run の最短は 35 だった
+# (design_decisions 214、D2232 の 7 節)
+_FAILURES_TO_GIVE_UP = 8
+_ROUNDS_TO_GIVE_UP = 2
 
 
 @final
@@ -88,6 +101,10 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         self._finished: list[PersonId] = []
         self._waiting_since: dict[PersonId, int] = {}
         self._called: set[PersonId] = set()
+        self._failures_by_person: dict[PersonId, int] = {}
+        self._failures_in_a_row: list[str] = []
+        self._rounds_of_failures: set[int] = set()
+        self._gave_up_on: tuple[str, ...] = ()
 
     @property
     def world(self) -> WorldId:
@@ -126,8 +143,11 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         match outcome:
             case Waited():
                 self._waiting_since[person] = self._current_round
+                self._count_choice_made(person)
             case Acted():
-                pass
+                self._count_choice_made(person)
+            case ChoiceFailed():
+                self._count_choice_failed(person, outcome.reason)
             case _:
                 assert_never(outcome)
         self.add_event(
@@ -152,6 +172,12 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         self._due = None
         self.add_event(RoundClosedEvent(**new_event_stamp(), world=self._world, round=closed))
 
+    def has_given_up_choosing(self) -> bool:
+        return bool(self._gave_up_on)
+
+    def failures_given_up_on(self) -> tuple[str, ...]:
+        return self._gave_up_on
+
     def has_reached_round_limit(self) -> bool:
         return self._closed_rounds >= self._round_limit.value
 
@@ -163,6 +189,25 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         if self._due is None:
             raise RoundNotOpenException(f"no round of {self._world.value} is open")
         return self._due
+
+    def _count_choice_made(self, person: PersonId) -> None:
+        self._failures_by_person.pop(person, None)
+        self._failures_in_a_row.clear()
+        self._rounds_of_failures.clear()
+
+    def _count_choice_failed(self, person: PersonId, reason: str) -> None:
+        failures = self._failures_by_person.get(person, 0) + 1
+        if failures >= _FAILURES_BEFORE_WAITING:
+            self._waiting_since[person] = self._current_round
+            failures = 0
+        self._failures_by_person[person] = failures
+        self._failures_in_a_row.append(reason)
+        self._rounds_of_failures.add(self._current_round)
+        # 一度止めると決めたら、後から選べたターンが届いても止めたままにし、止めたときの理由を残す
+        if self._gave_up_on:
+            return
+        if len(self._failures_in_a_row) >= _FAILURES_TO_GIVE_UP and len(self._rounds_of_failures) >= _ROUNDS_TO_GIVE_UP:
+            self._gave_up_on = tuple(self._failures_in_a_row)
 
     def _wake_those_waited_long_enough(self) -> None:
         for person, since in tuple(self._waiting_since.items()):

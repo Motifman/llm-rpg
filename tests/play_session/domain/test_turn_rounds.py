@@ -19,10 +19,12 @@ from ai_rpg_world.play_session.domain.play_session_exception import (
 )
 from ai_rpg_world.play_session.domain.turn_rounds import (
     Acted,
+    ChoiceFailed,
     RoundClosedEvent,
     RoundCount,
     RoundOpenedEvent,
     TurnFinishedEvent,
+    TurnOutcome,
     TurnRounds,
     Waited,
 )
@@ -36,7 +38,7 @@ def _rounds(*, round_limit: int = 100, wake_waiting_after: int = 3) -> TurnRound
     return TurnRounds(_WORLD, round_limit=RoundCount(round_limit), wake_waiting_after=RoundCount(wake_waiting_after))
 
 
-def _play_round(rounds: TurnRounds, readiness: dict[PersonId, ReadinessToAct], **outcomes: Waited) -> None:
+def _play_round(rounds: TurnRounds, readiness: dict[PersonId, ReadinessToAct], **outcomes: TurnOutcome) -> None:
     rounds.open_round(readiness)
     for person in rounds.due_turns():
         rounds.finish_turn(person, outcomes.get(person.value, Acted()))
@@ -281,3 +283,132 @@ class TestRoundLimit:
         """巡りの数に 0 以下や真偽値を渡すと RoundValidationException を投げる。"""
         with pytest.raises(RoundValidationException):
             RoundCount(value)
+
+
+_FAILED = ChoiceFailed("Timeout: no reply in 95 seconds")
+
+
+class TestChoiceFailures:
+    """選べなかったターン (ChoiceFailed) が、同じ人の 3 回続きで待つ扱いになり、全員の 8 件続きが 2 巡りにまたがると選ぶことを諦めることを保証する。"""
+
+    def test_three_failures_in_a_row_make_the_person_wait(self) -> None:
+        """ミオが巡り 1〜3 と続けて選べないと、巡り 4 ではミオにターンが回らない。"""
+        rounds = _rounds(wake_waiting_after=3)
+        for _ in range(3):
+            _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+
+        rounds.open_round({_MIO: FreeToAct()})
+
+        assert rounds.due_turns() == ()
+
+    def test_a_choice_in_between_starts_the_count_over(self) -> None:
+        """ミオが 2 回続けて選べず、次に選べたあと、また 2 回選べなくても、ミオにはターンが回る。"""
+        rounds = _rounds(wake_waiting_after=3)
+        for outcome in (_FAILED, _FAILED, Acted(), _FAILED, _FAILED):
+            _play_round(rounds, {_MIO: FreeToAct()}, mio=outcome)
+
+        rounds.open_round({_MIO: FreeToAct()})
+
+        assert rounds.due_turns() == (_MIO,)
+
+    def test_failures_after_waiting_are_counted_from_one(self) -> None:
+        """3 回続けて選べずに待たされたミオは、戻ってから 1 回選べなくても、次の巡りでまたターンが回る (数え直して 1 回目)。"""
+        rounds = _rounds(wake_waiting_after=1)
+        for outcome in (_FAILED, _FAILED, _FAILED, None, _FAILED):
+            if outcome is None:
+                rounds.open_round({_MIO: FreeToAct()})
+                rounds.close_round()
+                continue
+            _play_round(rounds, {_MIO: FreeToAct()}, mio=outcome)
+
+        rounds.open_round({_MIO: FreeToAct()})
+
+        assert rounds.due_turns() == (_MIO,)
+
+    def test_gives_up_after_eight_failures_across_two_rounds(self) -> None:
+        """4 人とも 2 巡り続けて選べないと (8 件、2 巡り)、選ぶことを諦める。7 件の時点ではまだ諦めない。"""
+        rounds = _rounds()
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+        rounds.open_round(_ALL_FREE)
+        for person in (_HARU, _SAYO, _GEN):
+            rounds.finish_turn(person, _FAILED)
+        after_seven = rounds.has_given_up_choosing()
+
+        rounds.finish_turn(_MIO, _FAILED)
+
+        assert after_seven is False
+        assert rounds.has_given_up_choosing() is True
+
+    def test_eight_failures_within_one_round_do_not_give_up(self) -> None:
+        """8 人が同じ巡りで全員選べなくても、1 巡りに収まっているので諦めない。provider が一瞬遅れただけのことがあるため。"""
+        rounds = _rounds()
+        eight = {PersonId(f"p{i}"): FreeToAct() for i in range(8)}
+        rounds.open_round(eight)
+
+        for person in eight:
+            rounds.finish_turn(person, _FAILED)
+
+        assert rounds.has_given_up_choosing() is False
+
+    def test_a_choice_breaks_the_streak_of_failures(self) -> None:
+        """7 件続けて選べなかったあとに 1 人が選べると、続きが切れ、そのあと 2 巡りにまたがって 2 件選べなくても諦めない。"""
+        rounds = _rounds()
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+        rounds.open_round(_ALL_FREE)
+        for person in (_HARU, _SAYO, _GEN):
+            rounds.finish_turn(person, _FAILED)
+        rounds.finish_turn(_MIO, Acted())
+        rounds.close_round()
+
+        _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+        _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+
+        assert rounds.has_given_up_choosing() is False
+
+    def test_a_choice_forgets_the_rounds_of_earlier_failures(self) -> None:
+        """2 巡りにまたがる 7 件のあとに選べたターンが入ると、そのあと 1 つの巡りで 8 人が選べなくても、巡りが 1 つなので諦めない。"""
+        rounds = _rounds()
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+        rounds.open_round(_ALL_FREE)
+        for person in (_HARU, _SAYO, _GEN):
+            rounds.finish_turn(person, _FAILED)
+        rounds.finish_turn(_MIO, Acted())
+        rounds.close_round()
+        eight = {PersonId(f"p{i}"): FreeToAct() for i in range(8)}
+        rounds.open_round(eight)
+
+        for person in eight:
+            rounds.finish_turn(person, _FAILED)
+
+        assert rounds.has_given_up_choosing() is False
+
+    def test_giving_up_keeps_the_reasons_of_the_failures(self) -> None:
+        """8 件続けて選べずに諦めると、その 8 件の理由を起きた順に残し、そのあとにまた選べなくても理由は変わらない。"""
+        rounds = _rounds()
+        rounds.open_round(_ALL_FREE)
+        for person in _ALL_FREE:
+            rounds.finish_turn(person, ChoiceFailed(f"Timeout: {person.value}"))
+        rounds.close_round()
+        rounds.open_round(_ALL_FREE)
+
+        for person in _ALL_FREE:
+            rounds.finish_turn(person, ChoiceFailed(f"RateLimit: {person.value}"))
+        rounds.close_round()
+        rounds.open_round({_HARU: FreeToAct()})
+        rounds.finish_turn(_HARU, ChoiceFailed("Timeout: once more"))
+
+        assert rounds.failures_given_up_on() == (
+            *(f"Timeout: {p.value}" for p in _ALL_FREE),
+            *(f"RateLimit: {p.value}" for p in _ALL_FREE),
+        )
+
+    def test_giving_up_is_kept_even_if_a_choice_comes_later(self) -> None:
+        """一度諦めたら、そのあとに選べたターンが届いても諦めたままでいる。"""
+        rounds = _rounds()
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+        rounds.open_round({_HARU: FreeToAct()})
+
+        rounds.finish_turn(_HARU, Acted())
+
+        assert rounds.has_given_up_choosing() is True

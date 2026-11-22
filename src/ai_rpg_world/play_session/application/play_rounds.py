@@ -41,7 +41,13 @@ class RoundLimitReached:
     pass
 
 
-PlayStopped = Union[WorldEnded, RoundLimitReached]
+@final
+@dataclass(frozen=True)
+class ChoosingKeptFailing:
+    reasons: tuple[str, ...]
+
+
+PlayStopped = Union[WorldEnded, RoundLimitReached, ChoosingKeptFailing]
 
 
 @final
@@ -74,7 +80,10 @@ class PlayRounds:
         while True:
             if self._world_has_ended(WorldHasEndedCommand()):
                 return WorldEnded()
-            if self._turn_rounds.get(command.world).has_reached_round_limit():
+            rounds = self._turn_rounds.get(command.world)
+            if rounds.has_given_up_choosing():
+                return ChoosingKeptFailing(rounds.failures_given_up_on())
+            if rounds.has_reached_round_limit():
                 return RoundLimitReached()
             stopped = self._play_one_round(command.world, people)
             if stopped is not None:
@@ -89,6 +98,8 @@ class PlayRounds:
             rounds = self._turn_rounds.get(world)
             rounds.finish_turn(finished.person, finished.outcome)
             self._turn_rounds.save(rounds)
+            if rounds.has_given_up_choosing():
+                return ChoosingKeptFailing(rounds.failures_given_up_on())
             if self._world_has_ended(WorldHasEndedCommand()):
                 return WorldEnded()
         rounds = self._turn_rounds.get(world)
