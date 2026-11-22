@@ -732,6 +732,8 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
                 expectation="扉が開く",
                 inner_thought="鍵が要るかもしれない",
             ),
+            action_heading="操作する: 扉 / こじ開ける",
+            memo_rejections=("1 件目: text が空です。", "2 件目: m_3f2a7b というメモはありません。"),
             result=ObservedOutcome(
                 observation(
                     OwnActionResult(call_id="call-1", succeeded=False),
@@ -756,6 +758,7 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
         Attempt(
             turn=13,
             move=AgentMove(call_id="call-3", tool_name="memo_add", arguments={"text": "鍵を探す"}),
+            action_heading="思い出す: ep_3f2a7b",
             result=MemoryOperationOutcome(
                 call_id="call-3",
                 body="[行動] メモを書いた → [結果] メモを追加しました",
@@ -763,7 +766,11 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
                 order=OccurrenceOrder(environment="廃坑の山村", value=1729000002.0),
             ),
         ),
-        Attempt(turn=14, move=AgentMove(call_id="call-4", tool_name="interact", arguments={"target": "弁"})),
+        Attempt(
+            turn=14,
+            move=AgentMove(call_id="call-4", tool_name="interact", arguments={"target": "弁"}),
+            action_heading="操作する: 弁",
+        ),
         Lapse(
             turn=15,
             body="[行動] 迷い → [失敗] | 決められなかった",
@@ -775,7 +782,12 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
         Backstory(flow="坑道の奥で鍵を探していた", mood="少し焦っている", written_turn=10, until_turn=0),
         Backstory(flow="鍵を見つけて村へ戻った", mood="", written_turn=10, until_turn=10),
     )
-    awaiting = Attempt(turn=16, move=AgentMove(call_id="call-6", tool_name="wait", arguments={}))
+    awaiting = Attempt(
+        turn=16,
+        move=AgentMove(call_id="call-6", tool_name="wait", arguments={}),
+        action_heading="待つ",
+        memo_rejections=("memo: memo は操作の配列で書いてください。",),
+    )
     awaited = AwaitedBackstory(until_turn=20, since_turn=30)
     return ShortTermMemory(
         being,
@@ -839,6 +851,25 @@ class TestShortTermMemoryPayload:
         dst_svc.restore(being, payload_json)
 
         assert _state(dst_stores["short_term"].get(being)) == _state(_every_field_short_term_memory())
+
+    def test_attempts_saved_before_headings_restore_without_heading_or_memo_rejections(self) -> None:
+        """行動の見出しとメモの理由を足す前に保存した試み (結果のある試み・待っている 1 手) は、見出し無し・理由無しで戻る。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId("ada")
+        src_stores["short_term"].save(_every_field_short_term_memory())
+        payload = json.loads(src_svc.capture(being))
+        memory_payload = payload["being_short_term_memory"][0]
+        for item in [*memory_payload["experiences"], memory_payload["awaiting"]]:
+            item.pop("action_heading", None)
+            item.pop("memo_rejections", None)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, json.dumps(payload))
+
+        restored = dst_stores["short_term"].get(being)
+        attempts = [e for e in restored.experiences if isinstance(e, Attempt)]
+        assert attempts and restored.awaiting is not None
+        assert all(a.action_heading is None and a.memo_rejections == () for a in [*attempts, restored.awaiting])
 
     def test_more_than_one_memory_is_rejected(self) -> None:
         """1 つの Being に短期記憶が 2 つ書かれた payload は FormatError。"""
