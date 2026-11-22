@@ -112,6 +112,18 @@ class TestEnvironmentEntry:
 
         assert entry.imposed_goal is None
 
+    def test_known_facts_are_kept_and_optional(self) -> None:
+        """この世界で知っていることを渡すとそのまま読め、省くと None になる。"""
+        entry = EnvironmentEntry(environment_name="廃坑の山村", known_facts="金庫の番号は 1907 だと覚えた。")
+
+        assert entry.known_facts == "金庫の番号は 1907 だと覚えた。"
+        assert EnvironmentEntry(environment_name="廃坑の山村").known_facts is None
+
+    def test_blank_known_facts_are_rejected(self) -> None:
+        """知っていることが空白だけなら ContractViolation で拒む。知らないなら None にする。"""
+        with pytest.raises(ContractViolation, match="known_facts"):
+            EnvironmentEntry(environment_name="廃坑の山村", known_facts="  ")
+
     def test_blank_environment_name_is_rejected(self) -> None:
         """環境の名前が空なら拒む。"""
         with pytest.raises(ContractViolation):

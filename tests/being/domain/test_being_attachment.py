@@ -17,6 +17,20 @@ class TestBeingAttachmentValidation:
 
         assert (attachment.environment_id, attachment.environment_name) == ("mine_village_v1#1", "廃坑の山村")
 
+    def test_known_facts_are_optional(self) -> None:
+        """この世界で知っていることは省けて None になり、渡せばそのまま持つ。"""
+        assert BeingAttachment(environment_id="mine#1", environment_name="廃坑の山村").known_facts is None
+        attachment = BeingAttachment(
+            environment_id="mine#1", environment_name="廃坑の山村", known_facts="番号は 1907。"
+        )
+        assert attachment.known_facts == "番号は 1907。"
+
+    @pytest.mark.parametrize("value", ["", "  ", 1])
+    def test_blank_or_non_text_known_facts_raise(self, value: object) -> None:
+        """知っていることに空白だけの文字列か文字列でない値を渡すと BeingAttachmentValidationException を投げる。"""
+        with pytest.raises(BeingAttachmentValidationException, match="known_facts"):
+            BeingAttachment(environment_id="mine#1", environment_name="廃坑の山村", known_facts=value)  # type: ignore[arg-type]
+
     @pytest.mark.parametrize("field_name", ["environment_id", "environment_name"])
     @pytest.mark.parametrize("value", ["", "   ", 1, None])
     def test_blank_or_non_text_raises(self, field_name: str, value: object) -> None:

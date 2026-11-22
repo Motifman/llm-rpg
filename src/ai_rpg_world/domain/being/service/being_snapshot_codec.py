@@ -76,6 +76,7 @@ class BeingSnapshotCodec:
             persona=being.persona,
             attachment_environment_id=attachment.environment_id if attachment is not None else None,
             attachment_environment_name=attachment.environment_name if attachment is not None else None,
+            attachment_known_facts=attachment.known_facts if attachment is not None else None,
             snapshot_version=CURRENT_SNAPSHOT_VERSION,
             memory_payload_json=memory_payload_json,
         )
@@ -132,6 +133,7 @@ class BeingSnapshotCodec:
             attachment = BeingAttachment(
                 environment_id=snapshot.attachment_environment_id,
                 environment_name=snapshot.attachment_environment_name,
+                known_facts=snapshot.attachment_known_facts,
             )
 
         if snapshot.persona is None:

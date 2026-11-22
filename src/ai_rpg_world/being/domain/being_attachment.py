@@ -23,14 +23,18 @@ class BeingAttachment:
 
     - ``environment_id``: 環境が付けた識別子 (例: ``mine_village_v1#1``)。照合にだけ使う
     - ``environment_name``: 環境の表示の名前 (例: 廃坑の山村)。エピソードに書く名前と同じ
+    - ``known_facts``: この世界で知っていること。人柄に混ぜると、別の世界へ持ち越してしまう (D2222)
     """
 
     environment_id: str
     environment_name: str
+    known_facts: str | None = None
 
     def __post_init__(self) -> None:
         _require_text("environment_id", self.environment_id)
         _require_text("environment_name", self.environment_name)
+        if self.known_facts is not None:
+            _require_text("known_facts", self.known_facts)
 
 
 __all__ = ["BeingAttachment"]

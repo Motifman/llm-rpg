@@ -22,6 +22,7 @@ from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 def _snapshot(
     *,
     memory_payload_json: str | None = '{"memo": []}',
+    attachment_known_facts: str | None = None,
 ) -> BeingSnapshot:
     return BeingSnapshot(
         being_id_value="being_w1_p1",
@@ -36,6 +37,7 @@ def _snapshot(
         ),
         attachment_environment_id="w1p1",
         attachment_environment_name="廃坑の山村",
+        attachment_known_facts=attachment_known_facts,
         snapshot_version=2,
         memory_payload_json=memory_payload_json,
     )
@@ -49,6 +51,19 @@ class TestSnapshotToDict:
         original = _snapshot()
         restored = dict_to_snapshot(snapshot_to_dict(original))
         assert restored == original
+
+    def test_snapshot_saved_before_known_facts_reads_without_them(self) -> None:
+        """知っていることの欄を足す前に保存した snapshot (欄が無い) は、知っていること無しとして読む。"""
+        saved = snapshot_to_dict(_snapshot())
+        saved.pop("attachment_known_facts")
+
+        assert dict_to_snapshot(saved).attachment_known_facts is None
+
+    def test_known_facts_round_trip(self) -> None:
+        """居場所の知っていることは、dict にして戻しても同じ文で残る。"""
+        original = _snapshot(attachment_known_facts="金庫の番号は 1907 だ。")
+
+        assert dict_to_snapshot(snapshot_to_dict(original)) == original
 
     def test_payload_none_round_trip(self) -> None:
         """payload None でも round trip できる。"""
