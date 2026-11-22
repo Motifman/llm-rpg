@@ -12,7 +12,10 @@ from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
-from ai_rpg_world.domain.being.exception.being_exceptions import BeingSnapshotIncompleteException
+from ai_rpg_world.domain.being.exception.being_exceptions import (
+    BeingNotFoundException,
+    BeingSnapshotIncompleteException,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
@@ -197,3 +200,19 @@ def test_old_database_row_without_persona_is_not_turned_into_a_being(tmp_path: P
             reopened.find_by_id(original.being_id)
     finally:
         reopened.connection.close()
+
+
+class TestGetSqliteBeingRepositoryCrud:
+    """SqliteBeingRepositoryCrud.get が、保存した Being を返し、いない Being を BeingNotFoundException で断ることを保証する。"""
+
+    def test_get_returns_the_saved_being(self, repo: SqliteBeingRepository) -> None:
+        """アダを保存してから get すると、アダの Being が返る。"""
+        repo.save(_being("ada"))
+
+        assert repo.get(BeingId("ada")).persona.name == "アダ"
+
+    def test_get_refuses_a_being_not_saved(self, repo: SqliteBeingRepository) -> None:
+        """保存していない ID を get すると BeingNotFoundException を投げる。"""
+
+        with pytest.raises(BeingNotFoundException):
+            repo.get(BeingId("missing"))

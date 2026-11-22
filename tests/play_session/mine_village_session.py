@@ -5,11 +5,20 @@ from functools import cache
 from pathlib import Path
 from typing import cast
 
+from ai_rpg_world.being.application.choose_action import ActionChoosingCompletion, ChooseAction
+from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.enter_environment import EnterEnvironment
 from ai_rpg_world.being.application.perceive_observation import PerceiveObservation
 from ai_rpg_world.being.application.prepare_being import PrepareBeing
+from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult
+from ai_rpg_world.being.contract import OfferedBeingTools
+from ai_rpg_world.being.domain.being import Being
+from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_being_repository import InMemoryBeingRepository
+from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
+from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
@@ -20,11 +29,19 @@ from ai_rpg_world.game_world.application.check_readiness_to_act import CheckRead
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.deliver_perception import DeliverPerception
+from ai_rpg_world.game_world.application.deliver_perception_of_committed_events import (
+    DeliverPerceptionOfCommittedEvents,
+)
+from ai_rpg_world.game_world.application.describe_action_result import DescribeActionResult
+from ai_rpg_world.game_world.application.describe_scene import DescribeScene
 from ai_rpg_world.game_world.application.name_person import NamePerson
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
+from ai_rpg_world.game_world.application.offer_action_choices import OfferActionChoices
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime
 from ai_rpg_world.game_world.application.settle_world_conditions import SettleWorldConditions
+from ai_rpg_world.game_world.application.take_chosen_action import TakeChosenAction
+from ai_rpg_world.game_world.application.tell_current_time import TellCurrentTime
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
 from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration
@@ -42,6 +59,7 @@ from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldI
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
+from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsOneByOne
 from ai_rpg_world.play_session.application.hand_observation_to_being import HandObservationToBeing
 from ai_rpg_world.play_session.application.play_rounds import PlayRounds, TurnTakers
 from ai_rpg_world.play_session.application.start_play_session import StartPlaySession, StartPlaySessionCommand
@@ -82,6 +100,7 @@ class MineVillageSession:
         round_limit: int = 100,
         wake_waiting_after: int = 3,
         on_opening_world: Callable[[], None] = lambda: None,
+        delivers_world_events: bool = False,
     ) -> None:
         scenario = _scenario()
         self.store = SqliteWorldStore.create(
@@ -99,7 +118,8 @@ class MineVillageSession:
         self.casts = InMemoryCastRepository(handoff=self.cast_events.extend)
         self.turn_round_events: list[TurnRoundsEvent] = []
         self.turn_rounds = InMemoryTurnRoundsRepository(handoff=self.turn_round_events.extend)
-        self.scope = scope = CommandScope(self.store, CommittedEventsDistributor())
+        distributor = CommittedEventsDistributor()
+        self.scope = scope = CommandScope(self.store, distributor)
         self.start = StartPlaySession(
             open_world=cast(OpenWorld, _OpenWorldNoticed(OpenWorld(self.store), on_opening_world)),
             name_person=NamePerson(scope),
@@ -128,6 +148,43 @@ class MineVillageSession:
             scope,
             ObservationExit(WORLD, day_night, receiver),
             PerceptionReportsReceived(),
+        )
+        if delivers_world_events:
+            distributor.register_receiver(DeliverPerceptionOfCommittedEvents(scenario.design, self.deliver_perception))
+        self.episodes = InMemoryEpisodeRepository()
+        self.memo_books = InMemoryMemoBookRepository()
+
+    def beings_taking_turns(
+        self, completion: ActionChoosingCompletion, *, closing: str = "行動を 1 つ選んでください。"
+    ) -> BeingsTakingTurnsOneByOne:
+        design = _scenario().design
+        day_night = design.day_night
+        assert isinstance(day_night, DayNightDeclaration)
+        settle = SettleWorldConditions(self.scope, design)
+        return BeingsTakingTurnsOneByOne(
+            world=WORLD,
+            casts=self.casts,
+            being_tools=OfferedBeingTools(inner_thought="inner_thought"),
+            closing=Closing(instruction=closing),
+            describe_scene=DescribeScene(self.scope, design),
+            offer_choices=OfferActionChoices(self.scope, design),
+            tell_time=TellCurrentTime(self.scope, day_night),
+            choose_action=ChooseAction(
+                working_memory=CurrentWorkingMemory(
+                    beings=self.beings,
+                    short_term_memories=self.short_term_memories,
+                    acquaintances=self.acquaintances,
+                    episodes=self.episodes,
+                    memo_books=self.memo_books,
+                    episode_index_limit=5,
+                ),
+                completion=completion,
+                short_term_memories=self.short_term_memories,
+                turn_clock=self.clock,
+            ),
+            take_chosen_action=TakeChosenAction(self.scope, design, settle),
+            describe_result=DescribeActionResult(self.scope, design, day_night),
+            receive_result=ReceiveActionResult(self.short_term_memories, self.clock),
         )
 
     def play_rounds(self, turn_takers: TurnTakers) -> PlayRounds:
