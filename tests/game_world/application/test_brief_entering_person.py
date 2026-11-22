@@ -20,27 +20,24 @@ def scenario() -> LoadedScenario:
 
 def _brief_gen(scenario: LoadedScenario) -> BriefEnteringPersonCommand:
     briefing = scenario.briefings[_GEN]
-    return BriefEnteringPersonCommand(person=_GEN, known_facts=briefing.known_facts, objective=briefing.objective)
+    return BriefEnteringPersonCommand(person=_GEN, objective=briefing.objective)
 
 
 class TestBriefEnteringPerson:
     """BriefEnteringPerson が、廃坑の山村 v2 に入るゲンに、案内・課す目的・最初から知っている人を返すことを保証する。"""
 
-    def test_orientation_has_introduction_premises_map_and_what_gen_knows(self, scenario: LoadedScenario) -> None:
-        """ゲンの案内には「この世界について」「この世界の前提」「この場所の造り」「あなたが知っていること」がこの順に並び、知っていることに金庫の番号 1907 がある。"""
+    def test_orientation_has_introduction_premises_and_map_but_not_what_gen_knows(
+        self, scenario: LoadedScenario
+    ) -> None:
+        """ゲンの案内には「この世界について」「この世界の前提」「この場所の造り」がこの順に並び、知っていること (金庫の番号) は入らない。知っていることは Being が【ペルソナ】に出す (D2267)。"""
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
         descriptions = tuple(briefing.orientation.descriptions)
-        introduction, premises, _, known_facts = (d.text for d in descriptions)
-        assert [d.heading for d in descriptions] == [
-            "この世界について",
-            "この世界の前提",
-            "この場所の造り",
-            "あなたが知っていること",
-        ]
+        introduction, premises, _ = (d.text for d in descriptions)
+        assert [d.heading for d in descriptions] == ["この世界について", "この世界の前提", "この場所の造り"]
         assert isinstance(introduction, str) and introduction.startswith("冬が近い山あいの廃村。")
         assert isinstance(premises, str) and "昇降機は一度しか動かない。" in premises
-        assert isinstance(known_facts, str) and "1907" in known_facts
+        assert all("1907" not in str(d.text) for d in descriptions)
 
     def test_map_lists_every_place_with_its_neighbours_in_minutes(self, scenario: LoadedScenario) -> None:
         """「この場所の造り」は 21 の場所を 1 行ずつ載せ、北の竪坑口の行は、1 tick を 30 分として近い順に行き先を並べる。"""
@@ -68,9 +65,7 @@ class TestBriefEnteringPerson:
     def test_undeclared_person_is_refused(self, scenario: LoadedScenario) -> None:
         """シナリオに無い人 (kuro) を渡すと UndeclaredNounException を投げる。"""
         briefing = scenario.briefings[_GEN]
-        command = BriefEnteringPersonCommand(
-            person=PersonId("kuro"), known_facts=briefing.known_facts, objective=briefing.objective
-        )
+        command = BriefEnteringPersonCommand(person=PersonId("kuro"), objective=briefing.objective)
 
         with pytest.raises(UndeclaredNounException):
             BriefEnteringPerson(scenario.design)(command)

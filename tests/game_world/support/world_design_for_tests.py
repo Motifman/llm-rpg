@@ -344,7 +344,6 @@ def briefing_headings() -> BriefingHeadings:
     return BriefingHeadings(
         introduction="この世界について",
         premises="この世界の前提",
-        known_facts="あなたが知っていること",
         world_map="この場所の造り",
     )
 

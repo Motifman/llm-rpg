@@ -90,7 +90,13 @@ class Cast(AggregateRoot[BeingCastInWorldEvent]):
         return self._member(person).being_id
 
     def brief(
-        self, person: PersonId, *, orientation: Orientation, imposed_goal: str, known_people: Sequence[PersonId]
+        self,
+        person: PersonId,
+        *,
+        orientation: Orientation,
+        imposed_goal: str,
+        known_people: Sequence[PersonId],
+        known_facts: str | None = None,
     ) -> None:
         member = self._member(person)
         if person in self._briefed:
@@ -100,6 +106,7 @@ class Cast(AggregateRoot[BeingCastInWorldEvent]):
             environment_name=self._environment_name,
             imposed_goal=imposed_goal,
             introductions=tuple(Introduction(name=self._member(known).being_name) for known in known_people),
+            known_facts=known_facts,
         )
         self._briefed[person] = _Briefed(entry, orientation)
         self.add_event(

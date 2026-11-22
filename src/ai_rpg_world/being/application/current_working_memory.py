@@ -11,6 +11,7 @@ from ai_rpg_world.being.application.episode_index_text import format_episode_ind
 from ai_rpg_world.being.application.known_people import render_known_people
 from ai_rpg_world.being.application.memo_book_text import format_memo_book
 from ai_rpg_world.being.application.names_for_people import text_naming_people
+from ai_rpg_world.being.application.persona_text import PERSONA_HEADING, persona_text
 from ai_rpg_world.being.application.recent_events_text import recent_events_text
 from ai_rpg_world.being.contract import Description, Here, OfferedBeingTools, Orientation, Scene, TextWithPeople
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
@@ -107,6 +108,12 @@ class CurrentWorkingMemory:
         place = f"{here.place} {FIRST_VISIT_MARK}" if first else here.place
         text = text_naming_people(here.text) if isinstance(here.text, TextWithPeople) else here.text
         return (Description(heading=here.heading, text=f"{CURRENT_PLACE_LABEL}: {place}\n{text}"),)
+
+    def persona(self, being_id: BeingId) -> Description:
+        """人柄と、いまいる環境で知っていることの【ペルソナ】。"""
+        being = self._beings.get(being_id)
+        known_facts = None if being.attachment is None else being.attachment.known_facts
+        return Description(heading=PERSONA_HEADING, text=persona_text(being.persona, known_facts))
 
     def environment_name(self, being_id: BeingId) -> str:
         """Being が今いる環境の表示の名前。"""

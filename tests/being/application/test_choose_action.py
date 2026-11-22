@@ -67,8 +67,10 @@ WITH_MEMORY = OfferedBeingTools(
 
 class _Beings:
     def get(self, being_id: BeingId) -> Being:
-        attachment = BeingAttachment(environment_id="mine_village_v2#1", environment_name="廃坑の山村")
-        return Being(being_id=GEN, persona=Persona(name="ゲン"), attachment=attachment)
+        attachment = BeingAttachment(
+            environment_id="mine_village_v2#1", environment_name="廃坑の山村", known_facts="金庫の番号は 1907 だ。"
+        )
+        return Being(being_id=GEN, persona=Persona(name="ゲン", speech="ぶっきらぼうな常体"), attachment=attachment)
 
 
 def _choices() -> ActionChoices:
@@ -118,7 +120,7 @@ def _choices() -> ActionChoices:
 def _command(being_tools: OfferedBeingTools) -> ChooseActionCommand:
     return ChooseActionCommand(
         being_id=GEN,
-        orientation=Orientation([Description(heading="ペルソナ", text="あなたはゲン。")]),
+        orientation=Orientation([Description(heading="世界の前提", text="冬が近い山あいの廃村。")]),
         being_tools=being_tools,
         imposed_goal="金庫の中を確かめる",
         scene=Scene(here=Here(place="鉱山会社の事務所", heading="現在地と周囲", text="  埃をかぶった机と金庫がある。")),
@@ -260,6 +262,16 @@ class TestChooseAction:
         _, next_turn = _choose(_reply("interact", {"target": "金庫"}), visited_places=visited)
 
         assert "現在地: 鉱山会社の事務所\n" in next_turn.calls[0].messages[1]["content"]
+
+    def test_persona_follows_the_orientation_before_the_goal(self) -> None:
+        """システムプロンプトでは、世界の案内のあと、現在の目的の前に、人柄とこの世界で知っていることの【ペルソナ】が出る。"""
+        _, completion = _choose(_reply("interact", {"target": "金庫"}))
+
+        system = completion.calls[0].messages[0]["content"]
+        assert "【ペルソナ】\nあなたはゲン。\n\n金庫の番号は 1907 だ。\n\n話し方: ぶっきらぼうな常体。" in system
+        assert (
+            system.index("\n【世界の前提】\n") < system.index("\n【ペルソナ】\n") < system.index("\n【現在の目的】\n")
+        )
 
     def test_whisper_to_sayo_returns_her_mark_not_her_name(self) -> None:
         """サヨへのささやきは、呼び方「サヨ」ではなく人の印 {"person": 2} で返り、中身の文字はそのまま返る。"""

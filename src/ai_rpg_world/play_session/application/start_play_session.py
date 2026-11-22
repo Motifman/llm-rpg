@@ -68,14 +68,13 @@ class StartPlaySession:
         )
         # 世界を開いて Being を入れたあとで断られると、同じコマンドでやり直せない。断られうる手順を先に済ませる
         for role in command.roles:
-            briefing = self._brief(
-                BriefEnteringPersonCommand(person=role.person, known_facts=role.known_facts, objective=role.objective)
-            )
+            briefing = self._brief(BriefEnteringPersonCommand(person=role.person, objective=role.objective))
             cast.brief(
                 role.person,
                 orientation=briefing.orientation,
                 imposed_goal=briefing.imposed_goal,
                 known_people=briefing.known_people,
+                known_facts=role.known_facts.text,
             )
         names = tuple(NamePersonCommand(role.person, DisplayName(role.being_name)) for role in command.roles)
         for role in command.roles:

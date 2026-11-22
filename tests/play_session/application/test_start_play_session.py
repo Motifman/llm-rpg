@@ -53,24 +53,28 @@ class TestStartPlaySession:
 
         attachments = {being: session.beings.get(BeingId(being)).attachment for being in ("gen", "sayo", "haru", "mio")}
 
-        assert set(attachments.values()) == {
-            BeingAttachment(environment_id=WORLD.value, environment_name=ENVIRONMENT_NAME)
+        assert {(a.environment_id, a.environment_name) for a in attachments.values() if a is not None} == {
+            (WORLD.value, ENVIRONMENT_NAME)
         }
+        assert all(a is not None for a in attachments.values())
 
-    def test_gens_orientation_has_introduction_premises_and_what_he_knows(self) -> None:
-        """ゲンの案内には導入・前提・「この場所の造り」・「あなたが知っていること」が並び、知っていることに金庫の番号 1907 がある。"""
+    def test_gens_orientation_has_introduction_premises_and_map(self) -> None:
+        """ゲンの案内には導入・前提・「この場所の造り」だけが並び、知っていることは入らない。"""
         session = MineVillageSession().started()
 
         descriptions = tuple(session.casts.get(WORLD).orientation_of(_GEN).descriptions)
 
-        assert [d.heading for d in descriptions] == [
-            "この世界について",
-            "この世界の前提",
-            "この場所の造り",
-            "あなたが知っていること",
-        ]
-        known_facts = descriptions[3].text
-        assert isinstance(known_facts, str) and "1907" in known_facts
+        assert [d.heading for d in descriptions] == ["この世界について", "この世界の前提", "この場所の造り"]
+
+    def test_what_gen_knows_comes_with_his_entry_and_stays_with_his_attachment(self) -> None:
+        """ゲンがこの世界で知っていること (金庫の番号 1907) は、入るときの取り決めで渡り、ゲンの居場所が持つ。"""
+        session = MineVillageSession().started()
+
+        entry = session.casts.get(WORLD).entry_of(_GEN)
+        attachment = session.beings.get(BeingId("gen")).attachment
+
+        assert entry.known_facts is not None and "1907" in entry.known_facts
+        assert attachment is not None and attachment.known_facts == entry.known_facts
 
     def test_gens_imposed_goal_is_only_his_objective(self) -> None:
         """ゲンに課された目的は「サヨと二人そろって、坑道の奥の昇降機で外へ出る。」だけになる。"""
@@ -108,7 +112,6 @@ class TestStartPlaySession:
             "この世界について",
             "この世界の前提",
             "この場所の造り",
-            "あなたが知っていること",
         ]
 
     def test_casting_decides_which_being_plays_each_person(self) -> None:

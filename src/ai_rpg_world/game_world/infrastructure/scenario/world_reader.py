@@ -239,12 +239,11 @@ def scene_texts(node: YamlNode) -> SceneTexts:
 
 
 def briefing_headings(node: YamlNode) -> BriefingHeadings:
-    fields = node.fields("introduction", "premises", "known_facts", "world_map")
+    fields = node.fields("introduction", "premises", "world_map")
     return node.build(
         lambda: BriefingHeadings(
             introduction=fields.required("introduction").text(),
             premises=fields.required("premises").text(),
-            known_facts=fields.required("known_facts").text(),
             world_map=fields.required("world_map").text(),
         )
     )

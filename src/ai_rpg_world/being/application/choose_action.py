@@ -162,7 +162,10 @@ class ChooseAction:
         )
         memory = self._working_memory.of(
             command.being_id,
-            orientation=command.orientation,
+            # 人柄は人ごとに違うので、全員に同じ案内の後ろに置き、案内をプレフィックスのキャッシュに載せる。
+            orientation=Orientation(
+                (*command.orientation.descriptions, self._working_memory.persona(command.being_id))
+            ),
             being_tools=command.being_tools,
             imposed_goal=command.imposed_goal,
             scene=scene,
