@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_and_clock_time import DayAndClockTime
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_declaration import DayPhaseDeclaration
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_phase_name import DayPhaseName
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.time_of_day import TimeOfDay
@@ -16,6 +17,8 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
     UndeclaredDayPhaseException,
 )
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
+
+_MINUTES_PER_DAY = 24 * 60
 
 
 @final
@@ -35,6 +38,9 @@ class NoDayNight:
         return frozenset()
 
     def time_of_day_at(self, now: WorldTick) -> TimeOfDay:
+        raise NotDeclaredInThisWorldException("this world declares no day and night")
+
+    def day_and_clock_time_at(self, now: WorldTick) -> DayAndClockTime:
         raise NotDeclaredInThisWorldException("this world declares no day and night")
 
     def phase_at(self, time_of_day: TimeOfDay) -> DayPhaseDeclaration:
@@ -82,6 +88,14 @@ class DayNightDeclaration:
 
     def time_of_day_at(self, now: WorldTick) -> TimeOfDay:
         return TimeOfDay((self.starts_at.tick_of_day + now.value) % self.ticks_per_day.value)
+
+    def day_and_clock_time_at(self, now: WorldTick) -> DayAndClockTime:
+        minutes_since_midnight = self.time_of_day_at(now).tick_of_day * _MINUTES_PER_DAY // self.ticks_per_day.value
+        return DayAndClockTime(
+            day=(self.starts_at.tick_of_day + now.value) // self.ticks_per_day.value + 1,
+            hour=minutes_since_midnight // 60,
+            minute=minutes_since_midnight % 60,
+        )
 
     def phase_at(self, time_of_day: TimeOfDay) -> DayPhaseDeclaration:
         begun = [phase for phase in self.phases if phase.begins_at <= time_of_day]

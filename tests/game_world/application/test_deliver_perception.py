@@ -48,7 +48,14 @@ from ai_rpg_world.game_world.domain.whereabouts.location import AtSpot, OpenArea
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
-from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, passage, spot
+from tests.game_world.support.world_design_for_tests import (
+    character,
+    compose_world,
+    half_hour_ticks_from_midnight,
+    nouns,
+    passage,
+    spot,
+)
 
 _WORLD = WorldId("perception_world")
 _ALICE, _BOB, _CAROL, _DAVE, _EVE, _FRANK = (
@@ -117,11 +124,15 @@ class _World:
         self.scope = CommandScope(self.store, CommittedEventsDistributor())
         self.received = _ObservationsReceived()
         self.reports = PerceptionReportsReceived()
-        self._deliver = DeliverPerception(self.scope, ObservationExit(_WORLD, self.received), self.reports)
+        self._deliver = DeliverPerception(
+            self.scope, ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.received), self.reports
+        )
 
     def deliver_with_a_failing_commit(self, *, from_actions: tuple[Stimulus, ...]) -> None:
         scope = CommandScope(_CommitRefusingStore(self.store), CommittedEventsDistributor())
-        deliver = DeliverPerception(scope, ObservationExit(_WORLD, self.received), PerceptionReportsReceived())
+        deliver = DeliverPerception(
+            scope, ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.received), PerceptionReportsReceived()
+        )
         deliver(DeliverPerceptionCommand(cause=TimePassed(), from_actions=from_actions, from_states=()))
 
     def deliver(self, *, from_actions: tuple[Stimulus, ...] = (), from_states: tuple[Stimulus, ...] = ()) -> None:
@@ -473,9 +484,9 @@ class TestObservationTime:
     """出口に渡る観測に、起きた tick の時刻の札が付くことを保証する。"""
 
     def test_observation_has_the_time_label_of_the_tick(self) -> None:
-        """tick 0 に起きたことは、時刻の札「tick 0」を付けて届く。"""
+        """1 日 48 tick、始まり 00:00 の世界で tick 0 に起きたことは、時刻の札「1 日目 00:00」を付けて届く。"""
         world = _World()
 
         world.deliver(from_actions=(_sight(_SQUARE),))
 
-        assert [observation.time for observation in world.received.by_person[_ALICE]] == [ObservedTime("tick 0")]
+        assert [observation.time for observation in world.received.by_person[_ALICE]] == [ObservedTime("1 日目 00:00")]

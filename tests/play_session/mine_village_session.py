@@ -27,6 +27,7 @@ from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime
 from ai_rpg_world.game_world.application.settle_world_conditions import SettleWorldConditions
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
 from ai_rpg_world.game_world.domain.action.manner import Openly
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import (
     Notable,
@@ -118,12 +119,14 @@ class MineVillageSession:
         )
 
         self.short_term_memories = InMemoryShortTermMemoryRepository()
+        day_night = scenario.design.day_night
+        assert isinstance(day_night, DayNightDeclaration)
         receiver = HandObservationToBeing(
             WORLD, self.casts, self.turn_rounds, PerceiveObservation(self.short_term_memories, self.clock)
         )
         self.deliver_perception = DeliverPerception(
             scope,
-            ObservationExit(WORLD, receiver),
+            ObservationExit(WORLD, day_night, receiver),
             PerceptionReportsReceived(),
         )
 

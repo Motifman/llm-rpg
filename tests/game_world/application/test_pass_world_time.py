@@ -89,6 +89,7 @@ from tests.game_world.support.perception_reports import PerceptionReportsReceive
 from tests.game_world.support.world_design_for_tests import (
     character,
     compose_world,
+    half_hour_ticks_from_midnight,
     item_spec,
     nouns,
     passage,
@@ -554,9 +555,11 @@ class TestPassWorldTimeDayPhase:
         [entered] = world.events_of(TimeOfDayChangedEvent)
         stimuli = StimulusTranslator().stimuli_of(entered, world.design)
 
-        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()), PerceptionReportsReceived())(
-            DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli)
-        )
+        DeliverPerception(
+            world.scope,
+            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), _NoOneListening()),
+            PerceptionReportsReceived(),
+        )(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli))
 
         assert stimuli
         assert world.read(lambda session: session.facts().missed_notices(_AKI).notices()) == ()
@@ -575,9 +578,11 @@ class TestPassWorldTimeDayPhase:
         [entered] = world.events_of(TimeOfDayChangedEvent)
         stimuli = StimulusTranslator().stimuli_of(entered, world.design)
 
-        DeliverPerception(world.scope, ObservationExit(_WORLD, _NoOneListening()), PerceptionReportsReceived())(
-            DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli)
-        )
+        DeliverPerception(
+            world.scope,
+            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), _NoOneListening()),
+            PerceptionReportsReceived(),
+        )(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli))
 
         assert entered.audience == frozenset({_HARU})
         assert world.read(lambda session: session.facts().vitals(_HARU).is_down())
