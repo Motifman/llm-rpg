@@ -173,6 +173,8 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 - 世界が終わったあとに届いた行為と時間を進める要求は、どちらも断り、世界を変えない。規則は `WorldEnding.admit_change` が持つ。行為には「世界はもう終わった」の文 (`RefusalTexts.world_state`) で `ActionRefused` を返し、断られた試みは記録しない。時間には `WorldTimePassageRefused` を返す。外側は、返事か `WorldHasEnded` で終わりを知る (D2218)
 - 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つのコマンドの確定が 1 つの `CommandScope`。終わっていないかの確かめと `SettleWorldConditions` は、それぞれ別の範囲) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
 - `SettleWorldConditions` は、1 つのコマンドが確定するたびと、時間を進めるたびに回す
+- Being が世界に入るとき、外側は導入 (`WorldIntroduction.text`)、世界の前提 (`WorldIntroduction.premises`)、その人の立場 (`CharacterBriefing.known_facts`、見出し「あなたが知っていること」) を案内 (`Orientation`) の見出しの違う `Description` にし、その人の目的 (`CharacterBriefing.objective`) を課された目的 (`EnvironmentEntry.imposed_goal`) で渡す (D2222)
+- 昼夜を宣言しない世界 (`NoDayNight`) は、ステージ 8 では run の入口で止めて知らせる。観測の時刻を割り出せないため (D2222)
 - 誰がいつ考えて行動を送るか (手番、目立つ知らせで考え直す、しばらく何も無ければ考える) は世界の外側 (エージェントを動かす側) が決める。今の実験のターン制は、外側の進め方の 1 つ
 
 ## 1 つの行為のユースケースの流れ
@@ -238,7 +240,7 @@ class TurnGuidance:                               # 世界では何も起きて�
     at: WorldTick
 ```
 
-- 観測の出口は 1 つ。`Perceived` と、倒れている間にためた知らせだけを受け、時刻の札を付けて Being の契約の観測にする。文は `TextWithAssignedPeople` のまま渡し、人のプレースホルダーは Being が覚えた名前か見た目で埋める
+- 観測の出口は 1 つ。`Perceived` と、倒れている間にためた知らせだけを受け、時刻の札を付けて Being の契約の観測にする。時刻の札は何日目と時:分 (`2 日目 06:30`) で、`DayNightDeclaration.clock_reading_at` が返す `ClockReading` から作る (D2222)。文は `TextWithAssignedPeople` のまま渡し、人のプレースホルダーは Being が覚えた名前か見た目で埋める
 - 外側がエージェントに考えさせる前に集める材料は 3 つに分かれる。場面 (`LookAround`)、できること (`ListAvailableActions`)、自分が知っていること (持ち物、体の状態、時刻。知覚を通さず集約から読む)
 
 ## そのほかの型
