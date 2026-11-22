@@ -15,3 +15,11 @@ class BlankPeopleJoinerException(GameWorldDomainException):
 
 class NoPeopleToListException(GameWorldDomainException):
     error_code = "GAME_WORLD.SURROUNDINGS_TEXTS.NO_PEOPLE_TO_LIST"
+
+
+class UnfillableSceneTextException(GameWorldDomainException):
+    error_code = "GAME_WORLD.SURROUNDINGS_TEXTS.UNFILLABLE_SCENE_TEXT"
+
+
+class MissingWorldWordException(GameWorldDomainException):
+    error_code = "GAME_WORLD.SURROUNDINGS_TEXTS.MISSING_WORLD_WORD"

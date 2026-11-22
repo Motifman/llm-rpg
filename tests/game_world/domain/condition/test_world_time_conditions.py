@@ -64,10 +64,20 @@ _DAY_NIGHT = DayNightDeclaration(
     starts_at=TimeOfDay(0),
     phases=(
         DayPhaseDeclaration(
-            name=_MORNING, begins_at=TimeOfDay(0), dark=False, announcement=NoAnnouncement(), audience=EveryoneAwake()
+            name=_MORNING,
+            display_name=DisplayName("朝"),
+            begins_at=TimeOfDay(0),
+            dark=False,
+            announcement=NoAnnouncement(),
+            audience=EveryoneAwake(),
         ),
         DayPhaseDeclaration(
-            name=_NIGHT, begins_at=TimeOfDay(2), dark=True, announcement=NoAnnouncement(), audience=EveryoneAwake()
+            name=_NIGHT,
+            display_name=DisplayName("夜"),
+            begins_at=TimeOfDay(2),
+            dark=True,
+            announcement=NoAnnouncement(),
+            audience=EveryoneAwake(),
         ),
     ),
 )

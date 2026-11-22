@@ -23,12 +23,13 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
 )
 from ai_rpg_world.game_world.domain.exception.world_design_exception import BlankDeclaredNameException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
+from ai_rpg_world.game_world.domain.value_object import DisplayName, Ticks, WorldTick
 
 
 def _phase(name: str, begins_at: int, *, dark: bool = False) -> DayPhaseDeclaration:
     return DayPhaseDeclaration(
         name=DayPhaseName(name),
+        display_name=DisplayName(name),
         begins_at=TimeOfDay(begins_at),
         dark=dark,
         announcement=NoAnnouncement(),
@@ -65,6 +66,7 @@ class TestDayPhaseAnnouncement:
         """announcement に文を渡すと、人のプレースホルダーを割り当てないまま持つ。"""
         phase = DayPhaseDeclaration(
             name=DayPhaseName("夜"),
+            display_name=DisplayName("夜"),
             begins_at=TimeOfDay(20),
             dark=True,
             announcement=TextWithUnassignedPeople("日が沈んだ。"),

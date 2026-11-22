@@ -33,7 +33,12 @@ class DescribeScene:
     def _describe(self, session: WorldSession, person: PersonId) -> Scene:
         facts = session.facts()
         seen = VisibleSurroundings.seen_by(perceiver_of(facts, person), SurroundingsOf(person, facts, self._design))
-        return seen.scene_with(self._design.surroundings_texts, _Names(facts, self._design))
+        return seen.scene_with(
+            self._design.surroundings_texts,
+            _Names(facts, self._design),
+            self._design.world_words,
+            self._design.clock_wording,
+        )
 
 
 @final

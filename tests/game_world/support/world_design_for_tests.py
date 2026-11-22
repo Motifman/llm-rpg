@@ -53,6 +53,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     WeatherDeclaration,
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.weather_type import WeatherType
 from ai_rpg_world.game_world.domain.declaration.verb import (
     BuiltInActionPerceptions,
     DefaultDuration,
@@ -76,6 +77,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import Ite
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.declaration.world_map import WorldMapWording
+from ai_rpg_world.game_world.domain.declaration.world_words import WorldWords
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.lighting import Lighting
@@ -289,6 +291,25 @@ def built_in_action_perceptions(without: Iterable[ActionKind] = ()) -> BuiltInAc
     )
 
 
+def world_words() -> WorldWords:
+    return WorldWords(
+        lighting={
+            Lighting.BRIGHT: "明るい",
+            Lighting.DUSKY: "薄暗い",
+            Lighting.DARK: "暗い",
+            Lighting.PITCH_DARK: "真っ暗",
+        },
+        temperature={
+            Temperature.FREEZING: "凍える寒さ",
+            Temperature.COLD: "寒い",
+            Temperature.NORMAL: "過ごしやすい",
+            Temperature.WARM: "暖かい",
+            Temperature.HOT: "暑い",
+        },
+        weather={weather: weather.name.lower() for weather in WeatherType},
+    )
+
+
 def clock_wording() -> ClockWording:
     return ClockWording(day="Day {day}", late_night="深夜 ", late_night_before_hour=6)
 
@@ -324,8 +345,27 @@ def surroundings_texts() -> SurroundingsTexts:
 def scene_texts() -> SceneTexts:
     return SceneTexts(
         heading=DisplayName("現在地と周囲"),
-        objects=DisplayName("物:"),
-        destinations=DisplayName("行き先:"),
+        description="  {description}",
+        atmosphere="雰囲気: {parts}",
+        lighting="明るさ: {lighting}",
+        sound="音: {sound}",
+        temperature="気温: {temperature}",
+        smell="匂い: {smell}",
+        atmosphere_joiner=" / ",
+        weather="天候: {weather}（屋外）",
+        clock="現在時刻: {time}",
+        day_phase="時刻帯: {phase}",
+        dark_day_phase="時刻帯: {phase} (暗い)",
+        destinations="接続先:",
+        destination='  - "{passage}" → "{spot}"（{status}）',
+        passable="通行可",
+        impassable="通行不可 — {state}",
+        objects="オブジェクト:",
+        object='  - "{object}" ({look}) — {description}',
+        object_without_look='  - "{object}" — {description}',
+        no_objects="オブジェクト: (ここには何も無い)",
+        no_objects_in_dark="オブジェクト: (暗くて何も見えない。灯りが要る)",
+        objects_in_dark="  (暗い。灯りがなければ、見えるのはこれだけ)",
         ground_items=DisplayName("落ちている品物:"),
         count_mark=DisplayName("×"),
         pitch_dark=DisplayName("真っ暗で、何も見えない。"),
@@ -355,6 +395,7 @@ def half_hour_ticks_from_midnight() -> DayNightDeclaration:
         phases=(
             DayPhaseDeclaration(
                 name=DayPhaseName("昼"),
+                display_name=DisplayName("昼"),
                 begins_at=TimeOfDay(0),
                 dark=False,
                 announcement=NoAnnouncement(),
@@ -415,6 +456,7 @@ def compose_world(
         surroundings_texts=surroundings_texts(),
         clock_wording=clock_wording(),
         world_map_wording=world_map_wording(),
+        world_words=world_words(),
         weather=weather,
         day_night=day_night,
         initial_stage=initial_stage,

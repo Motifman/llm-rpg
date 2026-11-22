@@ -87,6 +87,7 @@ _NIGHT_FROM_THE_START = DayNightDeclaration(
     phases=(
         DayPhaseDeclaration(
             name=DayPhaseName("夜"),
+            display_name=DisplayName("夜"),
             begins_at=TimeOfDay(0),
             dark=True,
             announcement=NoAnnouncement(),
