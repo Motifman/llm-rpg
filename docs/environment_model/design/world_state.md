@@ -279,6 +279,7 @@ class Shop(AggregateRoot[ShopEvent]):             # 店ごと (D2224)
         # 人の店は、品を受け取った品 (received) にため、預けたお金から代金を出す。作者の店は、品を世界から出すよう ShopBoughtItemsEvent に載せ、自分のお金から代金を出す (足りなければ SHOP.NOT_ENOUGH_WANTED)
     def let_run_out(self, items: tuple[ItemInstanceId, ...]) -> None: ...
         # 時間で消える品を、預けた品と受け取った品から外す。在庫はその分減り、品目は残る。ShopItemsRanOutEvent (人の店なら持ち主を載せる)
+        # PassWorldTime が 1 tick に店ごと 1 回呼ぶので、同じ tick に傷んだ分は 1 つのイベントにまとまり、知らせは品物の種類ごとに 1 つになる
     def hand_over_received(self) -> None: ...     # 受け取った品を全部外し、ShopReceivedItemsCollectedEvent に載せる。無ければ SHOP.NOTHING_TO_COLLECT
     def close_for_gone_owner(self) -> None: ...   # 持ち主が死んだ・世界から外れた。閉じて、以後は開けない。ShopClosedEvent(reason=OWNER_GONE)
 
