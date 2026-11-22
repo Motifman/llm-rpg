@@ -110,7 +110,6 @@ class CurrentWorkingMemory:
         return (Description(heading=here.heading, text=f"{CURRENT_PLACE_LABEL}: {place}\n{text}"),)
 
     def persona(self, being_id: BeingId) -> Description:
-        """人柄と、いまいる環境で知っていることの【ペルソナ】。"""
         being = self._beings.get(being_id)
         known_facts = None if being.attachment is None else being.attachment.known_facts
         return Description(heading=PERSONA_HEADING, text=persona_text(being.persona, known_facts))

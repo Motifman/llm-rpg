@@ -208,14 +208,15 @@ class TestBeingEnter:
         )
         assert being.persona == _persona()
 
-    def test_known_facts_leave_with_the_attachment(self) -> None:
-        """環境を離れると、その環境で知っていたことは居場所と一緒に無くなる。"""
+    def test_known_facts_do_not_follow_into_the_next_environment(self) -> None:
+        """廃坑の山村を離れて遭難の島に入ると、山村で知っていた金庫の番号は持ち越さない。"""
         being = Being(BeingId("being_ada"), _persona())
         being.enter("mine#1", EnvironmentEntry(environment_name="廃坑の山村", known_facts="金庫の番号は 1907 だ。"))
 
         being.detach()
+        being.enter("island#1", EnvironmentEntry(environment_name="遭難の島"))
 
-        assert being.attachment is None
+        assert being.attachment == BeingAttachment(environment_id="island#1", environment_name="遭難の島")
 
     def test_introduction_to_itself_is_refused_and_being_stays_outside(self) -> None:
         """紹介に自分の名前「アダ」があると BeingIntroducedToItselfException を投げ、どの環境にも入らない。"""
