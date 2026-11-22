@@ -45,6 +45,7 @@ _BUILT_IN_ACTIONS = frozenset(
 _SMALLEST_SCENARIO = """
 includes: [common/ja_default.yaml]
 introduction:
+  title: 坑道
   text: 坑道の奥で目を覚ました。
   premises: 外へ出る。
 spots:
@@ -224,14 +225,15 @@ class TestSurroundingsTexts:
 class TestBriefingHeadings:
     """ja_default.yaml の、入るときの案内の見出しが、読み込んだ設計図から使えることを保証する。"""
 
-    def test_headings_are_about_the_world_premises_and_the_map(self, tmp_path: Path) -> None:
-        """見出しは、導入が「この世界について」、前提が「この世界の前提」、地図が「この場所の造り」になる。"""
+    def test_heading_and_lines_follow_the_old_run(self, tmp_path: Path) -> None:
+        """見出しは古い run と同じ「世界の前提」で、題名・概要・地図の見出しの行も古い run の形になる。"""
         headings = _load_smallest_scenario(tmp_path).design.briefing_headings
 
-        assert (headings.introduction, headings.premises, headings.world_map) == (
-            "この世界について",
-            "この世界の前提",
-            "この場所の造り",
+        assert (headings.premises, headings.title, headings.overview, headings.world_map) == (
+            "世界の前提",
+            "- 舞台のタイトル: {title}",
+            "- 概要: {text}",
+            "【この場所の造り】",
         )
 
 

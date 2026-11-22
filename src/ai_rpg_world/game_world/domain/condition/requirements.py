@@ -26,6 +26,7 @@ class Requirements:
     closes_group_decisions: frozenset[GroupDecisionDeclaration]
     may_hide_membership: bool
     reads_happenings: frozenset[HappeningId]
+    reads_world_tick: bool = False
 
     @classmethod
     def nothing(cls) -> Requirements:
@@ -56,6 +57,7 @@ class Requirements:
             closes_group_decisions=self.closes_group_decisions | other.closes_group_decisions,
             may_hide_membership=self.may_hide_membership or other.may_hide_membership,
             reads_happenings=self.reads_happenings | other.reads_happenings,
+            reads_world_tick=self.reads_world_tick or other.reads_world_tick,
         )
 
     def without_subject(self, kind: SubjectKind) -> Requirements:

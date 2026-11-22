@@ -75,7 +75,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.infrastructure.scenario.condition_reader import ConditionReader
 from ai_rpg_world.game_world.infrastructure.scenario.perception_reader import PerceptionReader
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
-from ai_rpg_world.game_world.infrastructure.scenario.value_readers import description, people_text, ticks
+from ai_rpg_world.game_world.infrastructure.scenario.value_readers import description, display_name, people_text, ticks
 from ai_rpg_world.game_world.infrastructure.scenario.yaml_node import YamlNode
 
 _RULE_FIELDS = (
@@ -258,23 +258,27 @@ def world_words(node: YamlNode) -> WorldWords:
 
 
 def briefing_headings(node: YamlNode) -> BriefingHeadings:
-    fields = node.fields("introduction", "premises", "world_map")
+    fields = node.fields("premises", "title", "overview", "world_map", "deadline")
     return node.build(
         lambda: BriefingHeadings(
-            introduction=fields.required("introduction").text(),
             premises=fields.required("premises").text(),
+            title=fields.required("title").text(),
+            overview=fields.required("overview").text(),
             world_map=fields.required("world_map").text(),
+            deadline=fields.required("deadline").text(),
         )
     )
 
 
 def introduction(node: YamlNode) -> WorldIntroduction:
-    fields = node.fields("text", "premises", "show_world_map")
+    fields = node.fields("title", "text", "premises", "show_world_map")
     shown = fields.optional("show_world_map")
+    premises = fields.optional("premises")
     return node.build(
         lambda: WorldIntroduction(
+            title=display_name(fields.required("title")),
             text=description(fields.required("text")),
-            premises=description(fields.required("premises")),
+            premises=description(premises) if premises is not None else None,
             shows_world_map=shown.boolean() if shown is not None else False,
         )
     )

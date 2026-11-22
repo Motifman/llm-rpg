@@ -288,9 +288,11 @@ surroundings_texts:
     pitch_dark: 真っ暗で、何も見えない。
 
 briefing_headings:
-  introduction: この世界について
-  premises: この世界の前提
-  world_map: この場所の造り
+  premises: 世界の前提
+  title: "- 舞台のタイトル: {title}"
+  overview: "- 概要: {text}"
+  world_map: 【この場所の造り】
+  deadline: "- 行動の制限: この局面で取りうる自発的な行動（移動・調べる・話す・メモする等）の総量には限りがあり、使い方を誤ると脱出できない可能性がある（現実世界の時計の分秒とは無関係）。今後、クライアントから残り行動量や制限の残りが知らされる場合は、それに従うこと。"
 
 perception_defaults:
   witness: { clear: "{actor}が何かをした。" }

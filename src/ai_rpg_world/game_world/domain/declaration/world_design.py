@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
-from ai_rpg_world.being.contract import Description
+from ai_rpg_world.being.contract import Description, Orientation
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
@@ -486,6 +486,11 @@ class WorldDesign:
     @property
     def surroundings_texts(self) -> SurroundingsTexts:
         return self._surroundings_texts
+
+    def orientation(self) -> Orientation:
+        return self._briefing_headings.orientation(
+            self._introduction, self.world_map_text(), self._ending.has_deadline()
+        )
 
     def world_map_text(self) -> str | None:
         if not self._introduction.shows_world_map:
