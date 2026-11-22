@@ -216,7 +216,16 @@ class TestOwnActionResultRoute:
         assert observation.route.call_id == "call-7"
         assert observation.route.succeeded is False
 
-    @pytest.mark.parametrize("route", [SeenOrHeard(), ToldOrWritten(), OwnBodyState(), EnvironmentNotice()])
+    @pytest.mark.parametrize(
+        "route",
+        [
+            SeenOrHeard(),
+            ToldOrWritten(),
+            OwnBodyState(),
+            EnvironmentNotice(),
+            OwnActionCompleted(action_summary="「南の坑道」に着いた", tool="travel_to"),
+        ],
+    )
     def test_other_routes_have_no_call_id(self, route: object) -> None:
         """「自分の行動の結果」以外の経路は、呼び出しの ID を持たない。"""
         assert not hasattr(route, "call_id")

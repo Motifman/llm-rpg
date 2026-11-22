@@ -18,7 +18,9 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
+    OwnActionCompleted,
     OwnActionResult,
+    TextWithPeople,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
@@ -51,11 +53,15 @@ def _require_text(value: object, field_name: str) -> None:
         raise ShortTermMemoryValidationException(f"{field_name} must be non-blank str")
 
 
-def _require_body_without_people(observation: Observation) -> None:
+def _require_people_named(observation: Observation) -> None:
+    # 人の穴が残ったまま覚えると、プロンプトに出すときと snapshot に書くときに初めて落ち、どの観測かを追えない。
     try:
         observation.body_without_people()
     except ContractViolation as violation:
         raise ShortTermMemoryValidationException(str(violation)) from violation
+    route = observation.route
+    if isinstance(route, (OwnActionResult, OwnActionCompleted)) and isinstance(route.action_summary, TextWithPeople):
+        raise ShortTermMemoryValidationException("an action summary must have its people named before it is kept")
 
 
 def _require_order(value: object) -> None:
@@ -103,7 +109,7 @@ class Perception(Experience):
             raise ShortTermMemoryValidationException("observation must be Observation")
         if isinstance(self.observation.route, OwnActionResult):
             raise ShortTermMemoryValidationException("an own action result belongs to an attempt")
-        _require_body_without_people(self.observation)
+        _require_people_named(self.observation)
 
     @property
     def order(self) -> OccurrenceOrder | None:
@@ -141,7 +147,7 @@ class ObservedOutcome(Outcome):
     def __post_init__(self) -> None:
         if not isinstance(self.observation, Observation) or not isinstance(self.observation.route, OwnActionResult):
             raise ShortTermMemoryValidationException("an observed outcome must be an own action result")
-        _require_body_without_people(self.observation)
+        _require_people_named(self.observation)
 
     @property
     def order(self) -> OccurrenceOrder | None:

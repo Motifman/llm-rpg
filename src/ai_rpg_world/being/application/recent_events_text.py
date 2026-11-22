@@ -48,7 +48,7 @@ def _attempt_line(
 
 
 def _own_move_body(summary: str, result_body: str, *, succeeded: bool, call_text: str | None) -> str:
-    """古い run の format_action_result_body と同じ形。失敗には呼び出しの行を付けない。"""
+    """失敗には呼び出しの行を付けない。"""
     if not succeeded:
         return f"[行動] {summary} → [失敗] | {result_body}"
     call = "" if call_text is None else f"\n  呼び出し: {call_text}"
