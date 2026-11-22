@@ -11,7 +11,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.metrics_sink import (
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     build_unsupported_tool_message,
-    suggest_closest_tool_name,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
     WorldLlmTurnTrigger,
@@ -21,6 +20,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.types import (
     ReasonFirstGateDecision,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import WorldLlmWiring
+from ai_rpg_world.being.application.closest_tool_name import suggest_closest_tool_name
 
 __all__ = [
     "ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from itertools import product
 from typing import Any
 
@@ -10,13 +10,16 @@ from ai_rpg_world.being.application.people_called_apart import PeopleCalledApart
 from ai_rpg_world.being.contract import (
     ActionChoice,
     ActionChoices,
+    AgentMove,
     Candidate,
     ChoiceValue,
     Description,
     FreeText,
+    FrozenJsonObject,
     OfferedBeingTools,
     PersonInText,
     PersonPlaceholderValue,
+    PickOne,
     TextWithPeople,
     UnavailableAction,
 )
@@ -45,6 +48,32 @@ class ActionTools:
 
     def definitions(self) -> tuple[dict[str, Any], ...]:
         return tuple(self._definition(choice) for choice in self._choices.choices)
+
+    def tool_names(self) -> tuple[str, ...]:
+        return tuple(choice.name for choice in self._choices.choices)
+
+    def move_from(self, *, call_id: str, tool_name: str, arguments: Mapping[str, object]) -> AgentMove | None:
+        """出していないツールの名前なら None。
+
+        世界がツールの書式を知らずに済むよう、``details`` を外して平らに並べ、候補から選ぶ値の人の呼び方は
+        人の印に戻す。``details`` の中と上の段で名前が重なれば、上の段を使う。
+        """
+        choice = next((c for c in self._choices.choices if c.name == tool_name), None)
+        if choice is None:
+            return None
+        given = dict(arguments)
+        thought = given.pop(self._being_tools.inner_thought, None) if self._being_tools.inner_thought else None
+        details = given.pop(DETAILS, None) if choice.takes_details else None
+        flat = {**(details if isinstance(details, Mapping) else {}), **given}
+        picked = _picked_names(choice.values)
+        return AgentMove(
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=FrozenJsonObject(
+                {name: self._person_or_value(value) if name in picked else value for name, value in flat.items()}
+            ),
+            inner_thought=thought if isinstance(thought, str) and thought.strip() else None,
+        )
 
     def candidate_table(self) -> Description:
         return Description(
@@ -128,6 +157,20 @@ class ActionTools:
 
     def _label(self, label: str | PersonInText) -> str:
         return self._people.name_of(label) if isinstance(label, PersonInText) else label
+
+    def _person_or_value(self, value: object) -> object:
+        person = self._people.person_named(value) if isinstance(value, str) else None
+        return value if person is None else {"person": person.handle}
+
+
+def _picked_names(values: Sequence[ChoiceValue]) -> frozenset[str]:
+    names: set[str] = set()
+    for value in values:
+        if isinstance(value, PickOne):
+            names.add(value.name)
+            for candidate in value.candidates:
+                names |= _picked_names(candidate.values)
+    return frozenset(names)
 
 
 __all__ = ["CANDIDATE_TABLE_HEADING", "DETAILS", "ActionTools"]
