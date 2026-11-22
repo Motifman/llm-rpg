@@ -116,6 +116,70 @@ class TestRecentEventsText:
             "  メモ: 「text が空のメモを足す」は書けなかった（理由: text が空）"
         )
 
+    def test_succeeded_move_with_a_summary_reads_like_the_old_run(self) -> None:
+        """要約のある成功した 1 手は「[行動] 要約 → [結果] 結果の文」の行に、呼び出し・心の声・メモの順で続き行が付く。"""
+        memory = ShortTermMemory.empty(ADA)
+        memory.act(
+            _move("call-1", inner_thought="まず灯りだ"),
+            current_turn=1,
+            memo_rejections=("「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",),
+            call_text='interact(target="カンテラ", how="火を入れる")',
+        )
+        memory.receive_result(
+            ObservedOutcome(
+                _observation(
+                    "カンテラに火を入れた。",
+                    route=OwnActionResult(call_id="call-1", succeeded=True, action_summary="「カンテラ」に働きかけた"),
+                )
+            ),
+            current_turn=1,
+        )
+
+        assert recent_events_text(memory) == (
+            "- [1日目 朝] [行動] 「カンテラ」に働きかけた → [結果] カンテラに火を入れた。\n"
+            '  呼び出し: interact(target="カンテラ", how="火を入れる")\n'
+            "  心の声: まず灯りだ\n"
+            "  メモ: 「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）"
+        )
+
+    def test_failed_move_with_a_summary_reads_failure_and_has_no_call_line(self) -> None:
+        """要約のある失敗した 1 手は「[行動] 要約 → [失敗] | 理由」の行になり、古い run と同じく呼び出しの行は付かない。"""
+        memory = ShortTermMemory.empty(ADA)
+        memory.act(_move("call-1"), current_turn=1, call_text='interact(target="金庫")')
+        memory.receive_result(
+            ObservedOutcome(
+                _observation(
+                    "番号が違った。",
+                    route=OwnActionResult(call_id="call-1", succeeded=False, action_summary="「金庫」に働きかけた"),
+                )
+            ),
+            current_turn=1,
+        )
+
+        assert recent_events_text(memory) == "- [1日目 朝] [行動] 「金庫」に働きかけた → [失敗] | 番号が違った。"
+
+    def test_memory_operation_with_a_summary_reads_by_whether_it_succeeded(self) -> None:
+        """要約のある記憶の道具の 1 手も、成功なら [結果] と呼び出しの行、失敗なら [失敗] の行になる。"""
+        memory = ShortTermMemory.empty(ADA)
+        for call_id, succeeded, body in (("call-1", True, "[ep_1] 金庫の話"), ("call-2", False, "減らしてください。")):
+            memory.act(_move(call_id), current_turn=1, call_text='episode_recall(handles=["ep_1"])')
+            memory.receive_result(
+                MemoryOperationOutcome(
+                    call_id=call_id,
+                    body=body,
+                    time=ObservedTime(display="1日目 昼"),
+                    succeeded=succeeded,
+                    action_summary='episode_recall({"handles": ["ep_1"]}) を実行しました。',
+                ),
+                current_turn=1,
+            )
+
+        assert recent_events_text(memory) == (
+            '- [1日目 昼] [行動] episode_recall({"handles": ["ep_1"]}) を実行しました。 → [結果] [ep_1] 金庫の話\n'
+            '  呼び出し: episode_recall(handles=["ep_1"])\n'
+            '- [1日目 昼] [行動] episode_recall({"handles": ["ep_1"]}) を実行しました。 → [失敗] | 減らしてください。'
+        )
+
     def test_lapse_is_a_line_without_inner_thought(self) -> None:
         """1 手を出せなかったことは「- [時刻] 本文」の 1 行になる。"""
         memory = ShortTermMemory.empty(ADA)
