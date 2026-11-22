@@ -19,4 +19,10 @@ class TextArgumentValue:
             raise BlankTextArgumentException(f"TextArgumentValue must be non-blank, got {self.text!r}")
 
 
+@final
+@dataclass(frozen=True)
+class ArgumentsNotChosen:
+    pass
+
+
 ActionArguments = Mapping[ArgumentName, TextArgumentValue | ItemInstanceId]

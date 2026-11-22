@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TypeVar
 
+import pytest
+
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused, ActionReply
 from ai_rpg_world.game_world.application.action.carry_out_action import CarryOutAction
 from ai_rpg_world.game_world.application.action.cast_ballot import CastBallot, CastBallotCommand
@@ -27,6 +29,7 @@ from ai_rpg_world.game_world.application.action.leave_section import LeaveSectio
 from ai_rpg_world.game_world.application.action.pick_up_ground_item import PickUpGroundItem, PickUpGroundItemCommand
 from ai_rpg_world.game_world.application.action.put_away_item import PutAwayItem, PutAwayItemCommand
 from ai_rpg_world.game_world.application.action.search_spot import SearchSpot, SearchSpotCommand
+from ai_rpg_world.game_world.application.action.speak import Speak, SpeakCommand
 from ai_rpg_world.game_world.application.action.start_travel import StartTravel, StartTravelCommand
 from ai_rpg_world.game_world.application.action.tend_fallen_person import TendFallenPerson, TendFallenPersonCommand
 from ai_rpg_world.game_world.application.action.use_item import UseItem, UseItemCommand
@@ -38,6 +41,7 @@ from ai_rpg_world.game_world.application.list_available_actions import (
 )
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_arguments import ArgumentsNotChosen, TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, TextArgument
@@ -53,6 +57,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     LeaveSectionAttempt,
     ListeningAttempt,
     PutAwayItemAttempt,
+    SpeechAttempt,
     SpotSearchAttempt,
     TendAttempt,
     TravelAttempt,
@@ -65,8 +70,11 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     SomeoneInTheDark,
 )
 from ai_rpg_world.game_world.domain.action.manner import Openly
+from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechContentNotChosen, Whisper
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
+from ai_rpg_world.game_world.domain.condition.argument_condition import ArgumentEqualsCondition
 from ai_rpg_world.game_world.domain.condition.condition import NoText
+from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition, NotCondition
 from ai_rpg_world.game_world.domain.condition.flag_conditions import FlagIsRaisedCondition
 from ai_rpg_world.game_world.domain.condition.membership_condition import IsMemberCondition
 from ai_rpg_world.game_world.domain.condition.subject import Target
@@ -94,6 +102,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.body_effects import DamageEffect
 from ai_rpg_world.game_world.domain.effect.flag_effects import RaiseFlagEffect
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+from ai_rpg_world.game_world.domain.exception.action_exception import ArgumentsNotChosenException
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -121,6 +130,7 @@ from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.game_world.domain.world_progress import Abstain, VoteFor
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
+from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
 from tests.game_world.support.verb_declarations_for_tests import (
     everyone_votes_on,
     lever_pulled_quietly,
@@ -177,6 +187,19 @@ _NOT_A_WOLF_TEXT = "仲間ではない。"
 _CARVE = replace(
     pull_lever((ArgumentDeclaration(ArgumentName("words"), TextArgument()),)),
     interaction_id=InteractionId("carve"),
+)
+_ALREADY_OPEN_TEXT = "扉はもう開いている。"
+_OPEN_WITH_CODE = replace(
+    pull_lever((ArgumentDeclaration(ArgumentName("code"), TextArgument()),)),
+    interaction_id=InteractionId("open_with_code"),
+    precondition=AllOfCondition(
+        children=(
+            NotCondition(FlagIsRaisedCondition(_DOOR_OPENED, NoText()), TextWithUnassignedPeople(_ALREADY_OPEN_TEXT)),
+            ArgumentEqualsCondition(ArgumentName("code"), TextArgumentValue("1907"), NoText()),
+        ),
+        failure_text=TextWithUnassignedPeople("扉はびくともしない。"),
+    ),
+    effect=RaiseFlagEffect(_DOOR_OPENED),
 )
 _RUB = replace(pull_lever(()), interaction_id=InteractionId("rub"), effect=RaiseFlagEffect(_KEY_FOUND))
 _TAP: InteractionDeclaration = replace(
@@ -295,6 +318,11 @@ class _Mine:
             lambda session: session.aggregates().whereabouts().enter_section(PersonBody(_ALICE), _CART, frozenset())
         )
 
+    def open_door(self) -> None:
+        self.scope.run(
+            lambda session: session.aggregates().flags().raise_flag(_DOOR_OPENED, ActionAttemptForTests(actor_id=_BOB))
+        )
+
     def keep_alice_busy(self) -> None:
         self.scope.run(
             lambda session: (
@@ -367,6 +395,18 @@ def _design(
     )
 
 
+_UNWORDED = SpeechContentNotChosen()
+
+
+def _worded(attempts: list[ActionAttempt]) -> list[ActionAttempt]:
+    return [
+        a
+        for a in attempts
+        if not isinstance(a, SpeechAttempt)
+        and not (isinstance(a, ObjectInteractionAttempt) and isinstance(a.arguments, ArgumentsNotChosen))
+    ]
+
+
 def _doable(actions: tuple[AvailableAction, ...]) -> list[ActionAttempt]:
     return [action.attempt for action in actions if isinstance(action.standing, Doable)]
 
@@ -385,7 +425,7 @@ class TestListAvailableActions:
     """ListAvailableActions が、場面に見えるものと持ち物を候補にし、試したときと同じ確認でできる・できないに分ける挙動を保証する。"""
 
     def test_bright_mine_lists_every_candidate_from_surroundings_and_belongings(self) -> None:
-        """明るい坑道で alice が一覧を求めると、探す・耳を澄ます・待つ、外への移動、ロープを拾う、ランプと石を置く、石を持つ、ランプをしまう・使う・磨く、bob の介抱、carol へランプと石を渡す、トロッコに乗る、扉を叩く、bob と carol に手を振る、ができるにこの順で並び、扉を開けるができないに並ぶ。"""
+        """明るい坑道で alice が一覧を求めると、探す・耳を澄ます・待つ、ふつうの声で話す・叫ぶ・carol にささやく、外への移動、ロープを拾う、ランプと石を置く、石を持つ、ランプをしまう・使う・磨く、bob の介抱、carol へランプと石を渡す、トロッコに乗る、扉を叩く、bob と carol に手を振る、ができるにこの順で並び、扉を開けるができないに並ぶ。"""
         mine = _Mine()
         lamp, rock = mine.lamp(), mine.rock()
         door, cart = mine.design.nouns.object_of(_DOOR.object_id), mine.design.section_access(_CART.section_id)
@@ -393,31 +433,36 @@ class TestListAvailableActions:
 
         actions = mine.lists()
 
-        assert _doable(actions) == [
-            SpotSearchAttempt(_ALICE),
-            ListeningAttempt(_ALICE),
-            WaitAttempt(_ALICE, NoReason()),
-            TravelAttempt(_ALICE, outside),
-            GroundItemPickupAttempt(_ALICE, mine.rope, Openly()),
-            ItemDropAttempt(_ALICE, lamp, Openly()),
-            ItemDropAttempt(_ALICE, rock, Openly()),
-            HoldItemAttempt(_ALICE, rock),
-            PutAwayItemAttempt(_ALICE, lamp),
-            ItemUseAttempt(_ALICE, lamp),
-            TendAttempt(_ALICE, _BOB),
-            ItemHandOverAttempt(_ALICE, _CAROL, (lamp,), Openly()),
-            ItemHandOverAttempt(_ALICE, _CAROL, (rock,), Openly()),
-            EnterSectionAttempt(_ALICE, cart),
-            ObjectInteractionAttempt(_ALICE, door, _KNOCK, {}, Openly()),
-            CarriedItemInteractionAttempt(_ALICE, lamp, _RUB, {}, Openly()),
-            PersonInteractionAttempt(_ALICE, _CAROL, _WAVE, {}, Openly()),
-            PersonInteractionAttempt(_ALICE, _BOB, _WAVE, {}, Openly()),
-        ]
+        assert _doable(actions) == list[ActionAttempt](
+            [
+                SpotSearchAttempt(_ALICE),
+                ListeningAttempt(_ALICE),
+                WaitAttempt(_ALICE, NoReason()),
+                SpeechAttempt(_ALICE, OrdinaryVoice(), _UNWORDED),
+                SpeechAttempt(_ALICE, Shout(), _UNWORDED),
+                SpeechAttempt(_ALICE, Whisper(_CAROL), _UNWORDED),
+                TravelAttempt(_ALICE, outside),
+                GroundItemPickupAttempt(_ALICE, mine.rope, Openly()),
+                ItemDropAttempt(_ALICE, lamp, Openly()),
+                ItemDropAttempt(_ALICE, rock, Openly()),
+                HoldItemAttempt(_ALICE, rock),
+                PutAwayItemAttempt(_ALICE, lamp),
+                ItemUseAttempt(_ALICE, lamp),
+                TendAttempt(_ALICE, _BOB),
+                ItemHandOverAttempt(_ALICE, _CAROL, (lamp,), Openly()),
+                ItemHandOverAttempt(_ALICE, _CAROL, (rock,), Openly()),
+                EnterSectionAttempt(_ALICE, cart),
+                ObjectInteractionAttempt(_ALICE, door, _KNOCK, {}, Openly()),
+                CarriedItemInteractionAttempt(_ALICE, lamp, _RUB, {}, Openly()),
+                PersonInteractionAttempt(_ALICE, _CAROL, _WAVE, {}, Openly()),
+                PersonInteractionAttempt(_ALICE, _BOB, _WAVE, {}, Openly()),
+            ]
+        )
         assert _not_now(actions) == [ObjectInteractionAttempt(_ALICE, door, _UNLOCK, {}, Openly())]
 
     def test_every_doable_action_goes_through_when_tried(self) -> None:
-        """明るい坑道でできるに分けた行為は、1 つずつ新しい坑道で試すと、どれも断られずに通る。"""
-        doable = _doable(_Mine().lists())
+        """明るい坑道でできるに分けた行為のうち、値を選ぶ必要の無いものは、1 つずつ新しい坑道で試すと、どれも断られずに通る。"""
+        doable = _worded(_doable(_Mine().lists()))
 
         replies = [(attempt, _Mine().tries(attempt)) for attempt in doable]
 
@@ -451,13 +496,47 @@ class TestListAvailableActions:
         assert isinstance(reply, ActionRefused)
         assert reply.refusal.text.template.template != _NOT_A_WOLF_TEXT
 
-    def test_interaction_needing_words_is_not_listed(self) -> None:
-        """文の引数がある操作 (刻む) は、一覧に出ない。"""
+    def test_interaction_needing_words_is_listed_with_arguments_not_chosen(self) -> None:
+        """文の引数がある操作 (刻む) は、引数をまだ選んでいない試みとして、できるに出る。"""
         mine = _Mine(object_interactions=(_CARVE,))
+        door = mine.design.nouns.object_of(_DOOR.object_id)
 
         actions = mine.lists()
 
-        assert [a for a in (x.attempt for x in actions) if isinstance(a, ObjectInteractionAttempt)] == []
+        assert [a for a in _doable(actions) if isinstance(a, ObjectInteractionAttempt)] == [
+            ObjectInteractionAttempt(_ALICE, door, _CARVE, ArgumentsNotChosen(), Openly())
+        ]
+
+    def test_interaction_awaiting_its_code_is_doable_while_the_door_is_closed(self) -> None:
+        """「扉が開いていない」かつ「番号が 1907」を前提にする操作は、扉が閉じているあいだ、番号を読まずにできるに出る。"""
+        mine = _Mine(object_interactions=(_OPEN_WITH_CODE,))
+        door = mine.design.nouns.object_of(_DOOR.object_id)
+
+        actions = mine.lists()
+
+        assert ObjectInteractionAttempt(_ALICE, door, _OPEN_WITH_CODE, ArgumentsNotChosen(), Openly()) in _doable(
+            actions
+        )
+
+    def test_interaction_awaiting_its_code_is_not_now_once_the_door_is_open(self) -> None:
+        """扉が開いたあとは、番号が分からなくても前提の前半が成り立たないので、作者の文を理由にできないに出る。"""
+        mine = _Mine(object_interactions=(_OPEN_WITH_CODE,))
+        mine.open_door()
+        door = mine.design.nouns.object_of(_DOOR.object_id)
+        unworded = ObjectInteractionAttempt(_ALICE, door, _OPEN_WITH_CODE, ArgumentsNotChosen(), Openly())
+
+        actions = mine.lists()
+
+        assert unworded in _not_now(actions)
+        assert _reason_of(actions, unworded) == _ALREADY_OPEN_TEXT
+
+    def test_interaction_with_arguments_not_chosen_cannot_take_effect(self) -> None:
+        """引数をまだ選んでいない試みを試すと、世界を変えずに ArgumentsNotChosenException を投げる。"""
+        mine = _Mine(object_interactions=(_OPEN_WITH_CODE,))
+        door = mine.design.nouns.object_of(_DOOR.object_id)
+
+        with pytest.raises(ArgumentsNotChosenException):
+            mine.tries(ObjectInteractionAttempt(_ALICE, door, _OPEN_WITH_CODE, ArgumentsNotChosen(), Openly()))
 
     def test_dark_mine_hides_ground_items_and_unidentified_people(self) -> None:
         """暗い坑道では、地面のロープを拾う、誰か分からない bob の介抱、carol へ渡す、は候補に出ない。暗がりで見える扉の操作は出る。"""
@@ -525,15 +604,37 @@ class TestListAvailableActions:
 
         assert _doable(mine.lists()) == []
 
-    def test_busy_person_finds_every_action_not_now_with_the_common_rule_text(self) -> None:
-        """行っている最中の alice には、一覧のどの行為もできないに分かれ、理由は共通の決まり Busy の断りの文。"""
+    def test_speech_without_content_cannot_take_effect(self) -> None:
+        """中身をまだ書いていない発話を試すと、世界を変える前に ArgumentsNotChosenException を投げる。"""
+        mine = _Mine()
+
+        with pytest.raises(ArgumentsNotChosenException):
+            Speak(mine.carry_out)(SpeakCommand(SpeechAttempt(_ALICE, OrdinaryVoice(), _UNWORDED)))
+
+    def test_busy_person_can_only_speak(self) -> None:
+        """行っている最中の alice は、話すことだけができるに分かれ、ほかの行為はどれも共通の決まり Busy の断りの文でできないに分かれる。"""
         mine = _Mine()
         mine.keep_alice_busy()
 
         actions = mine.lists()
 
-        assert _doable(actions) == []
-        assert {_reason_of(actions, action.attempt) for action in actions} == {"BUSY のためできない。"}
+        assert _doable(actions) == [
+            SpeechAttempt(_ALICE, OrdinaryVoice(), _UNWORDED),
+            SpeechAttempt(_ALICE, Shout(), _UNWORDED),
+            SpeechAttempt(_ALICE, Whisper(_CAROL), _UNWORDED),
+        ]
+        assert {_reason_of(actions, attempt) for attempt in _not_now(actions)} == {"BUSY のためできない。"}
+
+    def test_dark_mine_offers_no_whisper_to_unidentified_people(self) -> None:
+        """暗い坑道では、誰か分からない人にはささやけず、ふつうの声で話すと叫ぶだけが出る。"""
+        mine = _Mine(Lighting.DARK)
+
+        speeches = [a for a in _doable(mine.lists()) if isinstance(a, SpeechAttempt)]
+
+        assert speeches == [
+            SpeechAttempt(_ALICE, OrdinaryVoice(), _UNWORDED),
+            SpeechAttempt(_ALICE, Shout(), _UNWORDED),
+        ]
 
 
 _HARU, _NATSU, _AKI = PersonId("haru"), PersonId("natsu"), PersonId("aki")

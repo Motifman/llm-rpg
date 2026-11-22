@@ -55,6 +55,12 @@ SpeechReach = Whisper | OrdinaryVoice | Shout
 
 @final
 @dataclass(frozen=True)
+class SpeechContentNotChosen:
+    pass
+
+
+@final
+@dataclass(frozen=True)
 class SpeechContent:
     text: str
 

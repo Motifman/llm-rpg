@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure, NoText
+from ai_rpg_world.game_world.domain.condition.condition import AwaitsArguments, FailureReason, HiddenFailure, NoText
 from ai_rpg_world.game_world.domain.condition.failure_texts import explains, own_failure, placeholder_requirements
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -29,6 +29,13 @@ class LeafCondition(ABC):
         if self.holds(facts, trigger):
             return None
         return own_failure(self.failure_text, trigger)
+
+    def failure_reason_before_arguments(
+        self, facts: WorldFacts, trigger: Trigger
+    ) -> FailureReason | HiddenFailure | AwaitsArguments | None:
+        if self.requirements().uses_action_arguments:
+            return AwaitsArguments()
+        return self.failure_reason(facts, trigger)
 
     def explains_failure(self) -> bool:
         return explains(self.failure_text)
