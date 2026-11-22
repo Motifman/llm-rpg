@@ -345,7 +345,7 @@ class TestChooseAction:
         assert (outcome.requested_tool, outcome.suggestion) == ("pickup", "pickup_item")
 
     def test_unknown_tool_is_remembered_as_a_failed_attempt(self) -> None:
-        """出していないツール名の呼び出しは、試みと、近い名前と使えるツールの一覧を添えた失敗の結果として短期記憶に残る。"""
+        """出していないツール名の呼び出しは、古い run と同じ文面 (近い名前と、名前の順に並べた使えるツールの一覧) の失敗の結果として短期記憶に残る。"""
         memories = InMemoryShortTermMemoryRepository()
 
         _choose(_reply("pickup", {"item": "ランプ"}, call_id="call_9"), memories=memories)
@@ -354,8 +354,7 @@ class TestChooseAction:
         assert isinstance(attempt, Attempt) and isinstance(attempt.result, ObservedOutcome)
         assert attempt.move.tool_name == "pickup" and attempt.is_answered()
         assert attempt.result.observation.body == (
-            "'pickup' というツールは無い。もしかして 'pickup_item' ですか? "
-            "いま使えるツール: [interact, speak, pickup_item]"
+            "未対応のツールです: pickup。もしかして 'pickup_item' ですか? 現在使える tool: [interact, pickup_item, speak]"
         )
         assert attempt.result.observation.time == NOW
         assert attempt.result.observation.route == OwnActionResult(
@@ -373,7 +372,7 @@ class TestChooseAction:
         assert isinstance(attempt, Attempt) and isinstance(attempt.result, ObservedOutcome)
         assert (
             attempt.result.observation.body
-            == "'gather' というツールは無い。いま使えるツール: [interact, speak, pickup_item]"
+            == "未対応のツールです: gather。 現在使える tool: [interact, pickup_item, speak]"
         )
 
 

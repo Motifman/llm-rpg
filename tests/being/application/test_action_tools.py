@@ -140,6 +140,23 @@ class TestActionToolDefinitions:
 
         assert definition["function"]["parameters"]["required"] == ["inner_thought"]
 
+    def test_max_length_of_the_outline_limits_the_argument(self) -> None:
+        """見取り図が長さの上限 (200) を持つ引数は、ツールの定義の maxLength になり、持たない引数には付かない。"""
+        wait = ActionChoice(
+            name="wait",
+            label="待つ",
+            outline=(
+                ArgumentOutline(name="say_inline", label="一言", max_length=200),
+                ArgumentOutline(name="note", label="覚え"),
+            ),
+        )
+
+        [definition] = _tools(ActionChoices((wait,))).definitions()
+
+        properties = definition["function"]["parameters"]["properties"]
+        assert properties["say_inline"] == {"type": "string", "description": "一言", "maxLength": 200}
+        assert "maxLength" not in properties["note"]
+
     def test_candidates_are_not_written_into_the_definition(self) -> None:
         """ツールの説明と引数には、このターンの候補 (金庫) を書かない。"""
         [interact] = _tools(ActionChoices((_interact(SAFE),))).definitions()

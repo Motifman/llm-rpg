@@ -78,7 +78,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue impor
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     build_unsupported_tool_message,
-    format_unsupported_tool_message,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
@@ -113,6 +112,7 @@ from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
+from ai_rpg_world.being.application.closest_tool_name import format_unsupported_tool_message
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,

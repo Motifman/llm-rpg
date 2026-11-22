@@ -9,7 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from ai_rpg_world.being.application.action_tools import ActionTools
-from ai_rpg_world.being.application.closest_tool_name import suggest_closest_tool_name
+from ai_rpg_world.being.application.closest_tool_name import format_unsupported_tool_message, suggest_closest_tool_name
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.episode_recall_tool import (
     MALFORMED_HANDLES_TEXT,
@@ -245,8 +245,9 @@ class ChooseAction:
             return ActionChosen(move=move, exchange=exchange)
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
-        guess = f"もしかして '{suggestion}' ですか? " if suggestion else ""
-        body = f"'{call.tool_name}' というツールは無い。{guess}いま使えるツール: [{', '.join(tools.tool_names())}]"
+        body = format_unsupported_tool_message(
+            requested=call.tool_name, valid_tools=tools.tool_names(), suggestion=suggestion
+        )
         self._act(
             being_id,
             AgentMove(call_id=call_id, tool_name=call.tool_name, arguments={}),

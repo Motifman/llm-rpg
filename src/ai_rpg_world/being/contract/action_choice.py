@@ -104,12 +104,17 @@ class ArgumentOutline:
     label: str
     required: bool = False
     hidden_as: str | None = None
+    max_length: int | None = None
 
     def __post_init__(self) -> None:
         _require_name(self.name, "name")
         require_text(self.label, "label")
         require_bool(self.required, "required")
         require_optional_text(self.hidden_as, "hidden_as")
+        if self.max_length is not None and (
+            isinstance(self.max_length, bool) or not isinstance(self.max_length, int) or self.max_length < 1
+        ):
+            raise ContractViolation("max_length must be a positive int or None")
 
 
 @dataclass(frozen=True, kw_only=True)
