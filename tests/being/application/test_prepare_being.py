@@ -60,3 +60,13 @@ class TestPrepareBeing:
             )
 
         assert beings.find_by_id(GEN) is None
+
+    def test_unknown_field_is_refused_even_for_existing_being(self) -> None:
+        """同じ BeingId の Being がもういても、人柄に無い欄があれば PersonaValidationException を投げ、シナリオの誤りを見逃さない。"""
+        beings = InMemoryBeingRepository()
+        beings.save(Being(GEN, Persona(name="ゲン")))
+
+        with pytest.raises(PersonaValidationException):
+            PrepareBeing(beings).execute(
+                PrepareBeingCommand(being_id=GEN, persona_fields={"name": "ゲン", "objective": "外へ出る"})
+            )

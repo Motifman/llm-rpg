@@ -62,7 +62,6 @@ class Persona:
             raise PersonaValidationException(f"Persona has no fields {unknown}")
         if "name" not in persona_fields:
             raise PersonaValidationException("Persona.name must be given")
-        # 欄ごとの値の型は __post_init__ が確かめ、PersonaValidationException で断る
         return cls(**persona_fields)  # type: ignore[arg-type]
 
 

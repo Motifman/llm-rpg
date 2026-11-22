@@ -4,7 +4,7 @@ import pytest
 
 from ai_rpg_world.being.application.enter_environment import EnterEnvironment, EnterEnvironmentCommand
 from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
-from ai_rpg_world.being.domain.acquaintance import HowKnown
+from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -102,3 +102,43 @@ class TestEnterEnvironment:
                     being_id=GEN, environment_id="mine#1", entry=EnvironmentEntry(environment_name=MINE)
                 )
             )
+
+    def test_failed_introduction_leaves_being_outside_so_the_same_command_can_be_retried(self) -> None:
+        """紹介の記録で失敗すると、Being は環境に入らないまま残り、同じコマンドをやり直すと入れて紹介も 1 件だけ記録される。"""
+        parts = _Parts()
+        parts.prepare_gen()
+        failing = _FailsOnce(parts.acquaintances)
+        command = EnterEnvironmentCommand(
+            being_id=GEN,
+            environment_id="mine#1",
+            entry=EnvironmentEntry(environment_name=MINE, introductions=(Introduction(name="サヨ"),)),
+        )
+
+        with pytest.raises(RuntimeError):
+            EnterEnvironment(parts.beings, failing, parts.clock).execute(command)
+        left = parts.beings.find_by_id(GEN)
+        EnterEnvironment(parts.beings, failing, parts.clock).execute(command)
+
+        assert left is not None
+        assert left.attachment is None
+        entered = parts.beings.find_by_id(GEN)
+        assert entered is not None
+        assert entered.attachment == BeingAttachment(environment_id="mine#1", environment_name=MINE)
+        assert [a.name for a in parts.acquaintances.list_by_being(GEN)] == ["サヨ"]
+
+
+class _FailsOnce(InMemoryAcquaintanceRepository):
+    def __init__(self, store: InMemoryAcquaintanceRepository) -> None:
+        super().__init__()
+        self._store = store
+        self._failed = False
+
+    def record_introduction(
+        self, being_id: BeingId, *, environment_name: str, name: str, turn: int, relation_note: str | None
+    ) -> Acquaintance:
+        if not self._failed:
+            self._failed = True
+            raise RuntimeError("acquaintance store is unavailable")
+        return self._store.record_introduction(
+            being_id, environment_name=environment_name, name=name, turn=turn, relation_note=relation_note
+        )

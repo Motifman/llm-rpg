@@ -30,8 +30,9 @@ class EnterEnvironment:
         if being is None:
             raise BeingNotFoundException(f"Being({command.being_id}) is not prepared")
         being.enter(command.environment_id, command.entry)
-        self._beings.save(being)
         turn = self._turn_reader.current_turn(command.being_id)
+        # 入ったことを先に保存すると、紹介の記録で失敗したとき、同じコマンドをやり直しても入り直せず断られる。
+        # 紹介の記録は知っている相手を変えないので、やり直しても重ならない
         for introduction in command.entry.introductions:
             self._acquaintances.record_introduction(
                 command.being_id,
@@ -40,6 +41,7 @@ class EnterEnvironment:
                 turn=turn,
                 relation_note=introduction.relation_note,
             )
+        self._beings.save(being)
 
 
 __all__ = ["EnterEnvironment", "EnterEnvironmentCommand"]
