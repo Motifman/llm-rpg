@@ -34,7 +34,7 @@ from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, EpisodeRepository
-from ai_rpg_world.being.domain.memo_book import MemoBookRepository, MemoKind
+from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository, MemoKind
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
@@ -130,6 +130,11 @@ def _reply(name: str, arguments: dict[str, object], *, call_id: str = "call_1") 
 
 
 CUT_OFF = ActionChoosingReply(tool_call=None, cut_off_while_reasoning=True)
+
+
+class _FailingToSaveMemo(InMemoryMemoBookRepository):
+    def save(self, book: MemoBook) -> None:
+        raise OSError("disk is full")
 
 
 class _FailingToSave(InMemoryShortTermMemoryRepository):
@@ -357,6 +362,22 @@ class TestWritingMemoWithTheMove:
         )
 
         assert memo_books.get(GEN).memos == ()
+
+    def test_failing_to_write_the_memo_leaves_no_attempt_and_keeps_the_turn(self) -> None:
+        """メモ帳に保存できなければ例外が上がり、試みは短期記憶に残らず、記憶のターンも進まない。"""
+        memories = InMemoryShortTermMemoryRepository()
+        clock = InMemoryMemoryTurnClock()
+
+        with pytest.raises(OSError):
+            _choose(
+                _reply("interact", {"target": "金庫", "memo": [{"do": "add", "kind": "todo", "text": "開ける"}]}),
+                being_tools=WITH_MEMORY,
+                memo_books=_FailingToSaveMemo(),
+                memories=memories,
+                clock=clock,
+            )
+
+        assert memories.get(GEN).unsummarized() == () and clock.current_turn(GEN) == 0
 
 
 class TestRecallingEpisodes:

@@ -191,9 +191,10 @@ class ChooseAction:
             return TurnSpentRecalling(move=recall, exchange=exchange)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=call.arguments)
         if move is not None:
-            self._act(being_id, move, turn=turn, result=None)
-            # 行動が世界に断られても、書いたことは本人がしたことなので残す。
+            # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
+            # 行動が世界に断られても、書いたことは本人がしたことなので残る。
             self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
+            self._act(being_id, move, turn=turn, result=None)
             return ActionChosen(move=move, exchange=exchange)
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
