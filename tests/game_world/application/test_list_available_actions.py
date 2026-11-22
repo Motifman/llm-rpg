@@ -198,10 +198,11 @@ _MINE_EXIT = passage("mine_exit", ("mine", "outside"))
 _UNLOCK = replace(
     pull_lever(()),
     interaction_id=InteractionId("unlock"),
+    display_label=DisplayName("unlock"),
     precondition=FlagIsRaisedCondition(_KEY_FOUND, TextWithUnassignedPeople(_NO_KEY_TEXT)),
     effect=RaiseFlagEffect(_DOOR_OPENED),
 )
-_KNOCK = replace(pull_lever(()), interaction_id=InteractionId("knock"))
+_KNOCK = replace(pull_lever(()), interaction_id=InteractionId("knock"), display_label=DisplayName("knock"))
 _WOLVES = GroupDeclaration(
     group_id=GroupId("wolves"),
     grouping=GroupingDeclaration(
@@ -215,11 +216,13 @@ _NOT_A_WOLF_TEXT = "仲間ではない。"
 _CARVE = replace(
     pull_lever((ArgumentDeclaration(ArgumentName("words"), TextArgument()),)),
     interaction_id=InteractionId("carve"),
+    display_label=DisplayName("carve"),
 )
 _ALREADY_OPEN_TEXT = "扉はもう開いている。"
 _OPEN_WITH_CODE = replace(
     pull_lever((ArgumentDeclaration(ArgumentName("code"), TextArgument()),)),
     interaction_id=InteractionId("open_with_code"),
+    display_label=DisplayName("open_with_code"),
     precondition=AllOfCondition(
         children=(
             NotCondition(FlagIsRaisedCondition(_DOOR_OPENED, NoText()), TextWithUnassignedPeople(_ALREADY_OPEN_TEXT)),
@@ -229,10 +232,16 @@ _OPEN_WITH_CODE = replace(
     ),
     effect=RaiseFlagEffect(_DOOR_OPENED),
 )
-_RUB = replace(pull_lever(()), interaction_id=InteractionId("rub"), effect=RaiseFlagEffect(_KEY_FOUND))
+_RUB = replace(
+    pull_lever(()),
+    interaction_id=InteractionId("rub"),
+    display_label=DisplayName("rub"),
+    effect=RaiseFlagEffect(_KEY_FOUND),
+)
 _TAP: InteractionDeclaration = replace(
     pull_lever(()),
     interaction_id=InteractionId("tap"),
+    display_label=DisplayName("tap"),
     effect=DamageEffect(Target(), Damage(1)),
     perceived_as=replace(
         lever_pulled_quietly(),
@@ -242,16 +251,22 @@ _TAP: InteractionDeclaration = replace(
     reaches_unseen=True,
 )
 _WAVE: InteractionDeclaration = replace(
-    _TAP, interaction_id=InteractionId("wave"), effect=ChangesNothing(), reaches_unseen=False
+    _TAP,
+    interaction_id=InteractionId("wave"),
+    display_label=DisplayName("wave"),
+    effect=ChangesNothing(),
+    reaches_unseen=False,
 )
 _HOWL_WITH: InteractionDeclaration = replace(
     _WAVE,
     interaction_id=InteractionId("howl_with"),
+    display_label=DisplayName("howl_with"),
     precondition=IsMemberCondition(Target(), _WOLVES, TextWithUnassignedPeople(_NOT_A_WOLF_TEXT)),
 )
 _GREET_BY_KEY: InteractionDeclaration = replace(
     _TAP,
     interaction_id=InteractionId("greet_by_key"),
+    display_label=DisplayName("greet_by_key"),
     precondition=FlagIsRaisedCondition(_KEY_FOUND, TextWithUnassignedPeople(_NO_KEY_TEXT)),
 )
 

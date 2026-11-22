@@ -29,6 +29,19 @@ DECISION = OfferedValue("decision", "決めごと")
 BALLOT = OfferedValue("choice", "選び先")
 
 
+_NAME_LIMIT = 64
+_NAMES_ON_THE_INTERACTION_PATH = frozenset({TARGET.name, HOW.name})
+
+
+def offered_value_name_problems(name: str) -> tuple[str, ...]:
+    # 引数の名前は、Being が選択肢を LLM のツールにするとき引数の名前になり、操作の道筋 (target → how) にも並ぶ。
+    if not (name.isascii() and name.isidentifier() and len(name) <= _NAME_LIMIT):
+        return (f"argument {name!r} must be an ASCII identifier of up to {_NAME_LIMIT} characters",)
+    if name in _NAMES_ON_THE_INTERACTION_PATH:
+        return (f"argument {name!r} is already used on the path of an interaction",)
+    return ()
+
+
 class ActionChoiceKind(Enum):
     TRAVEL_TO = ("travel_to", "行く", DESTINATION)
     SET_SUB_LOCATION = ("set_sub_location", "区画に出入りする", SECTION_MOVE)

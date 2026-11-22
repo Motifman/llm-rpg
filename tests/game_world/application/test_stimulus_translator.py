@@ -277,11 +277,15 @@ def _acts_design(failure_witness: bool = False) -> WorldDesign:
     greet = replace(
         pull_lever(()),
         interaction_id=InteractionId("greet"),
+        display_label=DisplayName("greet"),
         perceived_as=_seen("{actor}が{target}に会釈した。", "{actor}があなたに会釈した。"),
         reaches_unseen=True,
     )
     polish = replace(
-        pull_lever(()), interaction_id=InteractionId("polish"), perceived_as=_seen("{actor}がつるはしを磨いた。")
+        pull_lever(()),
+        interaction_id=InteractionId("polish"),
+        display_label=DisplayName("polish"),
+        perceived_as=_seen("{actor}がつるはしを磨いた。"),
     )
     return compose_world(
         nouns(

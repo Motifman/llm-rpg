@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import reduce
 from typing import Any, final
 
+from ai_rpg_world.game_world.domain.action.offered_action import offered_value_name_problems
 from ai_rpg_world.game_world.domain.condition.condition import Condition
 from ai_rpg_world.game_world.domain.condition.requirements import Requirements
 from ai_rpg_world.game_world.domain.declaration.progress import (
@@ -43,6 +44,16 @@ def duplicate_flaws(declaration: str, keys: Iterable[tuple[Any, ...]], field: st
         for key, count in Counter(keys).items()
         if count > 1
     ]
+
+
+def labels_alike_flaws(labelled: Iterable[tuple[DesignLocation, object, str]]) -> list[DesignFlaw]:
+    # 行動の選択肢では、同じ相手の下の操作や行き先を表示名で選ぶので、重なると見分けられない (D2226)。
+    first_at: dict[tuple[object, str], DesignLocation] = {}
+    flaws: list[DesignFlaw] = []
+    for location, group, label in labelled:
+        if first_at.setdefault((group, label), location) != location:
+            flaws.append(DesignFlaw(location, f"{label!r} is the same label as {first_at[(group, label)].name!r}"))
+    return flaws
 
 
 def one_per_noun_flaws(
@@ -129,6 +140,11 @@ class WorldDesignReview:
         self.requirements(placement, notice.requirements())
 
     def interaction(self, placement: RulePlacement, interaction: InteractionDeclaration) -> None:
+        self.flaws += [
+            DesignFlaw(placement.at_field("arguments").location, problem)
+            for argument in interaction.arguments
+            for problem in offered_value_name_problems(argument.name.value)
+        ]
         self.precondition(placement.at_field("precondition"), interaction.precondition)
         self.effect(placement.at_field("effect"), interaction.effect)
         self.perception(placement, interaction.perceived_as)

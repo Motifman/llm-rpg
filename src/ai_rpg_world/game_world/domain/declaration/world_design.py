@@ -43,6 +43,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design_review import (
     WorldDesignReview,
     design_location,
     duplicate_flaws,
+    labels_alike_flaws,
     one_per_noun_flaws,
 )
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
@@ -307,6 +308,34 @@ class WorldDesign:
             "decision",
             [decision.decision_id for decision in nouns.all_group_decisions()],
             [rules.decision.decision_id for rules in group_decision_rules],
+        )
+        review.flaws += labels_alike_flaws(
+            (
+                design_location(
+                    "object_interaction", d.obj.object_id, d.interaction.interaction_id, field="display_label"
+                ),
+                d.obj.object_id,
+                d.interaction.display_label.text,
+            )
+            for d in object_interactions
+        )
+        review.flaws += labels_alike_flaws(
+            (
+                design_location(
+                    "item_interaction", d.item_spec.item_spec_id, d.interaction.interaction_id, field="display_label"
+                ),
+                d.item_spec.item_spec_id,
+                d.interaction.display_label.text,
+            )
+            for d in item_interactions
+        )
+        review.flaws += labels_alike_flaws(
+            (
+                design_location("person_interaction", i.interaction_id, field="display_label"),
+                "person",
+                i.display_label.text,
+            )
+            for i in person_interactions
         )
         review.flaws += duplicate_flaws(
             "object_interaction",

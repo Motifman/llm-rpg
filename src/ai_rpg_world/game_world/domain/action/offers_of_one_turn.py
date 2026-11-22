@@ -91,7 +91,7 @@ class _Node:
 
     def add(self, steps: tuple[OfferedStep, ...], inputs: tuple[OfferedInput, ...]) -> None:
         leaf_values = tuple(_input(offered) for offered in inputs)
-        # 品物の候補が 1 つも無い値は選びようがないので、その道筋ごと候補に入れない。
+        # 暗がりの相手のように品物の候補が出せない道筋を残すと、契約が行き止まりとして拒む。
         if any(isinstance(value, PickOne) and not value.candidates for value in leaf_values):
             return
         node = self

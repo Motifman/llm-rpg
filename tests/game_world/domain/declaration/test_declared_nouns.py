@@ -520,6 +520,16 @@ class TestObjectsSharingASpot:
             _flaw("object", "desk_b", "name", "object '机' is named the same as another object in spot 'office'"),
         )
 
+    def test_two_spots_with_the_same_name_are_a_flaw(self) -> None:
+        """「井戸」という名前の場所が 2 つあると、行き先を名前で選べないので、後の場所の名前の欄を指す DesignFlaw を投げる。"""
+        well = DisplayName("井戸")
+
+        flaws = _flaws_of(
+            lambda: _nouns(spots=[replace(_spot("well_a"), name=well), replace(_spot("well_b"), name=well)])
+        )
+
+        assert flaws == (_flaw("spot", "well_b", "name", "spot '井戸' is named the same as spot 'well_a'"),)
+
     def test_objects_with_the_same_name_in_different_spots_are_allowed(self) -> None:
         """事務所と鍛冶場に「机」が 1 つずつあるのは誤りにしない。"""
         desk = DisplayName("机")

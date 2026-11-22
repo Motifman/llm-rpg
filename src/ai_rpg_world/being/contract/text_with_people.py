@@ -62,6 +62,10 @@ class TextWithPeople:
             raise ContractViolation("people must be PersonInText or UnidentifiedPerson")
         object.__setattr__(self, "people", MappingProxyType(dict(self.people)))
 
+    def __hash__(self) -> int:
+        # people を書き換えられない MappingProxyType で持つと、dataclass の既定のハッシュが使えない。
+        return hash((self.template, frozenset(self.people.items())))
+
 
 def _person_placeholders_in(template: str) -> frozenset[str]:
     try:
