@@ -80,7 +80,7 @@ class TestMineVillageLoads:
         assert mine_village.warnings == ()
 
     def test_two_pairs_start_at_their_own_entrances(self, mine_village: LoadedScenario) -> None:
-        """ハルとミオは北の竪坑口、ゲンとサヨは南の横坑口から始まり、4 人とも Being に渡す人柄を持つ。"""
+        """ハルとミオは北の竪坑口、ゲンとサヨは南の横坑口から始まり、4 人とも Being に渡す人柄と、入るときに渡す文を持つ。"""
         starts = {person.person: person.spawn_spot.spot_id for person in mine_village.design.initial_world().people}
 
         assert starts == {
@@ -90,6 +90,32 @@ class TestMineVillageLoads:
             PersonId("sayo"): SpotId("south_adit_mouth"),
         }
         assert set(mine_village.beings) == set(starts)
+        assert set(mine_village.briefings) == set(starts)
+
+
+class TestWhatGenBringsIn:
+    """廃坑の山村のゲンが、人柄と、この世界での立場・目的を分けて持つことを保証する (D2222)。"""
+
+    def test_gen_persona_has_name_first_person_and_speech(self, mine_village: LoadedScenario) -> None:
+        """ゲンの人柄は、名前「ゲン」・一人称「俺」・話し方「ぶっきらぼうな常体」を欄ごとに持ち、金庫の番号を含まない。"""
+        gen = mine_village.beings[PersonId("gen")]
+
+        assert (gen["name"], gen["first_person"], gen["speech"]) == ("ゲン", "俺", "ぶっきらぼうな常体")
+        assert "1907" not in repr(dict(gen))
+
+    def test_gen_briefing_holds_safe_number_and_objective(self, mine_village: LoadedScenario) -> None:
+        """ゲンの briefings は、金庫の番号 1907 を知っていることと、サヨと二人で外へ出る目的を持つ。"""
+        briefing = mine_village.briefings[PersonId("gen")]
+
+        assert "1907" in briefing.known_facts.text
+        assert briefing.objective == DescriptionText("サヨと二人そろって、坑道の奥の昇降機で外へ出る。")
+
+    def test_premises_do_not_repeat_the_objective(self, mine_village: LoadedScenario) -> None:
+        """全員に同じ前提は「昇降機は一度しか動かない」を含み、「最終目標」の箇条を含まない。"""
+        premises = mine_village.design.introduction.premises.text
+
+        assert "昇降機は一度しか動かない" in premises
+        assert "最終目標" not in premises
 
 
 class TestLiftCage:

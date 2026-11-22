@@ -81,7 +81,7 @@ precondition:
 | `groupings.<名前>` | `name`, `visibility`, `changes`, `groups` (`<集まり>: { name, members_know_each_other, shared_description }`) |
 | `monster_kinds.<名前>` | `name`, `description`, `max_hp`, `attack` (`{ damage, every }`), `senses` (`{ sees_in_dark, hears_from }`), `temperament` (`hostile` / `territorial` / `retaliating` / `timid`), `flees_below` (`null` か割合), `gives_up_after`, `wander_chance`, `drops` (`- { item_spec, count, chance }`。`chance` を書かなければ必ず落とす), `perceptions` (書かなければ `monster_perceptions`) |
 | `monster_spawns.<名前>` | `kind`, `count`, `home`, `territory`, `present_while` (書かなければ最初からいる) |
-| `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `being` |
+| `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `known_facts` (必須), `objective` (必須), `being` (必須。`name`, `first_person`, `speech`, `traits`, `values`, `fears`, `background`。必須は `name` だけ) |
 | `world_stages.<名前>` | `name`, `description`, `allowed_actions` (`all` か一覧), `when_entered`, `when_left` |
 | `group_decisions.<名前>` | `name`, `abstain_allowed`, `reveals_ballots`, `voters`, `choices`, `when_decided`, `when_undecided` |
 | `outcomes.<名前>` | `name`, `announcement` (結末が決まった本人だけに届く。文の `{each_person}` が本人) |
@@ -326,3 +326,9 @@ characters:
 1. 人柄 (`being:`) は `Persona` の欄ごとに書く。この世界での立場 (`known_facts`) と本人の目的 (`objective`) は `being:` の外、登場人物の直下に書く
 2. `known_facts` と `objective` は世界の宣言に入れず、`LoadedScenario.briefings` に返す
 3. `introduction.objective` を `introduction.premises` に改める。中身は目的ではなく、全員に同じ世界の前提。目的の箇条は書かず、各人の `objective` に書く
+
+## 決めたこと (#2227)
+
+1. 登場人物の `being:`、`known_facts`、`objective` はどれも必須。書き忘れは `DesignFlaw`。「無い」の書き方は、要るシナリオが出たときに決める
+2. `being:` の中で必須なのは `name` だけ。`traits`、`values`、`fears` は文の一覧で書く。空白だけの文は `DesignFlaw`
+3. 読み込む側は `Persona` を作らず、欄ごとに確かめた地図を `LoadedScenario.beings` に返す。`Persona` を作るのは Being を用意する側

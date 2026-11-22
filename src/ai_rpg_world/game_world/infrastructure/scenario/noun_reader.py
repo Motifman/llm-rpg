@@ -76,6 +76,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldStageId,
 )
+from ai_rpg_world.game_world.infrastructure.scenario.character_briefing import CharacterBriefing
 from ai_rpg_world.game_world.infrastructure.scenario.kinded_node import split_kind
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_defaults import ScenarioDefaults
 from ai_rpg_world.game_world.infrastructure.scenario.value_readers import (
@@ -114,8 +115,13 @@ CHARACTER_FIELDS = (
     "knows_at_start",
     "max_hp",
     "pack_capacity",
+    "known_facts",
+    "objective",
     "being",
 )
+PERSONA_FIELDS = ("name", "first_person", "speech", "traits", "values", "fears", "background")
+_PERSONA_TEXT_FIELDS = ("first_person", "speech", "background")
+_PERSONA_LIST_FIELDS = ("traits", "values", "fears")
 WORLD_STAGE_FIELDS = ("name", "description", "allowed_actions", "when_entered", "when_left")
 GROUP_DECISION_FIELDS = (
     "name",
@@ -149,6 +155,7 @@ class ReadNouns:
     sections: list[SpotSectionDeclaration] = field(default_factory=list)
     outcomes: list[OutcomeDeclaration] = field(default_factory=list)
     beings: dict[PersonId, dict[str, object]] = field(default_factory=dict)
+    briefings: dict[PersonId, CharacterBriefing] = field(default_factory=dict)
     unreadable: set[tuple[str, str]] = field(default_factory=set)
 
     def declared(self) -> DeclaredNouns:
@@ -520,13 +527,14 @@ class NounReader:
         fields = self._defaults.fill("character", node).fields(*CHARACTER_FIELDS)
         max_hp = fields.optional("max_hp")
         pack_capacity = fields.optional("pack_capacity")
-        being = fields.optional("being")
-        if being is not None:
-            if not isinstance(being.value, dict):
-                raise being.unreadable(f"being must be a mapping, got {being.value!r}")
-            self._read.beings[node.build(lambda: PersonId(name))] = {
-                str(key): value for key, value in being.value.items()
-            }
+        person = node.build(lambda: PersonId(name))
+        self._read.beings[person] = _being(fields.required("being"))
+        self._read.briefings[person] = node.build(
+            lambda: CharacterBriefing(
+                known_facts=description(fields.required("known_facts")),
+                objective=description(fields.required("objective")),
+            )
+        )
         return node.build(
             lambda: CharacterDeclaration(
                 person_id=PersonId(name),
@@ -591,3 +599,24 @@ def _item_kind(kind: StateKind, node: YamlNode) -> ItemStateKind:
     if isinstance(kind, (FlagStateKind, CountStateKind, ChoiceStateKind)):
         return kind
     raise node.unreadable("an item state key is a flag, a count or a choice")
+
+
+def _being(node: YamlNode) -> dict[str, object]:
+    fields = node.fields(*PERSONA_FIELDS)
+    being: dict[str, object] = {"name": _persona_text(fields.required("name"))}
+    for key in _PERSONA_TEXT_FIELDS:
+        written = fields.optional(key)
+        if written is not None:
+            being[key] = _persona_text(written)
+    for key in _PERSONA_LIST_FIELDS:
+        written = fields.optional(key)
+        if written is not None:
+            being[key] = tuple(_persona_text(item) for item in written.items())
+    return being
+
+
+def _persona_text(node: YamlNode) -> str:
+    text = node.text()
+    if not text.strip():
+        raise node.unreadable("the persona text must not be blank")
+    return text

@@ -178,10 +178,10 @@ def surroundings_texts(node: YamlNode) -> SurroundingsTexts:
 
 
 def introduction(node: YamlNode) -> WorldIntroduction:
-    fields = node.fields("text", "objective")
+    fields = node.fields("text", "premises")
     return node.build(
         lambda: WorldIntroduction(
-            text=description(fields.required("text")), objective=description(fields.required("objective"))
+            text=description(fields.required("text")), premises=description(fields.required("premises"))
         )
     )
 

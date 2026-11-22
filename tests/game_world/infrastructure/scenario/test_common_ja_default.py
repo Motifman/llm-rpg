@@ -46,14 +46,14 @@ _SMALLEST_SCENARIO = """
 includes: [common/ja_default.yaml]
 introduction:
   text: 坑道の奥で目を覚ました。
-  objective: 外へ出る。
+  premises: 外へ出る。
 spots:
   tunnel:
     name: 坑道
     description: 狭い坑道。
     atmosphere: { lighting: dark }
 characters:
-  haru: { appearance: 年かさの男, spawn_spot: tunnel }
+  haru: { appearance: 年かさの男, spawn_spot: tunnel, known_facts: 坑道は暗い。, objective: 外へ出る。, being: { name: ハル } }
 ending:
   ends_when: all_outcomes_decided
 time:

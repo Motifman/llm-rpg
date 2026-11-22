@@ -31,6 +31,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     PersonId,
     SpotSectionId,
 )
+from ai_rpg_world.game_world.infrastructure.scenario.character_briefing import CharacterBriefing
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 
 _COMMON = Path(__file__).parent / "data" / "common_for_tests.yaml"
@@ -39,7 +40,7 @@ _LIFT_LANDING = """
 includes: [common.yaml]
 introduction:
   text: 坑道の奥で目を覚ました。
-  objective: 昇降機で外へ出る。
+  premises: 昇降機は一度しか動かない。
 flags:
   generator_running: { meaning: 発電機が動いている, initially_raised: true }
   lift_departed: { meaning: 籠が上がった }
@@ -97,14 +98,22 @@ characters:
     appearance: 測量具を背負った年かさの男
     spawn_spot: lift_landing
     initial_items: [lift_key]
+    known_facts: 昇降機の鍵は自分が持っている。
+    objective: ミオと二人で昇降機に乗る。
     being:
       name: ハル
       first_person: 私
+      speech: 落ち着いた常体
+      traits: [慎重, 確かめてから動く]
   mio:
     appearance: 小柄な若い女
     spawn_spot: lift_landing
     max_hp: 60
     pack_capacity: 8
+    known_facts: 籠には三人しか乗れない。
+    objective: ハルと二人で昇降機に乗る。
+    being:
+      name: ミオ
 outcomes:
   rescued: { name: 救出, announcement: "{each_person}は昇降機で外へ出た。" }
   stranded: { name: 取り残された, announcement: "{each_person}は坑道に取り残された。" }
@@ -175,12 +184,6 @@ class TestLoadingTheLiftLanding:
         assert [state.display_name for state in ladder.states] == [DisplayName("開いている")]
         assert ladder.allows(ladder.initial_state)
 
-    def test_being_is_returned_apart_from_the_world(self, tmp_path: Path) -> None:
-        """haru の being: は世界の宣言には入らず、人柄の地図のまま beings に返る。being の無い mio は含まれない。"""
-        loaded = _load(tmp_path)
-
-        assert dict(loaded.beings) == {PersonId("haru"): {"name": "ハル", "first_person": "私"}}
-
     def test_people_start_with_world_default_unless_they_override_it(self, tmp_path: Path) -> None:
         """体力と荷を書かない haru は世界の既定 (100、20)、書いた mio はその値 (60、8) で始まる。"""
         people = {person.person: person for person in _load(tmp_path).design.initial_world().people}
@@ -198,6 +201,124 @@ class TestLoadingTheLiftLanding:
         assert _mine("section", "cage", "access.perceived_as.sound") in [
             warning.location for warning in loaded.warnings
         ]
+
+
+class TestWhatEachPersonBringsIn:
+    """load_scenario が、登場人物の人柄・立場・目的と全員に同じ前提を、世界の宣言の外へ新しい形で返すことを保証する (D2222)。"""
+
+    def test_being_is_read_by_persona_fields_with_lists_as_tuples(self, tmp_path: Path) -> None:
+        """haru の being: は人柄の欄ごとに beings に返り、traits は書いた順の tuple になる。書かなかった欄は含まれない。"""
+        loaded = _load(tmp_path)
+
+        assert dict(loaded.beings[PersonId("haru")]) == {
+            "name": "ハル",
+            "first_person": "私",
+            "speech": "落ち着いた常体",
+            "traits": ("慎重", "確かめてから動く"),
+        }
+        assert dict(loaded.beings[PersonId("mio")]) == {"name": "ミオ"}
+
+    def test_every_persona_field_is_read(self, tmp_path: Path) -> None:
+        """mio の being: に人柄の 7 つの欄をすべて書くと、文の欄は文のまま、一覧の欄は tuple で beings に返る。"""
+        text = _LIFT_LANDING.replace(
+            "      name: ミオ\n",
+            "      name: ミオ\n"
+            "      first_person: あたし\n"
+            "      speech: 気さくな常体\n"
+            "      traits: [元気]\n"
+            "      values: [仲間]\n"
+            "      fears: [暗がり, 狭い所]\n"
+            "      background: 調査隊の若い隊員。\n",
+            1,
+        )
+
+        assert dict(_load(tmp_path, text).beings[PersonId("mio")]) == {
+            "name": "ミオ",
+            "first_person": "あたし",
+            "speech": "気さくな常体",
+            "traits": ("元気",),
+            "values": ("仲間",),
+            "fears": ("暗がり", "狭い所"),
+            "background": "調査隊の若い隊員。",
+        }
+
+    def test_known_facts_and_objective_are_returned_as_briefing(self, tmp_path: Path) -> None:
+        """haru の known_facts と objective は、briefings の CharacterBriefing として返る。"""
+        loaded = _load(tmp_path)
+
+        assert loaded.briefings[PersonId("haru")] == CharacterBriefing(
+            known_facts=DescriptionText("昇降機の鍵は自分が持っている。"),
+            objective=DescriptionText("ミオと二人で昇降機に乗る。"),
+        )
+
+    def test_premises_are_read_into_world_introduction(self, tmp_path: Path) -> None:
+        """introduction.premises は、WorldIntroduction.premises として設計図から引ける。"""
+        introduction = _load(tmp_path).design.introduction
+
+        assert introduction.premises == DescriptionText("昇降機は一度しか動かない。")
+
+    @pytest.mark.parametrize(
+        ("old", "new", "location"),
+        [
+            (
+                "      speech: 落ち着いた常体\n",
+                "      persona: 慎重な隊長。\n",
+                _mine("character", "haru", "being.persona"),
+            ),
+            (
+                "      speech: 落ち着いた常体\n",
+                "      objective: 外へ出る。\n",
+                _mine("character", "haru", "being.objective"),
+            ),
+            (
+                "  premises: 昇降機は一度しか動かない。\n",
+                "  objective: 外へ出る。\n",
+                _mine("world", "world", "introduction.objective"),
+            ),
+        ],
+    )
+    def test_old_shape_is_a_flaw(self, tmp_path: Path, old: str, new: str, location: DesignLocation) -> None:
+        """古い形の being.persona・being.objective・introduction.objective を書くと、その欄の場所を付けた DesignFlaw になる。"""
+        assert location in [flaw.location for flaw in _flaws(tmp_path, _LIFT_LANDING.replace(old, new, 1))]
+
+    @pytest.mark.parametrize(
+        ("removed", "location"),
+        [
+            ("    known_facts: 籠には三人しか乗れない。\n", _mine("character", "mio", "known_facts")),
+            ("    objective: ハルと二人で昇降機に乗る。\n", _mine("character", "mio", "objective")),
+            ("    being:\n      name: ミオ\n", _mine("character", "mio", "being")),
+        ],
+    )
+    def test_unwritten_briefing_or_being_is_a_flaw(
+        self, tmp_path: Path, removed: str, location: DesignLocation
+    ) -> None:
+        """mio の known_facts・objective・being: のどれかを書かないと、その欄の場所を付けた DesignFlaw になる。"""
+        assert location in [flaw.location for flaw in _flaws(tmp_path, _LIFT_LANDING.replace(removed, "", 1))]
+
+    @pytest.mark.parametrize(
+        ("old", "new", "location"),
+        [
+            ("      name: ミオ\n", "      first_person: あたし\n", _mine("character", "mio", "being.name")),
+            ("      name: ミオ\n", '      name: "  "\n', _mine("character", "mio", "being.name")),
+            (
+                "      traits: [慎重, 確かめてから動く]\n",
+                "      traits: 慎重\n",
+                _mine("character", "haru", "being.traits"),
+            ),
+            (
+                "      traits: [慎重, 確かめてから動く]\n",
+                '      traits: [慎重, " "]\n',
+                _mine("character", "haru", "being.traits[1]"),
+            ),
+            ("      first_person: 私\n", '      first_person: " "\n', _mine("character", "haru", "being.first_person")),
+            ("    being:\n      name: ミオ\n", "    being: ミオ\n", _mine("character", "mio", "being")),
+        ],
+    )
+    def test_being_that_cannot_become_persona_is_a_flaw(
+        self, tmp_path: Path, old: str, new: str, location: DesignLocation
+    ) -> None:
+        """name の無い being:、空白だけの name・first_person・traits の項目、一覧でない traits、地図でない being: は、その欄の場所を付けた DesignFlaw になる。"""
+        assert location in [flaw.location for flaw in _flaws(tmp_path, _LIFT_LANDING.replace(old, new, 1))]
 
 
 class TestIncludes:
@@ -530,7 +651,7 @@ class TestBrokenShapesStayDesignFlaws:
         """名前で指す宣言の欄を空や一覧にすると、その欄の場所を付けた DesignFlaw になる。"""
         text = (
             "includes: [common.yaml]\n"
-            "introduction: { text: 目覚めた。, objective: 出る。 }\n"
+            "introduction: { text: 目覚めた。, premises: 出る。 }\n"
             "ending: { ends_when: all_outcomes_decided }\n"
             "time: { day_night: null, weather: null }\n" + broken
         )
