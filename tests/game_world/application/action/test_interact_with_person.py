@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from ai_rpg_world.being.contract import TextWithPeople
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
 from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator
+from ai_rpg_world.game_world.application.world_perception_senses import WorldPerceptionSenses
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_refusal import PreconditionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.interaction_attempts import PersonInteractionAttempt, SomeoneInTheDark
@@ -142,3 +145,22 @@ class TestInteractWithSomeoneInTheDark:
         assert isinstance(reply, ActionRefused)
         assert isinstance(reply.refusal.reason, WorldStateRefusal)
         assert _failed_targets(world) == [BOB]
+
+    def test_refusal_before_anyone_is_chosen_is_summarized_without_a_name(self) -> None:
+        """一緒にいる人が誰もいないまま暗がりの誰かの肩を叩いて断られると、要約は相手の名前の無い、暗がりの相手の行の文になる。"""
+        world = WorldForInteractions(bob_at="shore")
+
+        reply = world.tap(ALICE, SomeoneInTheDark())
+
+        assert isinstance(reply, ActionRefused)
+        summary = _summary_for(world, reply, ALICE)
+        assert isinstance(summary, TextWithPeople)
+        assert summary.template == "interact_with_someone_in_the_darkした tap_shoulder"
+
+
+def _summary_for(world: WorldForInteractions, reply: ActionRefused, actor: PersonId) -> object:
+    def read(session: WorldSession) -> object:
+        facts = session.facts()
+        return reply.summary_for_actor(world.design, facts, WorldPerceptionSenses(facts).view_for(actor))
+
+    return world.scope.run(read)

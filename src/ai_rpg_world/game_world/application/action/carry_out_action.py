@@ -38,38 +38,41 @@ class CarryOutAction:
 
     def __call__(self, attempt: _Attempt, steps: ActionSteps[_Attempt]) -> ActionReply:
         aimed = attempt
-        done_text = self._texts.done_text(attempt.actor)
 
-        def carry_out(session: WorldSession) -> None:
-            nonlocal aimed, done_text
+        def carry_out(session: WorldSession) -> ActionDone:
+            nonlocal aimed
             facts = session.facts()
             aimed = self._check.cleared(attempt, steps, facts, self._texts)
-            done_text = self._carry_out_aimed(aimed, steps, session, facts)
+            return self._carry_out_aimed(aimed, steps, session, facts)
 
         try:
-            self._scope.run(carry_out)
+            done = self._scope.run(carry_out)
         except ActionRefusedException as refused:
             return self._note_refusal(refused.refusal)
         except WorldRefusal as exception:
             code = RefusalCode.of(exception)
             text = self._texts.world_state_text(code, aimed.actor)
             return self._note_refusal(ActionRefusal(attempt=aimed, reason=WorldStateRefusal(code), text=text))
-        return ActionDone(aimed, done_text)
+        return done
 
     def _carry_out_aimed(
         self, attempt: _Attempt, steps: ActionSteps[_Attempt], session: WorldSession, facts: WorldFacts
-    ) -> TextAboutPeople:
+    ) -> ActionDone:
         now = facts.now()
         situation = ActorSituation.of(attempt, facts)
         # 使い切った品物は効果のあとで種類を引けないので、文は効果の前に引く
-        done_text = attempt.done_text_in(self._design, situation.item_specs)
+        done = ActionDone(
+            attempt,
+            done_text=attempt.done_text_in(self._design, situation.item_specs),
+            summary=attempt.summary_in(self._design, situation.item_specs),
+        )
         present = PeopleWhoWereThere.before_the_effect(facts)
         world = session.aggregates()
         busy_for = steps.change_world(attempt, facts, world)
         world.vitals(attempt.actor).start_acting(attempt.exertion(), now + busy_for, facts.rules().fatigue)
         session.latest_actions().note(attempt, situation, present, now)
         session.scenario_progress().note_joint_action_part_done(attempt, self._joint_actions, now)
-        return done_text
+        return done
 
     def _note_refusal(self, refusal: ActionRefusal) -> ActionRefused:
         self._scope.run(lambda session: self._note_failed_attempt(refusal, session))

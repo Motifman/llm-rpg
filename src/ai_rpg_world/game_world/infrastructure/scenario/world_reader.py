@@ -33,6 +33,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     EndingDeclaration,
     PerceptionDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey, ActionTexts
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SeesShapes, SightQuality
@@ -115,7 +116,7 @@ def world_rules(node: YamlNode) -> WorldRules:
 
 
 def refusal_texts(node: YamlNode) -> RefusalTexts:
-    fields = node.fields("common_rules", "world_state", "hidden", "unlisted", "done")
+    fields = node.fields("common_rules", "world_state", "hidden", "unlisted")
     return node.build(
         lambda: RefusalTexts(
             common_rules=_by_enum(fields.required("common_rules"), CommonRuleRefusalKind, people_text),
@@ -125,9 +126,22 @@ def refusal_texts(node: YamlNode) -> RefusalTexts:
             },
             hidden=people_text(fields.required("hidden")),
             unlisted=people_text(fields.required("unlisted")),
-            done=people_text(fields.required("done")),
         )
     )
+
+
+def action_texts(node: YamlNode) -> ActionTexts:
+    keys = {key.written_as: key for key in ActionTextKey}
+    rows = node.fields(*keys)
+    summaries = {}
+    done = {}
+    for written_as, key in keys.items():
+        row = rows.required(written_as).fields("summary", "done")
+        summaries[key] = people_text(row.required("summary"))
+        written_done = row.optional("done")
+        if written_done is not None:
+            done[key] = people_text(written_done)
+    return node.build(lambda: ActionTexts(summaries=summaries, done=done))
 
 
 _ITEM_JOINER = "item_joiner"

@@ -28,6 +28,16 @@ class TestEnterSection:
         assert isinstance(reply, ActionDone)
         assert world.read().facts().whereabouts().is_in_section(PersonBody(ALICE), CAGE) is True
 
+    def test_done_reply_uses_the_authors_enter_text_and_the_section_name(self) -> None:
+        """区画 cage に入ると、返事の本人向けの文は、共通の部品の文ではなく、作者が区画の出入りに書いた「乗り込んだ。」になる。"""
+        world = WorldForActions()
+
+        reply = world.enter_cage(ALICE)
+
+        assert isinstance(reply, ActionDone)
+        assert reply.done_text == TextAboutPeople(TextWithUnassignedPeople("乗り込んだ。"), {})
+        assert reply.summary.template == TextWithUnassignedPeople("enter_sectionした cage")
+
     def test_full_section_refuses_with_section_full_code(self) -> None:
         """定員 1 の区画に誰かがいると、次の人は SECTION_FULL の RefusalCode で断られ、区画の外に残る。"""
         world = WorldForActions()
