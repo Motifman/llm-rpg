@@ -362,6 +362,34 @@ class TestWritingMemoWithTheMove:
 
         assert memo_books.get(GEN).memos == ()
 
+    def test_memo_over_the_limit_names_the_kind_and_its_limit(self) -> None:
+        """やることが上限の 5 件あるときに足そうとすると、分類と上限の件数を理由にして試みに残る。"""
+        memories = InMemoryShortTermMemoryRepository()
+        memo_books = InMemoryMemoBookRepository(handoff=discard_events)
+        book = memo_books.get(GEN)
+        for n in range(5):
+            book.add(
+                memo_id=f"3f2a7b9c-1d2e-4f00-8a00-00000000000{n}",
+                kind=MemoKind.TODO,
+                text=f"用事 {n}",
+                provenance=None,
+                turn=1,
+                environment_name="廃坑の山村",
+            )
+        memo_books.save(book)
+
+        _choose(
+            _reply("interact", {"target": "金庫", "memo": [{"do": "add", "kind": "todo", "text": "鍵を取る"}]}),
+            being_tools=WITH_MEMORY,
+            memories=memories,
+            memo_books=memo_books,
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and attempt.memo_rejections == (
+            "「やることに「鍵を取る」を書く」は書けなかった（理由: やることが上限の 5 件。消すか書き換える）",
+        )
+
     def test_failing_to_write_the_memo_leaves_no_attempt_and_keeps_the_turn(self) -> None:
         """メモ帳に保存できなければ例外が上がり、試みは短期記憶に残らず、記憶のターンも進まない。"""
         memories = InMemoryShortTermMemoryRepository()
