@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -53,6 +54,13 @@ def read_handles(arguments: Mapping[str, object]) -> list[str] | None:
     if not all(isinstance(h, str) and h.strip() for h in raw):
         return None
     return [h.strip() for h in raw]
+
+
+def recall_call_text(tool_name: str, arguments: Mapping[str, object]) -> str:
+    """古い run と同じく、呼び名の配列だけを JSON のまま引用する。"""
+    if HANDLES not in arguments:
+        return f"{tool_name}()"
+    return f"{tool_name}({HANDLES}={json.dumps(arguments[HANDLES], ensure_ascii=False, separators=(',', ':'))})"
 
 
 def too_many_handles_text(max_handles: int) -> str:

@@ -332,3 +332,63 @@ class TestMoveFrom:
         )
 
         assert move is not None and move.inner_thought is None and "inner_thought" not in move.arguments
+
+
+class TestCallText:
+    """ActionTools.call_text が、行動を選んだ時点の呼び方で、写せる値だけを引用した呼び出しの文を作ることを保証する。"""
+
+    def test_picked_values_are_quoted_and_the_rest_is_hidden_as_text(self) -> None:
+        """候補から選んだ値は引用し、操作の宣言の引数 (details) は「本文」と伏せる。"""
+        call = _tools(ActionChoices((_interact(SAFE),))).call_text(
+            "interact", {"target": "金庫", "how": "番号を合わせて開ける", "details": {"code": "1907"}}
+        )
+
+        assert call == 'interact(target="金庫", how="番号を合わせて開ける", details=本文)'
+
+    def test_whisper_keeps_the_listener_as_the_being_calls_her(self) -> None:
+        """サヨにささやくと、相手は呼び方のまま引用し、中身は「本文」と伏せる。"""
+        call = _tools(_gen_in_the_office()).call_text("speak", {"reach": "ささやく", "to": "サヨ", "content": "鍵は?"})
+
+        assert call == 'speak(reach="ささやく", to="サヨ", content=本文)'
+
+    def test_being_tools_are_left_out(self) -> None:
+        """独白とメモは別の行や欄に出るので、呼び出しの文には出さない。"""
+        call = _tools(_gen_in_the_office(), WITH_MEMORY).call_text(
+            "travel_to", {"destination": "井戸", "inner_thought": "行こう", "memo": [{"do": "add"}]}
+        )
+
+        assert call == 'travel_to(destination="井戸")'
+
+    def test_quoted_values_come_first_in_the_outline_order_whatever_the_llm_wrote(self) -> None:
+        """LLM が書いた順によらず、引用する値を見取り図の順に先に並べ、伏せる文をそのあとに見取り図の順で並べる。"""
+        call = _tools(ActionChoices((_interact(SAFE),))).call_text(
+            "interact",
+            {"say_inline": "開けるぞ", "details": {"code": "1907"}, "how": "番号を合わせて開ける", "target": "金庫"},
+        )
+
+        assert call == 'interact(target="金庫", how="番号を合わせて開ける", say_inline=本文, details=本文)'
+
+    def test_value_is_hidden_with_the_word_the_outline_gives(self) -> None:
+        """見取り図が伏せる言葉 (発言) を持つ引数は、その言葉で伏せ、持たない引数は「本文」で伏せる。"""
+        wait = ActionChoice(
+            name="wait",
+            label="待つ",
+            outline=(
+                ArgumentOutline(name="say_inline", label="一言", hidden_as="発言"),
+                ArgumentOutline(name="note", label="覚え"),
+            ),
+        )
+
+        call = _tools(ActionChoices((wait,))).call_text("wait", {"note": "あとで", "say_inline": "待つぞ"})
+
+        assert call == "wait(say_inline=発言, note=本文)"
+
+    def test_arguments_outside_the_outline_follow_in_name_order(self) -> None:
+        """見取り図に無い引数は、見取り図の引数のあとに、名前の順で並ぶ。"""
+        call = _tools(_gen_in_the_office()).call_text("travel_to", {"zeta": "1", "destination": "井戸", "alpha": "2"})
+
+        assert call == 'travel_to(destination="井戸", alpha=本文, zeta=本文)'
+
+    def test_tool_that_was_not_offered_has_no_call_text(self) -> None:
+        """出していないツールの名前なら None を返す。"""
+        assert _tools(_gen_in_the_office()).call_text("gather", {}) is None

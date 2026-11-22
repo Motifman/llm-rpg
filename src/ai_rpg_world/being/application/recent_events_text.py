@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ai_rpg_world.being.contract import Observation, ObservedTime
+from ai_rpg_world.being.contract import ContractViolation, Observation, ObservedTime, OwnActionResult, TextWithPeople
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Experience,
@@ -25,10 +25,30 @@ def _line(time: ObservedTime, body: str, inner_thought: str | None = None) -> st
     return f"[{time.display}] {body}" + (f"\n  心の声: {thought}" if thought else "")
 
 
-def _attempt_line(attempt: Attempt, time: ObservedTime, result_body: str) -> str:
-    return _line(time, result_body, attempt.move.inner_thought) + "".join(
+def _attempt_line(
+    attempt: Attempt, time: ObservedTime, result_body: str, *, summary: str | None, succeeded: bool
+) -> str:
+    # 要約の無い試み (古い run と、要約を足す前の snapshot) は、結果の文だけの行のまま出す。古い run の結果の文は、
+    # すでに古い run の行の形になっている。
+    if summary is None:
+        body = result_body
+    elif succeeded:
+        call = "" if attempt.call_text is None else f"\n  呼び出し: {attempt.call_text}"
+        body = f"[行動] {summary} → [結果] {result_body}{call}"
+    else:
+        body = f"[行動] {summary} → [失敗] | {result_body}"
+    return _line(time, body, attempt.move.inner_thought) + "".join(
         f"\n  メモ: {line}" for line in attempt.memo_rejections
     )
+
+
+def _summary_of(route: object) -> str | None:
+    if not isinstance(route, OwnActionResult):
+        return None
+    summary = route.action_summary
+    if isinstance(summary, TextWithPeople):
+        raise ContractViolation("an action summary with people placeholders cannot be read before they are filled in")
+    return summary
 
 
 class _Line:
@@ -38,10 +58,16 @@ class _Line:
         return _line(perception.observation.time, perception.observation.body_without_people())
 
     def attempted(self, attempt: Attempt, result: Observation) -> str | None:
-        return _attempt_line(attempt, result.time, result.body_without_people())
+        route = result.route
+        succeeded = isinstance(route, OwnActionResult) and route.succeeded
+        return _attempt_line(
+            attempt, result.time, result.body_without_people(), summary=_summary_of(route), succeeded=succeeded
+        )
 
     def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> str | None:
-        return _attempt_line(attempt, result.time, result.body)
+        return _attempt_line(
+            attempt, result.time, result.body, summary=result.action_summary, succeeded=result.succeeded
+        )
 
     def attempted_without_result(self, attempt: Attempt) -> str | None:
         # 切り替える前のプロンプトに無かった行なので、切り替えでは出さないと決めた (design_decisions D1824-22)。

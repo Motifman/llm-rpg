@@ -736,6 +736,7 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
                 "「メモを足す」は書けなかった（理由: text が空）",
                 "「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",
             ),
+            call_text='interact(target="扉", how="こじ開ける")',
             result=ObservedOutcome(
                 observation(
                     OwnActionResult(call_id="call-1", succeeded=False, action_summary="「扉」に働きかけた"),
@@ -765,6 +766,8 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
                 body="[行動] メモを書いた → [結果] メモを追加しました",
                 time=ObservedTime(display="1日目 昼", seconds=43200.0),
                 order=OccurrenceOrder(environment="廃坑の山村", value=1729000002.0),
+                succeeded=False,
+                action_summary='memo_add({"text": "鍵を探す"}) を実行しました。',
             ),
         ),
         Attempt(turn=14, move=AgentMove(call_id="call-4", tool_name="interact", arguments={"target": "弁"})),
@@ -783,6 +786,7 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
         turn=16,
         move=AgentMove(call_id="call-6", tool_name="wait", arguments={}),
         memo_rejections=("「メモの書き込み」は書けなかった（理由: memo は操作の配列で書く）",),
+        call_text="wait()",
     )
     awaited = AwaitedBackstory(until_turn=20, since_turn=30)
     return ShortTermMemory(
@@ -848,8 +852,8 @@ class TestShortTermMemoryPayload:
 
         assert _state(dst_stores["short_term"].get(being)) == _state(_every_field_short_term_memory())
 
-    def test_attempts_saved_before_memo_rejections_restore_without_them(self) -> None:
-        """書けなかったメモの理由を足す前に保存した試み (結果のある試み・待っている 1 手) は、理由無しで戻る。"""
+    def test_attempts_saved_before_memo_rejections_and_call_text_restore_without_them(self) -> None:
+        """書けなかったメモの理由・呼び出しの文・記憶の道具の成否を足す前に保存した試みは、理由と呼び出しの文が無く、記憶の道具は成功として戻る。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId("ada")
         src_stores["short_term"].save(_every_field_short_term_memory())
@@ -857,6 +861,10 @@ class TestShortTermMemoryPayload:
         memory_payload = payload["being_short_term_memory"][0]
         for item in [*memory_payload["experiences"], memory_payload["awaiting"]]:
             item.pop("memo_rejections", None)
+            item.pop("call_text", None)
+            if item.get("result") and "memory_operation" in item["result"]:
+                item["result"]["memory_operation"].pop("succeeded")
+                item["result"]["memory_operation"].pop("action_summary")
         (dst_svc, dst_stores) = _make_service()
 
         dst_svc.restore(being, json.dumps(payload))
@@ -864,7 +872,9 @@ class TestShortTermMemoryPayload:
         restored = dst_stores["short_term"].get(being)
         attempts = [e for e in restored.experiences if isinstance(e, Attempt)]
         assert attempts and restored.awaiting is not None
-        assert all(a.memo_rejections == () for a in [*attempts, restored.awaiting])
+        assert all(a.memo_rejections == () and a.call_text is None for a in [*attempts, restored.awaiting])
+        operations = [a.result for a in attempts if isinstance(a.result, MemoryOperationOutcome)]
+        assert operations and all(o.succeeded and o.action_summary is None for o in operations)
 
     def test_more_than_one_memory_is_rejected(self) -> None:
         """1 つの Being に短期記憶が 2 つ書かれた payload は FormatError。"""

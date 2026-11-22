@@ -227,6 +227,12 @@ class TestActionChoice:
 class TestArgumentOutline:
     """行動の種類ごとに変わらない引数の見取り図 (outline・takes_details) と、値の名前との決まりを保証する。"""
 
+    @pytest.mark.parametrize("hidden_as", ["", "  "])
+    def test_blank_hidden_as_is_rejected(self, hidden_as: str) -> None:
+        """伏せるときの言葉が空か空白だけなら拒む。伏せないなら None にする。"""
+        with pytest.raises(ContractViolation, match="hidden_as"):
+            ArgumentOutline(name="say_inline", label="一言", hidden_as=hidden_as)
+
     def test_top_level_value_missing_from_outline_is_rejected(self) -> None:
         """いちばん上の値の名前が見取り図に無いと拒む。上の段の引数は、候補の無いターンにも同じ顔ぶれで並べるため。"""
         with pytest.raises(ContractViolation, match="outline"):

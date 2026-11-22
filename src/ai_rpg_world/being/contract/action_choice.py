@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Union
 
-from ai_rpg_world.being.contract.errors import ContractViolation, require_bool, require_text
+from ai_rpg_world.being.contract.errors import ContractViolation, require_bool, require_optional_text, require_text
 from ai_rpg_world.being.contract.text_with_people import PersonInText, TextWithPeople
 
 _NAME_LIMIT = 64
@@ -94,16 +94,22 @@ def _people_in(values: Sequence[ChoiceValue]) -> tuple[PersonInText, ...]:
 
 @dataclass(frozen=True, kw_only=True)
 class ArgumentOutline:
-    """``required`` は、いちばん上の値として毎ターン必ず渡る引数。"""
+    """``required`` は、いちばん上の値として毎ターン必ず渡る引数。
+
+    ``hidden_as`` は、自由に書いた値を【直近の出来事】の呼び出しの行で伏せるときの言葉 (例: 発言)。自由に書いた文を
+    そのまま引用すると、手本として写されるため。
+    """
 
     name: str
     label: str
     required: bool = False
+    hidden_as: str | None = None
 
     def __post_init__(self) -> None:
         _require_name(self.name, "name")
         require_text(self.label, "label")
         require_bool(self.required, "required")
+        require_optional_text(self.hidden_as, "hidden_as")
 
 
 @dataclass(frozen=True, kw_only=True)

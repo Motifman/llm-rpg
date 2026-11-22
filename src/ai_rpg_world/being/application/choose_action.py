@@ -14,6 +14,7 @@ from ai_rpg_world.being.application.current_working_memory import CurrentWorking
 from ai_rpg_world.being.application.episode_recall_tool import (
     MALFORMED_HANDLES_TEXT,
     read_handles,
+    recall_call_text,
     recalled_text,
     too_many_handles_text,
 )
@@ -21,6 +22,7 @@ from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.memo_arguments import read_memo_operations
 from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.names_for_people import name_for
+from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
 from ai_rpg_world.being.application.unwritten_memo_text import (
     WHOLE_MEMO,
     attempted_operation,
@@ -189,9 +191,23 @@ class ChooseAction:
         turn = self._turn_clock.current_turn(being_id) + 1
         if call.tool_name == command.being_tools.episode_recall:
             recall = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
-            body = self._recall(being_id, call.arguments, turn=turn)
+            body, succeeded = self._recall(being_id, call.arguments, turn=turn)
             self._act(
-                being_id, recall, turn=turn, result=MemoryOperationOutcome(call_id=call_id, body=body, time=command.now)
+                being_id,
+                recall,
+                turn=turn,
+                call_text=recall_call_text(call.tool_name, call.arguments),
+                result=MemoryOperationOutcome(
+                    call_id=call_id,
+                    body=body,
+                    time=command.now,
+                    succeeded=succeeded,
+                    action_summary=own_tool_summary(
+                        call.tool_name,
+                        call.arguments,
+                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
+                    ),
+                ),
             )
             return TurnSpentRecalling(move=recall, exchange=exchange)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=call.arguments)
@@ -199,7 +215,14 @@ class ChooseAction:
             # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
             # 行動が世界に断られても、書いたことは本人がしたことなので残る。
             rejections = self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
-            self._act(being_id, move, turn=turn, memo_rejections=rejections, result=None)
+            self._act(
+                being_id,
+                move,
+                turn=turn,
+                memo_rejections=rejections,
+                call_text=tools.call_text(call.tool_name, call.arguments),
+                result=None,
+            )
             return ActionChosen(move=move, exchange=exchange)
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
@@ -209,18 +232,30 @@ class ChooseAction:
             being_id,
             AgentMove(call_id=call_id, tool_name=call.tool_name, arguments={}),
             turn=turn,
-            result=ObservedOutcome(_own_failure(body, call_id=call_id, now=command.now)),
+            result=ObservedOutcome(
+                _own_failure(
+                    body,
+                    call_id=call_id,
+                    now=command.now,
+                    action_summary=own_tool_summary(
+                        call.tool_name,
+                        call.arguments,
+                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
+                    ),
+                )
+            ),
         )
         return ActionNotChosen(requested_tool=call.tool_name, suggestion=suggestion, exchange=exchange)
 
-    def _recall(self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int) -> str:
+    def _recall(self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int) -> tuple[str, bool]:
+        """知らない呼び名は、古い run と同じく、思い出せないと答える成功にする。"""
         handles = read_handles(arguments)
         if handles is None:
-            return MALFORMED_HANDLES_TEXT
+            return MALFORMED_HANDLES_TEXT, False
         # 一部だけ思い出すと、どれを落としたかを本人が知らないまま 1 手が終わる (D1623-2)。
         if len(set(handles)) > self._recall_limit:
-            return too_many_handles_text(self._recall_limit)
-        return recalled_text(recall_episodes(self._episodes, being_id, handles, turn=turn))
+            return too_many_handles_text(self._recall_limit), False
+        return recalled_text(recall_episodes(self._episodes, being_id, handles, turn=turn)), True
 
     def _write_memo(
         self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int
@@ -266,20 +301,21 @@ class ChooseAction:
         turn: int,
         result: Outcome | None,
         memo_rejections: tuple[str, ...] = (),
+        call_text: str | None = None,
     ) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。
         memory = self._short_term_memories.get(being_id)
-        memory.act(move, current_turn=turn, memo_rejections=memo_rejections)
+        memory.act(move, current_turn=turn, memo_rejections=memo_rejections, call_text=call_text)
         if result is not None:
             memory.receive_result(result, current_turn=turn)
         self._short_term_memories.save(memory)
         self._turn_clock.advance_turn(being_id)
 
 
-def _own_failure(body: str, *, call_id: str, now: ObservedTime) -> Observation:
+def _own_failure(body: str, *, call_id: str, now: ObservedTime, action_summary: str) -> Observation:
     return Observation(
         body=body,
-        route=OwnActionResult(call_id=call_id, succeeded=False),
+        route=OwnActionResult(call_id=call_id, succeeded=False, action_summary=action_summary),
         time=now,
         subject_is_self=True,
         subject_name=UNKNOWN,
