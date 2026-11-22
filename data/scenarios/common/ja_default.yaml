@@ -176,6 +176,11 @@ surroundings_texts:
   waking: 目が覚めた。
   darkening: 辺りが暗くなった。
 
+briefing_headings:
+  introduction: この世界について
+  premises: この世界の前提
+  known_facts: あなたが知っていること
+
 perception_defaults:
   witness: { clear: "{actor}が何かをした。" }
   target: { clear: "{actor}があなたに何かをした。" }
