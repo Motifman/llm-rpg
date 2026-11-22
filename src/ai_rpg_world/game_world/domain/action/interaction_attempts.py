@@ -34,6 +34,7 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.condition.failure_texts import people_in_text
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+    from ai_rpg_world.game_world.domain.people import TextAboutPeople
 
 _Reply = TypeVar("_Reply")
 
@@ -132,6 +134,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
 
     def acting_person(self) -> PersonId | NoActingPerson:
         return self.actor
+
+    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        return people_in_text(self._declared(design, item_specs).success_text, self)
 
     def argument(self, name: ArgumentName) -> TextArgumentValue | ItemInstanceId:
         return self.arguments.value_of(name, self)

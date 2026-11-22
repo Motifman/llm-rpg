@@ -534,46 +534,47 @@ _WORLD_REFUSED = WorldStateRefusal(RefusalCode("PERSON_INVENTORY.HANDS_FULL"))
 
 
 class TestStimulusTranslatorFailedActs:
-    """StimulusTranslator が、断られた行為を、本人には断られた理由の体の刺激に、見ていた人には作者が書いたときだけ失敗の文の刺激にすることを保証する。"""
+    """StimulusTranslator が、断られた行為を、本人には何も届けず (理由は行動の結果で返す)、見ていた人には作者が書いたときだけ失敗の文の刺激にすることを保証する。"""
 
-    def test_refusal_by_a_common_rule_is_felt_only_by_the_actor(self) -> None:
-        """行っている最中 (Busy) で断られた拾う行為は、失敗の文を宣言していても、ハル本人の体の刺激だけになる。"""
-        [felt] = StimulusTranslator().stimuli_of(_failed(Busy()), _acts_design(failure_witness=True))
+    def test_refusal_by_a_common_rule_makes_no_stimulus(self) -> None:
+        """行っている最中 (Busy) で断られた拾う行為は、失敗の文を宣言していても、刺激を作らない。周りから見て何も起きていないため。"""
+        stimuli = StimulusTranslator().stimuli_of(_failed(Busy()), _acts_design(failure_witness=True))
 
-        assert felt == BodilyStimulus(person=_HAL, text=_REFUSED, salience=Background(), at=_NOW)
+        assert stimuli == ()
 
     def test_refusal_while_changing_the_world_is_seen_when_the_author_wrote_it(self) -> None:
-        """世界を変える途中で断られ、作者が失敗の文を書いていれば、本人の体の刺激に続いて「{actor}が拾い損ねた。」の見える刺激ができる。"""
-        felt, seen = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design(failure_witness=True))
+        """世界を変える途中で断られ、作者が失敗の文を書いていれば、「{actor}が拾い損ねた。」の見える刺激だけができ、本人には届けない印が付く。"""
+        [seen] = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design(failure_witness=True))
 
-        assert isinstance(felt, BodilyStimulus) and isinstance(seen, SightStimulus)
-        assert (seen.where, seen.witness.clear.template.template, seen.target) == (
+        assert isinstance(seen, SightStimulus)
+        assert (seen.where, seen.witness.clear.template.template, seen.target, seen.withheld_from) == (
             SpotId("well"),
             "{actor}が拾い損ねた。",
             NoTarget(),
+            frozenset({_HAL}),
         )
 
     def test_refusal_by_the_precondition_is_seen_when_the_author_wrote_it(self) -> None:
-        """行為ごとの前提で断られ、作者が失敗の文を書いていれば、見える刺激ができる。"""
+        """行為ごとの前提で断られ、作者が失敗の文を書いていれば、見える刺激だけができる。"""
         reason = PreconditionRefusal(HiddenFailure(ConditionPath.root()))
 
         stimuli = StimulusTranslator().stimuli_of(_failed(reason), _acts_design(failure_witness=True))
 
-        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus, SightStimulus]
+        assert [type(stimulus) for stimulus in stimuli] == [SightStimulus]
 
-    def test_refusal_without_a_failure_text_is_felt_only_by_the_actor(self) -> None:
-        """作者が失敗の文を書いていなければ、世界を変える途中で断られても、本人の体の刺激だけになる。"""
+    def test_refusal_without_a_failure_text_makes_no_stimulus(self) -> None:
+        """作者が失敗の文を書いていなければ、世界を変える途中で断られても、刺激を作らない。"""
         stimuli = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design())
 
-        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus]
+        assert stimuli == ()
 
-    def test_refusal_at_no_spot_is_felt_only_by_the_actor(self) -> None:
-        """どの場所にもいない人が断られたときは、失敗の文があっても、本人の体の刺激だけになる。"""
+    def test_refusal_at_no_spot_makes_no_stimulus(self) -> None:
+        """どの場所にもいない人が断られたときは、失敗の文があっても、刺激を作らない。"""
         event = _failed(_WORLD_REFUSED, at_spot=NotAtSpot())
 
         stimuli = StimulusTranslator().stimuli_of(event, _acts_design(failure_witness=True))
 
-        assert [type(stimulus) for stimulus in stimuli] == [BodilyStimulus]
+        assert stimuli == ()
 
 
 def _happening(name: str, notice: HappeningNotice | NoNotice) -> HappeningDeclaration:

@@ -79,11 +79,33 @@ def _template(body: str | TextWithPeople) -> str:
 class TestDescribeActionResult:
     """DescribeActionResult が、世界の返事を、本人の行動の結果 (OwnActionResult) の観測にすることを保証する。"""
 
-    def test_done_action_becomes_a_successful_result_with_the_done_text(self, mine_village: WorldDesign) -> None:
-        """ゲンが金庫を「1907」で開けると、結果は成功で、本文は共通の文面の「できた。」になる。"""
+    def test_done_interaction_becomes_a_successful_result_with_the_authors_text(
+        self, mine_village: WorldDesign
+    ) -> None:
+        """ゲンが金庫を「1907」で開けると、結果は成功で、本文は作者が操作に書いた成功の文 (起動鍵だ…) になる。"""
         gen = _GenInTheOffice(mine_village)
 
         result = gen.result_of("interact", target="金庫", how=_OPEN_SAFE, code="1907")
+
+        assert result.route == OwnActionResult(call_id="call_1", succeeded=True)
+        assert "昇降機の起動鍵だ" in _template(result.body)
+
+    def test_lighting_the_lamp_carried_gives_the_authors_text_for_the_lamp(self, mine_village: WorldDesign) -> None:
+        """ゲンが持っているカンテラを灯すと、本文は、持ち物のカンテラの操作に作者が書いた成功の文になる。"""
+        gen = _GenInTheOffice(mine_village)
+
+        result = gen.result_of("interact", target="カンテラ", how="油を足して灯す")
+
+        assert result.route == OwnActionResult(call_id="call_1", succeeded=True)
+        assert _template(result.body).startswith("カンテラに油を足して火を入れた。")
+
+    def test_done_built_in_action_becomes_a_successful_result_with_the_common_text(
+        self, mine_village: WorldDesign
+    ) -> None:
+        """作者の成功の文の無い組み込みの行為 (耳を澄ます) では、本文は共通の文面の「できた。」になる。"""
+        gen = _GenInTheOffice(mine_village)
+
+        result = gen.result_of("listen")
 
         assert result.route == OwnActionResult(call_id="call_1", succeeded=True)
         assert _template(result.body) == "できた。"

@@ -92,13 +92,16 @@ class TestRecentEventsText:
 
         assert recent_events_text(memory) == "- [1日目 昼] [行動] 思い出した → [結果] 鍵は事務所\n  心の声: 思い出そう"
 
-    def test_memo_rejections_are_added_after_the_result_like_the_old_run(self) -> None:
-        """書けなかったメモの操作は、古い run と同じく、結果の文の末尾に [メモ] の段落として足し、心の声はその後に付く。"""
+    def test_unwritten_memos_follow_the_inner_thought_one_line_each(self) -> None:
+        """書けなかったメモの操作は、試みの行の下に、心の声と同じ字下げで、心の声のあとに 1 つずつ「メモ:」の行で付く。"""
         memory = ShortTermMemory.empty(ADA)
         memory.act(
             _move("call-1", inner_thought="灯りをつける"),
             current_turn=1,
-            memo_rejections=("2 件目: m_3f2a7b というメモはありません。",),
+            memo_rejections=(
+                "「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",
+                "「text が空のメモを足す」は書けなかった（理由: text が空）",
+            ),
         )
         memory.receive_result(
             ObservedOutcome(
@@ -108,8 +111,9 @@ class TestRecentEventsText:
         )
 
         assert recent_events_text(memory) == (
-            "- [1日目 朝] カンテラに火を入れた。\n\n[メモ] 次の操作は書けませんでした。\n"
-            "- 2 件目: m_3f2a7b というメモはありません。\n  心の声: 灯りをつける"
+            "- [1日目 朝] カンテラに火を入れた。\n  心の声: 灯りをつける\n"
+            "  メモ: 「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）\n"
+            "  メモ: 「text が空のメモを足す」は書けなかった（理由: text が空）"
         )
 
     def test_lapse_is_a_line_without_inner_thought(self) -> None:

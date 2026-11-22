@@ -45,9 +45,7 @@ class ActionRefusal:
         actor: Occupant,
         at: WorldTick,
     ) -> tuple[Stimulus, ...]:
-        # 本人には、コマンドへの返事とは別に、断られたことを記憶に残す。考え直す目安にはしない。
-        felt = BodilyStimulus(person=self.attempt.actor, text=self.text, salience=Background(), at=at)
         # 共通の規則で断られたときは、周りから見て何も起きていない (use_cases.md)。
         if not isinstance(self.reason, (PreconditionRefusal, WorldStateRefusal)):
-            return (felt,)
-        return (felt, *self.attempt.witnessed_in(design, item_specs).failure_stimuli_at(where, actor, at))
+            return ()
+        return self.attempt.witnessed_in(design, item_specs).failure_stimuli_at(where, actor, at)

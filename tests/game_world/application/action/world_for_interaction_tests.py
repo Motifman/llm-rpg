@@ -134,8 +134,9 @@ TAKE_KEY_IN_THE_DARK = replace(
 
 
 class WorldForInteractions:
-    def __init__(self, *, bob_at: str = "dam", carol_at: str = "shore") -> None:
-        self.design = _design(bob_at, carol_at)
+    def __init__(self, *, bob_at: str = "dam", carol_at: str = "shore", rub: InteractionDeclaration = RUB) -> None:
+        self.design = _design(bob_at, carol_at, rub)
+        self._rub = rub
         self.store = SqliteWorldStore.create(
             ":memory:",
             world_id=WORLD,
@@ -159,7 +160,7 @@ class WorldForInteractions:
         return InteractWithObject(self.carry_out, self.design)(InteractWithObjectCommand(attempt))
 
     def rub(self, actor: PersonId, item: ItemInstanceId) -> ActionReply:
-        attempt = CarriedItemInteractionAttempt(actor, item, RUB, ChosenArguments(), Openly())
+        attempt = CarriedItemInteractionAttempt(actor, item, self._rub, ChosenArguments(), Openly())
         return InteractWithCarriedItem(self.carry_out, self.design)(InteractWithCarriedItemCommand(attempt))
 
     def use(self, actor: PersonId, item: ItemInstanceId) -> ActionReply:
@@ -195,7 +196,7 @@ class WorldForInteractions:
         return self.store.session()
 
 
-def _design(bob_at: str, carol_at: str) -> WorldDesign:
+def _design(bob_at: str, carol_at: str, rub: InteractionDeclaration) -> WorldDesign:
     return compose_world(
         nouns(
             flags=[GATE_CLOSED, POWERED, LAMP_RUBBED, LAMP_LIT],
@@ -213,7 +214,7 @@ def _design(bob_at: str, carol_at: str) -> WorldDesign:
             ObjectInteractionDeclaration(obj=LEVER, interaction=interaction)
             for interaction in (PULL, PUSH_BUTTON, JAM_WITH_KEY)
         ],
-        item_interactions=[ItemInteractionDeclaration(item_spec=LAMP, interaction=RUB)],
+        item_interactions=[ItemInteractionDeclaration(item_spec=LAMP, interaction=rub)],
         item_uses=[ItemUseDeclaration(item_spec=LAMP, effect=RaiseFlagEffect(LAMP_LIT))],
         person_interactions=[TAP_SHOULDER, PUSH_IN_THE_DARK, TAKE_KEY_IN_THE_DARK],
     )

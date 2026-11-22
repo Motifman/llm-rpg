@@ -18,7 +18,6 @@ from ai_rpg_world.being.application.memo_arguments import (
     ReadMemoOperations,
     feedback_text,
     read_memo_operations,
-    rejection_lines,
     rejection_text,
 )
 from ai_rpg_world.being.application.memo_writing import (
@@ -206,7 +205,7 @@ class TestFeedback:
 
     def test_feedback_lists_each_rejection_by_position(self) -> None:
         """外した操作を、配列の何件目かと理由の文を 1 行ずつ並べて返す。"""
-        text = feedback_text(rejection_lines([(0, "text が空です。"), (None, "memo は操作の配列で書いてください。")]))
+        text = feedback_text([(0, "text が空です。"), (None, "memo は操作の配列で書いてください。")])
 
         assert text == (
             "\n\n[メモ] 次の操作は書けませんでした。\n"

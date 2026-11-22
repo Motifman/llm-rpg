@@ -33,6 +33,10 @@ def text_about_people(failure_text: TextWithUnassignedPeople | NoText, trigger: 
     return failure_text.about_each(lambda placeholder, template: trigger.person_as(_subject_of(placeholder, template)))
 
 
+def people_in_text(text: TextWithUnassignedPeople, trigger: Trigger) -> TextAboutPeople:
+    return text.about_each(lambda placeholder, template: trigger.person_as(_subject_of(placeholder, template)))
+
+
 def placeholder_requirements(failure_text: TextWithUnassignedPeople | NoText) -> Requirements:
     return replace(Requirements.nothing(), subjects=failure_text.placeholders_read_as(_subject_of))
 
