@@ -1,66 +1,75 @@
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
-from ai_rpg_world.being.contract import Description
-from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
-from ai_rpg_world.game_world.domain.exception.briefing_headings_exception import (
-    MalformedBriefingHeadingException,
-    RepeatedBriefingHeadingException,
-)
-from ai_rpg_world.game_world.domain.value_object import DescriptionText
+from ai_rpg_world.game_world.domain.exception.briefing_headings_exception import MalformedBriefingHeadingException
+from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName
+from tests.game_world.support.world_design_for_tests import briefing_headings
 
 _INTRODUCTION = WorldIntroduction(
-    text=DescriptionText("冬が近い山あいの廃村。"),
-    premises=DescriptionText("昇降機は一度しか動かない。"),
+    title=DisplayName("廃坑の山村"),
+    text=DescriptionText("冬が近い山あいの廃村。\n\n坑道の中は光が無いと何も見えない。"),
+    premises=DescriptionText("- 昇降機は一度しか動かない。"),
     shows_world_map=False,
 )
 _MAP = "  井戸 (明るい) → 広場 まで 30 分"
+_TITLE_AND_OVERVIEW = (
+    "- 舞台のタイトル: 廃坑の山村",
+    "- 概要: 冬が近い山あいの廃村。",
+    "",
+    "坑道の中は光が無いと何も見えない。",
+)
 
-_HEADINGS = {
-    "introduction": "この世界について",
-    "premises": "この世界の前提",
-    "world_map": "この場所の造り",
-}
-_PAIRS = [(first, second) for i, first in enumerate(_HEADINGS) for second in tuple(_HEADINGS)[i + 1 :]]
+
+def _premises(introduction: WorldIntroduction, world_map: str | None, has_deadline: bool) -> object:
+    [premises] = briefing_headings().orientation(introduction, world_map, has_deadline).descriptions
+    assert premises.heading == "世界の前提"
+    return premises.text
+
+
+class TestOrientation:
+    """BriefingHeadings.orientation が、古い run の【世界の前提】の並びで題名・概要・前提・地図・行動の制限を 1 つの説明にすることを保証する。"""
+
+    def test_title_overview_premises_map_and_deadline_in_the_old_order(self) -> None:
+        """題名、概要 (段落ごと)、前提の行、空行のあとの地図の見出しと地図、行動の制限の順に並ぶ。"""
+        assert _premises(_INTRODUCTION, _MAP, has_deadline=True) == "\n".join(
+            (
+                *_TITLE_AND_OVERVIEW,
+                "- 昇降機は一度しか動かない。",
+                "",
+                "【この場所の造り】",
+                _MAP,
+                "- 行動の制限: 行動の総量には限りがある。",
+            )
+        )
+
+    def test_world_without_premises_map_or_deadline_has_title_and_overview_only(self) -> None:
+        """前提の欄が空で、地図を見せず、締め切りの無い世界は、題名と概要だけになる。"""
+        introduction = dataclasses.replace(_INTRODUCTION, premises=None)
+
+        assert _premises(introduction, None, has_deadline=False) == "\n".join(_TITLE_AND_OVERVIEW)
 
 
 class TestBriefingHeadings:
-    """BriefingHeadings が、導入・前提・地図を見出しの違う説明にし、使えない見出しを宣言のときに断ることを保証する。"""
+    """BriefingHeadings が、使えない見出しと言い回しを宣言のときに断ることを保証する。"""
 
-    def test_orientation_lists_introduction_premises_and_map_in_order(self) -> None:
-        """案内には、導入・前提・地図が、それぞれの見出しでこの順に並ぶ。この世界で知っていることは入らない (D2267)。"""
-        headings = BriefingHeadings(**_HEADINGS)
-
-        orientation = headings.orientation(_INTRODUCTION, _MAP)
-
-        assert tuple(orientation.descriptions) == (
-            Description(heading="この世界について", text="冬が近い山あいの廃村。"),
-            Description(heading="この世界の前提", text="昇降機は一度しか動かない。"),
-            Description(heading="この場所の造り", text=_MAP),
-        )
-
-    def test_orientation_without_a_map_has_no_map_heading(self) -> None:
-        """地図を渡さないと、案内は導入・前提の 2 つだけになる。"""
-        headings = BriefingHeadings(**_HEADINGS)
-
-        orientation = headings.orientation(_INTRODUCTION, None)
-
-        assert [d.heading for d in orientation.descriptions] == ["この世界について", "この世界の前提"]
-
-    @pytest.mark.parametrize("field", list(_HEADINGS))
     @pytest.mark.parametrize("heading", ["", "  ", "【前提】", "この世界の\n前提"])
-    def test_malformed_heading_is_refused(self, field: str, heading: str) -> None:
-        """どの欄でも、空白だけ・【】を含む・2 行にわたる見出しは MalformedBriefingHeadingException で断る。"""
+    def test_malformed_heading_is_refused(self, heading: str) -> None:
+        """空白だけ・【】を含む・2 行にわたる見出しは MalformedBriefingHeadingException で断る。"""
         with pytest.raises(MalformedBriefingHeadingException):
-            BriefingHeadings(**{**_HEADINGS, field: heading})
+            dataclasses.replace(briefing_headings(), premises=heading)
 
-    @pytest.mark.parametrize(
-        ("first", "second"),
-        _PAIRS,
-    )
-    def test_repeated_heading_is_refused(self, first: str, second: str) -> None:
-        """どの 2 つの見出しが同じでも RepeatedBriefingHeadingException で断る。案内は見出しの重なりを許さないため。"""
-        with pytest.raises(RepeatedBriefingHeadingException):
-            BriefingHeadings(**{**_HEADINGS, second: _HEADINGS[first]})
+    @pytest.mark.parametrize(("field", "text"), [("title", "- 舞台のタイトル"), ("overview", "- 概要: {title}")])
+    def test_line_that_does_not_write_its_value_is_refused(self, field: str, text: str) -> None:
+        """題名を書かない題名の行や、概要の代わりに別の値を書く概要の行は、MalformedBriefingHeadingException で断る。"""
+        with pytest.raises(MalformedBriefingHeadingException):
+            dataclasses.replace(briefing_headings(), **{field: text})
+
+    @pytest.mark.parametrize("field", ["world_map", "deadline"])
+    def test_blank_line_is_refused(self, field: str) -> None:
+        """地図の見出しや行動の制限の文が空白だけだと、MalformedBriefingHeadingException で断る。"""
+        with pytest.raises(MalformedBriefingHeadingException):
+            dataclasses.replace(briefing_headings(), **{field: " "})

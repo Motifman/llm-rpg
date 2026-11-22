@@ -127,12 +127,9 @@ class TestPersonaApartFromBriefing:
 
         assert mentions == set()
 
-    def test_premises_do_not_repeat_the_objective(self, mine_village: LoadedScenario) -> None:
-        """全員に同じ前提は「昇降機は一度しか動かない」を含み、「最終目標」の箇条を含まない。"""
-        premises = mine_village.design.introduction.premises.text
-
-        assert "昇降機は一度しか動かない" in premises
-        assert "最終目標" not in premises
+    def test_premises_are_left_empty_like_the_old_run(self, mine_village: LoadedScenario) -> None:
+        """山村 v2 は前提の欄を書かない。古い run の【世界の前提】には題名と概要しかなく、同じ文にするため (D2268-5)。"""
+        assert mine_village.design.introduction.premises is None
 
 
 class TestLiftCage:

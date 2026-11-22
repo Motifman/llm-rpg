@@ -377,6 +377,7 @@ def scene_texts() -> SceneTexts:
 
 def introduction() -> WorldIntroduction:
     return WorldIntroduction(
+        title=DisplayName("廃坑の村"),
         text=DescriptionText("山あいの廃坑の村で目を覚ました。"),
         premises=DescriptionText("昇降機は一度しか動かない。"),
         shows_world_map=False,
@@ -385,9 +386,11 @@ def introduction() -> WorldIntroduction:
 
 def briefing_headings() -> BriefingHeadings:
     return BriefingHeadings(
-        introduction="この世界について",
-        premises="この世界の前提",
-        world_map="この場所の造り",
+        premises="世界の前提",
+        title="- 舞台のタイトル: {title}",
+        overview="- 概要: {text}",
+        world_map="【この場所の造り】",
+        deadline="- 行動の制限: 行動の総量には限りがある。",
     )
 
 

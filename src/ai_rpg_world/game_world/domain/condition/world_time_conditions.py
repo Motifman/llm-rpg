@@ -27,7 +27,7 @@ class TickAtLeastCondition(LeafCondition):
         return facts.now() >= self.tick
 
     def _requirements_besides_text(self) -> Requirements:
-        return Requirements.nothing()
+        return replace(Requirements.nothing(), reads_world_tick=True)
 
 
 @final
@@ -73,7 +73,7 @@ class TicksInWorldStageAtLeastCondition(LeafCondition):
         return facts.now().ticks_since(facts.world_stage().entered_at()) >= self.ticks
 
     def _requirements_besides_text(self) -> Requirements:
-        return replace(Requirements.nothing(), reads_world_stage=True)
+        return replace(Requirements.nothing(), reads_world_stage=True, reads_world_tick=True)
 
 
 @final

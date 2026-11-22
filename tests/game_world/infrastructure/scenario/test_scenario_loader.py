@@ -40,6 +40,7 @@ _COMMON = Path(__file__).parent / "data" / "common_for_tests.yaml"
 _LIFT_LANDING = """
 includes: [common.yaml]
 introduction:
+  title: 昇降機の乗り場
   text: 坑道の奥で目を覚ました。
   premises: 昇降機は一度しか動かない。
 flags:
@@ -251,6 +252,16 @@ class TestWhatEachPersonBringsIn:
             known_facts=DescriptionText("昇降機の鍵は自分が持っている。"),
             objective=DescriptionText("ミオと二人で昇降機に乗る。"),
         )
+
+    def test_omitted_premises_are_read_as_none(self, tmp_path: Path) -> None:
+        """introduction に premises を書かないと、WorldIntroduction.premises は None になり、案内に前提の行は出ない。"""
+        text = _LIFT_LANDING.replace("  premises: 昇降機は一度しか動かない。\n", "", 1)
+
+        assert _load(tmp_path, text).design.introduction.premises is None
+
+    def test_title_is_read_into_world_introduction(self, tmp_path: Path) -> None:
+        """introduction.title は、WorldIntroduction.title として設計図から引ける。"""
+        assert _load(tmp_path).design.introduction.title == DisplayName("昇降機の乗り場")
 
     def test_premises_are_read_into_world_introduction(self, tmp_path: Path) -> None:
         """introduction.premises は、WorldIntroduction.premises として設計図から引ける。"""
@@ -504,18 +515,18 @@ class TestBriefingHeadings:
 
         headings = _load(tmp_path, text).design.briefing_headings
 
-        assert (headings.introduction, headings.premises, headings.world_map) == (
-            "この世界について",
+        assert (headings.premises, headings.title, headings.world_map) == (
             "この村の決まり",
-            "この場所の造り",
+            "- 舞台のタイトル: {title}",
+            "【この場所の造り】",
         )
 
-    def test_missing_heading_is_a_flaw_naming_the_field(self, tmp_path: Path) -> None:
+    def test_missing_line_is_a_flaw_naming_the_field(self, tmp_path: Path) -> None:
         """共通の部品にもシナリオにも world_map が無いと、briefing_headings.world_map の場所を付けた DesignFlaw になる。"""
         path = _scenario(tmp_path, _LIFT_LANDING)
         common = tmp_path / "common.yaml"
         common.write_text(
-            common.read_text(encoding="utf-8").replace("  world_map: この場所の造り\n", ""), encoding="utf-8"
+            common.read_text(encoding="utf-8").replace("  world_map: 【この場所の造り】\n", ""), encoding="utf-8"
         )
 
         with pytest.raises(WorldDesignFlawsException) as raised:
@@ -527,11 +538,11 @@ class TestBriefingHeadings:
 
     @pytest.mark.parametrize(
         "line",
-        ["  premises: この世界について\n", '  premises: "【前提】"\n', "  sequel: 続き\n"],
-        ids=["repeated", "brackets", "unknown_key"],
+        ['  title: "- 題名"\n', '  premises: "【前提】"\n', "  sequel: 続き\n"],
+        ids=["title_without_value", "brackets", "unknown_key"],
     )
     def test_malformed_headings_are_a_flaw(self, tmp_path: Path, line: str) -> None:
-        """見出しの重なり・【】を含む見出し・知らない鍵は、briefing_headings の場所の DesignFlaw になる。"""
+        """題名を書かない題名の行・【】を含む見出し・知らない鍵は、briefing_headings の場所の DesignFlaw になる。"""
         flaws = _flaws(tmp_path, _LIFT_LANDING + "briefing_headings:\n" + line)
 
         assert [flaw.location.field.split(".")[0] for flaw in flaws] == ["briefing_headings"]
@@ -722,7 +733,7 @@ class TestBrokenShapesStayDesignFlaws:
         """名前で指す宣言の欄を空や一覧にすると、その欄の場所を付けた DesignFlaw になる。"""
         text = (
             "includes: [common.yaml]\n"
-            "introduction: { text: 目覚めた。, premises: 出る。 }\n"
+            "introduction: { title: 坑道, text: 目覚めた。, premises: 出る。 }\n"
             "ending: { ends_when: all_outcomes_decided }\n"
             "time: { day_night: null, weather: null }\n" + broken
         )
