@@ -47,6 +47,7 @@ from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import Sqli
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.world_design_for_tests import (
     character,
+    clock_wording,
     compose_world,
     half_hour_ticks_from_midnight,
     nouns,
@@ -126,7 +127,7 @@ class _World:
         OpenWorld(self._store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self._scope = CommandScope(self._store, CommittedEventsDistributor())
         self.memories = _Memories()
-        exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.memories)
+        exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), self.memories)
         deliver_perception = DeliverPerception(self._scope, exit, PerceptionReportsReceived())
         self.deliver = DeliverNoticesOnWaking(
             self._scope,
@@ -185,7 +186,7 @@ class TestDeliverNoticesOnWaking:
         """崩落の知らせも含め、届く観測はすべて目が覚めた tick 9 の時刻と順を持つ。"""
         observations = _wakes_alice().memories.observations[_ALICE]
 
-        assert {observation.time for observation in observations} == {ObservedTime(display="1 日目 04:30")}
+        assert {observation.time for observation in observations} == {ObservedTime(display="Day 1 深夜 4:30")}
         assert {observation.order.value for observation in observations if observation.order} == {9}
 
     def test_missed_notices_are_cleared(self) -> None:
@@ -206,7 +207,7 @@ class TestDeliverNoticesOnWakingHandler:
 
         DeliverNoticesOnWakingHandler(world.deliver).handle(revived)
 
-        assert world.memories.observations[_ALICE][0].time == ObservedTime(display="1 日目 04:30")
+        assert world.memories.observations[_ALICE][0].time == ObservedTime(display="Day 1 深夜 4:30")
         assert [observation.time for observation in world.memories.observations[_BOB]] == [
-            ObservedTime(display="1 日目 03:30")
+            ObservedTime(display="Day 1 深夜 3:30")
         ]

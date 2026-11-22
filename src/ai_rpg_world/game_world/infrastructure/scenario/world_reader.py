@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalText
 from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
+    ClockWording,
     DayNightDeclaration,
     DayPhaseDeclaration,
     DayPhaseName,
@@ -36,6 +37,8 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
 from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey, ActionTexts
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
+from ai_rpg_world.game_world.domain.declaration.world_map import WorldMapWording
+from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesNothing, SeesShapes, SightQuality
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.death_rule import DeathRule
@@ -181,6 +184,32 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
     )
 
 
+def clock_wording(node: YamlNode) -> ClockWording:
+    fields = node.fields("day", "late_night", "late_night_before_hour")
+    return node.build(
+        lambda: ClockWording(
+            day=fields.required("day").text(),
+            late_night=fields.required("late_night").text(),
+            late_night_before_hour=fields.required("late_night_before_hour").integer(),
+        )
+    )
+
+
+def world_map_wording(node: YamlNode) -> WorldMapWording:
+    fields = node.fields("place", "place_without_exits", "exit", "joiner", "minutes", "turns", "lighting")
+    return node.build(
+        lambda: WorldMapWording(
+            place=fields.required("place").text(),
+            place_without_exits=fields.required("place_without_exits").text(),
+            exit=fields.required("exit").text(),
+            joiner=fields.required("joiner").text(),
+            minutes=fields.required("minutes").text(),
+            turns=fields.required("turns").text(),
+            lighting=_by_enum(fields.required("lighting"), Lighting, lambda value: value.text()),
+        )
+    )
+
+
 def surroundings_texts(node: YamlNode) -> SurroundingsTexts:
     fields = node.fields("people_here", "bodies_here", "joiner", "waking", "darkening", "scene")
     return node.build(
@@ -210,21 +239,25 @@ def scene_texts(node: YamlNode) -> SceneTexts:
 
 
 def briefing_headings(node: YamlNode) -> BriefingHeadings:
-    fields = node.fields("introduction", "premises", "known_facts")
+    fields = node.fields("introduction", "premises", "known_facts", "world_map")
     return node.build(
         lambda: BriefingHeadings(
             introduction=fields.required("introduction").text(),
             premises=fields.required("premises").text(),
             known_facts=fields.required("known_facts").text(),
+            world_map=fields.required("world_map").text(),
         )
     )
 
 
 def introduction(node: YamlNode) -> WorldIntroduction:
-    fields = node.fields("text", "premises")
+    fields = node.fields("text", "premises", "show_world_map")
+    shown = fields.optional("show_world_map")
     return node.build(
         lambda: WorldIntroduction(
-            text=description(fields.required("text")), premises=description(fields.required("premises"))
+            text=description(fields.required("text")),
+            premises=description(fields.required("premises")),
+            shows_world_map=shown.boolean() if shown is not None else False,
         )
     )
 
