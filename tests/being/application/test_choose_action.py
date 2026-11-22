@@ -252,6 +252,15 @@ class TestChooseAction:
         assert mark in acting.calls[0].messages[1]["content"]
         assert "現在地: 鉱山会社の事務所\n" in after_acting.calls[0].messages[1]["content"]
 
+    def test_turn_spent_on_a_tool_that_was_not_offered_also_counts_as_visiting(self) -> None:
+        """出していないツールの名前を呼んだターンも 1 手を使ったので、次のターンからは (初めて訪れた) を付けない。古い run も、実行した手番で数えていた。"""
+        visited = InMemoryVisitedPlacesRepository()
+
+        _choose(_reply("pickup", {"item": "ランプ"}), visited_places=visited)
+        _, next_turn = _choose(_reply("interact", {"target": "金庫"}), visited_places=visited)
+
+        assert "現在地: 鉱山会社の事務所\n" in next_turn.calls[0].messages[1]["content"]
+
     def test_whisper_to_sayo_returns_her_mark_not_her_name(self) -> None:
         """サヨへのささやきは、呼び方「サヨ」ではなく人の印 {"person": 2} で返り、中身の文字はそのまま返る。"""
         outcome, _ = _choose(_reply("speak", {"reach": "ささやく", "to": "サヨ", "content": "サヨ、番号を知ってる？"}))

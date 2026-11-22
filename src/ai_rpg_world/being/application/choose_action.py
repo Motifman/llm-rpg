@@ -178,7 +178,6 @@ class ChooseAction:
         if call is None:
             return ActionNotChosen(requested_tool=None, suggestion=None, exchange=exchange)
         outcome = self._outcome_of(call, tools, command, exchange)
-        # 1 手を選んだ場所は訪れたことになる。選ぶまでは、組み直したプロンプトにも (初めて訪れた) が付く (#1596)。
         self._visit(command.being_id, command.scene.here)
         return outcome
 

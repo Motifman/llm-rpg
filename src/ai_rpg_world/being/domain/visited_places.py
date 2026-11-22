@@ -24,8 +24,6 @@ class VisitedPlace:
 
 
 class VisitedPlaces:
-    """Being ごとに 1 つ。"""
-
     def __init__(self, being_id: BeingId, places: tuple[VisitedPlace, ...] = ()) -> None:
         if not isinstance(being_id, BeingId):
             raise VisitedPlacesValidationException("being_id must be BeingId")
@@ -65,8 +63,7 @@ class VisitedPlacesRepository(ABC):
     def save(self, places: VisitedPlaces) -> None: ...
 
     @abstractmethod
-    def replace_all_by_being(self, places: VisitedPlaces) -> None:
-        """snapshot から戻すときに使う。"""
+    def replace_all_by_being(self, places: VisitedPlaces) -> None: ...
 
 
 __all__ = ["VisitedPlace", "VisitedPlaces", "VisitedPlacesRepository"]

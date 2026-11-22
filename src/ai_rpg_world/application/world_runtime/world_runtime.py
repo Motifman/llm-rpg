@@ -641,8 +641,7 @@ class WorldRuntime:
     _being_short_term_memory_store: ShortTermMemoryRepository = field(
         default_factory=InMemoryShortTermMemoryRepository, repr=False
     )
-    # #2267: Being が訪れた場所。世界の snapshot には入らない。古い run の場面は現在地の欄 (Scene.here) を
-    # 持たないので記録は増えないが、Being の snapshot が読み書きするので持つ。
+    # #2267: Being が訪れた場所。世界の snapshot には入らない。
     _being_visited_places_store: VisitedPlacesRepository = field(
         default_factory=InMemoryVisitedPlacesRepository, repr=False
     )
