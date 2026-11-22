@@ -44,6 +44,10 @@ class ArgumentsNotChosenException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.ARGUMENTS_NOT_CHOSEN"
 
 
+class SeveralItemsNotOfferedException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.SEVERAL_ITEMS_NOT_OFFERED"
+
+
 class BlankRefusalCodeException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.BLANK_REFUSAL_CODE"
 

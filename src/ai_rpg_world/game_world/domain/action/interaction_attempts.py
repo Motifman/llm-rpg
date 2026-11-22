@@ -189,7 +189,7 @@ class ObjectInteractionAttempt(_InteractionAttempt):
         return OfferedAction(
             ActionChoiceKind.INTERACT,
             (OfferedStep(TARGET, self.obj.name), OfferedStep(HOW, declared.display_label)),
-            wording.arguments(declared.arguments),
+            wording.arguments_on_things(declared.arguments),
         )
 
 
@@ -228,7 +228,7 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
         return OfferedAction(
             ActionChoiceKind.INTERACT,
             (target, OfferedStep(HOW, declared.display_label)),
-            wording.arguments(declared.arguments),
+            wording.arguments_on_things(declared.arguments),
         )
 
 
@@ -281,12 +281,13 @@ class PersonInteractionAttempt(_InteractionAttempt):
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         declared = wording.design.person_interaction(self.interaction.interaction_id)
+        how = OfferedStep(HOW, declared.display_label)
         if isinstance(self.target, SomeoneInTheDark):
-            target, toward = OfferedStep(TARGET, wording.someone_in_the_dark()), None
-        else:
-            target, toward = OfferedStep(TARGET, wording.person(self.target)), self.target
+            target = OfferedStep(TARGET, wording.someone_in_the_dark())
+            return OfferedAction(
+                ActionChoiceKind.INTERACT, (target, how), wording.arguments_toward_unseen(declared.arguments)
+            )
+        target = OfferedStep(TARGET, wording.person(self.target))
         return OfferedAction(
-            ActionChoiceKind.INTERACT,
-            (target, OfferedStep(HOW, declared.display_label)),
-            wording.arguments(declared.arguments, toward=toward),
+            ActionChoiceKind.INTERACT, (target, how), wording.arguments_toward(declared.arguments, self.target)
         )

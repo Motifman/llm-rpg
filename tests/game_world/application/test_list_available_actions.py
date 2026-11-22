@@ -127,7 +127,10 @@ from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.effect.body_effects import DamageEffect
 from ai_rpg_world.game_world.domain.effect.flag_effects import RaiseFlagEffect
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
-from ai_rpg_world.game_world.domain.exception.action_exception import ArgumentsNotChosenException
+from ai_rpg_world.game_world.domain.exception.action_exception import (
+    ArgumentsNotChosenException,
+    SeveralItemsNotOfferedException,
+)
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedPeople
@@ -723,7 +726,7 @@ class TestOfferedActions:
         mine = _Mine()
         lamp = mine.lamp()
 
-        offered = mine.offered(CarriedItemInteractionAttempt(_ALICE, lamp, _RUB, {}, Openly()))
+        offered = mine.offered(CarriedItemInteractionAttempt(_ALICE, lamp, _RUB, ChosenArguments(), Openly()))
 
         assert offered.steps == (OfferedStep(TARGET, DisplayName("lamp"), lamp), OfferedStep(HOW, _RUB.display_label))
 
@@ -757,27 +760,117 @@ class TestOfferedActions:
         """暗がりの誰かへの操作は、相手の候補が「暗がりの誰か」になる。"""
         mine = _Mine(Lighting.DARK, person_interactions=(_TAP,))
 
-        offered = mine.offered(PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), _TAP, {}, Openly()))
+        offered = mine.offered(PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), _TAP, ChosenArguments(), Openly()))
 
         assert offered.steps[0] == OfferedStep(TARGET, DisplayName("暗がりの誰か"))
 
-    def test_hand_over_and_section_entry_and_waiting(self) -> None:
-        """carol へランプを渡すは「渡す」の carol → ランプ、トロッコに乗るは「区画に出入りする」の作者の文、待つは道筋の無い「待つ」。"""
+    def test_someone_in_the_dark_offers_no_items_for_an_item_argument(self) -> None:
+        """暗がりの誰かへの、品物の引数を取る操作は、相手の持ち物が見えないので品物の候補が無い。"""
+        mine = _Mine(Lighting.DARK, person_interactions=(replace(_GRAB, reaches_unseen=True),))
+        grab = replace(_GRAB, reaches_unseen=True)
+        loot = OfferedValue("loot", "loot")
+
+        offered = mine.offered(
+            PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), grab, ArgumentsNotChosen(), Openly())
+        )
+
+        assert offered.inputs == (OfferedItemPick(loot, ()),)
+
+    def test_hand_over_of_several_items_is_not_offered(self) -> None:
+        """2 つの品物を一度に渡す試みは、行動の選択肢に当たらないので SeveralItemsNotOfferedException を投げる。"""
         mine = _Mine()
-        lamp, cart = mine.lamp(), mine.design.section_access(_CART.section_id)
 
-        hand_over = mine.offered(ItemHandOverAttempt(_ALICE, _CAROL, (lamp,), Openly()))
-        entry = mine.offered(EnterSectionAttempt(_ALICE, cart))
-        waiting = mine.offered(WaitAttempt(_ALICE, NoReason()))
+        with pytest.raises(SeveralItemsNotOfferedException):
+            mine.offered(ItemHandOverAttempt(_ALICE, _CAROL, (mine.lamp(), mine.rock()), Openly()))
 
-        assert hand_over.steps == (
+    def test_every_listed_attempt_is_offered_as_the_choice_of_the_d2226_table(self) -> None:
+        """明るい坑道とトロッコの中で一覧に出るどの試みも、D2226 の 4 節の表どおりの行動の選択肢と、最初の値の名前で返る。"""
+        expected: dict[type, tuple[ActionChoiceKind, str | None]] = {
+            SpotSearchAttempt: (ActionChoiceKind.EXPLORE, None),
+            ListeningAttempt: (ActionChoiceKind.LISTEN, None),
+            WaitAttempt: (ActionChoiceKind.WAIT, None),
+            SpeechAttempt: (ActionChoiceKind.SPEAK, "reach"),
+            TravelAttempt: (ActionChoiceKind.TRAVEL_TO, "destination"),
+            GroundItemPickupAttempt: (ActionChoiceKind.PICKUP_ITEM, "item"),
+            ItemDropAttempt: (ActionChoiceKind.DROP_ITEM, "item"),
+            HoldItemAttempt: (ActionChoiceKind.HOLD_ITEM, "item"),
+            PutAwayItemAttempt: (ActionChoiceKind.PUT_AWAY_ITEM, "item"),
+            ItemUseAttempt: (ActionChoiceKind.USE_ITEM, "item"),
+            TendAttempt: (ActionChoiceKind.TEND_TO_PLAYER, "target"),
+            ItemHandOverAttempt: (ActionChoiceKind.GIVE_ITEM, "to"),
+            EnterSectionAttempt: (ActionChoiceKind.SET_SUB_LOCATION, "move"),
+            LeaveSectionAttempt: (ActionChoiceKind.SET_SUB_LOCATION, "move"),
+            ObjectInteractionAttempt: (ActionChoiceKind.INTERACT, "target"),
+            CarriedItemInteractionAttempt: (ActionChoiceKind.INTERACT, "target"),
+            PersonInteractionAttempt: (ActionChoiceKind.INTERACT, "target"),
+        }
+        outside, in_cart = _Mine(), _Mine()
+        in_cart.enter_cart()
+        listed = [(mine, a.attempt) for mine in (outside, in_cart) for a in mine.lists()]
+
+        offered = {
+            type(attempt): (o.kind, o.steps[0].value.name if o.steps else None)
+            for mine, attempt in listed
+            for o in (mine.offered(attempt),)
+        }
+
+        assert offered == expected
+
+    def test_each_item_choice_names_the_item_and_remembers_it(self) -> None:
+        """使う・置く・手に持つ・しまうは、どれも品物の段に品名と品物の印を持つ。"""
+        mine = _Mine()
+        lamp, rock = mine.lamp(), mine.rock()
+
+        steps = [
+            mine.offered(attempt).steps
+            for attempt in (
+                ItemUseAttempt(_ALICE, lamp),
+                ItemDropAttempt(_ALICE, rock, Openly()),
+                HoldItemAttempt(_ALICE, rock),
+                PutAwayItemAttempt(_ALICE, lamp),
+            )
+        ]
+
+        assert steps == [
+            (OfferedStep(ITEM, DisplayName("lamp"), lamp),),
+            (OfferedStep(ITEM, DisplayName("rock"), rock),),
+            (OfferedStep(ITEM, DisplayName("rock"), rock),),
+            (OfferedStep(ITEM, DisplayName("lamp"), lamp),),
+        ]
+
+    def test_hand_over_is_offered_as_recipient_then_item(self) -> None:
+        """carol へランプを渡すは、渡す相手 carol (alice に見えている人の印) → ランプの道筋になる。"""
+        mine = _Mine()
+        lamp = mine.lamp()
+
+        offered = mine.offered(ItemHandOverAttempt(_ALICE, _CAROL, (lamp,), Openly()))
+
+        assert offered.steps == (
             OfferedStep(RECIPIENT, mine.ref_of(_CAROL)),
             OfferedStep(ITEM, DisplayName("lamp"), lamp),
         )
-        assert entry == OfferedAction(
-            ActionChoiceKind.SET_SUB_LOCATION, (OfferedStep(SECTION_MOVE, DisplayName("乗り込む")),)
-        )
-        assert waiting == OfferedAction(ActionChoiceKind.WAIT)
+
+    def test_section_entry_and_exit_offer_the_authors_labels(self) -> None:
+        """トロッコに乗る・降りるは、作者が書いた「乗り込む」「降りる」を出入りの候補にする。"""
+        mine = _Mine()
+        cart = mine.design.section_access(_CART.section_id)
+
+        entry = mine.offered(EnterSectionAttempt(_ALICE, cart))
+        exit_ = mine.offered(LeaveSectionAttempt(_ALICE, cart))
+
+        assert entry.steps == (OfferedStep(SECTION_MOVE, DisplayName("乗り込む")),)
+        assert exit_.steps == (OfferedStep(SECTION_MOVE, DisplayName("降りる")),)
+
+    def test_ordinary_voice_and_shout_have_no_listener(self) -> None:
+        """ふつうの声と叫ぶは、届け方の段だけで相手を持たず、中身を自由に書く。"""
+        mine = _Mine()
+
+        ordinary = mine.offered(SpeechAttempt(_ALICE, OrdinaryVoice(), _UNWORDED))
+        shout = mine.offered(SpeechAttempt(_ALICE, Shout(), _UNWORDED))
+
+        assert ordinary.steps == (OfferedStep(REACH, DisplayName("ふつうの声で話す")),)
+        assert shout.steps == (OfferedStep(REACH, DisplayName("叫ぶ")),)
+        assert ordinary.inputs == shout.inputs == (OfferedFreeText(CONTENT),)
 
 
 _HARU, _NATSU, _AKI = PersonId("haru"), PersonId("natsu"), PersonId("aki")

@@ -49,6 +49,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.default_duration import Def
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     HandOverToSelfException,
     NothingToHandOverException,
+    SeveralItemsNotOfferedException,
 )
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     NoRouteToDestinationException,
@@ -363,8 +364,12 @@ class ItemHandOverAttempt(_BuiltInAttempt):
         return super().person_as(kind)
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        if len(self.items) != 1:
+            raise SeveralItemsNotOfferedException(
+                f"a hand-over of {len(self.items)} items is not one of the action choices; offer one item at a time"
+            )
         to = OfferedStep(RECIPIENT, wording.person(self.to))
-        return OfferedAction(self._CHOICE, (to, *(wording.item(ITEM, item) for item in self.items)))
+        return OfferedAction(self._CHOICE, (to, wording.item(ITEM, self.items[0])))
 
 
 @final

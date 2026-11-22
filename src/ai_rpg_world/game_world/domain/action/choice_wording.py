@@ -51,17 +51,24 @@ class ChoiceWording:
     def item(self, value: OfferedValue, item: ItemInstanceId) -> OfferedStep:
         return OfferedStep(value, self.design.nouns.item_spec_of(self.facts.item(item).spec_id).name, item)
 
-    def arguments(
-        self, declared: tuple[ArgumentDeclaration, ...], toward: PersonId | None = None
-    ) -> tuple[OfferedInput, ...]:
-        return tuple(self._argument(argument, toward) for argument in declared)
+    # 品物の引数がどの品物を指すかは、まだ宣言に書かれていない (#2247)。人への操作は相手の見えている持ち物、
+    # 暗がりの相手は持ち物が見えないので無し、ほかは自分の持ち物から出す。決め方を変えるときはこの 3 つだけを直す。
+    def arguments_on_things(self, declared: tuple[ArgumentDeclaration, ...]) -> tuple[OfferedInput, ...]:
+        return self._arguments(declared, self.facts.inventory(self._actor).items())
 
-    def _argument(self, argument: ArgumentDeclaration, toward: PersonId | None) -> OfferedInput:
+    def arguments_toward(self, declared: tuple[ArgumentDeclaration, ...], person: PersonId) -> tuple[OfferedInput, ...]:
+        return self._arguments(declared, self._items_seen_on.get(person, ()))
+
+    def arguments_toward_unseen(self, declared: tuple[ArgumentDeclaration, ...]) -> tuple[OfferedInput, ...]:
+        return self._arguments(declared, ())
+
+    def _arguments(
+        self, declared: tuple[ArgumentDeclaration, ...], items: tuple[ItemInstanceId, ...]
+    ) -> tuple[OfferedInput, ...]:
+        return tuple(self._argument(argument, items) for argument in declared)
+
+    def _argument(self, argument: ArgumentDeclaration, items: tuple[ItemInstanceId, ...]) -> OfferedInput:
         value = OfferedValue(argument.name.value, argument.name.value)
         if isinstance(argument.kind, TextArgument):
             return OfferedFreeText(value)
-        # 品物の引数がどの品物を指すかは宣言に書かれていない。人への操作は相手の見えている持ち物、ほかは自分の持ち物から出す。
-        owner_items = (
-            self.facts.inventory(self._actor).items() if toward is None else self._items_seen_on.get(toward, ())
-        )
-        return OfferedItemPick(value, tuple(self.item(value, item) for item in owner_items))
+        return OfferedItemPick(value, tuple(self.item(value, item) for item in items))
