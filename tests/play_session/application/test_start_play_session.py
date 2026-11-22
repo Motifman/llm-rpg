@@ -9,7 +9,12 @@ from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 from ai_rpg_world.game_world.domain.value_object import PersonId
-from ai_rpg_world.play_session.domain.play_session_exception import CastNotFoundException, PersonNotCastException
+from ai_rpg_world.play_session.domain.cast import Casting
+from ai_rpg_world.play_session.domain.play_session_exception import (
+    CastNotFoundException,
+    CastValidationException,
+    PersonNotCastException,
+)
 from tests.play_session.mine_village_session import ENVIRONMENT_NAME, WORLD, MineVillageSession
 
 _GEN = PersonId("gen")
@@ -43,7 +48,8 @@ class TestStartPlaySession:
         descriptions = tuple(session.casts.get(WORLD).orientation_of(_GEN).descriptions)
 
         assert [d.heading for d in descriptions] == ["この世界について", "この世界の前提", "あなたが知っていること"]
-        assert "1907" in descriptions[2].text
+        known_facts = descriptions[2].text
+        assert isinstance(known_facts, str) and "1907" in known_facts
 
     def test_gens_imposed_goal_is_only_his_objective(self) -> None:
         """ゲンに課された目的は「サヨと二人そろって、坑道の奥の昇降機で外へ出る。」だけになる。"""
@@ -86,7 +92,7 @@ class TestStartPlaySession:
     def test_casting_decides_which_being_plays_each_person(self) -> None:
         """配役でゲンを Being wanderer に当てると、ゲンの人柄の Being wanderer が用意されて入り、Being gen は用意されない。"""
         session = MineVillageSession()
-        casting = {**session.command.casting, _GEN: BeingId("wanderer")}
+        casting = Casting({**session.command.casting.beings, _GEN: BeingId("wanderer")})
 
         session.start(replace(session.command, casting=casting))
 
@@ -110,20 +116,32 @@ class TestStartPlaySession:
         assert session.casts.get(WORLD).entry_of(_GEN).imposed_goal is not None
 
 
-class TestStartPlaySessionCommand:
-    """StartPlaySessionCommand と Role が、配役の無い役と、名前の無い人柄を受け取らないことを保証する。"""
+class TestStartPlaySessionRefusesBadCasting:
+    """StartPlaySession が、配役の無い役と名前の無い人柄を、世界を開く前に断ることを保証する。"""
 
-    def test_role_without_being_name_is_refused(self) -> None:
-        """人柄の欄に名前が無い役は ValueError で断る。紹介に使う名前が無いため。"""
-        role = MineVillageSession().command.roles[0]
+    def test_role_not_in_casting_is_refused_before_opening_the_world(self) -> None:
+        """配役にゲンが無いのにゲンの役があると PersonNotCastException で断り、配役は保存されず、どの Being も用意しない。"""
+        session = MineVillageSession()
+        casting = Casting({p: b for p, b in session.command.casting.beings.items() if p != _GEN})
 
-        with pytest.raises(ValueError):
-            replace(role, persona_fields={"first_person": "俺"})
+        with pytest.raises(PersonNotCastException):
+            session.start(replace(session.command, casting=casting))
 
-    def test_role_not_in_casting_is_refused(self) -> None:
-        """配役にゲンが無いのにゲンの役があると ValueError で断る。"""
-        command = MineVillageSession().command
-        casting = {person: being for person, being in command.casting.items() if person != _GEN}
+        with pytest.raises(CastNotFoundException):
+            session.casts.get(WORLD)
+        with pytest.raises(BeingNotFoundException):
+            session.beings.get(BeingId("sayo"))
 
-        with pytest.raises(ValueError):
-            replace(command, casting=casting)
+    def test_role_without_being_name_is_refused_before_opening_the_world(self) -> None:
+        """ゲンの人柄の欄に名前が無いと CastValidationException で断り、配役は保存されない。紹介に使う名前が無いため。"""
+        session = MineVillageSession()
+        roles = tuple(
+            replace(role, persona_fields={"first_person": "俺"}) if role.person == _GEN else role
+            for role in session.command.roles
+        )
+
+        with pytest.raises(CastValidationException):
+            session.start(replace(session.command, roles=roles))
+
+        with pytest.raises(CastNotFoundException):
+            session.casts.get(WORLD)

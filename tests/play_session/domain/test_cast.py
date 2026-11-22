@@ -5,7 +5,7 @@ import pytest
 from ai_rpg_world.being.contract import Description, EnvironmentEntry, Introduction, Orientation
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
-from ai_rpg_world.play_session.domain.cast import BeingCastInWorldEvent, Cast, CastMember
+from ai_rpg_world.play_session.domain.cast import BeingCastInWorldEvent, Cast, Casting, CastMember
 from ai_rpg_world.play_session.domain.play_session_exception import (
     CastValidationException,
     PersonAlreadyBriefedException,
@@ -129,3 +129,23 @@ class TestCastBrief:
         """まだ渡していない人の取り決めを聞くと PersonNotBriefedException で断る。"""
         with pytest.raises(PersonNotBriefedException):
             _cast().entry_of(_SAYO)
+
+
+class TestCasting:
+    """Casting が、配役のある登場人物だけを Being と名前の組にし、名前の無い組を断ることを保証する。"""
+
+    def test_member_pairs_the_person_with_the_cast_being(self) -> None:
+        """ゲンに Being being_gen を当てた配役では、ゲンの組は being_gen と名前「ゲン」になる。"""
+        casting = Casting({_GEN: BeingId("being_gen")})
+
+        assert casting.member(_GEN, "ゲン") == CastMember(_GEN, BeingId("being_gen"), "ゲン")
+
+    def test_person_without_being_is_refused(self) -> None:
+        """配役に無いサヨの組を作ろうとすると PersonNotCastException で断る。"""
+        with pytest.raises(PersonNotCastException):
+            Casting({_GEN: BeingId("being_gen")}).member(_SAYO, "サヨ")
+
+    def test_blank_being_name_is_refused(self) -> None:
+        """Being の名前が空白だけの組は CastValidationException で断る。紹介に使う名前が無いため。"""
+        with pytest.raises(CastValidationException):
+            CastMember(_GEN, BeingId("being_gen"), " ")

@@ -5,6 +5,7 @@ from pathlib import Path
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.game_world.domain.value_object import PersonId
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
+from ai_rpg_world.play_session.domain.cast import Casting
 from ai_rpg_world.play_session.infrastructure.roles_from_scenario import casting_by_person_name, roles_from_scenario
 
 _MINE_VILLAGE = Path(__file__).parents[3] / "data" / "scenarios" / "mine_village_v2.yaml"
@@ -41,4 +42,4 @@ class TestCastingByPersonName:
 
         casting = casting_by_person_name(scenario)
 
-        assert casting == {PersonId(name): BeingId(name) for name in ("gen", "sayo", "haru", "mio")}
+        assert casting == Casting({PersonId(name): BeingId(name) for name in ("gen", "sayo", "haru", "mio")})

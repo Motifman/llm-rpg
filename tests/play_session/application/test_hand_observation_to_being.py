@@ -60,7 +60,7 @@ class TestHandObservationToBeing:
         assert session.short_term_memories.get(BeingId("haru")).experiences == ()
 
     def test_people_in_the_observation_are_named_before_entering_memory(self) -> None:
-        """南の横坑口でサヨが扉を壊すと、ゲンの短期記憶には人の穴を呼び名で埋めた文字列の本文で入る。"""
+        """南の横坑口でサヨが扉を壊すと、ゲンの短期記憶には、人の穴を、世界に名乗ったサヨの名前で埋めた「サヨが扉を壊した」で入る。"""
         session = MineVillageSession().started()
 
         session.deliver_perception(
@@ -73,6 +73,4 @@ class TestHandObservationToBeing:
 
         [perceived] = session.short_term_memories.get(BeingId("gen")).experiences
         assert isinstance(perceived, Perception)
-        body = perceived.observation.body_without_people()
-        assert "{" not in body
-        assert body.endswith("扉を壊した") or body == "何かが崩れた"
+        assert perceived.observation.body == "サヨが扉を壊した"
