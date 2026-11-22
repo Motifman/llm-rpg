@@ -31,15 +31,16 @@ SAY_INLINE = OfferedValue("say_inline", "この行動をしながら、同じ場
 
 
 _NAME_LIMIT = 64
-_NAMES_ON_THE_INTERACTION_PATH = frozenset({TARGET.name, HOW.name})
+_NAMES_TAKEN_BY_THE_CHOICE = frozenset({TARGET.name, HOW.name, SAY_INLINE.name})
 
 
 def offered_value_name_problems(name: str) -> tuple[str, ...]:
-    # 引数の名前は、Being が選択肢を LLM のツールにするとき引数の名前になり、操作の道筋 (target → how) にも並ぶ。
+    # 引数の名前は、Being が選択肢を LLM のツールにするとき引数の名前になり、操作の道筋 (target → how) と
+    # 行動しながらの一言と同じ段に並ぶ。
     if not (name.isascii() and name.isidentifier() and len(name) <= _NAME_LIMIT):
         return (f"argument {name!r} must be an ASCII identifier of up to {_NAME_LIMIT} characters",)
-    if name in _NAMES_ON_THE_INTERACTION_PATH:
-        return (f"argument {name!r} is already used on the path of an interaction",)
+    if name in _NAMES_TAKEN_BY_THE_CHOICE:
+        return (f"argument {name!r} is already used by the interact choice",)
     return ()
 
 
@@ -68,6 +69,10 @@ class ActionChoiceKind(Enum):
         self.outline = outline
         self.takes_details = takes_details
         self.first_value = next((value for value in outline if value is not SAY_INLINE), None)
+
+    @property
+    def takes_inline_speech(self) -> bool:
+        return SAY_INLINE in self.outline
 
 
 @final

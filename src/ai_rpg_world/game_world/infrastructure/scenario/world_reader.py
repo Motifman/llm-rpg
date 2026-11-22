@@ -10,7 +10,7 @@ from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSele
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
-from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
+from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
     DayNightDeclaration,
@@ -54,6 +54,7 @@ from ai_rpg_world.game_world.domain.sound.sound_level import SoundLevel, SoundLo
 from ai_rpg_world.game_world.domain.value_object import (
     Capacity,
     Damage,
+    DisplayName,
     FatigueAmount,
     HitPoints,
     HungerAmount,
@@ -166,7 +167,7 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
 
 
 def surroundings_texts(node: YamlNode) -> SurroundingsTexts:
-    fields = node.fields("people_here", "bodies_here", "joiner", "waking", "darkening")
+    fields = node.fields("people_here", "bodies_here", "joiner", "waking", "darkening", "scene")
     return node.build(
         lambda: SurroundingsTexts(
             people_here=people_text(fields.required("people_here")),
@@ -174,6 +175,21 @@ def surroundings_texts(node: YamlNode) -> SurroundingsTexts:
             joiner=fields.required("joiner").text(),
             waking=people_text(fields.required("waking")),
             darkening=people_text(fields.required("darkening")),
+            scene=scene_texts(fields.required("scene")),
+        )
+    )
+
+
+def scene_texts(node: YamlNode) -> SceneTexts:
+    fields = node.fields("heading", "objects", "destinations", "ground_items", "count_mark", "pitch_dark")
+    return node.build(
+        lambda: SceneTexts(
+            heading=DisplayName(fields.required("heading").text()),
+            objects=DisplayName(fields.required("objects").text()),
+            destinations=DisplayName(fields.required("destinations").text()),
+            ground_items=DisplayName(fields.required("ground_items").text()),
+            count_mark=DisplayName(fields.required("count_mark").text()),
+            pitch_dark=DisplayName(fields.required("pitch_dark").text()),
         )
     )
 

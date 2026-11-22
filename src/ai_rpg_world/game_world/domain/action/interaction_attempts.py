@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, TypeVar, final
 
 from typing_extensions import Self, assert_never
 
@@ -51,11 +51,14 @@ from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentNa
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+
+_Reply = TypeVar("_Reply")
 
 
 @final
@@ -90,6 +93,12 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
 
     @abstractmethod
     def offered_as(self, wording: ChoiceWording) -> OfferedAction: ...
+
+    @abstractmethod
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self: ...
+
+    @abstractmethod
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply: ...
 
     def __post_init__(self) -> None:
         self.manner.require_allowed_by(self.interaction)
@@ -172,6 +181,12 @@ class ObjectInteractionAttempt(_InteractionAttempt):
     arguments: ChosenArguments | ArgumentsNotChosen
     manner: Manner
 
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.interact_with_object(self)
+
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
+        return replace(self, arguments=self.arguments.chosen_as(values))
+
     def kind(self) -> ActionKind:
         return ActionKind.INTERACT_WITH_OBJECT
 
@@ -201,6 +216,12 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
     interaction: DeclaredInteraction
     arguments: ChosenArguments | ArgumentsNotChosen
     manner: Manner
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.interact_with_carried_item(self)
+
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
+        return replace(self, arguments=self.arguments.chosen_as(values))
 
     def kind(self) -> ActionKind:
         return ActionKind.INTERACT_WITH_CARRIED_ITEM
@@ -247,6 +268,12 @@ class PersonInteractionAttempt(_InteractionAttempt):
                 f"{self.interaction.interaction_id.value} cannot be aimed at someone in the dark"
             )
         super().__post_init__()
+
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
+        return entrances.interact_with_person(self)
+
+    def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
+        return replace(self, arguments=self.arguments.chosen_as(values))
 
     def kind(self) -> ActionKind:
         return ActionKind.INTERACT_WITH_PERSON

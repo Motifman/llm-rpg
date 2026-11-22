@@ -12,8 +12,20 @@ from ai_rpg_world.game_world.domain.exception.surroundings_texts_exception impor
 )
 from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedPeople, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
+from ai_rpg_world.game_world.domain.value_object import DisplayName
 
 _PEOPLE = "people"
+
+
+@final
+@dataclass(frozen=True)
+class SceneTexts:
+    heading: DisplayName
+    objects: DisplayName
+    destinations: DisplayName
+    ground_items: DisplayName
+    count_mark: DisplayName
+    pitch_dark: DisplayName
 
 
 @final
@@ -24,6 +36,7 @@ class SurroundingsTexts:
     joiner: str
     waking: TextWithUnassignedPeople
     darkening: TextWithUnassignedPeople
+    scene: SceneTexts
 
     def __post_init__(self) -> None:
         for name, text in (("people_here", self.people_here), ("bodies_here", self.bodies_here)):

@@ -68,6 +68,9 @@ class ChosenArguments:
     def require_chosen(self, interaction: DeclaredInteraction) -> None:
         pass
 
+    def chosen_as(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> ChosenArguments:
+        return self
+
 
 @final
 @dataclass(frozen=True)
@@ -87,6 +90,9 @@ class ArgumentsNotChosen:
         # 値しだいで決まる前提は、値を選べば満たせる見込みがあるので、できる側に倒す。
         verdict = precondition.failure_reason_before_arguments(facts, trigger)
         return None if isinstance(verdict, AwaitsArguments) else verdict
+
+    def chosen_as(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> ChosenArguments:
+        return ChosenArguments({ArgumentName(name): value for name, value in values.items()})
 
     def require_chosen(self, interaction: DeclaredInteraction) -> None:
         raise ArgumentsNotChosenException(f"the arguments of {interaction.interaction_id.value} have not been chosen")

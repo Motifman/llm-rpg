@@ -678,6 +678,7 @@ class SurroundingsTexts:                    # 行為ではなく、本人に直�
     joiner: str                             # {people} に 2 人以上入るとき、人の穴どうしをつなぐ言葉 (共通の部品では「、」)。1 人のときは使わない。空でない 1 行
     waking: TextWithUnassignedPeople        # 「目が覚めた。」。介抱されて起きた本人へ。穴は書けない
     darkening: TextWithUnassignedPeople     # 「辺りが暗くなった。」。明るさが下がった場所の人へ。穴は書けない
+    scene: SceneTexts                       # 毎ターン渡す場面の文の見出しと決まった言い回し (「現在地と周囲」「物:」「行き先:」「落ちている品物:」「×」「真っ暗で、何も見えない。」、D2241)
 
     def scene_as_seen(self, *, people: tuple[PersonRef | Unidentified, ...], bodies: tuple[PersonRef | Unidentified, ...]) -> TextWithAssignedPeople: ...
     # {people} を 1 人ずつの穴 ({person_1}、{person_2} ...) に広げ、渡した順に joiner でつなぐ。穴の番号は people_here から bodies_here へ通しで付ける

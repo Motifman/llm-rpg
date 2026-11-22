@@ -320,9 +320,9 @@ class TestArgumentsRead:
 class TestNamesShownInActionChoices:
     """行動の選択肢で名前から選べなくなる宣言を、compose が読み込みの時点で誤りにすることを保証する (design_decisions D2226)。"""
 
-    @pytest.mark.parametrize("name", ["番号", "1st", "target", "how"])
+    @pytest.mark.parametrize("name", ["番号", "1st", "target", "how", "say_inline"])
     def test_argument_name_that_cannot_be_a_choice_value_is_a_flaw(self, name: str) -> None:
-        """引数の名前が ASCII の識別子でないか、操作の道筋に並ぶ target・how と同じだと、操作の arguments を指す DesignFlaw になる。"""
+        """引数の名前が ASCII の識別子でないか、操作の道筋に並ぶ target・how か、行動しながらの一言の say_inline と同じだと、操作の arguments を指す DesignFlaw になる。"""
         argument = ArgumentDeclaration(name=ArgumentName(name), kind=TextArgument())
 
         flaws = flaws_of_composing(object_interactions=(_open_door(arguments=(argument,)),))

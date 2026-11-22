@@ -18,6 +18,7 @@ from tests.game_world.domain.perception._surroundings_builders import (
     seen,
     thing,
 )
+from tests.game_world.support.world_design_for_tests import scene_texts
 
 
 class TestHiddenThingsStayOutOfSurroundings:
@@ -245,6 +246,7 @@ def _surroundings_texts() -> SurroundingsTexts:
         joiner="、",
         waking=TextWithUnassignedPeople("目が覚めた。"),
         darkening=TextWithUnassignedPeople("辺りが暗くなった。"),
+        scene=scene_texts(),
     )
 
 

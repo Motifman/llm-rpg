@@ -51,4 +51,4 @@ def _persona_text(persona_block: str) -> str:
 
 
 def _continued(description: Description, text: str) -> Description:
-    return Description(heading=description.heading, text=description.text + text)
+    return Description(heading=description.heading, text=description.text_without_people() + text)

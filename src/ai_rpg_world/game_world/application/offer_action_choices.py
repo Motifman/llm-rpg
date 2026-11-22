@@ -33,8 +33,12 @@ class OfferActionChoices:
         return self._scope.run(lambda session: self._offer(session, command.person))
 
     def _offer(self, session: WorldSession, person: PersonId) -> ActionChoices:
-        facts = session.facts()
-        seen = VisibleSurroundings.seen_by(perceiver_of(facts, person), SurroundingsOf(person, facts, self._design))
-        people = WorldPerceptionSenses(facts).view_for(person)
-        wording = ChoiceWording.seeing(person, self._design, facts, people, seen)
+        wording = choice_wording_for(session, person, self._design)
         return OffersOfOneTurn.of(self._list.available_in(session, person), wording).as_action_choices()
+
+
+def choice_wording_for(session: WorldSession, person: PersonId, design: WorldDesign) -> ChoiceWording:
+    facts = session.facts()
+    seen = VisibleSurroundings.seen_by(perceiver_of(facts, person), SurroundingsOf(person, facts, design))
+    people = WorldPerceptionSenses(facts).view_for(person)
+    return ChoiceWording.seeing(person, design, facts, people, seen)
