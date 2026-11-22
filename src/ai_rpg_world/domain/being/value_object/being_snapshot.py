@@ -60,6 +60,8 @@ class BeingSnapshot:
     #: Being が入っていた環境の識別子と表示の名前 (design_decisions D1928-2)。入っていなければ両方 None。
     attachment_environment_id: str | None
     attachment_environment_name: str | None
+    #: 入っていた環境で知っていたこと (D2267)。入っていないか、知っていることの無い環境なら None。
+    attachment_known_facts: str | None = None
     snapshot_version: int = CURRENT_SNAPSHOT_VERSION
     memory_payload_json: str | None = None
     #: 消した「どの種類の記憶を持つかの宣言」。古い snapshot から読んだときだけ埋まる。読み捨てた件数を
@@ -112,6 +114,11 @@ class BeingSnapshot:
             value = getattr(self, field)
             if value is not None and not value.strip():
                 raise BeingSnapshotIncompleteException(f"{field} must be non-blank")
+        if self.attachment_known_facts is not None:
+            if self.attachment_environment_id is None:
+                raise BeingSnapshotIncompleteException("attachment_known_facts needs an attachment")
+            if not isinstance(self.attachment_known_facts, str) or not self.attachment_known_facts.strip():
+                raise BeingSnapshotIncompleteException("attachment_known_facts must be non-blank str")
         self._require_both_or_neither(
             "legacy_attachment", self.legacy_attachment_world_id, self.legacy_attachment_player_id, int
         )

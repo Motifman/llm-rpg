@@ -938,6 +938,8 @@ characters:
       first_person: 私
       speech: 落ち着いた常体
       traits: [落ち着いている, 慎重で、確かめてから動く]
+      values: [確かめたことを頼りにすること, 連れの者を無事に帰すこと]
+      fears: [当て推量で動くこと]
       background: 山の測量を請け負ってきた測量士。
   mio:
     appearance: 工具袋を腰に下げた若い女の子
@@ -954,6 +956,9 @@ characters:
       first_person: あたし
       speech: 気さくな常体
       traits: [元気, 身軽で、先に行って様子を見るのが得意, 機械いじりが好き]
+      values: [自分の目で確かめること]
+      fears: [じっと待たされること]
+      background: 調査の仕事を手伝う若い隊員。
   gen:
     appearance: 煤けた坑夫の上着を着た初老の男
     spawn_spot: south_adit_mouth
@@ -970,6 +975,8 @@ characters:
       first_person: 俺
       speech: ぶっきらぼうな常体
       traits: [口数は少ないが、坑道の空気には敏い]
+      values: [身内を無事に家へ帰すこと]
+      fears: [坑道のガス]
       background: 元鉱夫。
   sayo:
     appearance: 綿入れを着込んだ若い娘
@@ -986,7 +993,10 @@ characters:
       name: サヨ
       first_person: 私
       speech: はきはきした敬体
-      background: 物覚えのよい娘。
+      traits: [物覚えがよい]
+      values: [覚えたことを人の役に立てること]
+      fears: [暗いところで一人になること]
+      background: 鉱夫の家に育った娘。
 
 outcomes:
   rescued: { name: 救出, announcement: "{each_person}は昇降機で外へ出た。" }

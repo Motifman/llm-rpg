@@ -29,6 +29,7 @@ def snapshot_to_dict(snapshot: BeingSnapshot) -> dict[str, Any]:
         },
         "attachment_environment_id": snapshot.attachment_environment_id,
         "attachment_environment_name": snapshot.attachment_environment_name,
+        "attachment_known_facts": snapshot.attachment_known_facts,
         "snapshot_version": snapshot.snapshot_version,
         "memory_payload_json": snapshot.memory_payload_json,
     }
@@ -79,6 +80,8 @@ def dict_to_snapshot(data: dict[str, Any]) -> BeingSnapshot:
         legacy_identity_first_person=data.get("identity_first_person") if legacy else None,
         attachment_environment_id=data.get("attachment_environment_id"),
         attachment_environment_name=data.get("attachment_environment_name"),
+        # 知っていることを足す前の snapshot には欄が無いので、知っていること無しとして読む
+        attachment_known_facts=data.get("attachment_known_facts"),
         legacy_attachment_world_id=data.get("attachment_world_id"),
         legacy_attachment_player_id=data.get("attachment_player_id"),
         snapshot_version=data.get("snapshot_version", 1),

@@ -144,7 +144,7 @@ perception_defaults:
 - `refusal_texts.world_state` には、遊んでいる最中に世界の状態が変わって起きうる集約の断り (拾おうとした品物がもう無い、籠が満員など) の `error_code` を載せる。宣言を作るときの検査や、実装の誤りでしか起きない `error_code` は載せない。断りの文の人のプレースホルダーは `{actor}` だけ
 - `built_in_action_perceptions` の文には、人のほかに、行為が扱う物・行き先・話した中身の呼び名を書ける。刺激に変える役が埋める (#2058)
 - `surroundings_texts` の `people_here`・`bodies_here` は `{people}` をちょうど 1 回だけ書く。`{people}` には場所にいる人が 1 人ずつの穴に分かれて `joiner` でつながって入る。`waking`・`darkening` には穴を書けない (#2174)。`scene` は毎ターン渡す場面の文の見出しと決まった言い回し (`heading`、`objects`、`destinations`、`ground_items`、`count_mark`、`pitch_dark`) で、どれも空でない 1 行 (D2241)
-- `briefing_headings` は、入るときの案内で導入・前提・その人の立場に付ける見出し。共通の部品では「この世界について」「この世界の前提」「あなたが知っていること」。3 つは違う見出しにする (#2229)
+- `briefing_headings` は、入るときの案内で導入・前提・地図に付ける見出し。共通の部品では「この世界について」「この世界の前提」「この場所の造り」。3 つは違う見出しにする (#2229)。その人の立場は案内に入れず、Being が【ペルソナ】に出す (D2267)
 
 | 行為 | 書ける呼び名 | 人 |
 |---|---|---|
@@ -291,7 +291,7 @@ happenings:
 1 人の登場人物に、性質の違う 3 つを分けて書く (D2222)。
 
 - 世界に渡す部分 (`appearance`、`spawn_spot` など)。読み込む側が `CharacterDeclaration` にする
-- この世界での立場 (`known_facts`) と本人の目的 (`objective`)。登場人物の直下に書く。読み込む側は世界の宣言に入れず、人ごとに入るときに渡す文 `CharacterBriefing` にして `LoadedScenario.briefings` に返す。立場は案内 (`Orientation`) に「あなたが知っていること」の見出しで、目的は課された目的 (`EnvironmentEntry.imposed_goal`) で Being に渡す
+- この世界での立場 (`known_facts`) と本人の目的 (`objective`)。登場人物の直下に書く。読み込む側は世界の宣言に入れず、人ごとに入るときに渡す文 `CharacterBriefing` にして `LoadedScenario.briefings` に返す。立場は入るときの取り決め (`EnvironmentEntry.known_facts`) で、目的は課された目的 (`EnvironmentEntry.imposed_goal`) で Being に渡す。Being は立場を【ペルソナ】に出す (D2267)
 - Being に渡す人柄 (`being:`)。鍵は人柄の型 (`Persona`) の欄の名前 (`name`、`first_person`、`speech`、`traits`、`values`、`fears`、`background`) と同じ。読み込む側は世界の宣言に入れず、`LoadedScenario.beings` に返す。世界をまたいで持ち越すものだけを書く。この世界でしか通じないこと (金庫の番号など) と、ほかの登場人物やこの世界の場所に触れる文は `known_facts` に書く
 
 `knows_at_start` は最初から知っている人、`known_facts` は最初から知っている事柄。全員に同じ導入と前提は `introduction` だけに書き、人ごとには書かない。

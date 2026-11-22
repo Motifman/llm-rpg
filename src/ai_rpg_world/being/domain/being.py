@@ -67,7 +67,11 @@ class Being(AggregateRoot[DomainEvent]):
             raise BeingIntroducedToItselfException(
                 f"Being({self._being_id}) is introduced to itself as {self._persona.name!r}"
             )
-        self.attach(BeingAttachment(environment_id=environment_id, environment_name=entry.environment_name))
+        self.attach(
+            BeingAttachment(
+                environment_id=environment_id, environment_name=entry.environment_name, known_facts=entry.known_facts
+            )
+        )
 
     def detach(self) -> None:
         """入っていなければ ``BeingNotAttachedException`` で断る。離れても記憶は Being に残る。

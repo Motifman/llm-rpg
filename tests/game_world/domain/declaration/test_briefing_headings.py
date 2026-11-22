@@ -21,39 +21,33 @@ _MAP = "  井戸 (明るい) → 広場 まで 30 分"
 _HEADINGS = {
     "introduction": "この世界について",
     "premises": "この世界の前提",
-    "known_facts": "あなたが知っていること",
     "world_map": "この場所の造り",
 }
 _PAIRS = [(first, second) for i, first in enumerate(_HEADINGS) for second in tuple(_HEADINGS)[i + 1 :]]
 
 
 class TestBriefingHeadings:
-    """BriefingHeadings が、導入・前提・地図・知っていることを見出しの違う説明にし、使えない見出しを宣言のときに断ることを保証する。"""
+    """BriefingHeadings が、導入・前提・地図を見出しの違う説明にし、使えない見出しを宣言のときに断ることを保証する。"""
 
-    def test_orientation_lists_introduction_premises_map_and_known_facts_in_order(self) -> None:
-        """案内には、導入・前提・地図・知っていることが、それぞれの見出しでこの順に並ぶ。"""
+    def test_orientation_lists_introduction_premises_and_map_in_order(self) -> None:
+        """案内には、導入・前提・地図が、それぞれの見出しでこの順に並ぶ。この世界で知っていることは入らない (D2267)。"""
         headings = BriefingHeadings(**_HEADINGS)
 
-        orientation = headings.orientation(_INTRODUCTION, DescriptionText("金庫の番号は 1907。"), _MAP)
+        orientation = headings.orientation(_INTRODUCTION, _MAP)
 
         assert tuple(orientation.descriptions) == (
             Description(heading="この世界について", text="冬が近い山あいの廃村。"),
             Description(heading="この世界の前提", text="昇降機は一度しか動かない。"),
             Description(heading="この場所の造り", text=_MAP),
-            Description(heading="あなたが知っていること", text="金庫の番号は 1907。"),
         )
 
     def test_orientation_without_a_map_has_no_map_heading(self) -> None:
-        """地図を渡さないと、案内は導入・前提・知っていることの 3 つだけになる。"""
+        """地図を渡さないと、案内は導入・前提の 2 つだけになる。"""
         headings = BriefingHeadings(**_HEADINGS)
 
-        orientation = headings.orientation(_INTRODUCTION, DescriptionText("金庫の番号は 1907。"), None)
+        orientation = headings.orientation(_INTRODUCTION, None)
 
-        assert [d.heading for d in orientation.descriptions] == [
-            "この世界について",
-            "この世界の前提",
-            "あなたが知っていること",
-        ]
+        assert [d.heading for d in orientation.descriptions] == ["この世界について", "この世界の前提"]
 
     @pytest.mark.parametrize("field", list(_HEADINGS))
     @pytest.mark.parametrize("heading", ["", "  ", "【前提】", "この世界の\n前提"])

@@ -12,7 +12,6 @@ from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonI
 @dataclass(frozen=True)
 class BriefEnteringPersonCommand:
     person: PersonId
-    known_facts: DescriptionText
     objective: DescriptionText
 
 
@@ -33,7 +32,7 @@ class BriefEnteringPerson:
         character = self._design.nouns.character_of(command.person)
         return EntryBriefing(
             orientation=self._design.briefing_headings.orientation(
-                self._design.introduction, command.known_facts, self._design.world_map_text()
+                self._design.introduction, self._design.world_map_text()
             ),
             imposed_goal=command.objective.text,
             known_people=character.knows_at_start,

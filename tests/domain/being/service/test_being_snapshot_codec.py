@@ -95,6 +95,20 @@ class TestBeingSnapshotCodecDecode:
         assert decoded.persona == original.persona
         assert decoded.attachment == original.attachment
 
+    def test_known_facts_of_the_attachment_survive_encode_and_decode(self) -> None:
+        """居場所の「この世界で知っていること」は、encode して decode しても残る。"""
+        original = Being(
+            being_id=BeingId("ada"),
+            persona=_persona(),
+            attachment=BeingAttachment(
+                environment_id="w1p2", environment_name="廃坑の山村", known_facts="金庫の番号は 1907 だ。"
+            ),
+        )
+
+        decoded = BeingSnapshotCodec.decode(BeingSnapshotCodec.encode(original))
+
+        assert decoded.attachment == original.attachment
+
     def test_attach_snapshot_decode_attachment_none(self) -> None:
         """attachment 両 None の snapshot は未 attach Being として復元される。"""
         being = BeingSnapshotCodec.decode(_snapshot())

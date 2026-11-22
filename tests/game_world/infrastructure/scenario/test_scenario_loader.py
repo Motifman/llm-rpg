@@ -504,25 +504,25 @@ class TestBriefingHeadings:
 
         headings = _load(tmp_path, text).design.briefing_headings
 
-        assert (headings.introduction, headings.premises, headings.known_facts) == (
+        assert (headings.introduction, headings.premises, headings.world_map) == (
             "この世界について",
             "この村の決まり",
-            "あなたが知っていること",
+            "この場所の造り",
         )
 
     def test_missing_heading_is_a_flaw_naming_the_field(self, tmp_path: Path) -> None:
-        """共通の部品にもシナリオにも known_facts が無いと、briefing_headings.known_facts の場所を付けた DesignFlaw になる。"""
+        """共通の部品にもシナリオにも world_map が無いと、briefing_headings.world_map の場所を付けた DesignFlaw になる。"""
         path = _scenario(tmp_path, _LIFT_LANDING)
         common = tmp_path / "common.yaml"
         common.write_text(
-            common.read_text(encoding="utf-8").replace("  known_facts: あなたが知っていること\n", ""), encoding="utf-8"
+            common.read_text(encoding="utf-8").replace("  world_map: この場所の造り\n", ""), encoding="utf-8"
         )
 
         with pytest.raises(WorldDesignFlawsException) as raised:
             load_scenario(path)
 
         assert [flaw.location for flaw in raised.value.flaws] == [
-            DesignLocation("world", "world", "briefing_headings.known_facts").in_file(ScenarioFile("common.yaml"))
+            DesignLocation("world", "world", "briefing_headings.world_map").in_file(ScenarioFile("common.yaml"))
         ]
 
     @pytest.mark.parametrize(

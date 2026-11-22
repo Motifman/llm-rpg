@@ -37,10 +37,13 @@ class EnvironmentEntry:
     environment_name: str
     imposed_goal: str | None = None
     introductions: Sequence[Introduction] = field(default_factory=tuple)
+    known_facts: str | None = None
+    """この世界で知っていること (この世界での立場)。人柄とは分けて持ち、Being は環境にいるあいだだけ持つ (D2222、D2267)。"""
 
     def __post_init__(self) -> None:
         require_text(self.environment_name, "environment_name")
         require_optional_text(self.imposed_goal, "imposed_goal")
+        require_optional_text(self.known_facts, "known_facts")
         introductions = tuple(self.introductions)
         if not all(isinstance(i, Introduction) for i in introductions):
             raise ContractViolation("introductions must be Introduction items")
