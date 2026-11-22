@@ -28,6 +28,7 @@ item_specs: { ... }
 monster_kinds: { ... }                # モンスターの種類 (monster.md)
 monster_spawns: { ... }               # どこに何匹いるか
 characters: { ... }
+shops: { ... }                        # 作者が持ち主の店 (ScenarioShopDeclaration、D2224)
 world_stages: { ... }
 initial_stage: ...                    # 最初の段階の名前。world_stages を書いたら必須、書かなければ NoWorldStages
 group_decisions: { ... }
@@ -40,6 +41,7 @@ ending: { ends_when: ... }
 refusal_texts: { ... }                # RefusalTexts。ふつうは includes から取り込み、行を書き換える
 built_in_action_perceptions: { ... }  # 組み込みの行為ごとの知覚 (行為は travel、hand_over などの snake_case)
 surroundings_texts: { ... }           # SurroundingsTexts。場面 (people_here、bodies_here、joiner) と、waking・darkening の知らせの文
+shop_texts: { ... }                   # ShopTexts。店の呼び名と、持ち主への知らせの文。ふつうは includes から取り込む (D2224)
 monster_perceptions: { ... }          # モンスターのしたこと (現れた、去った、襲った、逃げた、死んだ) の知覚の既定。ふつうは includes から取り込む
 monster_health: [ ... ]               # 傷の具合の境と文 ({ at_least, text } の並び)
 monster_doing: { ... }                # 状態ごとの、いましていることの文
@@ -71,7 +73,7 @@ precondition:
 | 書く場所 | 欄 |
 |---|---|
 | `flags.<名前>` | `meaning`, `initially_raised` |
-| `spots.<名前>` | `name`, `description`, `atmosphere` (`lighting`, `outdoor`, `temperature`, `ambient_sound`, `smell`), `sections`, `objects`, `discoverables` |
+| `spots.<名前>` | `name`, `description`, `atmosphere` (`lighting`, `outdoor`, `temperature`, `ambient_sound`, `smell`), `allows_shops` (人が店を出せるか。書かなければ偽), `sections`, `objects`, `discoverables` |
 | `spots.<場所>.sections.<名前>` | `name`, `capacity` (`null` は定員なし), `reachable_objects`, `access` (`enter_label`, `leave_label`, `enter_text`, `leave_text`, `exertion`, `duration`, `entry_condition`, `perceived_as`) |
 | `spots.<場所>.objects.<名前>` | `name`, `description`, `appearance` (`seen_in_dark`, `hidden_until_revealed`), `state_keys`, `interactions`, `looks` (`- { when, text }` の並び。書かなければ空) |
 | `spots.<場所>.discoverables.<名前>` | `found_text`, `condition`, `when_found`, `finding` (`once_in_world` / `once_per_person`) |
@@ -81,7 +83,8 @@ precondition:
 | `groupings.<名前>` | `name`, `visibility`, `changes`, `groups` (`<集まり>: { name, members_know_each_other, shared_description }`) |
 | `monster_kinds.<名前>` | `name`, `description`, `max_hp`, `attack` (`{ damage, every }`), `senses` (`{ sees_in_dark, hears_from }`), `temperament` (`hostile` / `territorial` / `retaliating` / `timid`), `flees_below` (`null` か割合), `gives_up_after`, `wander_chance`, `drops` (`- { item_spec, count, chance }`。`chance` を書かなければ必ず落とす), `perceptions` (書かなければ `monster_perceptions`) |
 | `monster_spawns.<名前>` | `kind`, `count`, `home`, `territory`, `present_while` (書かなければ最初からいる) |
-| `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `being` |
+| `characters.<名前>` | `appearance`, `spawn_spot`, `initial_items`, `initial_held`, `initial_groups`, `knows_at_start`, `max_hp`, `pack_capacity`, `initial_gold` (書かなければ 0), `being` |
+| `shops.<名前>` | `spot`, `keeper_name`, `look`, `selling`・`buying` (`<品物>: { count, unit_price, note }`。`count` は数か `unlimited`、`note` は書かなければ無し), `gold` (数か `unlimited`) |
 | `world_stages.<名前>` | `name`, `description`, `allowed_actions` (`all` か一覧), `when_entered`, `when_left` |
 | `group_decisions.<名前>` | `name`, `abstain_allowed`, `reveals_ballots`, `voters`, `choices`, `when_decided`, `when_undecided` |
 | `outcomes.<名前>` | `name`, `announcement` (結末が決まった本人だけに届く。文の `{each_person}` が本人) |
@@ -101,6 +104,7 @@ precondition:
 - 行為は組み込みの行為の名前か `{ interaction: <名前> }`。人の結末は結末の名前か `died`
 - `exertion` は `uses_body` / `does_not_use_body`、`actor_requirement` は `living_only` / `living_or_departed`、`salience` は `notable` / `background`、`duration` は tick の数か `default`、操作の引数は `<名前>: text` / `<名前>: item`
 - 知らせ (`notice`) は `sight_at: { spot, texts, salience }` / `sound_from: { spot, sound, salience }` / `announcement_to: { audience, text, salience }`
+- 作者の店の「尽きない」は `unlimited` と書く (`UnlimitedSupply`)
 - 体力 `max_hp` と荷 `pack_capacity` を書かない登場人物は、`rules` の `person_max_hp` と `pack_capacity` で始まる (#2055)
 
 ## 書かなかった欄
@@ -120,7 +124,7 @@ defaults:
 
 `includes:` の重ね方は地図を全階層で重ねるので、シナリオで `defaults.passage.states` を書くと、共通の部品の状態に足される。状態を置き換えたいときは、通路の `states` に直接書く。
 
-種類は `flag` `spot` `atmosphere` `section` `section_access` `object` `appearance` `state_key` `discoverable` `interaction` `passage` `passage_state` `item_spec` `grouping` `group` `character` `world_stage` `group_decision` `outcome` `happening` `reaction` `joint_action` `perception` `sight_texts` `sound` `sight_at` `sound_from` `announcement_to` `day_phase` `weather`。知らない種類は `DesignFlaw`。
+種類は `flag` `spot` `atmosphere` `section` `section_access` `object` `appearance` `state_key` `discoverable` `interaction` `passage` `passage_state` `item_spec` `grouping` `group` `character` `shop_line` `world_stage` `group_decision` `outcome` `happening` `reaction` `joint_action` `perception` `sight_texts` `sound` `sight_at` `sound_from` `announcement_to` `day_phase` `weather`。知らない種類は `DesignFlaw`。
 
 知覚 (`perceived_as`) の目撃の文 `witness`、音の文 `sound`、された人の文 `target` (人への操作だけ) を書かなかったときは、`perception_defaults:` の文で埋めて `DesignWarning` を残す。`sound: null` と書けば音の無い操作 (`Silent`) で、警告しない。
 
@@ -151,11 +155,16 @@ perception_defaults:
 | `pick_up` `drop` `use_item` `hold` `put_away` | `{item}` | `{actor}` |
 | `listen` `wait` `search` `cast_ballot` | — | `{actor}` |
 | `attack_monster` | `{monster}` (モンスターの呼び名) | `{actor}` |
+| `buy_from_shop` `sell_to_shop` | `{item}`、`{count}`、`{gold}` (合計の代金) | `{actor}` |
+| `edit_shop_line` | `{item}` | `{actor}` |
+| `open_shop` `close_shop` `rewrite_shop_look` `collect_from_shop` | — | `{actor}` |
 
 - 表に無い名前は書けない
 - 相手 (`{target}`) のいる `whisper`・`hand_over`・`tend` にだけ、相手が見る文 (`target`) と、知らせの相手で `target` を選ぶ条件を書ける。ほかの行に書けば `DesignFlaw` になる (#2076)
 - `tend` の相手は倒れているので、`target` には目が覚めてから気づく文 `noticed_later` だけを書く (`target: { noticed_later: "{actor}が介抱してくれたようだ。" }`)。`clear` などを書けば `DesignFlaw`。書かなければ気づかない (#2076)
 - 1 回で複数の相手や品物を渡す `hand_over` は、渡す 1 件ごとに文を作る
+- `hand_over` でお金も渡すときは、`gold_label` (共通の部品では `"{amount}G"`) で呼び名にし、品物の後ろに `item_joiner` でつないで `{item}` に入れる。「ミナがパンと10Gをトムに渡した。」(D2224)
+- 店の行為の行は、店を出せる場所か作者の店がある世界でだけ求める。店の文には持ち主を書けない (店の持ち主は行為の相手ではないため)。「{actor}が店でパンを3つ買った。」
 - `travel` の文は、出ていくところを見た人に届く。着いた先にいた人には `arrival` の文が届く。着いた本人には届けない (#2061)
 - 話す文は、声の大きさごとに `whisper` (ささやく)、`speak` (ふつう)、`shout` (叫ぶ) に書く。音の大きさは、それぞれの `loudness` を使う。共通の部品は `whisper`、`normal`、`very_loud` にしてある (#2061)
 
@@ -304,6 +313,52 @@ characters:
       background: この鉱山で働いていた元鉱夫。家族のサヨと村に戻ってきた。
 ```
 
+## 例: 市場町の店
+
+広場は人が店を出せる場所にする。グスタフの露店は作者が持ち主の店で、パンを尽きないだけ売り、薬草を尽きないお金で買い取る。トムは初めに 30G を持ち、自分の店を開く (D2224)。
+
+```yaml
+spots:
+  plaza:
+    name: 広場
+    description: 市場町の真ん中の石畳の広場。
+    atmosphere: { lighting: bright, outdoor: true }
+    allows_shops: true
+  mine_depths:
+    name: 坑道の奥
+    description: ...                              # allows_shops を書かないので、店を出せない
+
+characters:
+  tom:
+    appearance: 煤けた上着の男
+    spawn_spot: plaza
+    initial_items: [bread, bread, bread]
+    initial_gold: 30
+
+shops:
+  gustav_stall:
+    spot: plaza
+    keeper_name: グスタフ
+    look: 古い荷車を据えた露店
+    selling:
+      bread: { count: unlimited, unit_price: 12, note: 昨日焼いた固いパン }
+    buying:
+      herb: { count: unlimited, unit_price: 5 }
+    gold: unlimited
+
+shop_texts:                                       # ふつうは共通の部品から取り込む
+  person_shop_label: "{owner}の店"
+  scenario_shop_label: "{keeper}の店"
+  closed_mark: 閉まっている
+  sold_out_mark: 売り切れ
+  filled_mark: 買い取り終了
+  sold_notice: 店で{item}が{count}つ売れ、{gold}が入った。
+  bought_notice: 店が{item}を{count}つ買い取り、{gold}を払った。
+  ran_out_notice: 店の{item}が{count}つ駄目になった。{ended_text}
+```
+
+場面には「グスタフの店: 古い荷車を据えた露店」と、その品目が出る。トムが開いた店は、トムを知る人には「トムの店: 焼きたてのパンが並ぶ小さな露店」、知らない人には「煤けた上着の男の店: ……」と出る。
+
 ## 決めたこと (#2052)
 
 1. 条件と効果の節は、種類を鍵にした地図で書く (`kind:` の欄は使わない)。短く書けて、人と LLM が読みやすいため
@@ -326,3 +381,10 @@ characters:
 1. 人柄 (`being:`) は `Persona` の欄ごとに書く。この世界での立場 (`known_facts`) と本人の目的 (`objective`) は `being:` の外、登場人物の直下に書く
 2. `known_facts` と `objective` は世界の宣言に入れず、`LoadedScenario.briefings` に返す
 3. `introduction.objective` を `introduction.premises` に改める。中身は目的ではなく、全員に同じ世界の前提。目的の箇条は書かず、各人の `objective` に書く
+
+## 決めたこと (#2224)
+
+1. 人が店を出せる場所は、場所の `allows_shops` に書く。書かなければ出せない
+2. 作者が持ち主の店は、一番上の `shops:` に書く。在庫とお金は数か `unlimited`
+3. 初めの所持金は、登場人物の `initial_gold` に書く。書かなければ 0
+4. 店の呼び名と、持ち主への知らせの文は `shop_texts:` に書く。共通の部品に既定を置く
