@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from itertools import product
 from typing import Any
@@ -28,6 +29,7 @@ from ai_rpg_world.being.contract import (
 
 CANDIDATE_TABLE_HEADING = "行動の候補"
 DETAILS = "details"
+HIDDEN_TEXT = "本文"
 _INNER_THOUGHT_MAX_LENGTH = 500
 
 _Pairs = tuple[tuple[str, str], ...]
@@ -91,6 +93,26 @@ class ActionTools:
             ),
             inner_thought=thought if isinstance(thought, str) and thought.strip() else None,
         )
+
+    def call_text(self, tool_name: str, arguments: Mapping[str, object]) -> str | None:
+        """出していないツールの名前なら None。
+
+        候補から選んだ値だけを引用し、ほかは「本文」と伏せる。自由に書いた文を引用すると、手本として写されるため。
+        独白とメモは別の行や欄に出るので出さない。
+        """
+        choice = next((c for c in self._choices.choices if c.name == tool_name), None)
+        if choice is None:
+            return None
+        picked = _picked_names(choice.values)
+        hidden = {self._being_tools.inner_thought, self._being_tools.memo}
+        parts = [
+            f"{name}={json.dumps(value, ensure_ascii=False)}"
+            if name in picked and isinstance(value, str)
+            else f"{name}={HIDDEN_TEXT}"
+            for name, value in arguments.items()
+            if name not in hidden
+        ]
+        return f"{tool_name}({', '.join(parts)})"
 
     def candidate_table(self) -> Description:
         return Description(
