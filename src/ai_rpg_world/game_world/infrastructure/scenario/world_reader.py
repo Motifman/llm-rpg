@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalText
 from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts, SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ChangesEvery,
+    ClockWording,
     DayNightDeclaration,
     DayPhaseDeclaration,
     DayPhaseName,
@@ -177,6 +178,17 @@ def built_in_action_perceptions(node: YamlNode, perceptions: PerceptionReader) -
             shout=read_row(shout),
             arrival=read_row(arrival),
             item_joiner=ItemNameJoiner(rows.required(_ITEM_JOINER).text()),
+        )
+    )
+
+
+def clock_wording(node: YamlNode) -> ClockWording:
+    fields = node.fields("day", "late_night", "late_night_before_hour")
+    return node.build(
+        lambda: ClockWording(
+            day=fields.required("day").text(),
+            late_night=fields.required("late_night").text(),
+            late_night_before_hour=fields.required("late_night_before_hour").integer(),
         )
     )
 

@@ -18,7 +18,11 @@ from ai_rpg_world.being.contract import (
     TextWithPeople,
     UnidentifiedPerson,
 )
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayAndClockTime, DayNightDeclaration
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    ClockWording,
+    DayAndClockTime,
+    DayNightDeclaration,
+)
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
@@ -45,9 +49,12 @@ class ObservationReceiver(Protocol):
 
 @final
 class ObservationExit:
-    def __init__(self, world: WorldId, day_night: DayNightDeclaration, receiver: ObservationReceiver) -> None:
+    def __init__(
+        self, world: WorldId, day_night: DayNightDeclaration, clock: ClockWording, receiver: ObservationReceiver
+    ) -> None:
         self._world = world
         self._day_night = day_night
+        self._clock = clock
         self._receiver = receiver
 
     def hand_over(self, perceived: Perceived) -> None:
@@ -56,7 +63,7 @@ class ObservationExit:
             Observation(
                 body=text_with_people(perceived.text),
                 route=_ROUTES[type(perceived.quality)],
-                time=observed_time_of(self._day_night.day_and_clock_time_at(perceived.happened_at)),
+                time=observed_time_of(self._day_night.day_and_clock_time_at(perceived.happened_at), self._clock),
                 subject_is_self=False,
                 subject_name=UNKNOWN,
                 source=UNKNOWN,
@@ -68,8 +75,8 @@ class ObservationExit:
         )
 
 
-def observed_time_of(time: DayAndClockTime) -> ObservedTime:
-    return ObservedTime(display=f"{time.day} 日目 {time.hour:02d}:{time.minute:02d}")
+def observed_time_of(time: DayAndClockTime, clock: ClockWording) -> ObservedTime:
+    return ObservedTime(display=clock.display(time))
 
 
 def text_with_people(text: TextWithAssignedPeople) -> TextWithPeople:

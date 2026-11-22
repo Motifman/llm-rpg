@@ -27,7 +27,7 @@ from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, No
 from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
-from tests.game_world.support.world_design_for_tests import half_hour_ticks_from_midnight
+from tests.game_world.support.world_design_for_tests import clock_wording, half_hour_ticks_from_midnight
 
 _WORLD = WorldId("exit_world")
 _MINE_VILLAGE_V2 = Path(__file__).parents[3] / "data" / "scenarios" / "mine_village_v2.yaml"
@@ -63,7 +63,7 @@ def _perceived(
 def _handed_over(perceived: Perceived) -> tuple[PersonId, Observation]:
     received = _Received()
 
-    ObservationExit(_WORLD, half_hour_ticks_from_midnight(), received).hand_over(perceived)
+    ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), received).hand_over(perceived)
 
     assert len(received.observations) == 1
     return received.observations[0]
@@ -79,10 +79,10 @@ class TestObservationExit:
         assert person == _ALICE
 
     def test_observation_carries_the_day_and_clock_time_as_its_time_and_the_tick_as_its_order(self) -> None:
-        """1 日 48 tick、始まり 00:00 の世界で 61 tick に起きたことの観測は、時刻の札「2 日目 06:30」と、この世界の中で 61 番目に起きた順を持つ。"""
+        """1 日 48 tick、始まり 00:00 の世界で 61 tick に起きたことの観測は、時刻の札「Day 2 6:30」と、この世界の中で 61 番目に起きた順を持つ。"""
         _, observation = _handed_over(_perceived(at=61))
 
-        assert observation.time == ObservedTime(display="2 日目 06:30")
+        assert observation.time == ObservedTime(display="Day 2 6:30")
         assert observation.order == OccurrenceOrder(environment="exit_world", value=61)
 
     def test_people_in_the_text_become_people_marks_of_the_contract(self) -> None:
@@ -149,12 +149,12 @@ class TestObservationExitInMineVillageV2:
     """廃坑の山村 v2 の昼夜の宣言を渡した観測の出口が、観測の時刻を何日目と時:分で出すことを保証する。"""
 
     def test_safe_opened_at_tick_61_is_seen_at_day_two_six_thirty(self) -> None:
-        """1 日 48 tick、始まり 00:00 の廃坑の山村 v2 で 61 tick に起きたことの観測は、時刻の札「2 日目 06:30」を持つ。"""
+        """1 日 48 tick、始まり 00:00 の廃坑の山村 v2 で 61 tick に起きたことの観測は、時刻の札「Day 2 6:30」を持つ。"""
         day_night = load_scenario(_MINE_VILLAGE_V2).design.day_night
         assert isinstance(day_night, DayNightDeclaration)
         received = _Received()
 
-        ObservationExit(_WORLD, day_night, received).hand_over(_perceived(at=61))
+        ObservationExit(_WORLD, day_night, clock_wording(), received).hand_over(_perceived(at=61))
 
         [(_, observation)] = received.observations
-        assert observation.time == ObservedTime(display="2 日目 06:30")
+        assert observation.time == ObservedTime(display="Day 2 6:30")
