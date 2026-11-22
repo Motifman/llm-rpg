@@ -122,7 +122,10 @@ class ActionAttemptForTests(ActionAttempt):
         raise NotImplementedError(f"{self!r} is not witnessed in tests that use it")
 
     def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
-        return design.refusal_texts.done_text(self.actor)
+        raise NotImplementedError(f"{self!r} is not carried out in tests that use it")
+
+    def summary_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        raise NotImplementedError(f"{self!r} is not summarized in tests that use it")
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         raise NotImplementedError(f"{self!r} is not offered in tests that use it")

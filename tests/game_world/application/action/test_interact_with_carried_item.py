@@ -3,11 +3,16 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
+from ai_rpg_world.game_world.application.world_perception_senses import WorldPerceptionSenses
+from ai_rpg_world.game_world.application.world_store import WorldSession
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+from ai_rpg_world.game_world.domain.action.built_in_attempts import ItemDropAttempt
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NotCarrying
+from ai_rpg_world.game_world.domain.action.manner import Openly
 from ai_rpg_world.game_world.domain.condition.subject import Actor
 from ai_rpg_world.game_world.domain.effect.item_effects import TakeItemEffect
 from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.value_object import Count
+from ai_rpg_world.game_world.domain.value_object import Count, PersonId
 from tests.game_world.application.action.world_for_interaction_tests import (
     ALICE,
     BOB,
@@ -68,3 +73,25 @@ class TestInteractWithCarriedItem:
 
         assert isinstance(reply, ActionDone)
         assert reply.done_text == TextAboutPeople(TextWithUnassignedPeople("ランプは磨り減って無くなった。"), {})
+
+    def test_refusal_of_an_item_gone_from_the_world_has_no_summary(self) -> None:
+        """アリスのランプを置こうとして断られたあいだに、ランプが世界から無くなると、品物の名前を引けないので、要約は無い。"""
+        world = WorldForInteractions()
+        lamp = world.item_of(ALICE, LAMP)
+        attempt = ItemDropAttempt(ALICE, lamp, Openly())
+        refused = ActionRefused(
+            ActionRefusal(
+                attempt=attempt, reason=NotCarrying(), text=TextWithUnassignedPeople("持っていない。").about({})
+            )
+        )
+        world.scope.run(lambda session: session.aggregates().take_item_out_of_world(lamp))
+
+        assert _summary_for(world, refused, ALICE) is None
+
+
+def _summary_for(world: WorldForInteractions, reply: ActionRefused, actor: PersonId) -> object:
+    def read(session: WorldSession) -> object:
+        facts = session.facts()
+        return reply.summary_for_actor(world.design, facts, WorldPerceptionSenses(facts).view_for(actor))
+
+    return world.scope.run(read)

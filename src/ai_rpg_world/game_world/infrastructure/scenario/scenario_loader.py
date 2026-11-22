@@ -48,6 +48,7 @@ _TOP_FIELDS = (
     "ending",
     "refusal_texts",
     "built_in_action_perceptions",
+    "action_texts",
     "surroundings_texts",
     "briefing_headings",
     "defaults",
@@ -149,6 +150,7 @@ class _ScenarioLoading:
                 self._fields.required("built_in_action_perceptions"), self._perceptions
             )
         )
+        action_texts = collector.attempt(lambda: world_reader.action_texts(self._fields.required("action_texts")))
         surroundings_texts = collector.attempt(
             lambda: world_reader.surroundings_texts(self._fields.required("surroundings_texts"))
         )
@@ -175,6 +177,7 @@ class _ScenarioLoading:
             or rules is None
             or refusal_texts is None
             or built_in is None
+            or action_texts is None
             or surroundings_texts is None
             or introduction is None
             or briefing_headings is None
@@ -204,6 +207,7 @@ class _ScenarioLoading:
                 world_rules=rules,
                 refusal_texts=refusal_texts,
                 built_in_action_perceptions=built_in,
+                action_texts=action_texts,
                 surroundings_texts=surroundings_texts,
                 weather=weather,
                 day_night=day_night,

@@ -76,6 +76,13 @@ def _template(body: str | TextWithPeople) -> str:
     return body.template if isinstance(body, TextWithPeople) else body
 
 
+def _succeeded_and_summary(result: Observation) -> tuple[bool, str | None]:
+    route = result.route
+    assert isinstance(route, OwnActionResult) and route.call_id == "call_1"
+    summary = route.action_summary
+    return route.succeeded, summary if summary is None or isinstance(summary, str) else summary.template
+
+
 class TestDescribeActionResult:
     """DescribeActionResult が、世界の返事を、本人の行動の結果 (OwnActionResult) の観測にすることを保証する。"""
 
@@ -87,7 +94,7 @@ class TestDescribeActionResult:
 
         result = gen.result_of("interact", target="金庫", how=_OPEN_SAFE, code="1907")
 
-        assert result.route == OwnActionResult(call_id="call_1", succeeded=True)
+        assert _succeeded_and_summary(result) == (True, f"「金庫」で{_OPEN_SAFE}")
         assert "昇降機の起動鍵だ" in _template(result.body)
 
     def test_lighting_the_lamp_carried_gives_the_authors_text_for_the_lamp(self, mine_village: WorldDesign) -> None:
@@ -96,19 +103,46 @@ class TestDescribeActionResult:
 
         result = gen.result_of("interact", target="カンテラ", how="油を足して灯す")
 
-        assert result.route == OwnActionResult(call_id="call_1", succeeded=True)
+        assert _succeeded_and_summary(result) == (True, "「カンテラ」で油を足して灯す")
         assert _template(result.body).startswith("カンテラに油を足して火を入れた。")
 
-    def test_done_built_in_action_becomes_a_successful_result_with_the_common_text(
+    def test_done_built_in_action_becomes_a_successful_result_with_the_text_of_the_kind(
         self, mine_village: WorldDesign
     ) -> None:
-        """作者の成功の文の無い組み込みの行為 (耳を澄ます) では、本文は共通の文面の「できた。」になる。"""
+        """組み込みの行為 (耳を澄ます) では、要約と本文は、共通の部品に行為ごとに書いた「耳を澄ました」と成功の文になる。"""
         gen = _GenInTheOffice(mine_village)
 
         result = gen.result_of("listen")
 
-        assert result.route == OwnActionResult(call_id="call_1", succeeded=True)
-        assert _template(result.body) == "できた。"
+        assert _succeeded_and_summary(result) == (True, "耳を澄ました")
+        assert _template(result.body) == "耳を澄まし、周囲の音や人の気配を確かめた。"
+
+    def test_names_of_things_are_filled_into_the_summary_and_the_text(self, mine_village: WorldDesign) -> None:
+        """ゲンが井戸へ移動を始めると、要約と本文の行き先に「井戸」が入る。"""
+        gen = _GenInTheOffice(mine_village)
+
+        result = gen.result_of("travel_to", destination="井戸")
+
+        assert _succeeded_and_summary(result) == (True, "井戸へ移動した")
+        assert _template(result.body) == "「井戸」へ移動中。到着までは他の行動はできない。"
+
+    def test_spoken_words_are_filled_into_the_summary_and_the_text(self, mine_village: WorldDesign) -> None:
+        """ゲンがふつうの声で「誰かいるか」と話すと、要約は「あなたは言った: 「誰かいるか」」、本文は「「誰かいるか」と言った。」になる。"""
+        gen = _GenInTheOffice(mine_village)
+
+        result = gen.result_of("speak", reach="ふつうの声で話す", content="誰かいるか")
+
+        assert _succeeded_and_summary(result) == (True, "あなたは言った: 「誰かいるか」")
+        assert _template(result.body) == "「誰かいるか」と言った。"
+
+    def test_shouting_uses_the_text_for_shouting(self, mine_village: WorldDesign) -> None:
+        """ゲンが「助けて」と叫ぶと、要約は「あなたは叫んだ: 「助けて」」、本文は「「助けて」と叫んだ。」になり、話すときの文と分かれる。"""
+        gen = _GenInTheOffice(mine_village)
+
+        result = gen.result_of("speak", reach="叫ぶ", content="助けて")
+
+        assert _succeeded_and_summary(result) == (True, "あなたは叫んだ: 「助けて」")
+        assert _template(result.body) == "「助けて」と叫んだ。"
 
     def test_refused_action_becomes_a_failed_result_with_the_reason(self, mine_village: WorldDesign) -> None:
         """ゲンが金庫を「0000」で開けようとすると、結果は失敗で、本文は作者の書いた断りの理由 (扉はびくともしない) になる。"""
@@ -116,16 +150,16 @@ class TestDescribeActionResult:
 
         result = gen.result_of("interact", target="金庫", how=_OPEN_SAFE, code="0000")
 
-        assert result.route == OwnActionResult(call_id="call_1", succeeded=False)
+        assert _succeeded_and_summary(result) == (False, f"「金庫」で{_OPEN_SAFE}")
         assert "扉はびくともしない" in _template(result.body)
 
     def test_guidance_becomes_a_failed_result_with_the_guidance_text(self, mine_village: WorldDesign) -> None:
-        """ゲンが無いツール名を選ぶと、結果は失敗で、本文は世界の案内の文になる。"""
+        """ゲンが無いツール名を選ぶと、結果は失敗で、要約は無く (行為にならなかったため)、本文は世界の案内の文になる。"""
         gen = _GenInTheOffice(mine_village)
 
         result = gen.result_of("fly")
 
-        assert result.route == OwnActionResult(call_id="call_1", succeeded=False)
+        assert _succeeded_and_summary(result) == (False, None)
         assert isinstance(result.body, str)
         assert "fly" in result.body
 

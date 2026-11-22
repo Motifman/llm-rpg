@@ -47,3 +47,11 @@ class TargetTextWithoutTargetException(GameWorldDomainException):
 
 class TargetTextNotFittingTargetException(GameWorldDomainException):
     error_code = "GAME_WORLD.VERB_DECLARATION.TARGET_TEXT_NOT_FITTING_TARGET"
+
+
+class ActionTextMissingException(GameWorldDomainException):
+    error_code = "GAME_WORLD.VERB_DECLARATION.ACTION_TEXT_MISSING"
+
+
+class UnfilledNameInActionTextException(GameWorldDomainException):
+    error_code = "GAME_WORLD.VERB_DECLARATION.UNFILLED_NAME_IN_ACTION_TEXT"

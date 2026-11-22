@@ -60,10 +60,19 @@ class OwnActionResult:
 
     call_id: str
     succeeded: bool
+    action_summary: str | TextWithPeople | None = None
 
     def __post_init__(self) -> None:
         require_text(self.call_id, "call_id")
         require_bool(self.succeeded, "succeeded")
+        # 世界の外で作る結果 (Being 自身の失敗、要約を足す前の snapshot) は要約を持たない
+        if self.action_summary is not None and not isinstance(self.action_summary, TextWithPeople):
+            require_text(self.action_summary, "action_summary")
+
+    def with_people_named(self, name: Callable[[TextWithPeople], str]) -> OwnActionResult:
+        if not isinstance(self.action_summary, TextWithPeople):
+            return self
+        return replace(self, action_summary=name(self.action_summary))
 
 
 @dataclass(frozen=True)
@@ -194,9 +203,9 @@ class Observation:
                 raise ContractViolation("withheld_if_subject_unknown and body_if_subject_unknown are exclusive")
 
     def with_people_named(self, name: Callable[[TextWithPeople], str]) -> Observation:
-        if not isinstance(self.body, TextWithPeople):
-            return self
-        return replace(self, body=name(self.body))
+        route = self.route.with_people_named(name) if isinstance(self.route, OwnActionResult) else self.route
+        body = name(self.body) if isinstance(self.body, TextWithPeople) else self.body
+        return replace(self, body=body, route=route)
 
     def body_without_people(self) -> str:
         if isinstance(self.body, TextWithPeople):

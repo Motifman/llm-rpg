@@ -7,6 +7,7 @@ from ai_rpg_world.being.application.choose_action import (
     ActionChoosingReply,
     ToolCallReply,
 )
+from ai_rpg_world.being.contract import OwnActionResult
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import Attempt, ObservedOutcome
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
@@ -117,7 +118,7 @@ class TestBeingsTakingTurnsOneByOne:
             assert "listen" in {tool["function"]["name"] for tool in call.tools}
 
     def test_result_of_the_chosen_action_answers_the_attempt(self) -> None:
-        """1 巡り目に全員が耳を澄ますと、ゲンの短期記憶の試みに、成功の結果「できた。」が結び付く。"""
+        """1 巡り目に全員が耳を澄ますと、ゲンの短期記憶の試みに、耳を澄ます行為の成功の文と行動の要約「耳を澄ました」が結び付く。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
 
         session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(_listening(4))))(
@@ -126,7 +127,10 @@ class TestBeingsTakingTurnsOneByOne:
 
         [attempt] = _answered_attempts(session, _GEN)
         assert isinstance(attempt.result, ObservedOutcome)
-        assert attempt.result.observation.body == "できた。"
+        assert attempt.result.observation.body == "耳を澄まし、周囲の音や人の気配を確かめた。"
+        route = attempt.result.observation.route
+        assert isinstance(route, OwnActionResult)
+        assert (route.succeeded, route.action_summary) == (True, "耳を澄ました")
 
     def test_choosing_to_wait_skips_the_next_round(self) -> None:
         """1 巡り目にゲンだけが待つを選ぶと、2 巡り目はゲンを除く 3 人にだけ頼む。"""

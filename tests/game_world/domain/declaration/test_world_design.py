@@ -332,6 +332,26 @@ class TestSuccessTextPeople:
         compose_world(object_interactions=(opened,))
 
 
+class TestSectionAccessTextNames:
+    """区画の出入りの作者の文に書いた名前を、compose が読み込みのときに確かめることを保証する。"""
+
+    def test_name_the_section_access_cannot_fill_is_a_flaw(self) -> None:
+        """区画 cage に入る文に、出入りでは埋められない {target} を書くと、enter_text を場所とする DesignFlaw になる。"""
+        cage = section("cage", "hall")
+        access = replace(access_to(cage), enter_text=TextWithUnassignedPeople("{target}と乗り込んだ。"))
+
+        flaws = flaws_of_composing(nouns_=nouns(spots=(spot("hall"),), sections=(cage,)), section_accesses=(access,))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("section_access", "cage", "enter_text")]
+
+    def test_actor_and_section_in_the_section_access_text_are_allowed(self) -> None:
+        """区画 cage から出る文に {actor} と {section} を書いても、compose は断らない。"""
+        cage = section("cage", "hall")
+        access = replace(access_to(cage), leave_text=TextWithUnassignedPeople("{actor}は{section}から降りた。"))
+
+        compose_world(nouns(spots=(spot("hall"),), sections=(cage,)), section_accesses=(access,))
+
+
 class TestArgumentsRead:
     """効果と条件が読む引数の名前が、操作の宣言の arguments にあるかを compose が確かめることを保証する。"""
 
