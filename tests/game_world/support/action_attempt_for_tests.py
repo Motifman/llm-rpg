@@ -22,6 +22,7 @@ from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
+from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -114,6 +115,14 @@ class ActionAttemptForTests(ActionAttempt):
 
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
         return False
+
+    def hidden_while_unmet(self) -> bool:
+        return False
+
+    def unavailable_on_object(
+        self, design: WorldDesign, reason: TextAboutPeople
+    ) -> tuple[UnavailableObjectOperation, ...]:
+        return ()
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
         return self

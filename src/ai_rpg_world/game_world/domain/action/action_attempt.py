@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
+    from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
     from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
     from ai_rpg_world.game_world.domain.condition.aggregate_readings import PersonVitalsReading
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -165,6 +166,12 @@ class ActionAttempt(Protocol):
     def done_as(self) -> frozenset[ActionKind | InteractionId]: ...
 
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool: ...
+
+    def hidden_while_unmet(self) -> bool: ...
+
+    def unavailable_on_object(
+        self, design: WorldDesign, reason: TextAboutPeople
+    ) -> tuple[UnavailableObjectOperation, ...]: ...
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct: ...
 

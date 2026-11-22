@@ -46,6 +46,7 @@ class InteractionForTests:
     allows_stealth: bool = False
     reaches_unseen: bool = False
     arguments: tuple[ArgumentDeclaration, ...] = ()
+    hidden_while_unmet: bool = False
 
 
 @final

@@ -59,21 +59,37 @@ class ActionPrerequisiteCheck:
             raise ActionRefusedException(ActionRefusal(attempt=aimed, reason=PreconditionRefusal(failure), text=text))
         return aimed
 
-    def available(
+    def offered(
         self,
         attempt: _Attempt,
         precondition: ActionPrecondition[_Attempt],
+        facts: WorldFacts,
+        refusal_texts: RefusalTexts,
+    ) -> tuple[AvailableAction, ...]:
+        failure = precondition.unmet_precondition(attempt, facts)
+        # 条件で切り替わる操作 (水門を開ける / 閉じる) は、条件を満たさないあいだ、ほかに断る理由があっても存在ごと伏せる
+        if attempt.hidden_while_unmet() and isinstance(failure, FailureReason):
+            return ()
+        return (self._available(attempt, failure, facts, refusal_texts),)
+
+    def _available(
+        self,
+        attempt: _Attempt,
+        failure: FailureReason | HiddenFailure | None,
         facts: WorldFacts,
         refusal_texts: RefusalTexts,
     ) -> AvailableAction:
         refusal = self.refusal(attempt, facts, refusal_texts)
         if refusal is not None:
             return AvailableAction(attempt=attempt, standing=NotNow(refusal.text))
-        failure = precondition.unmet_precondition(attempt, facts)
         # 伏せた理由まで「できない」に分けると、一覧の出る / 出ないの差から伏せた所属が漏れる。
         if isinstance(failure, FailureReason):
             return AvailableAction(
-                attempt=attempt, standing=NotNow(refusal_texts.precondition_text(failure, attempt.actor))
+                attempt=attempt,
+                standing=NotNow(
+                    refusal_texts.precondition_text(failure, attempt.actor),
+                    about_object_state=failure.about_object_state,
+                ),
             )
         return AvailableAction(attempt=attempt, standing=Doable())
 

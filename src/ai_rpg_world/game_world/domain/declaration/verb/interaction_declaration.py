@@ -31,6 +31,7 @@ class InteractionDeclaration:
     duration: Ticks | DefaultDuration
     allows_stealth: bool
     arguments: tuple[ArgumentDeclaration, ...]
+    hidden_while_unmet: bool
 
     def __post_init__(self) -> None:
         names = [argument.name for argument in self.arguments]

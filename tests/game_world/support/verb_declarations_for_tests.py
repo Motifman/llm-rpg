@@ -84,6 +84,7 @@ def pull_lever(arguments: tuple[ArgumentDeclaration, ...]) -> InteractionDeclara
         reaches_unseen=False,
         duration=DefaultDuration(),
         allows_stealth=False,
+        hidden_while_unmet=False,
         arguments=arguments,
     )
 

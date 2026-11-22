@@ -25,3 +25,6 @@ class DeclaredInteraction(Protocol):
 
     @property
     def arguments(self) -> tuple[ArgumentDeclaration, ...]: ...
+
+    @property
+    def hidden_while_unmet(self) -> bool: ...

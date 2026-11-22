@@ -29,6 +29,7 @@ from ai_rpg_world.game_world.domain.perception import (
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perceiver import PersonWhoLeftTheWorld
+from ai_rpg_world.game_world.domain.perception.scene_conditions import SceneConditions
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import NotWhispered
 from ai_rpg_world.game_world.domain.perception.surroundings import SpotContents, VisibleSurroundings
 from ai_rpg_world.game_world.domain.person.life_state import Alive, Down, Starvation
@@ -71,6 +72,9 @@ class _SurroundingsNotToBeLookedAt:
 
     def contents_at(self, spot: SpotId) -> SpotContents:
         raise AssertionError(f"looked at the contents of {spot.value}")
+
+    def conditions_at(self, spot: SpotId) -> SceneConditions:
+        raise AssertionError(f"looked at the conditions of {spot.value}")
 
 
 def _door_broken_in_the_square() -> SightStimulus:

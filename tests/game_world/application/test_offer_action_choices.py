@@ -32,7 +32,8 @@ def mine_village() -> WorldDesign:
 class _Office:
     """廃坑の山村 v2 を開き、ゲンとサヨが自分の名前で入って、鉱山会社の事務所へ移る。"""
 
-    def __init__(self, design: WorldDesign) -> None:
+    def __init__(self, design: WorldDesign, place: SpotId = _OFFICE) -> None:
+        self._place = place
         store = SqliteWorldStore.create(
             ":memory:",
             world_id=_WORLD,
@@ -47,7 +48,7 @@ class _Office:
         self.scope.run(self._move_to_office)
 
     def _move_to_office(self, session: WorldSession) -> None:
-        office = self.design.nouns.spot_of(_OFFICE)
+        office = self.design.nouns.spot_of(self._place)
         for person, name in ((_GEN, "ゲン"), (_SAYO, "サヨ")):
             session.people_register().name(person, DisplayName(name))
             session.aggregates().whereabouts().teleport(PersonBody(person), office, WorldTick(0))
@@ -153,3 +154,38 @@ class TestOfferActionChoices:
         assert [choice.name for choice in choices.choices if choice.can_be_chosen()] == ["speak"]
         assert _labels(travel) == []
         assert ("井戸",) in [unavailable.picked for unavailable in travel.unavailable]
+
+
+def test_object_operations_refused_by_common_rules_stay_in_the_choices(mine_village: WorldDesign) -> None:
+    """行っているあいだのゲンの金庫や事務机への操作は、「操作する」の「いまはできない」に残る。物の状態で断られたのではないので、場面の物の行には出さないため。"""
+    office = _Office(mine_village)
+    office.keep_gen_busy()
+
+    interact = _choice(office.choices_of_gen(), "interact")
+
+    assert {"金庫", "事務机"} <= {unavailable.picked[0] for unavailable in interact.unavailable}
+
+
+def test_closed_gate_offers_opening_it_and_hides_closing_it(mine_village: WorldDesign) -> None:
+    """閉じている北の坑道の水門は、「水門を開ける」だけを選べ、「水門を閉じる」は選べる候補にも「いまはできない」にも出ない。伏せる印のある操作は、条件を満たさないあいだ存在ごと伏せるため (古い run と同じ)。"""
+    tunnel = _Office(mine_village, SpotId("north_tunnel"))
+
+    interact = _choice(tunnel.choices_of_gen(), "interact")
+
+    [how] = _candidate(interact, "北の坑道の水門").values
+    assert isinstance(how, PickOne)
+    hows = [str(candidate.label) for candidate in how.candidates]
+    assert hows == ["水門を開ける"]
+    assert all("水門を閉じる" not in str(unavailable.picked) for unavailable in interact.unavailable)
+
+
+def test_busy_gen_still_does_not_see_closing_the_closed_gate(mine_village: WorldDesign) -> None:
+    """行っているあいだのゲンにも、閉じている水門の「水門を閉じる」は「いまはできない」に出ない。伏せる印のある操作は、共通の決まりで断られるより先に、条件を満たさないことで伏せるため。"""
+    tunnel = _Office(mine_village, SpotId("north_tunnel"))
+    tunnel.keep_gen_busy()
+
+    interact = _choice(tunnel.choices_of_gen(), "interact")
+
+    picked = [str(unavailable.picked) for unavailable in interact.unavailable]
+    assert any("水門を開ける" in p for p in picked)
+    assert not any("水門を閉じる" in p for p in picked)

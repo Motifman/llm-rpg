@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.game_world.application.world_store import WorldSession
-from ai_rpg_world.game_world.domain.condition.condition import NoText
+from ai_rpg_world.game_world.domain.condition.condition import FailureReason, NoText
+from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition, AnyOfCondition, NotCondition
 from ai_rpg_world.game_world.domain.condition.object_state_conditions import (
     ObjectCountAtLeastCondition,
     ObjectCountGreaterThanCondition,
@@ -11,6 +12,7 @@ from ai_rpg_world.game_world.domain.condition.object_state_conditions import (
     ObjectValueIsCondition,
 )
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+from ai_rpg_world.game_world.domain.condition.world_time_conditions import TickAtLeastCondition
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ChoiceName,
     ChoiceStateKind,
@@ -30,6 +32,7 @@ from ai_rpg_world.game_world.domain.exception.object_and_item_declaration_except
     StateValueMismatchesKindException,
 )
 from ai_rpg_world.game_world.domain.objects_and_items import ObjectState
+from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     DescriptionText,
@@ -157,3 +160,83 @@ class TestObjectStockAtLeast:
         """在庫でない鍵 (硬貨の数) を在庫として見る ObjectStockAtLeastCondition は StateKeyOfAnotherKindException を投げる。"""
         with pytest.raises(StateKeyOfAnotherKindException):
             ObjectStockAtLeastCondition(key=_COINS, amount=Count(1), failure_text=NoText())
+
+
+class TestFailureAboutObjectState:
+    """物の状態・数を見る条件が偽になると、その理由が「物の状態で断られた」と分かることを保証する。場面の物の行に「いまできない」を出すかを、これで決める。"""
+
+    @pytest.mark.parametrize(
+        "condition",
+        [
+            ObjectValueIsCondition(key=_LID, value=ChoiceValue(_OPEN), failure_text=NoText()),
+            ObjectCountAtLeastCondition(key=_COINS, count=Count(4), failure_text=NoText()),
+            ObjectCountGreaterThanCondition(key=_COINS, other=_PEBBLES, failure_text=NoText()),
+            ObjectStockAtLeastCondition(key=_FISH, amount=Count(3), failure_text=NoText()),
+        ],
+    )
+    def test_failure_of_object_state_condition_is_about_object_state(self, condition: object) -> None:
+        """蓋・硬貨・在庫のどの条件でも、偽のときの理由は about_object_state を持つ。"""
+        reason = condition.failure_reason(_facts(), _BY_ALICE)  # type: ignore[attr-defined]
+
+        assert isinstance(reason, FailureReason) and reason.about_object_state
+
+    def test_all_of_keeps_it_from_the_failed_child(self) -> None:
+        """AllOf の中で在庫の条件が偽になると、AllOf の理由も about_object_state を持つ。"""
+        condition = AllOfCondition(children=(_lid_is_shut(), _three_fish()), failure_text=NoText())
+
+        reason = condition.failure_reason(_facts(), _BY_ALICE)
+
+        assert isinstance(reason, FailureReason) and reason.about_object_state
+
+    def test_all_of_keeps_it_when_the_failed_child_explains_itself(self) -> None:
+        """AllOf の中で、自分の断りの文を持つ在庫の条件が偽になると、その文とともに about_object_state を引き継ぐ。"""
+        fish = ObjectStockAtLeastCondition(
+            key=_FISH, amount=Count(3), failure_text=TextWithUnassignedPeople("魚が足りない。")
+        )
+        condition = AllOfCondition(children=(_lid_is_shut(), fish), failure_text=NoText())
+
+        reason = condition.failure_reason(_facts(), _BY_ALICE)
+
+        assert isinstance(reason, FailureReason) and reason.about_object_state
+
+    def test_any_of_has_it_when_some_failed_child_has_it(self) -> None:
+        """AnyOf の子がすべて偽で、そのうち 1 つが在庫の条件なら、理由は about_object_state を持つ。"""
+        never = TickAtLeastCondition(tick=WorldTick(99), failure_text=NoText())
+        condition = AnyOfCondition(children=(never, _three_fish()), failure_text=TextWithUnassignedPeople("駄目"))
+
+        reason = condition.failure_reason(_facts(), _BY_ALICE)
+
+        assert isinstance(reason, FailureReason) and reason.about_object_state
+
+    def test_negated_object_state_condition_is_not_about_object_state(self) -> None:
+        """「蓋が閉じていない」のように物の状態の条件を not で包むと、偽のときの理由は about_object_state を持たない。古い run に否定の形の状態の条件は無く、出すものを広げないため。"""
+        reason = NotCondition(_lid_is_shut(), NoText()).failure_reason(_facts(), _BY_ALICE)
+
+        assert isinstance(reason, FailureReason) and not reason.about_object_state
+
+    def test_any_of_without_object_state_does_not_have_it(self) -> None:
+        """AnyOf の子がすべて偽で、どれも物の状態を見ない条件なら、理由は about_object_state を持たない。"""
+        never = TickAtLeastCondition(tick=WorldTick(99), failure_text=NoText())
+        condition = AnyOfCondition(children=(never, never), failure_text=TextWithUnassignedPeople("駄目"))
+
+        reason = condition.failure_reason(_facts(), _BY_ALICE)
+
+        assert isinstance(reason, FailureReason) and not reason.about_object_state
+
+    def test_failure_of_other_condition_is_not_about_object_state(self) -> None:
+        """物の状態を見ない条件 (時刻) が偽のときの理由は、about_object_state を持たない。"""
+        never = TickAtLeastCondition(tick=WorldTick(99), failure_text=NoText())
+
+        reason = AllOfCondition(children=(_lid_is_shut(), never), failure_text=NoText()).failure_reason(
+            _facts(), _BY_ALICE
+        )
+
+        assert isinstance(reason, FailureReason) and not reason.about_object_state
+
+
+def _lid_is_shut() -> ObjectValueIsCondition:
+    return ObjectValueIsCondition(key=_LID, value=ChoiceValue(_SHUT), failure_text=NoText())
+
+
+def _three_fish() -> ObjectStockAtLeastCondition:
+    return ObjectStockAtLeastCondition(key=_FISH, amount=Count(3), failure_text=NoText())

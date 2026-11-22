@@ -5,8 +5,9 @@ from typing import final
 
 from ai_rpg_world.being.contract import Scene
 from ai_rpg_world.game_world.application.command_scope import CommandScope
+from ai_rpg_world.game_world.application.list_available_actions import ListAvailableActions
 from ai_rpg_world.game_world.application.look_around import SurroundingsOf
-from ai_rpg_world.game_world.application.world_perception_senses import perceiver_of
+from ai_rpg_world.game_world.application.world_perception_senses import WorldPerceptionSenses, perceiver_of
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -26,6 +27,7 @@ class DescribeScene:
     def __init__(self, scope: CommandScope, design: WorldDesign) -> None:
         self._scope = scope
         self._design = design
+        self._list = ListAvailableActions(scope, design)
 
     def __call__(self, command: DescribeSceneCommand) -> Scene:
         return self._scope.run(lambda session: self._describe(session, command.person))
@@ -38,6 +40,8 @@ class DescribeScene:
             _Names(facts, self._design),
             self._design.world_words,
             self._design.clock_wording,
+            self._list.available_in(session, person).unavailable_on_objects(self._design),
+            WorldPerceptionSenses(facts).view_for(person),
         )
 
 

@@ -72,6 +72,7 @@ _INTERACTION_FIELDS = (
     "duration",
     "allows_stealth",
     "arguments",
+    "hidden_while_unmet",
 )
 _ACCESS_FIELDS = (
     "enter_label",
@@ -185,6 +186,7 @@ class VerbReader:
                     ArgumentDeclaration(name=ArgumentName(argument_name), kind=words(kind, _ARGUMENT_KINDS))
                     for argument_name, kind in fields.required("arguments").entries()
                 ),
+                hidden_while_unmet=fields.required("hidden_while_unmet").boolean(),
             )
         )
 
