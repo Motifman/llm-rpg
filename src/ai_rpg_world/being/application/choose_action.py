@@ -18,9 +18,16 @@ from ai_rpg_world.being.application.episode_recall_tool import (
     too_many_handles_text,
 )
 from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
-from ai_rpg_world.being.application.memo_arguments import read_memo_operations, rejection_lines, rejection_text
+from ai_rpg_world.being.application.memo_arguments import read_memo_operations
 from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.names_for_people import name_for
+from ai_rpg_world.being.application.unwritten_memo_text import (
+    WHOLE_MEMO,
+    attempted_operation,
+    attempted_raw_operation,
+    short_reason,
+    unwritten_memo_line,
+)
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
 from ai_rpg_world.being.contract import (
     UNKNOWN,
@@ -239,10 +246,17 @@ class ChooseAction:
             known_episode_handles=known_episode_handles,
         )
         self._memo_books.save(book)
-        rejected = [(r.index, rejection_text(r.reason)) for r in read.rejected] + [
-            (r.index, rejection_text(r.reason, kind=r.kind, detail=r.detail)) for r in outcome.rejected
+        unread = [
+            (r.index, WHOLE_MEMO if r.index is None else attempted_raw_operation(r.raw), short_reason(r.reason))
+            for r in read.rejected
         ]
-        return rejection_lines(sorted(rejected, key=lambda r: -1 if r[0] is None else r[0]))
+        unwritten: list[tuple[int | None, str, str]] = [
+            (r.index, attempted_operation(r.operation), short_reason(r.reason, kind=r.kind)) for r in outcome.rejected
+        ]
+        return tuple(
+            unwritten_memo_line(attempted, reason)
+            for _, attempted, reason in sorted(unread + unwritten, key=lambda r: -1 if r[0] is None else r[0])
+        )
 
     def _act(
         self,

@@ -383,7 +383,7 @@ class TestMemoOperationsThatCouldNotBeWritten:
     """ChooseAction が、書けなかったメモの操作の理由を、世界の結果を待つ試みに添えることを保証する。"""
 
     def test_memo_operations_that_could_not_be_written_stay_with_the_attempt(self) -> None:
-        """書けたメモはメモ帳に入り、書けなかった操作の理由は、配列の位置を添えて試みに残る。"""
+        """書けたメモはメモ帳に入り、書けなかった操作は、配列の順に、しようとしたことと短い理由の文で試みに残る。"""
         memories = InMemoryShortTermMemoryRepository()
         memo_books = InMemoryMemoBookRepository(handoff=discard_events)
         memo = [{"do": "add", "kind": "todo", "text": "鍵を取る"}, {"do": "remove", "id": "m_3f2a7b"}, {"do": "fly"}]
@@ -398,8 +398,8 @@ class TestMemoOperationsThatCouldNotBeWritten:
         [attempt] = memories.get(GEN).unsummarized()
         assert [m.text for m in memo_books.get(GEN).memos] == ["鍵を取る"]
         assert isinstance(attempt, Attempt) and attempt.memo_rejections == (
-            "2 件目: m_3f2a7b というメモはありません。",
-            "3 件目: do は add / edit / remove のどれかです。",
+            "「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",
+            '「{"do": "fly"}」は書けなかった（理由: do は add / edit / remove のどれか）',
         )
 
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ai_rpg_world.being.application.memo_arguments import feedback_text
 from ai_rpg_world.being.contract import Observation, ObservedTime
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
@@ -27,7 +26,9 @@ def _line(time: ObservedTime, body: str, inner_thought: str | None = None) -> st
 
 
 def _attempt_line(attempt: Attempt, time: ObservedTime, result_body: str) -> str:
-    return _line(time, result_body + feedback_text(attempt.memo_rejections), attempt.move.inner_thought)
+    return _line(time, result_body, attempt.move.inner_thought) + "".join(
+        f"\n  メモ: {line}" for line in attempt.memo_rejections
+    )
 
 
 class _Line:
