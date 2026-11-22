@@ -25,6 +25,8 @@ from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentNa
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Occupant, PersonBody
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
+    from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
     from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
     from ai_rpg_world.game_world.domain.condition.aggregate_readings import PersonVitalsReading
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -162,3 +164,5 @@ class ActionAttempt(Protocol):
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct: ...
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark: ...
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction: ...

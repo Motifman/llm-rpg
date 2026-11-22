@@ -18,7 +18,9 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     UsesBody,
 )
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
+from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
+from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -114,6 +116,9 @@ class ActionAttemptForTests(ActionAttempt):
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
         raise NotImplementedError(f"{self!r} is not witnessed in tests that use it")
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        raise NotImplementedError(f"{self!r} is not offered in tests that use it")
 
 
 def situation_for_tests() -> ActorSituation:

@@ -40,6 +40,7 @@ from ai_rpg_world.game_world.application.list_available_actions import (
     ListAvailableActionsCommand,
 )
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
+from ai_rpg_world.game_world.application.world_perception_senses import WorldPerceptionSenses
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_arguments import (
     ArgumentsNotChosen,
@@ -48,7 +49,7 @@ from ai_rpg_world.game_world.domain.action.action_arguments import (
 )
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import WorldStateRefusal
-from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, TextArgument
+from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, ItemArgument, TextArgument
 from ai_rpg_world.game_world.domain.action.available_actions import AvailableAction, Doable, NotNow
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
@@ -67,6 +68,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     TravelAttempt,
     WaitAttempt,
 )
+from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     CarriedItemInteractionAttempt,
     ObjectInteractionAttempt,
@@ -74,6 +76,25 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     SomeoneInTheDark,
 )
 from ai_rpg_world.game_world.domain.action.manner import Openly
+from ai_rpg_world.game_world.domain.action.offered_action import (
+    BALLOT,
+    CONTENT,
+    DECISION,
+    DESTINATION,
+    HOW,
+    ITEM,
+    LISTENER,
+    REACH,
+    RECIPIENT,
+    SECTION_MOVE,
+    TARGET,
+    ActionChoiceKind,
+    OfferedAction,
+    OfferedFreeText,
+    OfferedItemPick,
+    OfferedStep,
+    OfferedValue,
+)
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice, Shout, SpeechContentNotChosen, Whisper
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
 from ai_rpg_world.game_world.domain.condition.argument_condition import ArgumentEqualsCondition
@@ -109,7 +130,7 @@ from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregat
 from ai_rpg_world.game_world.domain.exception.action_exception import ArgumentsNotChosenException
 from ai_rpg_world.game_world.domain.lighting import Lighting
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person import DeclaredOutcome
 from ai_rpg_world.game_world.domain.person.life_state import Dead, WorldHappening
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
@@ -326,6 +347,18 @@ class _Mine:
         self.scope.run(
             lambda session: session.aggregates().flags().raise_flag(_DOOR_OPENED, ActionAttemptForTests(actor_id=_BOB))
         )
+
+    def offered(
+        self, attempt: ActionAttempt, items_seen_on: dict[PersonId, tuple[ItemInstanceId, ...]] | None = None
+    ) -> OfferedAction:
+        def read(facts: WorldFacts) -> OfferedAction:
+            people = WorldPerceptionSenses(facts).view_for(_ALICE)
+            return attempt.offered_as(ChoiceWording(_ALICE, self.design, facts, people, items_seen_on or {}))
+
+        return self._read(read)
+
+    def ref_of(self, person: PersonId) -> PersonRef:
+        return self._read(lambda facts: WorldPerceptionSenses(facts).view_for(_ALICE).ref_of(person))
 
     def keep_alice_busy(self) -> None:
         self.scope.run(
@@ -641,6 +674,112 @@ class TestListAvailableActions:
         ]
 
 
+_GRAB = replace(
+    pull_lever((ArgumentDeclaration(ArgumentName("loot"), ItemArgument()),)),
+    interaction_id=InteractionId("grab"),
+    display_label=DisplayName("持ち物をつかむ"),
+)
+
+
+class TestOfferedActions:
+    """行為の試みが、どの行動の選択肢の、どの候補の道筋に当たるかを、alice に見えている名前で返すことを保証する。"""
+
+    def test_travel_is_offered_as_travel_to_with_the_destination_name(self) -> None:
+        """外への移動は「行く」の、行き先「outside」の道筋になる。"""
+        mine = _Mine()
+        outside = mine.design.nouns.spot_of(spot("outside").spot_id)
+
+        offered = mine.offered(TravelAttempt(_ALICE, outside))
+
+        assert offered == OfferedAction(ActionChoiceKind.TRAVEL_TO, (OfferedStep(DESTINATION, DisplayName("outside")),))
+
+    def test_whisper_is_offered_with_the_listener_as_seen_and_free_content(self) -> None:
+        """carol へのささやきは「話す」の、届け方「ささやく」→ 相手 carol (alice に見えている人の印) の道筋で、中身を自由に書く。"""
+        mine = _Mine()
+
+        offered = mine.offered(SpeechAttempt(_ALICE, Whisper(_CAROL), _UNWORDED))
+
+        assert offered == OfferedAction(
+            ActionChoiceKind.SPEAK,
+            (OfferedStep(REACH, DisplayName("ささやく")), OfferedStep(LISTENER, mine.ref_of(_CAROL))),
+            (OfferedFreeText(CONTENT),),
+        )
+
+    def test_object_interaction_offers_its_label_and_text_arguments(self) -> None:
+        """扉を刻む操作は「操作する」の、相手「door」→ 操作の表示名の道筋で、引数 words を自由に書く。"""
+        mine = _Mine(object_interactions=(_CARVE,))
+        door = mine.design.nouns.object_of(_DOOR.object_id)
+
+        offered = mine.offered(ObjectInteractionAttempt(_ALICE, door, _CARVE, ArgumentsNotChosen(), Openly()))
+
+        assert offered == OfferedAction(
+            ActionChoiceKind.INTERACT,
+            (OfferedStep(TARGET, DisplayName("door")), OfferedStep(HOW, _CARVE.display_label)),
+            (OfferedFreeText(OfferedValue("words", "words")),),
+        )
+
+    def test_carried_item_is_a_target_that_remembers_which_item_it_is(self) -> None:
+        """ランプを磨く操作は、相手の候補がランプの品名で、どの品物かを数えるために品物の印を持つ。"""
+        mine = _Mine()
+        lamp = mine.lamp()
+
+        offered = mine.offered(CarriedItemInteractionAttempt(_ALICE, lamp, _RUB, {}, Openly()))
+
+        assert offered.steps == (OfferedStep(TARGET, DisplayName("lamp"), lamp), OfferedStep(HOW, _RUB.display_label))
+
+    def test_item_argument_of_an_object_interaction_offers_the_actors_items(self) -> None:
+        """物への操作の品物の引数は、行う人 (alice) の持ち物 (ランプと石) を候補にする。"""
+        mine = _Mine(object_interactions=(_GRAB,))
+        door, lamp, rock = mine.design.nouns.object_of(_DOOR.object_id), mine.lamp(), mine.rock()
+        loot = OfferedValue("loot", "loot")
+
+        offered = mine.offered(ObjectInteractionAttempt(_ALICE, door, _GRAB, ArgumentsNotChosen(), Openly()))
+
+        assert offered.inputs == (
+            OfferedItemPick(
+                loot, (OfferedStep(loot, DisplayName("lamp"), lamp), OfferedStep(loot, DisplayName("rock"), rock))
+            ),
+        )
+
+    def test_item_argument_of_a_person_interaction_offers_the_items_seen_on_the_target(self) -> None:
+        """人への操作の品物の引数は、相手に見えている持ち物だけを候補にする。"""
+        mine = _Mine(person_interactions=(_GRAB,))
+        rock = mine.rock()
+        loot = OfferedValue("loot", "loot")
+
+        offered = mine.offered(
+            PersonInteractionAttempt(_ALICE, _CAROL, _GRAB, ArgumentsNotChosen(), Openly()), {_CAROL: (rock,)}
+        )
+
+        assert offered.inputs == (OfferedItemPick(loot, (OfferedStep(loot, DisplayName("rock"), rock),)),)
+
+    def test_someone_in_the_dark_is_offered_by_a_fixed_label(self) -> None:
+        """暗がりの誰かへの操作は、相手の候補が「暗がりの誰か」になる。"""
+        mine = _Mine(Lighting.DARK, person_interactions=(_TAP,))
+
+        offered = mine.offered(PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), _TAP, {}, Openly()))
+
+        assert offered.steps[0] == OfferedStep(TARGET, DisplayName("暗がりの誰か"))
+
+    def test_hand_over_and_section_entry_and_waiting(self) -> None:
+        """carol へランプを渡すは「渡す」の carol → ランプ、トロッコに乗るは「区画に出入りする」の作者の文、待つは道筋の無い「待つ」。"""
+        mine = _Mine()
+        lamp, cart = mine.lamp(), mine.design.section_access(_CART.section_id)
+
+        hand_over = mine.offered(ItemHandOverAttempt(_ALICE, _CAROL, (lamp,), Openly()))
+        entry = mine.offered(EnterSectionAttempt(_ALICE, cart))
+        waiting = mine.offered(WaitAttempt(_ALICE, NoReason()))
+
+        assert hand_over.steps == (
+            OfferedStep(RECIPIENT, mine.ref_of(_CAROL)),
+            OfferedStep(ITEM, DisplayName("lamp"), lamp),
+        )
+        assert entry == OfferedAction(
+            ActionChoiceKind.SET_SUB_LOCATION, (OfferedStep(SECTION_MOVE, DisplayName("乗り込む")),)
+        )
+        assert waiting == OfferedAction(ActionChoiceKind.WAIT)
+
+
 _HARU, _NATSU, _AKI = PersonId("haru"), PersonId("natsu"), PersonId("aki")
 _STAY_IN_MINE = group_decision("stay_in_mine")
 _WATCH_TONIGHT = group_decision("watch_tonight")
@@ -688,6 +827,15 @@ class _Village:
 
     def lists(self, person: PersonId = _HARU) -> tuple[AvailableAction, ...]:
         return ListAvailableActions(self.scope, self.design)(ListAvailableActionsCommand(person)).actions
+
+    def offered(self, attempt: ActionAttempt) -> tuple[OfferedAction, PersonRef]:
+        session = self.store.session()
+        facts = session.facts()
+        people = WorldPerceptionSenses(facts).view_for(_HARU)
+        offered = attempt.offered_as(ChoiceWording(_HARU, self.design, facts, people, {}))
+        natsu = people.ref_of(_NATSU)
+        session.roll_back()
+        return offered, natsu
 
     def votes(self, attempt: GroupDecisionBallotAttempt) -> ActionReply:
         return CastBallot(self.carry_out)(CastBallotCommand(attempt))
@@ -778,6 +926,17 @@ class TestListAvailableBallots:
             _ballot(_STAY_IN_MINE, Abstain()),
         ]
         assert _not_now(tuple(_ballots(actions))) == []
+
+    def test_ballot_is_offered_as_decision_then_choice(self) -> None:
+        """ナツへの票は「投票する」の、決めごとの名前 → ナツ (ハルに見えている人の印) の道筋、棄権は「棄権する」になる。"""
+        village = _Village()
+
+        for_natsu, natsu = village.offered(_ballot(_STAY_IN_MINE, VoteFor(_NATSU)))
+        abstain, _ = village.offered(_ballot(_STAY_IN_MINE, Abstain()))
+
+        decision = OfferedStep(DECISION, _STAY_IN_MINE.name)
+        assert for_natsu == OfferedAction(ActionChoiceKind.VOTE, (decision, OfferedStep(BALLOT, natsu)))
+        assert abstain == OfferedAction(ActionChoiceKind.VOTE, (decision, OfferedStep(BALLOT, DisplayName("棄権する"))))
 
     def test_ballots_of_several_open_decisions_follow_declaration_order(self) -> None:
         """今夜の見張りを先に開いても、ハルの一覧は宣言の順に「誰を坑道に残すか」の票 4 つ、次に「今夜の見張り」の票 4 つと並ぶ。"""

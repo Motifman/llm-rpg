@@ -24,6 +24,13 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredInteraction
 from ai_rpg_world.game_world.domain.action.manner import Manner
+from ai_rpg_world.game_world.domain.action.offered_action import (
+    HOW,
+    TARGET,
+    ActionChoiceKind,
+    OfferedAction,
+    OfferedStep,
+)
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
@@ -44,6 +51,7 @@ from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentNa
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -79,6 +87,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
 
     @abstractmethod
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]: ...
+
+    @abstractmethod
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction: ...
 
     def __post_init__(self) -> None:
         self.manner.require_allowed_by(self.interaction)
@@ -173,6 +184,14 @@ class ObjectInteractionAttempt(_InteractionAttempt):
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool:
         return (self.obj.object_id, self.interaction.interaction_id) == (obj, interaction)
 
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        declared = wording.design.interaction_on_object(self.obj.object_id, self.interaction.interaction_id)
+        return OfferedAction(
+            ActionChoiceKind.INTERACT,
+            (OfferedStep(TARGET, self.obj.name), OfferedStep(HOW, declared.display_label)),
+            wording.arguments(declared.arguments),
+        )
+
 
 @final
 @dataclass(frozen=True)
@@ -202,6 +221,15 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
         return (self.item, *super().items_handled())
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        target = wording.item(TARGET, self.item)
+        declared = self._declared_now(wording.design, wording.facts)
+        return OfferedAction(
+            ActionChoiceKind.INTERACT,
+            (target, OfferedStep(HOW, declared.display_label)),
+            wording.arguments(declared.arguments),
+        )
 
 
 @final
@@ -250,3 +278,15 @@ class PersonInteractionAttempt(_InteractionAttempt):
         if kind is SubjectKind.TARGET and isinstance(self.target, PersonId):
             return self.target
         return super().person_as(kind)
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        declared = wording.design.person_interaction(self.interaction.interaction_id)
+        if isinstance(self.target, SomeoneInTheDark):
+            target, toward = OfferedStep(TARGET, wording.someone_in_the_dark()), None
+        else:
+            target, toward = OfferedStep(TARGET, wording.person(self.target)), self.target
+        return OfferedAction(
+            ActionChoiceKind.INTERACT,
+            (target, OfferedStep(HOW, declared.display_label)),
+            wording.arguments(declared.arguments, toward=toward),
+        )
