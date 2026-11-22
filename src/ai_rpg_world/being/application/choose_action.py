@@ -192,7 +192,14 @@ class ChooseAction:
             # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
             # 行動が世界に断られても、書いたことは本人がしたことなので残る。
             rejections = self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
-            self._act(being_id, move, turn=turn, memo_rejections=rejections, result=None)
+            self._act(
+                being_id,
+                move,
+                turn=turn,
+                memo_rejections=rejections,
+                call_text=tools.call_text(call.tool_name, call.arguments),
+                result=None,
+            )
             return ActionChosen(move=move, exchange=exchange)
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
@@ -252,10 +259,11 @@ class ChooseAction:
         turn: int,
         result: Outcome | None,
         memo_rejections: tuple[str, ...] = (),
+        call_text: str | None = None,
     ) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。
         memory = self._short_term_memories.get(being_id)
-        memory.act(move, current_turn=turn, memo_rejections=memo_rejections)
+        memory.act(move, current_turn=turn, memo_rejections=memo_rejections, call_text=call_text)
         if result is not None:
             memory.receive_result(result, current_turn=turn)
         self._short_term_memories.save(memory)

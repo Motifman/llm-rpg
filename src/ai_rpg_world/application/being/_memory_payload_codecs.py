@@ -349,12 +349,13 @@ def _dict_to_attempt_result(data: dict[str, Any] | None) -> Outcome:
 
 
 def _dict_to_attempt(data: dict[str, Any], *, result: Outcome = UnknownOutcome()) -> Attempt:
-    # 書けなかったメモの理由を足す前 (D2240) の試みには、理由が無い。
+    # 書けなかったメモの理由と呼び出しの文を足す前 (D2240) の試みには、どちらも無い。
     return Attempt(
         turn=data["turn"],
         move=_dict_to_move(data["move"]),
         result=result,
         memo_rejections=tuple(data["memo_rejections"]) if "memo_rejections" in data else (),
+        call_text=data["call_text"] if "call_text" in data else None,
     )
 
 
@@ -403,6 +404,7 @@ def _attempt_fields_to_dict(attempt: Attempt) -> dict[str, Any]:
         "turn": attempt.turn,
         "move": _move_to_dict(attempt.move),
         "memo_rejections": list(attempt.memo_rejections),
+        "call_text": attempt.call_text,
     }
 
 

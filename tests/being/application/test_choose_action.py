@@ -379,6 +379,19 @@ class TestWritingMemoWithTheMove:
         assert memories.get(GEN).unsummarized() == () and clock.current_turn(GEN) == 0
 
 
+class TestCallTextOfTheChosenMove:
+    """ChooseAction が、選んだ行動の呼び出しの文を、世界の結果を待つ試みに添えることを保証する。"""
+
+    def test_chosen_move_keeps_how_the_being_called_it(self) -> None:
+        """サヨにささやくと、試みに、呼び方のままの呼び出しの文が付く。"""
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(_reply("speak", {"reach": "ささやく", "to": "サヨ", "content": "鍵は?"}), memories=memories)
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and attempt.call_text == 'speak(reach="ささやく", to="サヨ", content=本文)'
+
+
 class TestMemoOperationsThatCouldNotBeWritten:
     """ChooseAction が、書けなかったメモの操作の理由を、世界の結果を待つ試みに添えることを保証する。"""
 
