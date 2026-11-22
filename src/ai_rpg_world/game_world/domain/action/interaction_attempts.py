@@ -32,13 +32,14 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
     OfferedStep,
 )
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
-from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct
+from ai_rpg_world.game_world.domain.action.witnessed_act import WitnessedAct, item_names
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
 from ai_rpg_world.game_world.domain.condition.failure_texts import people_in_text
 from ai_rpg_world.game_world.domain.condition.subject import SubjectKind
 from ai_rpg_world.game_world.domain.declaration.object_and_item import ObjectDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
 from ai_rpg_world.game_world.domain.declaration.progress.no_world_stages import NoWorldStages
+from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     UnseenTargetNotAllowedException,
 )
@@ -58,7 +59,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
-    from ai_rpg_world.game_world.domain.people import TextAboutPeople
+    from ai_rpg_world.game_world.domain.people import NameInText, TextAboutPeople
 
 _Reply = TypeVar("_Reply")
 
@@ -138,6 +139,21 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
         return people_in_text(self._declared(design, item_specs).success_text, self)
 
+    def summary_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        how = {"how": self._declared(design, item_specs).display_label}
+        target = self._witnessed_target()
+        people = {"actor": self.actor} | ({"target": target} if isinstance(target, PersonId) else {})
+        summary = design.action_texts.summary_of(self._summary_key())
+        return summary.about_named(people, {**self._things_named(design, item_specs), **how})
+
+    @abstractmethod
+    def _summary_key(self) -> ActionTextKey: ...
+
+    def _things_named(
+        self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]
+    ) -> Mapping[str, NameInText]:
+        return {}
+
     def argument(self, name: ArgumentName) -> TextArgumentValue | ItemInstanceId:
         return self.arguments.value_of(name, self)
 
@@ -195,6 +211,14 @@ class ObjectInteractionAttempt(_InteractionAttempt):
     def kind(self) -> ActionKind:
         return ActionKind.INTERACT_WITH_OBJECT
 
+    def _summary_key(self) -> ActionTextKey:
+        return ActionTextKey.INTERACT_WITH_OBJECT
+
+    def _things_named(
+        self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]
+    ) -> Mapping[str, NameInText]:
+        return {"object": self.obj.name}
+
     def _declared(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> InteractionDeclaration:
         return design.interaction_on_object(self.obj.object_id, self.interaction.interaction_id)
 
@@ -230,6 +254,14 @@ class CarriedItemInteractionAttempt(_InteractionAttempt):
 
     def kind(self) -> ActionKind:
         return ActionKind.INTERACT_WITH_CARRIED_ITEM
+
+    def _summary_key(self) -> ActionTextKey:
+        return ActionTextKey.INTERACT_WITH_CARRIED_ITEM
+
+    def _things_named(
+        self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]
+    ) -> Mapping[str, NameInText]:
+        return {"item": item_names((self.item,), item_specs, design)}
 
     def _declared(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> InteractionDeclaration:
         if self.item not in item_specs:
@@ -282,6 +314,12 @@ class PersonInteractionAttempt(_InteractionAttempt):
 
     def kind(self) -> ActionKind:
         return ActionKind.INTERACT_WITH_PERSON
+
+    def _summary_key(self) -> ActionTextKey:
+        # 暗がりで相手を選ぶ前に断られると、相手の名前が無い
+        if isinstance(self.target, SomeoneInTheDark):
+            return ActionTextKey.INTERACT_WITH_SOMEONE_IN_THE_DARK
+        return ActionTextKey.INTERACT_WITH_PERSON
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
         if isinstance(self.target, PersonId):

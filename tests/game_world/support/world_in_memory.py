@@ -34,6 +34,7 @@ from ai_rpg_world.game_world.domain.world_records import LatestActions, MissedNo
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
 from tests.game_world.support.world_design_for_tests import (
+    action_texts,
     briefing_headings,
     built_in_action_perceptions,
     introduction,
@@ -165,6 +166,7 @@ def _design(
         world_rules=rules if rules is not None else world_rules_for_tests(),
         refusal_texts=refusal_texts(),
         built_in_action_perceptions=built_in_action_perceptions(without=(ActionKind.TEND,)),
+        action_texts=action_texts(),
         surroundings_texts=surroundings_texts(),
         weather=(
             NoWeather()

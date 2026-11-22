@@ -7,6 +7,7 @@ from ai_rpg_world.game_world.domain.exception.world_progress_exception import (
     BallotAlreadyCastException,
     GroupDecisionNotOpenException,
 )
+from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.world_progress import Abstain, BallotCastEvent, VoteFor
 from ai_rpg_world.game_world.domain.world_records import ActionAttemptFailedEvent
@@ -30,6 +31,16 @@ class TestCastBallot:
         assert isinstance(reply, ActionDone)
         [cast] = [event for event in world.events() if isinstance(event, BallotCastEvent)]
         assert (cast.voter, cast.choice) == (HARU, VoteFor(NATSU))
+
+    def test_ballot_for_a_person_names_them_in_the_summary(self) -> None:
+        """ハルがナツに投票すると、返事の要約は、投票先の {target} にナツを当てた文になる。"""
+        world = WorldForSpeechAndBallots()
+        world.open_exile_vote()
+
+        reply = world.vote(HARU, VoteFor(NATSU))
+
+        assert isinstance(reply, ActionDone)
+        assert reply.summary == TextAboutPeople(TextWithUnassignedPeople("vote_forした {target}"), {"target": NATSU})
 
     def test_ballot_in_vote_not_open_is_refused(self) -> None:
         """開いていない投票に投じると GROUP_DECISION_NOT_OPEN で断られ、失敗の記録だけが残る。"""

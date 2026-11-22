@@ -221,6 +221,34 @@ class TestOwnActionResultRoute:
         assert not hasattr(route, "call_id")
 
 
+class TestOwnActionResultSummary:
+    """OwnActionResult が、行動の要約を、無し・文字列・人の穴つきの文で持ち、人の穴を本文と一緒に呼び名で埋めることを保証する。"""
+
+    _TO_SAYO = TextWithPeople(
+        template="「{target}」に囁いた",
+        people={"target": PersonInText(handle=2, appearance="髪を結った娘", visible_name="サヨ")},
+    )
+
+    def test_summary_is_none_unless_given(self) -> None:
+        """要約を渡さなければ、要約は None になる。世界の外で作る結果や、要約を足す前の snapshot のため。"""
+        assert OwnActionResult(call_id="call-1", succeeded=True).action_summary is None
+
+    def test_blank_summary_is_rejected(self) -> None:
+        """空白だけの要約を渡すと ContractViolation で拒む。"""
+        with pytest.raises(ContractViolation):
+            OwnActionResult(call_id="call-1", succeeded=True, action_summary=" ")
+
+    def test_people_in_the_summary_are_named_with_the_body(self) -> None:
+        """要約が人の穴つきの文のとき、観測の人の穴を呼び名で埋めると、要約も「「サヨ」に囁いた」に埋まる。"""
+        route = OwnActionResult(call_id="call-1", succeeded=True, action_summary=self._TO_SAYO)
+        observation = Observation(**_fields(route=route, body="「水を汲もう」とささやいた。"))
+
+        named = observation.with_people_named(lambda text: text.template.replace("{target}", "サヨ"))
+
+        assert isinstance(named.route, OwnActionResult)
+        assert named.route.action_summary == "「サヨ」に囁いた"
+
+
 class TestObservedTime:
     """時刻が表示の文と、任意の比べられる数値 (秒) を持つことを保証する。"""
 

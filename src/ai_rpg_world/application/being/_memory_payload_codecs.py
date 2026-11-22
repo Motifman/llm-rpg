@@ -199,13 +199,16 @@ def _route_to_dict(route: Any) -> dict[str, Any]:
     if isinstance(route, OwnActionResult):
         out["call_id"] = route.call_id
         out["succeeded"] = route.succeeded
+        out["action_summary"] = route.action_summary
     return out
 
 
 def _dict_to_route(data: dict[str, Any]) -> Any:
     kind = data["kind"]
     if kind == "own_action_result":
-        return OwnActionResult(call_id=data["call_id"], succeeded=data["succeeded"])
+        # 要約を足す前 (#2232) に保存した snapshot の結果には要約が無いので、要約の無い結果として読む
+        summary = data["action_summary"] if "action_summary" in data else None
+        return OwnActionResult(call_id=data["call_id"], succeeded=data["succeeded"], action_summary=summary)
     return _ROUTES_WITHOUT_FIELDS[kind]()
 
 

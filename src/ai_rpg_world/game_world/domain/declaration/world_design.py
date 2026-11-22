@@ -39,6 +39,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     SectionAccessDeclaration,
     WorldStageEffectsDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey, ActionTexts
 from ai_rpg_world.game_world.domain.declaration.world_design_review import (
     DeclaredWorldTime,
     WorldDesignReview,
@@ -112,6 +113,7 @@ class WorldDesign:
         world_rules: WorldRules,
         refusal_texts: RefusalTexts,
         built_in_action_perceptions: BuiltInActionPerceptions,
+        action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
@@ -144,6 +146,7 @@ class WorldDesign:
         self._world_rules = world_rules
         self._refusal_texts = refusal_texts
         self._built_in_action_perceptions = built_in_action_perceptions
+        self._action_texts = action_texts
         self._surroundings_texts = surroundings_texts
         self._weather = weather
         self._day_night = day_night
@@ -173,6 +176,7 @@ class WorldDesign:
         world_rules: WorldRules,
         refusal_texts: RefusalTexts,
         built_in_action_perceptions: BuiltInActionPerceptions,
+        action_texts: ActionTexts,
         surroundings_texts: SurroundingsTexts,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
@@ -239,6 +243,8 @@ class WorldDesign:
             )
             review.precondition(placement.at_field("entry_condition"), access.entry_condition)
             review.perception(placement, access.perceived_as)
+            review.author_text(placement.at_field("enter_text"), access.enter_text, ActionTextKey.ENTER_SECTION)
+            review.author_text(placement.at_field("leave_text"), access.leave_text, ActionTextKey.LEAVE_SECTION)
         for traversal in passage_traversals:
             review.precondition(
                 RulePlacement.in_action(
@@ -419,6 +425,7 @@ class WorldDesign:
             world_rules=world_rules,
             refusal_texts=refusal_texts,
             built_in_action_perceptions=built_in_action_perceptions,
+            action_texts=action_texts,
             surroundings_texts=surroundings_texts,
             weather=weather,
             day_night=day_night,
@@ -455,6 +462,10 @@ class WorldDesign:
     @property
     def built_in_action_perceptions(self) -> BuiltInActionPerceptions:
         return self._built_in_action_perceptions
+
+    @property
+    def action_texts(self) -> ActionTexts:
+        return self._action_texts
 
     @property
     def surroundings_texts(self) -> SurroundingsTexts:
