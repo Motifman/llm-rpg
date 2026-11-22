@@ -28,7 +28,7 @@ class TestInteractWithObject:
 
         reply = world.interact_with_lever(ALICE, PULL)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.read().facts().flags().is_raised(GATE_CLOSED) is True
 
     def test_declared_duration_keeps_actor_busy(self) -> None:

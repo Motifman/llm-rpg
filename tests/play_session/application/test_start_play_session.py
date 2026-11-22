@@ -9,12 +9,15 @@ from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 from ai_rpg_world.game_world.domain.value_object import PersonId
+from ai_rpg_world.game_world.domain.value_object.readiness_to_act import FreeToAct
 from ai_rpg_world.play_session.domain.cast import Casting
 from ai_rpg_world.play_session.domain.play_session_exception import (
     CastNotFoundException,
     CastValidationException,
     PersonNotCastException,
+    TurnRoundsNotFoundException,
 )
+from ai_rpg_world.play_session.domain.turn_rounds import Acted, Waited
 from tests.play_session.mine_village_session import ENVIRONMENT_NAME, WORLD, MineVillageSession
 
 _GEN = PersonId("gen")
@@ -127,6 +130,54 @@ class TestStartPlaySession:
             session.casts.get(WORLD)
         session.start(MineVillageSession().command)
         assert session.casts.get(WORLD).entry_of(_GEN).imposed_goal is not None
+
+
+class TestStartPlaySessionPreparesTurnRounds:
+    """StartPlaySession が、コマンドの巡りの上限と待つ人を起こすまでの長さで巡りを作り、世界を開く前に置くことを保証する。"""
+
+    def test_rounds_reach_the_round_limit_given_in_the_command(self) -> None:
+        """巡りの上限 1 で始めると、置かれた巡りは 1 巡り閉じたところで上限に届く。"""
+        session = MineVillageSession(round_limit=1).started()
+        rounds = session.turn_rounds.get(WORLD)
+
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.finish_turn(_GEN, Acted())
+        rounds.close_round()
+
+        assert rounds.has_reached_round_limit() is True
+
+    def test_rounds_wake_the_waiting_person_after_the_length_given_in_the_command(self) -> None:
+        """起こすまでの長さ 1 で始めると、巡り 1 で待つを選んだゲンは巡り 2 を飛ばし、巡り 3 でターンが戻る。"""
+        session = MineVillageSession(wake_waiting_after=1).started()
+        rounds = session.turn_rounds.get(WORLD)
+        due = []
+        for outcome in (Waited(), None, None):
+            rounds.open_round({_GEN: FreeToAct()})
+            due.append(rounds.due_turns())
+            if outcome is not None:
+                rounds.finish_turn(_GEN, outcome)
+            elif rounds.due_turns():
+                rounds.finish_turn(_GEN, Acted())
+            rounds.close_round()
+
+        assert due == [(_GEN,), (), (_GEN,)]
+
+    def test_rounds_are_in_place_before_the_world_opens(self) -> None:
+        """世界を開く時点で、その世界の巡りがもう取り出せる。開くと入る人への観測が届き始めるため。"""
+        found_when_opening: list[bool] = []
+
+        def look_for_rounds() -> None:
+            try:
+                session.turn_rounds.get(WORLD)
+                found_when_opening.append(True)
+            except TurnRoundsNotFoundException:
+                found_when_opening.append(False)
+
+        session = MineVillageSession(on_opening_world=look_for_rounds)
+
+        session.started()
+
+        assert found_when_opening == [True]
 
 
 class TestStartPlaySessionRefusesBadCasting:

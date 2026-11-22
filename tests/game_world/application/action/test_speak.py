@@ -20,7 +20,7 @@ class TestSpeak:
 
         reply = world.say(HARU, "井戸を見てくる")
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         [acted] = [event for event in world.events() if isinstance(event, PersonActedEvent)]
         assert isinstance(acted.attempt, SpeechAttempt)
         assert acted.attempt.content.text == "井戸を見てくる"
@@ -32,7 +32,7 @@ class TestSpeak:
 
         reply = world.say(HARU, "先に行く")
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
 
     def test_speaking_on_the_way_keeps_the_travel_busy(self) -> None:
         """移動中 (梯子 3 tick) に話しても、行っているあいだは tick 3 まで残り、Busy のまま。"""

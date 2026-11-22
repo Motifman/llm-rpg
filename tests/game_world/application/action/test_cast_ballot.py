@@ -27,7 +27,7 @@ class TestCastBallot:
 
         reply = world.vote(HARU, VoteFor(NATSU))
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         [cast] = [event for event in world.events() if isinstance(event, BallotCastEvent)]
         assert (cast.voter, cast.choice) == (HARU, VoteFor(NATSU))
 

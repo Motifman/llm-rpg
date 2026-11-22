@@ -23,7 +23,7 @@ class TestHoldAndPutAwayItem:
 
         reply = HoldItem(world.carry_out)(HoldItemCommand(HoldItemAttempt(ALICE, rope)))
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.held_by(ALICE) == (rope,)
         assert world.carried_by(ALICE) == (rope,)
 
@@ -48,7 +48,7 @@ class TestHoldAndPutAwayItem:
 
         reply = PutAwayItem(world.carry_out)(PutAwayItemCommand(PutAwayItemAttempt(ALICE, rope)))
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.held_by(ALICE) == ()
         assert world.carried_by(ALICE) == (rope,)
 

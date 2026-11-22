@@ -120,7 +120,7 @@ class TestTakeChosenAction:
 
         reply = office.gen_chooses("interact", target="金庫", how=_OPEN_SAFE, code="1907")
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert office.count_of_gen("lift_key") == Count(1)
 
     def test_a_wrong_code_is_refused_and_the_reason_reaches_gen(self, mine_village: WorldDesign) -> None:
@@ -171,7 +171,7 @@ class TestTakeChosenAction:
             "speak", reach="ささやく", to=_person(office.handle_of_sayo()), content="番号を知っているか"
         )
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert office.acted() == [SpeechAttempt(_GEN, Whisper(_SAYO), SpeechContent("番号を知っているか"))]
 
     def test_a_blank_code_is_guided_instead_of_taken(self, mine_village: WorldDesign) -> None:
@@ -191,7 +191,7 @@ class TestTakeChosenAction:
 
         reply = office.gen_chooses("drop_item", item="カンテラの油")
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert [attempt.item for attempt in office.acted() if isinstance(attempt, ItemDropAttempt)] == [first]
 
     def test_inline_speech_is_spoken_in_an_ordinary_voice_after_the_main_action(
@@ -202,9 +202,36 @@ class TestTakeChosenAction:
 
         reply = office.gen_chooses("wait", say_inline="少し休もう")
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert [type(attempt).__name__ for attempt in office.acted()] == ["WaitAttempt", "SpeechAttempt"]
         assert office.acted()[1] == SpeechAttempt(_GEN, OrdinaryVoice(), SpeechContent("少し休もう"))
+
+    def test_choosing_to_wait_replies_done_that_was_waiting(self, mine_village: WorldDesign) -> None:
+        """待つを選ぶと、確定した返事 ActionDone は待つことだったと答える。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("wait")
+
+        assert isinstance(reply, ActionDone)
+        assert reply.was_waiting() is True
+
+    def test_waiting_with_inline_speech_still_replies_that_it_was_waiting(self, mine_village: WorldDesign) -> None:
+        """待つに一言を添えても、返事は主の行為の ActionDone で、待つことだったと答える。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("wait", say_inline="少し休もう")
+
+        assert isinstance(reply, ActionDone)
+        assert reply.was_waiting() is True
+
+    def test_opening_the_safe_replies_done_that_was_not_waiting(self, mine_village: WorldDesign) -> None:
+        """金庫を開けると、確定した返事 ActionDone は待つことではなかったと答える。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("interact", target="金庫", how=_OPEN_SAFE, code="1907")
+
+        assert isinstance(reply, ActionDone)
+        assert reply.was_waiting() is False
 
     def test_inline_speech_is_still_spoken_when_the_main_action_is_refused(self, mine_village: WorldDesign) -> None:
         """主の行為が断られても、添えた一言は話す試みとして確定し、返事は主の行為の断りになる。"""
@@ -230,7 +257,7 @@ class TestTakeChosenAction:
 
         reply = office.gen_chooses("listen")
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert [type(attempt).__name__ for attempt in office.acted()] == ["ListeningAttempt"]
 
     def test_inline_speech_is_not_spoken_when_the_main_action_is_guided(self, mine_village: WorldDesign) -> None:
@@ -248,7 +275,7 @@ class TestTakeChosenAction:
 
         reply = office.gen_chooses("wait", say_inline="   ")
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert [type(attempt).__name__ for attempt in office.acted()] == ["WaitAttempt"]
 
     def test_inline_speech_that_is_not_text_is_guided(self, mine_village: WorldDesign) -> None:

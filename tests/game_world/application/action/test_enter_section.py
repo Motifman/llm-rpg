@@ -25,7 +25,7 @@ class TestEnterSection:
 
         reply = world.enter_cage(ALICE)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.read().facts().whereabouts().is_in_section(PersonBody(ALICE), CAGE) is True
 
     def test_full_section_refuses_with_section_full_code(self) -> None:
