@@ -13,6 +13,8 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import PeopleAsSeen, PersonRef
+from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
+from ai_rpg_world.game_world.domain.perception.surroundings import VisibleSurroundings
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId
 
 if TYPE_CHECKING:
@@ -36,11 +38,31 @@ class ChoiceWording:
         self._actor = actor
         self.design = design
         self.facts = facts
-        self._people = people
+        self.people = people
         self._items_seen_on = items_seen_on
 
+    @classmethod
+    def seeing(
+        cls,
+        actor: PersonId,
+        design: WorldDesign,
+        facts: WorldFacts,
+        people: PeopleAsSeen,
+        seen: VisibleSurroundings | NothingInView,
+    ) -> ChoiceWording:
+        if isinstance(seen, NothingInView):
+            return cls(actor, design, facts, people, {})
+        register = facts.people_register()
+        by_handle = {register.handle_of(person): person for person in facts.people()}
+        items_seen_on = {
+            by_handle[shown.person.handle]: shown.visible_items
+            for shown in (*seen.people, *seen.bodies)
+            if isinstance(shown.person, PersonRef)
+        }
+        return cls(actor, design, facts, people, items_seen_on)
+
     def person(self, person: PersonId) -> PersonRef:
-        return self._people.ref_of(person)
+        return self.people.ref_of(person)
 
     def someone_in_the_dark(self) -> DisplayName:
         return _SOMEONE_IN_THE_DARK
