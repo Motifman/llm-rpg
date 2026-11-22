@@ -9,7 +9,7 @@
 刺激 (Stimulus)
   ↓ DeliverPerception が知覚しうる人を選び、材料を集めて、刺激に聞く
 知覚の結果 (Perceived / NotPerceived / NoticedLater)。まとまりごとに、届けた記録 (PerceptionDeliveryReport) も作る
-  ↓ 観測の出口が時刻の札を付ける
+  ↓ 観測の出口が時刻の札 (何日目と時:分。D2222) を付ける
 Being の契約の観測 (文は TextWithAssignedPeople のまま。人のプレースホルダーは Being が埋める)
 ```
 

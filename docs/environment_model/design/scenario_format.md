@@ -15,9 +15,9 @@
 
 ```yaml
 includes: [common/ja_default.yaml]    # 共通の部品。断りの文の表、組み込みの行為の知覚の文、知覚の既定の文、行為の長さなど
-introduction:                         # WorldIntroduction
+introduction:                         # WorldIntroduction。全員に同じ。人ごとの目的は登場人物に書く
   text: ...                           # 導入
-  objective: ...                      # 目的
+  premises: ...                       # 世界の前提の箇条 (D2222)
 rules: { ... }                        # WorldRules。includes の既定を、書いた欄だけ上書きする
 time: { day_night: ..., weather: ... }
 flags: { ... }
@@ -277,22 +277,31 @@ happenings:
 
 ## 例: 登場人物
 
-世界に渡す部分と、Being に渡す人柄 (`being:`) を分けて書く。読み込む側は `being:` を世界の宣言に入れず、Being の入口 (ステージ 8) に渡す。
+1 人の登場人物に、性質の違う 3 つを分けて書く (D2222)。
+
+- 世界に渡す部分 (`appearance`、`spawn_spot` など)。読み込む側が `CharacterDeclaration` にする
+- この世界での立場 (`known_facts`) と本人の目的 (`objective`)。登場人物の直下に書く。読み込む側は世界の宣言に入れず、人ごとに入るときに渡す文 `CharacterBriefing` にして `LoadedScenario.briefings` に返す。立場は案内 (`Orientation`) に「あなたが知っていること」の見出しで、目的は課された目的 (`EnvironmentEntry.imposed_goal`) で Being に渡す
+- Being に渡す人柄 (`being:`)。鍵は人柄の型 (`Persona`) の欄の名前 (`name`、`first_person`、`speech`、`traits`、`values`、`fears`、`background`) と同じ。読み込む側は世界の宣言に入れず、`LoadedScenario.beings` に返す。世界をまたいで持ち越すものだけを書き、この世界でしか通じないこと (金庫の番号など) は `known_facts` に書く
+
+`knows_at_start` は最初から知っている人、`known_facts` は最初から知っている事柄。全員に同じ導入と前提は `introduction` だけに書き、人ごとには書かない。
 
 ```yaml
 characters:
-  haru:
-    appearance: 測量具を背負った年かさの男
-    spawn_spot: north_shaft_head
-    initial_items: [lamp, fuel_can, lamp_oil, lamp_oil]
-    initial_held: [lamp]
-    initial_groups: [team_north]
-    knows_at_start: [mio]
+  gen:
+    appearance: 煤けた坑夫の上着を着た初老の男
+    spawn_spot: south_adit_mouth
+    initial_groups: [team_south]
+    knows_at_start: [sayo]
+    known_facts: |-
+      働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。昇降機を動かす起動鍵も、その金庫にしまわれていた。
+      坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。
+    objective: サヨと二人そろって、坑道の奥の昇降機で外へ出る。
     being:
-      name: ハル
-      first_person: 私
-      persona: あなたはハル、山の測量を請け負う調査隊の隊長で、落ち着いた男。……
-      objective: ミオと二人そろって、坑道の奥の昇降機で外へ出る。
+      name: ゲン
+      first_person: 俺
+      speech: ぶっきらぼうな常体
+      traits: [口数は少ないが、坑道の空気には敏い]
+      background: この鉱山で働いていた元鉱夫。家族のサヨと村に戻ってきた。
 ```
 
 ## 決めたこと (#2052)
@@ -311,3 +320,9 @@ characters:
 4. 登場人物の `being:` は世界の宣言に入れず、地図のまま `LoadedScenario.beings` に返す。地図でなければ `DesignFlaw`
 5. 誤りの場所に、どのファイルに書いたかを持たせ、誤りの文にもファイルの名前を出す。シナリオを作る LLM が、どこを直せばよいかを分かるようにするため
 6. `time` の `day_night` と `weather` は、「無い」ことも `null` で書かせる。欄が無ければ `DesignFlaw`
+
+## 決めたこと (#2222)
+
+1. 人柄 (`being:`) は `Persona` の欄ごとに書く。この世界での立場 (`known_facts`) と本人の目的 (`objective`) は `being:` の外、登場人物の直下に書く
+2. `known_facts` と `objective` は世界の宣言に入れず、`LoadedScenario.briefings` に返す
+3. `introduction.objective` を `introduction.premises` に改める。中身は目的ではなく、全員に同じ世界の前提。目的の箇条は書かず、各人の `objective` に書く
