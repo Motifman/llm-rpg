@@ -26,7 +26,6 @@ from ai_rpg_world.being.contract import (
 )
 
 NameRechooser = Callable[[str, str, Mapping[str, str | None], str | None], str | None]
-"""(書かれた名前, 値の見出し, 候補の名前 → 説明, どの候補の下か) → 選び直した候補の名前。選び直さなければ None。"""
 
 CANDIDATE_TABLE_HEADING = "現在選べる対象引数"
 CANDIDATE_TABLE_NOTE = "※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。"
@@ -138,13 +137,13 @@ class ActionTools:
         matched = {k: (dict(v) if k == DETAILS and isinstance(v, Mapping) else v) for k, v in arguments.items()}
         choice = next((c for c in self._choices.choices if c.name == tool_name), None)
         if choice is not None:
-            self._match(choice.values, frozenset(o.name for o in choice.outline), matched, rechoose, None)
+            self._match(choice.values, choice.takes_details, matched, rechoose, None)
         return matched
 
     def _match(
         self,
         values: Sequence[ChoiceValue],
-        outlined: frozenset[str],
+        takes_details: bool,
         arguments: dict[str, object],
         rechoose: NameRechooser,
         parent: str | None,
@@ -152,10 +151,11 @@ class ActionTools:
         for value in values:
             if isinstance(value, FreeText):
                 continue
-            place = arguments if value.name in outlined else arguments.get(DETAILS)
+            # move_from と同じ置き場所を見る。上の段が details に勝ち、details を取らない行動では details を捨てる。
+            place = arguments if value.name in arguments else (arguments.get(DETAILS) if takes_details else None)
             written = place.get(value.name) if isinstance(place, dict) else None
             by_label = {self._label(c.label): c for c in value.candidates}
-            if not isinstance(place, dict) or not isinstance(written, str) or not by_label:
+            if not isinstance(place, dict) or not isinstance(written, str) or not written.strip() or not by_label:
                 continue
             name = next((form for form in name_forms(written) if form in by_label), None)
             if name is None:
@@ -163,7 +163,7 @@ class ActionTools:
             if name is None or name not in by_label:
                 continue
             place[value.name] = name
-            self._match(by_label[name].values, outlined, arguments, rechoose, name)
+            self._match(by_label[name].values, takes_details, arguments, rechoose, name)
 
     def candidate_table(self) -> Description | None:
         lines = [

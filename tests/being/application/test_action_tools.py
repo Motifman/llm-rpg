@@ -526,3 +526,70 @@ class TestNamesMatched:
         _tools(ActionChoices((drop,))).with_names_matched("drop_item", {"item": "ランプ"}, rechoose)
 
         assert rechoose.asked == []
+
+    @pytest.mark.parametrize("written", ["", "  "])
+    def test_blank_name_is_not_asked(self, written: str) -> None:
+        """空や空白だけの名前は、選び直しに回さず、書かれたまま返す。世界が場面に合わないと断る。"""
+        rechoose = _Rechoose()
+
+        matched = _tools(ActionChoices((_interact(SAFE),))).with_names_matched(
+            "interact", {"target": written}, rechoose
+        )
+
+        assert matched == {"target": written} and rechoose.asked == []
+
+    def test_operation_in_details_is_matched_there(self) -> None:
+        """見取り図に無い操作を details に書いたとき、details の中の名前を選び直して、details の中で置き換える。"""
+        rechoose = _Rechoose({"open": "番号を合わせて開ける"})
+
+        matched = _tools(ActionChoices((_interact_without_how(),))).with_names_matched(
+            "interact", {"target": "金庫", "details": {"how": "open"}}, rechoose
+        )
+
+        assert matched == {"target": "金庫", "details": {"how": "番号を合わせて開ける"}}
+
+    def test_operation_written_on_top_wins_over_details(self) -> None:
+        """見取り図に無い操作を上の段と details の両方に書いたとき、行為に使われる上の段の名前を選び直す。"""
+        rechoose = _Rechoose({"open": "番号を合わせて開ける"})
+
+        matched = _tools(ActionChoices((_interact_without_how(),))).with_names_matched(
+            "interact", {"target": "金庫", "how": "open", "details": {"how": "番号を合わせて開ける"}}, rechoose
+        )
+
+        assert matched["how"] == "番号を合わせて開ける"
+        assert [asked[0] for asked in rechoose.asked] == ["open"]
+
+    def test_details_of_an_action_without_details_are_not_asked(self) -> None:
+        """details を取らない行動では、details に書いた操作は行為に渡らないので、選び直しに回さない。"""
+        rechoose = _Rechoose({"open": "番号を合わせて開ける"})
+        interact = ActionChoice(
+            name="interact",
+            label="操作する",
+            outline=(
+                ArgumentOutline(name="target", label="相手", required=True),
+                ArgumentOutline(name="how", label="操作"),
+            ),
+            values=(PickOne(name="target", label="相手", candidates=(LOCKED_SAFE,)),),
+        )
+
+        _tools(ActionChoices((interact,))).with_names_matched(
+            "interact", {"target": "金庫", "details": {"how": "open"}}, rechoose
+        )
+
+        assert rechoose.asked == []
+
+
+LOCKED_SAFE = Candidate(
+    label="金庫",
+    values=(PickOne(name="how", label="操作", candidates=(Candidate(label="番号を合わせて開ける"),)),),
+)
+
+
+def _interact_without_how() -> ActionChoice:
+    return ActionChoice(
+        name="interact",
+        label="操作する",
+        outline=(ArgumentOutline(name="target", label="相手", required=True),),
+        takes_details=True,
+        values=(PickOne(name="target", label="相手", candidates=(SAFE,)),),
+    )
