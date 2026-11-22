@@ -79,6 +79,11 @@ class ChosenActionReading:
         if chosen is None:
             return MisfitChosenAction(_unpicked(kind, offers, arguments))
         attempt, offered = chosen
+        # 読まない引数を黙って捨てると、エージェントは伝えたつもりのことが起きなかったと気づけない。
+        read = {INLINE_SPEECH, *(step.value.name for step in offered.steps), *(i.value.name for i in offered.inputs)}
+        unread = sorted(name for name in arguments if name not in read)
+        if unread:
+            return MisfitChosenAction(f"「{kind.label}」では「{unread[0]}」を選べない。")
         values: dict[str, _ChosenValue] = {}
         for offered_input in offered.inputs:
             value = _chosen_input(offered_input, arguments.get(offered_input.value.name))

@@ -86,6 +86,9 @@ class _Office:
         move = AgentMove(call_id="call", tool_name=tool_name, arguments=arguments)
         return self._take(TakeChosenActionCommand(_GEN, move))
 
+    def let_gen_finish_acting(self) -> None:
+        self.scope.run(lambda session: session.aggregates().vitals(_GEN).start_action(WorldTick(0)))
+
     def handle_of_sayo(self) -> int:
         return self.scope.run(lambda session: session.facts().people_register().handle_of(_SAYO).value)
 
@@ -229,3 +232,57 @@ class TestTakeChosenAction:
 
         assert reply == ActionDone()
         assert [type(attempt).__name__ for attempt in office.acted()] == ["ListeningAttempt"]
+
+    def test_inline_speech_is_not_spoken_when_the_main_action_is_guided(self, mine_village: WorldDesign) -> None:
+        """主の行為が案内になったときは、添えた一言も話す試みにならず、世界に何も起きない。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("travel_to", destination="北の坑道", say_inline="行ってくる")
+
+        assert isinstance(reply, TurnGuidance)
+        assert office.acted() == [] and office.failed() == []
+
+    def test_blank_inline_speech_is_treated_as_not_added(self, mine_village: WorldDesign) -> None:
+        """空白だけの一言は添えなかったことになり、待つことだけが確定する。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("wait", say_inline="   ")
+
+        assert reply == ActionDone()
+        assert [type(attempt).__name__ for attempt in office.acted()] == ["WaitAttempt"]
+
+    def test_inline_speech_that_is_not_text_is_guided(self, mine_village: WorldDesign) -> None:
+        """文字でない一言は確定せず、文字で書くよう伝える案内が返る。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("wait", say_inline=3)
+
+        assert reply == TurnGuidance(_GEN, "添える一言は文字で書く。", WorldTick(0))
+
+    def test_an_argument_the_choice_does_not_read_is_guided(self, mine_village: WorldDesign) -> None:
+        """待つ行動に選択肢に無い引数 (reason) を添えると、黙って捨てずに確定させず、その名前を挙げた案内が返る。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("wait", reason="疲れた")
+
+        assert reply == TurnGuidance(_GEN, "「待つ」では「reason」を選べない。", WorldTick(0))
+        assert office.acted() == []
+
+    def test_a_choice_with_nothing_to_pick_is_guided(self, mine_village: WorldDesign) -> None:
+        """事務所の床に何も落ちていないとき、拾うを選ぶと、選べるものが無いことを伝える案内が返る。"""
+        office = _Office(mine_village)
+
+        reply = office.gen_chooses("pickup_item", item="ランプ")
+
+        assert reply == TurnGuidance(_GEN, "いまは「拾う」で選べるものが無い。", WorldTick(0))
+
+    def test_opening_the_safe_again_is_refused_because_it_is_already_open(self, mine_village: WorldDesign) -> None:
+        """開いた金庫を番号でもう一度開けようとすると、いまはできない試みとして確定に回り、扉がもう開いている理由で断られる。"""
+        office = _Office(mine_village)
+        office.gen_chooses("interact", target="金庫", how=_OPEN_SAFE, code="1907")
+        office.let_gen_finish_acting()
+
+        reply = office.gen_chooses("interact", target="金庫", how=_OPEN_SAFE, code="1907")
+
+        assert isinstance(reply, ActionRefused)
+        assert "金庫の扉はもう開いている" in str(reply.refusal.text)
