@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.game_world.domain.value_object.readiness_to_act import (
     FreeToAct,
@@ -139,6 +140,45 @@ class TestWaiting:
         rounds.open_round({_GEN: FreeToAct()})
 
         assert rounds.due_turns() == (_GEN,)
+
+
+def _observation(wants_wake: bool | None) -> Observation:
+    return Observation(
+        body="扉が壊れた",
+        route=SeenOrHeard(),
+        time=ObservedTime(display="tick 1"),
+        subject_is_self=False,
+        subject_name=UNKNOWN,
+        source=UNKNOWN,
+        place=UNKNOWN,
+        addressed_to_self=UNKNOWN,
+        wants_wake=wants_wake,
+    )
+
+
+class TestNoticeObservation:
+    """TurnRounds.notice_observation が、wants_wake の立った観測だけを呼びかけとして数えることを保証する。"""
+
+    def test_observation_that_wants_wake_wakes_the_waiting_person(self) -> None:
+        """待っているゲンに wants_wake=True の観測が届くと、次の巡りでターンが回る。"""
+        rounds = _rounds(wake_waiting_after=3)
+        _play_round(rounds, {_GEN: FreeToAct()}, gen=Waited())
+
+        rounds.notice_observation(_GEN, _observation(True))
+        rounds.open_round({_GEN: FreeToAct()})
+
+        assert rounds.due_turns() == (_GEN,)
+
+    @pytest.mark.parametrize("wants_wake", [False, None], ids=["not_to_wake", "no_advice"])
+    def test_observation_without_wants_wake_does_not_wake(self, wants_wake: bool | None) -> None:
+        """待っているゲンに wants_wake が False か None の観測が届いても、次の巡りでターンは回らない。"""
+        rounds = _rounds(wake_waiting_after=3)
+        _play_round(rounds, {_GEN: FreeToAct()}, gen=Waited())
+
+        rounds.notice_observation(_GEN, _observation(wants_wake))
+        rounds.open_round({_GEN: FreeToAct()})
+
+        assert rounds.due_turns() == ()
 
 
 class TestTurnsWithinARound:

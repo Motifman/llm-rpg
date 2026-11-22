@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Union, final
+from typing import Protocol, Union, final
 
 from typing_extensions import assert_never
 
+from ai_rpg_world.being.contract import Observation
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.game_world.domain.value_object.readiness_to_act import (
@@ -108,6 +109,10 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         due = self._open_due()
         return tuple(person for person in due if person not in self._finished)
 
+    def notice_observation(self, person: PersonId, observation: Observation) -> None:
+        if observation.wants_wake is True:
+            self.hear_call(person)
+
     def hear_call(self, person: PersonId) -> None:
         self._waiting_since.pop(person, None)
         self._called.add(person)
@@ -175,3 +180,9 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
                 return False
             case _:
                 assert_never(readiness)
+
+
+class TurnRoundsRepository(Protocol):
+    def get(self, world: WorldId) -> TurnRounds: ...
+
+    def save(self, rounds: TurnRounds) -> None: ...

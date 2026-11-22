@@ -83,6 +83,9 @@ class Cast(AggregateRoot[BeingCastInWorldEvent]):
     def world(self) -> WorldId:
         return self._world
 
+    def people(self) -> tuple[PersonId, ...]:
+        return tuple(self._members)
+
     def being_of(self, person: PersonId) -> BeingId:
         return self._member(person).being_id
 

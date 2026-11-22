@@ -16,30 +16,7 @@ from ai_rpg_world.game_world.domain.perception import (
 from ai_rpg_world.game_world.domain.perception.people_present import WhoeverIsThere
 from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
-from tests.play_session.mine_village_session import MineVillageSession
-
-
-def _door_breaks_at(spot: SpotId, *, by: PersonId | None = None) -> SightStimulus:
-    actor = {} if by is None else {"actor": by}
-    clear = "扉が壊れた" if by is None else "{actor}が扉を壊した"
-    return SightStimulus(
-        where=spot,
-        witness=SightTexts(
-            clear=TextWithUnassignedPeople(clear).about(actor),
-            dim=TextWithUnassignedPeople("何かが崩れた").about({}),
-            unseen_actor=NotSeenWithoutActor(),
-            noticed_later=NotNoticedLater(),
-        ),
-        target=NoTarget(),
-        seen_in_dark=False,
-        manner=Openly(),
-        actor_departed=False,
-        involved=() if by is None else (by,),
-        salience=Notable(),
-        always_delivered=False,
-        at=WorldTick(0),
-        present=WhoeverIsThere(),
-    )
+from tests.play_session.mine_village_session import MineVillageSession, door_breaks_at
 
 
 class TestHandObservationToBeing:
@@ -51,7 +28,7 @@ class TestHandObservationToBeing:
 
         session.deliver_perception(
             DeliverPerceptionCommand(
-                cause=TimePassed(), from_actions=(_door_breaks_at(SpotId("south_adit_mouth")),), from_states=()
+                cause=TimePassed(), from_actions=(door_breaks_at(SpotId("south_adit_mouth")),), from_states=()
             )
         )
 
@@ -66,7 +43,7 @@ class TestHandObservationToBeing:
         session.deliver_perception(
             DeliverPerceptionCommand(
                 cause=TimePassed(),
-                from_actions=(_door_breaks_at(SpotId("south_adit_mouth"), by=PersonId("sayo")),),
+                from_actions=(door_breaks_at(SpotId("south_adit_mouth"), by=PersonId("sayo")),),
                 from_states=(),
             )
         )
