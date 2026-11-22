@@ -44,7 +44,14 @@ from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import Sqli
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
 from tests.game_world.support.verb_declarations_for_tests import seen_clearly_only
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds
-from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, passage, spot
+from tests.game_world.support.world_design_for_tests import (
+    character,
+    compose_world,
+    half_hour_ticks_from_midnight,
+    nouns,
+    passage,
+    spot,
+)
 
 _WORLD = WorldId("place_notice_world")
 _NORTH_SHAFT, _ENTRANCE, _DEEP_MINE = spot("north_shaft"), spot("entrance"), spot("deep_mine")
@@ -159,7 +166,7 @@ class _World:
         self.scope = CommandScope(self.store, distributor)
         self.observations = _Observations()
         self.reports = PerceptionReportsReceived()
-        exit = ObservationExit(_WORLD, self.observations)
+        exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.observations)
         distributor.register_receiver(
             DeliverPerceptionOfCommittedEvents(self.design, DeliverPerception(self.scope, exit, self.reports))
         )

@@ -16,7 +16,14 @@ from ai_rpg_world.game_world.domain.value_object import Damage, PersonId, SpotId
 from ai_rpg_world.game_world.domain.whereabouts import OccupantEnteredSpotEvent, PersonBody
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
-from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, passage, spot
+from tests.game_world.support.world_design_for_tests import (
+    character,
+    compose_world,
+    half_hour_ticks_from_midnight,
+    nouns,
+    passage,
+    spot,
+)
 
 _WORLD = WorldId("deliver_surroundings_world")
 _ALICE, _BOB, _CAROL, _DAVE = (PersonId(name) for name in ("alice", "bob", "carol", "dave"))
@@ -59,7 +66,9 @@ class _World:
         self._scope = CommandScope(store, CommittedEventsDistributor())
         self.received = _ObservationsReceived()
         self.deliver = DeliverSurroundings(
-            LookAround(self._scope, design), design, ObservationExit(_WORLD, self.received)
+            LookAround(self._scope, design),
+            design,
+            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.received),
         )
 
     def delivers_surroundings_to(self, person: PersonId) -> None:
@@ -87,7 +96,7 @@ class TestDeliverSurroundings:
         [observation] = world.received.by_person[_ALICE]
         assert isinstance(observation.body, TextWithPeople)
         assert observation.body.template == "ここには{person_1}がいる。{person_2}が倒れている。"
-        assert (observation.route, observation.time) == (SeenOrHeard(), ObservedTime(display="tick 3"))
+        assert (observation.route, observation.time) == (SeenOrHeard(), ObservedTime(display="1 日目 01:30"))
         assert set(world.received.by_person) == {_ALICE}
 
     def test_no_observation_when_no_one_else_is_there(self) -> None:
@@ -126,4 +135,6 @@ class TestDeliverSurroundingsOnArrivalHandler:
         DeliverSurroundingsOnArrivalHandler(world.deliver).handle(arrived)
 
         assert set(world.received.by_person) == {_BOB}
-        assert [observation.time for observation in world.received.by_person[_BOB]] == [ObservedTime(display="tick 5")]
+        assert [observation.time for observation in world.received.by_person[_BOB]] == [
+            ObservedTime(display="1 日目 02:30")
+        ]

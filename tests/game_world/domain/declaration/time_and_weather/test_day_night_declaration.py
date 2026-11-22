@@ -4,6 +4,7 @@ import pytest
 
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
+    DayAndClockTime,
     DayNightDeclaration,
     DayPhaseChange,
     DayPhaseDeclaration,
@@ -182,6 +183,54 @@ class TestDayNightDeclarationDeclaredPhases:
         assert day.phase_names() == frozenset({DayPhaseName("朝"), DayPhaseName("夜")})
 
 
+class TestDayAndClockTime:
+    """DayAndClockTime が何日目・時・分として、ありえない値を断ることを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("day", "hour", "minute"),
+        [(0, 0, 0), (1, -1, 0), (1, 24, 0), (1, 0, -1), (1, 0, 60)],
+    )
+    def test_rejects_values_outside_a_day(self, day: int, hour: int, minute: int) -> None:
+        """0 日目、0〜23 の外の時、0〜59 の外の分は ValueOutOfRangeException で断る。"""
+        with pytest.raises(ValueOutOfRangeException):
+            DayAndClockTime(day=day, hour=hour, minute=minute)
+
+
+class TestDayNightDeclarationDayAndClockTimeAt:
+    """DayNightDeclaration.day_and_clock_time_at が、世界の tick を、1 日を 24 時間とした何日目と時:分に割り当てることを保証する。"""
+
+    def test_tick_past_one_day_falls_on_day_two(self) -> None:
+        """1 日 48 tick、始まり 0 の世界で、61 tick は 2 日目 06:30。"""
+        declaration = _day(_phase("昼", 0), ticks_per_day=48, starts_at=0)
+
+        assert declaration.day_and_clock_time_at(WorldTick(61)) == DayAndClockTime(day=2, hour=6, minute=30)
+
+    def test_world_tick_zero_is_day_one_at_the_starting_time(self) -> None:
+        """1 日 48 tick、始まり 36 の世界で、0 tick は 1 日目 18:00。"""
+        declaration = _day(_phase("昼", 0), ticks_per_day=48, starts_at=36)
+
+        assert declaration.day_and_clock_time_at(WorldTick(0)) == DayAndClockTime(day=1, hour=18, minute=0)
+
+    def test_day_changes_at_midnight_not_at_the_starting_time(self) -> None:
+        """1 日 48 tick、始まり 36 の世界で、11 tick は 1 日目 23:30、12 tick は 2 日目 00:00、13 tick は 2 日目 00:30。"""
+        declaration = _day(_phase("昼", 0), ticks_per_day=48, starts_at=36)
+
+        assert [declaration.day_and_clock_time_at(WorldTick(tick)) for tick in (11, 12, 13)] == [
+            DayAndClockTime(day=1, hour=23, minute=30),
+            DayAndClockTime(day=2, hour=0, minute=0),
+            DayAndClockTime(day=2, hour=0, minute=30),
+        ]
+
+    def test_minutes_are_rounded_down_when_a_tick_is_not_whole_minutes(self) -> None:
+        """1 日 7 tick の世界では 1 tick が 205.7 分なので、1 tick は 03:25、6 tick は 20:34 と分を切り捨てる。"""
+        declaration = _day(_phase("昼", 0), ticks_per_day=7, starts_at=0)
+
+        assert [declaration.day_and_clock_time_at(WorldTick(tick)) for tick in (1, 6)] == [
+            DayAndClockTime(day=1, hour=3, minute=25),
+            DayAndClockTime(day=1, hour=20, minute=34),
+        ]
+
+
 class TestNoDayNight:
     """昼夜を宣言しない世界の NoDayNight が、昼夜の宣言と同じ問いに「昼夜は無い」と答えることを保証する。"""
 
@@ -202,3 +251,8 @@ class TestNoDayNight:
     def test_is_not_declared_and_has_no_phase_names(self) -> None:
         """昼夜が宣言されているかを問われると宣言されていないと答え、段階の名前は 1 つも返さない。"""
         assert (NoDayNight().is_declared(), NoDayNight().phase_names()) == (False, frozenset())
+
+    def test_day_and_clock_time_at_raises_not_declared(self) -> None:
+        """何日目と時:分を問われると、「昼夜を宣言していない」という文面の NotDeclaredInThisWorldException を投げる。"""
+        with pytest.raises(NotDeclaredInThisWorldException, match="^this world declares no day and night$"):
+            NoDayNight().day_and_clock_time_at(WorldTick(0))

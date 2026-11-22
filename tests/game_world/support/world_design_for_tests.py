@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.declaration.character import (
 )
 from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
+from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
     ItemSpecDeclaration,
     LastsIndefinitely,
@@ -42,10 +43,14 @@ from ai_rpg_world.game_world.domain.declaration.spot import (
 from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     DayNightDeclaration,
+    DayPhaseDeclaration,
+    DayPhaseName,
     NoDayNight,
     NoWeather,
+    TimeOfDay,
     WeatherDeclaration,
 )
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.declaration.verb import (
     BuiltInActionPerceptions,
     DefaultDuration,
@@ -278,6 +283,22 @@ def introduction() -> WorldIntroduction:
     return WorldIntroduction(
         text=DescriptionText("山あいの廃坑の村で目を覚ました。"),
         objective=DescriptionText("坑道から外へ出る。"),
+    )
+
+
+def half_hour_ticks_from_midnight() -> DayNightDeclaration:
+    return DayNightDeclaration(
+        ticks_per_day=Ticks(48),
+        starts_at=TimeOfDay(0),
+        phases=(
+            DayPhaseDeclaration(
+                name=DayPhaseName("昼"),
+                begins_at=TimeOfDay(0),
+                dark=False,
+                announcement=NoAnnouncement(),
+                audience=EveryoneAwake(),
+            ),
+        ),
     )
 
 
