@@ -28,6 +28,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.passage_traversal_declarati
 )
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import Capacity, PersonId, WorldId
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
@@ -85,8 +86,8 @@ class BatchesReceived:
 
 
 class WorldForActions:
-    def __init__(self) -> None:
-        self.design = _design()
+    def __init__(self, *, rules: WorldRules | None = None) -> None:
+        self.design = _design(rules)
         self.store = SqliteWorldStore.create(
             ":memory:",
             world_id=WORLD,
@@ -127,7 +128,7 @@ class WorldForActions:
         return [event for batch in self.received.batches for event in batch]
 
 
-def _design() -> WorldDesign:
+def _design(rules: WorldRules | None) -> WorldDesign:
     return compose_world(
         nouns(
             spots=[LANDING, SHAFT, ADIT, GALLERY],
@@ -137,4 +138,5 @@ def _design() -> WorldDesign:
         ),
         section_accesses=[access_to(CAGE), replace(access_to(LOFT), entry_condition=GateIsShut())],
         passage_traversals=[PassageTraversalDeclaration(passage=GATE, condition=GateIsShut())],
+        world_rules=rules,
     )
