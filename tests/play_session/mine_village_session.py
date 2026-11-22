@@ -16,6 +16,7 @@ from ai_rpg_world.game_world.application.brief_entering_person import BriefEnter
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.deliver_perception import DeliverPerception
+from ai_rpg_world.game_world.application.name_person import NamePerson
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.domain.value_object import WorldId
@@ -57,8 +58,10 @@ class MineVillageSession:
         self.clock = InMemoryMemoryTurnClock()
         self.cast_events: list[BeingCastInWorldEvent] = []
         self.casts = InMemoryCastRepository(handoff=self.cast_events.extend)
+        scope = CommandScope(self.store, CommittedEventsDistributor())
         self.start = StartPlaySession(
             open_world=OpenWorld(self.store),
+            name_person=NamePerson(scope),
             brief=BriefEnteringPerson(scenario.design),
             prepare_being=PrepareBeing(self.beings),
             enter_environment=EnterEnvironment(self.beings, self.acquaintances, self.clock),
@@ -76,7 +79,7 @@ class MineVillageSession:
             WORLD, self.casts, PerceiveObservation(self.short_term_memories, self.clock)
         )
         self.deliver_perception = DeliverPerception(
-            CommandScope(self.store, CommittedEventsDistributor()),
+            scope,
             ObservationExit(WORLD, receiver),
             PerceptionReportsReceived(),
         )
