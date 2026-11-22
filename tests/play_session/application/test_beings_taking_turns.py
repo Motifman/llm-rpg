@@ -24,6 +24,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
+from ai_rpg_world.play_session.domain.turn_rounds import ChoiceFailed, TurnFinishedEvent
 from tests.play_session.mine_village_session import WORLD, MineVillageSession
 
 _GEN = PersonId("gen")
@@ -64,6 +65,22 @@ class _AnswersByPerson(ActionChoosingCompletion):
         self.asked.append(person)
         planned = self._answers.get(person, [])
         return planned.pop(0) if planned else _reply("listen", f"listen_{len(self.asked)}")
+
+
+class _FailingFor(_AnswersByPerson):
+    """決めた人の呼び出しだけを、LLM の時間切れのように例外で落とす。"""
+
+    def __init__(self, session: MineVillageSession, failing: PersonId) -> None:
+        super().__init__(session, {})
+        self._failing = failing
+
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        reply = super().choose_action(messages, tools, reasoning_off=reasoning_off)
+        if self.asked[-1] == self._failing:
+            raise TimeoutError("no reply in 95 seconds")
+        return reply
 
 
 def _ready_to_start_the_lift(session: WorldSession) -> None:
@@ -181,3 +198,16 @@ class TestBeingsTakingTurnsOneByOne:
         [lit, held, started] = _answered_attempts(session, _GEN)
         assert isinstance(started.result, ObservedOutcome)
         assert (started.move.call_id, started.result.observation.route.succeeded) == ("start_lift", True)  # type: ignore[union-attr]
+
+    def test_failed_llm_call_is_a_failed_turn_and_the_others_still_take_theirs(self) -> None:
+        """ゲンの LLM の呼び出しが例外で落ちると、ゲンのターンは選べなかったターンとして残り、世界にも記憶にも何も入らず、同じ巡りの残りの人には頼む。"""
+        session = MineVillageSession(round_limit=1).started()
+        completion = _FailingFor(session, _GEN)
+
+        session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
+
+        finished = [e for e in session.turn_round_events if isinstance(e, TurnFinishedEvent)]
+        [gens] = [e for e in finished if e.person == _GEN]
+        assert gens.outcome == ChoiceFailed("TimeoutError: no reply in 95 seconds")
+        assert len(finished) == 4
+        assert _answered_attempts(session, _GEN) == []
