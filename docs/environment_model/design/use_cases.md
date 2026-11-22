@@ -17,6 +17,7 @@ class PassWorldTime:
         # WorldClock.advance → Whereabouts.advance_travels → PersonVitals.pass_time(now, death, hunger) (世界にいる人。PersonOutcomes.people_in_world)
         # → 品物の時間 (Lasts の時間が過ぎた品物を、持っている人の PersonInventory か置かれた場所の GroundItems から手放させ、Item.run_out)
         #   荷の品物は、世界にいる人の分だけ。結末が決まって世界から外れた人は、体も荷の品物も時間が止まる (D2211)
+        #   店に預けた品と受け取った品も進める (Shop.let_run_out)。持ち主が世界から外れた店は止める (D2224)
         # → 天候 (Weather.pass_time。ChangesEvery の N の倍数の時刻だけ facts.random() から 1 回引く) → モンスター (湧きを確かめ、個体ごとに感じて動き、SoundsThisTick を空にする。monster.md)
         # 状態効果は #2014 で決めてから足す
         ...
@@ -137,6 +138,34 @@ class SearchSpot:
 
 class AttackMonster:
     def __call__(self, command: AttackMonsterCommand) -> None: ...
+
+# 店 (D2224)。どれも行為の共通の前提を通ってから集約を呼ぶ
+class OpenShop:
+    def __call__(self, command: OpenShopCommand) -> ActionReply: ...        # 店が無ければ Shop.open_at、あれば Shop.reopen
+
+class CloseShop:
+    def __call__(self, command: CloseShopCommand) -> ActionReply: ...
+
+class EditShopLine:
+    def __call__(self, command: EditShopLineCommand) -> ActionReply:
+        # 売り: 増やす分を PersonInventory.items_to_give_up で選んで give_up → Shop.stock。減らす分は Shop.unstock → 戻る品を receive
+        # 買い取り: 足すお金を PersonInventory.pay → Shop.post_wanted。戻るお金は earn
+        ...
+
+class RewriteShopLook:
+    def __call__(self, command: RewriteShopLookCommand) -> ActionReply: ...
+
+class BuyFromShop:
+    def __call__(self, command: BuyFromShopCommand) -> ActionReply: ...      # ShopTrade.buy。代金を持ち主に入れるのも手順の中 (売り買いが果たせないため)
+
+class SellToShop:
+    def __call__(self, command: SellToShopCommand) -> ActionReply: ...       # ShopTrade.sell
+
+class CollectFromShop:
+    def __call__(self, command: CollectFromShopCommand) -> ActionReply: ...  # Shop.hand_over_received → 品を荷へ receive
+
+class CloseShopOfGoneOwnerHandler:      # PersonDiedEvent / PersonOutcomeDecidedEvent (世界から外れた) を受け、その人の店を close_for_gone_owner
+    ...
 
 class StartTravel:
     def __call__(self, command: StartTravelCommand) -> ActionReply: ...
