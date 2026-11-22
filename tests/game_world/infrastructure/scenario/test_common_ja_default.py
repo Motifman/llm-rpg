@@ -112,6 +112,7 @@ class TestCommonJaDefaultReads:
             "refusal_texts",
             "built_in_action_perceptions",
             "action_texts",
+            "world_map",
             "surroundings_texts",
             "clock",
             "briefing_headings",

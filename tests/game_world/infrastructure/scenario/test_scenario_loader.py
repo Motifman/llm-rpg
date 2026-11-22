@@ -257,6 +257,34 @@ class TestWhatEachPersonBringsIn:
 
         assert introduction.premises == DescriptionText("昇降機は一度しか動かない。")
 
+    def test_world_map_is_hidden_unless_the_introduction_shows_it(self, tmp_path: Path) -> None:
+        """introduction に show_world_map を書かないと、設計図は地図の文を返さない。"""
+        assert _load(tmp_path).design.world_map_text() is None
+
+    def test_show_world_map_puts_every_place_on_the_map(self, tmp_path: Path) -> None:
+        """introduction に show_world_map: true を書くと、設計図は場所ごとの行を地図の文として返す。"""
+        text = _LIFT_LANDING.replace(
+            "  premises: 昇降機は一度しか動かない。\n",
+            "  premises: 昇降機は一度しか動かない。\n  show_world_map: true\n",
+            1,
+        )
+
+        world_map = _load(tmp_path, text).design.world_map_text()
+
+        assert world_map is not None and world_map.startswith("  昇降機の乗り場 (暗い)")
+
+    def test_show_world_map_that_is_not_true_or_false_is_a_flaw(self, tmp_path: Path) -> None:
+        """show_world_map に真偽でない値を書くと、その欄の場所を付けた DesignFlaw になる。"""
+        text = _LIFT_LANDING.replace(
+            "  premises: 昇降機は一度しか動かない。\n",
+            "  premises: 昇降機は一度しか動かない。\n  show_world_map: yes please\n",
+            1,
+        )
+
+        assert _mine("world", "world", "introduction.show_world_map") in [
+            flaw.location for flaw in _flaws(tmp_path, text)
+        ]
+
     @pytest.mark.parametrize(
         ("old", "new", "location"),
         [

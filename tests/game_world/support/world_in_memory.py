@@ -42,6 +42,7 @@ from tests.game_world.support.world_design_for_tests import (
     refusal_texts,
     spot,
     surroundings_texts,
+    world_map_wording,
 )
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
@@ -170,6 +171,7 @@ def _design(
         action_texts=action_texts(),
         surroundings_texts=surroundings_texts(),
         clock_wording=clock_wording(),
+        world_map_wording=world_map_wording(),
         weather=(
             NoWeather()
             if isinstance(weather, NoWeather)

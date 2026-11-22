@@ -75,6 +75,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionT
 from ai_rpg_world.game_world.domain.declaration.verb.item_name_joiner import ItemNameJoiner
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
+from ai_rpg_world.game_world.domain.declaration.world_map import WorldMapWording
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw
 from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 from ai_rpg_world.game_world.domain.lighting import Lighting
@@ -292,6 +293,23 @@ def clock_wording() -> ClockWording:
     return ClockWording(day="Day {day}", late_night="深夜 ", late_night_before_hour=6)
 
 
+def world_map_wording() -> WorldMapWording:
+    return WorldMapWording(
+        place="  {spot} ({lighting}) → {exits}",
+        place_without_exits="  {spot} ({lighting}) — 行き来できる先は無い",
+        exit="{spot} まで {time}",
+        joiner=" / ",
+        minutes="{minutes} 分",
+        turns="{turns} 手ぶん",
+        lighting={
+            Lighting.BRIGHT: "明るい",
+            Lighting.DUSKY: "薄暗い",
+            Lighting.DARK: "暗い",
+            Lighting.PITCH_DARK: "真っ暗",
+        },
+    )
+
+
 def surroundings_texts() -> SurroundingsTexts:
     return SurroundingsTexts(
         people_here=TextWithUnassignedPeople("ここには{people}がいる。"),
@@ -318,12 +336,16 @@ def introduction() -> WorldIntroduction:
     return WorldIntroduction(
         text=DescriptionText("山あいの廃坑の村で目を覚ました。"),
         premises=DescriptionText("昇降機は一度しか動かない。"),
+        shows_world_map=False,
     )
 
 
 def briefing_headings() -> BriefingHeadings:
     return BriefingHeadings(
-        introduction="この世界について", premises="この世界の前提", known_facts="あなたが知っていること"
+        introduction="この世界について",
+        premises="この世界の前提",
+        known_facts="あなたが知っていること",
+        world_map="この場所の造り",
     )
 
 
@@ -365,6 +387,7 @@ def compose_world(
     weather: WeatherDeclaration | NoWeather = NoWeather(),
     day_night: DayNightDeclaration | NoDayNight = NoDayNight(),
     initial_stage: WorldStageDeclaration | NoWorldStages = NoWorldStages(),
+    introduction_: WorldIntroduction | None = None,
 ) -> WorldDesign:
     return WorldDesign.compose(
         nouns=nouns_ if nouns_ is not None else nouns(),
@@ -392,10 +415,11 @@ def compose_world(
         action_texts=action_texts(),
         surroundings_texts=surroundings_texts(),
         clock_wording=clock_wording(),
+        world_map_wording=world_map_wording(),
         weather=weather,
         day_night=day_night,
         initial_stage=initial_stage,
-        introduction=introduction(),
+        introduction=introduction_ if introduction_ is not None else introduction(),
         briefing_headings=briefing_headings(),
     )
 
