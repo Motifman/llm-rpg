@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, final
 
@@ -23,6 +23,21 @@ class CastMember:
     person: PersonId
     being_id: BeingId
     being_name: str
+
+    def __post_init__(self) -> None:
+        if not self.being_name.strip():
+            raise CastValidationException(f"the Being cast as {self.person.value} has a blank name")
+
+
+@final
+@dataclass(frozen=True)
+class Casting:
+    beings: Mapping[PersonId, BeingId]
+
+    def member(self, person: PersonId, being_name: str) -> CastMember:
+        if person not in self.beings:
+            raise PersonNotCastException(f"no Being is cast as {person.value}")
+        return CastMember(person, self.beings[person], being_name)
 
 
 @final
@@ -67,6 +82,9 @@ class Cast(AggregateRoot[BeingCastInWorldEvent]):
     @property
     def world(self) -> WorldId:
         return self._world
+
+    def being_of(self, person: PersonId) -> BeingId:
+        return self._member(person).being_id
 
     def brief(
         self, person: PersonId, *, orientation: Orientation, imposed_goal: str, known_people: Sequence[PersonId]
