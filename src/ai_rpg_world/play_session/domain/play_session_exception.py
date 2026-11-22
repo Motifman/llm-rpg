@@ -40,3 +40,7 @@ class RoundStillHasTurnsException(PlaySessionDomainException):
 
 class TurnNotDueException(PlaySessionDomainException):
     error_code = "PLAY_SESSION.TURN_NOT_DUE"
+
+
+class TurnRoundsNotFoundException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.TURN_ROUNDS_NOT_FOUND"
