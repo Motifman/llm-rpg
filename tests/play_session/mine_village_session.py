@@ -68,6 +68,7 @@ from ai_rpg_world.play_session.domain.turn_rounds import RoundCount, TurnRoundsE
 from ai_rpg_world.play_session.infrastructure.in_memory_cast_repository import InMemoryCastRepository
 from ai_rpg_world.play_session.infrastructure.in_memory_turn_rounds_repository import InMemoryTurnRoundsRepository
 from ai_rpg_world.play_session.infrastructure.roles_from_scenario import casting_by_person_name, roles_from_scenario
+from tests.event_handoff_helpers import discard_events
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
 
 _MINE_VILLAGE = Path(__file__).parents[2] / "data" / "scenarios" / "mine_village_v2.yaml"
@@ -151,8 +152,8 @@ class MineVillageSession:
         )
         if delivers_world_events:
             distributor.register_receiver(DeliverPerceptionOfCommittedEvents(scenario.design, self.deliver_perception))
-        self.episodes = InMemoryEpisodeRepository()
-        self.memo_books = InMemoryMemoBookRepository()
+        self.episodes = InMemoryEpisodeRepository(handoff=discard_events)
+        self.memo_books = InMemoryMemoBookRepository(handoff=discard_events)
 
     def beings_taking_turns(
         self, completion: ActionChoosingCompletion, *, closing: str = "行動を 1 つ選んでください。"
