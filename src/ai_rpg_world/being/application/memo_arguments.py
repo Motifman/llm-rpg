@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
+from ai_rpg_world.being.application.memo_argument import (
     MEMO_FIELD_NAME,
 )
 from ai_rpg_world.being.application.memo_writing import (

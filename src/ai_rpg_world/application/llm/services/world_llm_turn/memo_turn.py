@@ -8,15 +8,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.application.llm.services.memo_arguments import (
+from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.being.application.memo_argument import (
+    MEMO_FIELD_NAME,
+)
+from ai_rpg_world.being.application.memo_arguments import (
     feedback_text,
     read_memo_operations,
     rejection_text,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
-    MEMO_FIELD_NAME,
-)
-from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.being.application.memo_writing import (
     AddMemo,
     EditMemo,

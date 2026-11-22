@@ -120,10 +120,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.cross_tool_mentions impo
     without_absent_tool_mentions,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import INNER_THOUGHT_FIELD_NAME
-from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
-    MEMO_FIELD_NAME,
-    with_memo_schema,
-)
+from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import with_memo_schema
 from ai_rpg_world.application.llm.services.tool_catalog.memory import (
     get_memory_specs,
 )
@@ -317,6 +314,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.being.application.conduct_text import conduct_text
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.working_memory_text import system_prompt_text
 from ai_rpg_world.being.contract import Description, OfferedBeingTools, Orientation, Scene
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
