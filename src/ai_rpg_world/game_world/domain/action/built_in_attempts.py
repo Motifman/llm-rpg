@@ -22,6 +22,20 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.declared_section_access import DeclaredSectionAccess
 from ai_rpg_world.game_world.domain.action.manner import Manner, Openly
+from ai_rpg_world.game_world.domain.action.offered_action import (
+    BALLOT,
+    CONTENT,
+    DECISION,
+    DESTINATION,
+    ITEM,
+    RECIPIENT,
+    SECTION_MOVE,
+    TARGET,
+    ActionChoiceKind,
+    OfferedAction,
+    OfferedFreeText,
+    OfferedStep,
+)
 from ai_rpg_world.game_world.domain.action.speech import SpeechContent, SpeechContentNotChosen, SpeechReach
 from ai_rpg_world.game_world.domain.action.trigger_answers_nothing_by_default import TriggerAnswersNothingByDefault
 from ai_rpg_world.game_world.domain.action.wait_reason import NoReason, WaitReason
@@ -35,6 +49,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.default_duration import Def
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     HandOverToSelfException,
     NothingToHandOverException,
+    SeveralItemsNotOfferedException,
 )
 from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
     NoRouteToDestinationException,
@@ -58,6 +73,7 @@ from ai_rpg_world.game_world.domain.whereabouts import AtSpot, NoRoute, Occupant
 from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain, VoteFor
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.verb.perception_declaration import PerceptionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
@@ -69,6 +85,10 @@ if TYPE_CHECKING:
 class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     actor: PersonId
     _KIND: ClassVar[ActionKind]
+    _CHOICE: ClassVar[ActionChoiceKind]
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        return OfferedAction(self._CHOICE)
 
     def kind(self) -> ActionKind:
         return self._KIND
@@ -142,11 +162,15 @@ class _OnOneItem(_BuiltInAttempt):
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
         return (self.item,)
 
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        return OfferedAction(self._CHOICE, (wording.item(ITEM, self.item),))
+
 
 @final
 @dataclass(frozen=True)
 class TravelAttempt(_BuiltInAttempt):
     _KIND = ActionKind.TRAVEL
+    _CHOICE = ActionChoiceKind.TRAVEL_TO
     actor: PersonId
     destination: SpotDeclaration
 
@@ -193,6 +217,9 @@ class TravelAttempt(_BuiltInAttempt):
             passage for passage in _open_passages(facts) if design.passage_traversal(passage).holds(facts, self)
         )
 
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        return OfferedAction(self._CHOICE, (OfferedStep(DESTINATION, self.destination.name),))
+
 
 def _open_passages(facts: WorldFacts) -> frozenset[PassageId]:
     passages = facts.passages()
@@ -203,6 +230,7 @@ def _open_passages(facts: WorldFacts) -> frozenset[PassageId]:
 @dataclass(frozen=True)
 class SpeechAttempt(_BuiltInAttempt):
     _KIND = ActionKind.SPEAK
+    _CHOICE = ActionChoiceKind.SPEAK
     actor: PersonId
     reach: SpeechReach
     content: SpeechContent | SpeechContentNotChosen
@@ -233,11 +261,15 @@ class SpeechAttempt(_BuiltInAttempt):
     def _chosen_content(self) -> SpeechContent:
         return self.content.chosen_by(self.actor)
 
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        return OfferedAction(self._CHOICE, self.reach.offered_steps(wording), (OfferedFreeText(CONTENT),))
+
 
 @final
 @dataclass(frozen=True)
 class ListeningAttempt(_BuiltInAttempt):
     _KIND = ActionKind.LISTEN
+    _CHOICE = ActionChoiceKind.LISTEN
     actor: PersonId
 
     def exertion(self) -> Exertion:
@@ -251,6 +283,7 @@ class ListeningAttempt(_BuiltInAttempt):
 @dataclass(frozen=True)
 class WaitAttempt(_BuiltInAttempt):
     _KIND = ActionKind.WAIT
+    _CHOICE = ActionChoiceKind.WAIT
     actor: PersonId
     reason: WaitReason | NoReason
 
@@ -265,6 +298,7 @@ class WaitAttempt(_BuiltInAttempt):
 @dataclass(frozen=True)
 class TendAttempt(_BuiltInAttempt):
     _KIND = ActionKind.TEND
+    _CHOICE = ActionChoiceKind.TEND_TO_PLAYER
     actor: PersonId
     target: PersonId
 
@@ -286,11 +320,15 @@ class TendAttempt(_BuiltInAttempt):
             return self.target
         return super().person_as(kind)
 
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        return OfferedAction(self._CHOICE, (OfferedStep(TARGET, wording.person(self.target)),))
+
 
 @final
 @dataclass(frozen=True)
 class ItemHandOverAttempt(_BuiltInAttempt):
     _KIND = ActionKind.HAND_OVER
+    _CHOICE = ActionChoiceKind.GIVE_ITEM
     actor: PersonId
     to: PersonId
     items: tuple[ItemInstanceId, ...]
@@ -325,11 +363,20 @@ class ItemHandOverAttempt(_BuiltInAttempt):
             return self.to
         return super().person_as(kind)
 
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        if len(self.items) != 1:
+            raise SeveralItemsNotOfferedException(
+                f"a hand-over of {len(self.items)} items is not one of the action choices; offer one item at a time"
+            )
+        to = OfferedStep(RECIPIENT, wording.person(self.to))
+        return OfferedAction(self._CHOICE, (to, wording.item(ITEM, self.items[0])))
+
 
 @final
 @dataclass(frozen=True)
 class GroundItemPickupAttempt(_OnOneItem):
     _KIND = ActionKind.PICK_UP
+    _CHOICE = ActionChoiceKind.PICKUP_ITEM
     actor: PersonId
     item: ItemInstanceId
     manner: Manner
@@ -348,6 +395,7 @@ class GroundItemPickupAttempt(_OnOneItem):
 @dataclass(frozen=True)
 class ItemDropAttempt(_OnOneItem):
     _KIND = ActionKind.DROP
+    _CHOICE = ActionChoiceKind.DROP_ITEM
     actor: PersonId
     item: ItemInstanceId
     manner: Manner
@@ -363,6 +411,7 @@ class ItemDropAttempt(_OnOneItem):
 @dataclass(frozen=True)
 class SpotSearchAttempt(_BuiltInAttempt):
     _KIND = ActionKind.SEARCH
+    _CHOICE = ActionChoiceKind.EXPLORE
     actor: PersonId
 
     def exertion(self) -> Exertion:
@@ -380,6 +429,7 @@ class SpotSearchAttempt(_BuiltInAttempt):
 @dataclass(frozen=True)
 class ItemUseAttempt(_OnOneItem):
     _KIND = ActionKind.USE_ITEM
+    _CHOICE = ActionChoiceKind.USE_ITEM
     actor: PersonId
     item: ItemInstanceId
 
@@ -398,6 +448,7 @@ class ItemUseAttempt(_OnOneItem):
 @dataclass(frozen=True)
 class EnterSectionAttempt(_BuiltInAttempt):
     _KIND = ActionKind.ENTER_SECTION
+    _CHOICE = ActionChoiceKind.SET_SUB_LOCATION
     actor: PersonId
     access: DeclaredSectionAccess
 
@@ -406,12 +457,17 @@ class EnterSectionAttempt(_BuiltInAttempt):
 
     def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
         return design.section_access(self.access.section.section_id).perceived_as
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        label = wording.design.section_access(self.access.section.section_id).enter_label
+        return OfferedAction(self._CHOICE, (OfferedStep(SECTION_MOVE, label),))
 
 
 @final
 @dataclass(frozen=True)
 class LeaveSectionAttempt(_BuiltInAttempt):
     _KIND = ActionKind.LEAVE_SECTION
+    _CHOICE = ActionChoiceKind.SET_SUB_LOCATION
     actor: PersonId
     access: DeclaredSectionAccess
 
@@ -421,11 +477,16 @@ class LeaveSectionAttempt(_BuiltInAttempt):
     def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
         return design.section_access(self.access.section.section_id).perceived_as
 
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        label = wording.design.section_access(self.access.section.section_id).leave_label
+        return OfferedAction(self._CHOICE, (OfferedStep(SECTION_MOVE, label),))
+
 
 @final
 @dataclass(frozen=True)
 class HoldItemAttempt(_OnOneItem):
     _KIND = ActionKind.HOLD
+    _CHOICE = ActionChoiceKind.HOLD_ITEM
     actor: PersonId
     item: ItemInstanceId
 
@@ -437,6 +498,7 @@ class HoldItemAttempt(_OnOneItem):
 @dataclass(frozen=True)
 class PutAwayItemAttempt(_OnOneItem):
     _KIND = ActionKind.PUT_AWAY
+    _CHOICE = ActionChoiceKind.PUT_AWAY_ITEM
     actor: PersonId
     item: ItemInstanceId
 
@@ -448,6 +510,7 @@ class PutAwayItemAttempt(_OnOneItem):
 @dataclass(frozen=True)
 class GroupDecisionBallotAttempt(_BuiltInAttempt):
     _KIND = ActionKind.CAST_BALLOT
+    _CHOICE = ActionChoiceKind.VOTE
     actor: PersonId
     decision: GroupDecisionDeclaration
     choice: VoteFor | Abstain
@@ -461,3 +524,7 @@ class GroupDecisionBallotAttempt(_BuiltInAttempt):
     def cast(self, facts: WorldFacts, world: WorldAggregates) -> Ticks:
         world.group_decision(self.decision).cast(self.actor, self.choice)
         return facts.rules().duration_of(self.kind(), DefaultDuration())
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        choice = wording.person(self.choice.person) if isinstance(self.choice, VoteFor) else wording.abstain()
+        return OfferedAction(self._CHOICE, (OfferedStep(DECISION, self.decision.name), OfferedStep(BALLOT, choice)))
