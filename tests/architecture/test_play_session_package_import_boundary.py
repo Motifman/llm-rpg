@@ -25,7 +25,8 @@ _EVERY_LAYER = (
     "ai_rpg_world.game_world.domain.value_object",
 )
 _BEING_ENTRANCES = tuple(
-    f"ai_rpg_world.being.application.{name}" for name in ("prepare_being", "enter_environment", "perceive_observation")
+    f"ai_rpg_world.being.application.{name}"
+    for name in ("prepare_being", "enter_environment", "perceive_observation", "choose_action", "receive_action_result")
 )
 _WORLD_ENTRANCES = tuple(
     f"ai_rpg_world.game_world.application.{name}"
@@ -36,9 +37,22 @@ _WORLD_ENTRANCES = tuple(
         "check_readiness_to_act",
         "world_has_ended",
         "accept_world_time_passage",
+        "describe_scene",
+        "offer_action_choices",
+        "take_chosen_action",
+        "tell_current_time",
+        "describe_action_result",
     )
 )
-_APPLICATION = (*_EVERY_LAYER, f"{_PLAY_SESSION_PACKAGE}.application", *_BEING_ENTRANCES, *_WORLD_ENTRANCES)
+# 締めの一文 (Closing) は ChooseAction のコマンドの一部なので、入口と一緒に許す
+_BEING_COMMAND_PARTS = ("ai_rpg_world.being.domain.working_memory.Closing",)
+_APPLICATION = (
+    *_EVERY_LAYER,
+    f"{_PLAY_SESSION_PACKAGE}.application",
+    *_BEING_ENTRANCES,
+    *_WORLD_ENTRANCES,
+    *_BEING_COMMAND_PARTS,
+)
 _INFRASTRUCTURE = (
     *_APPLICATION,
     f"{_PLAY_SESSION_PACKAGE}.infrastructure",

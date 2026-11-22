@@ -40,8 +40,8 @@ class _Beings:
     def __init__(self, *beings: Being) -> None:
         self._beings = {b.being_id: b for b in beings}
 
-    def find_by_id(self, being_id: BeingId) -> Being | None:
-        return self._beings.get(being_id)
+    def get(self, being_id: BeingId) -> Being:
+        return self._beings[being_id]
 
 
 def _observation(body: str) -> Observation:

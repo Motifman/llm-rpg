@@ -37,6 +37,7 @@ from typing import Any
 
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import (
     BeingSnapshotCodec,
@@ -125,6 +126,12 @@ class SqliteBeingRepository(BeingRepository):
             ),
         )
         self._conn.commit()
+
+    def get(self, being_id: BeingId) -> Being:
+        being = self.find_by_id(being_id)
+        if being is None:
+            raise BeingNotFoundException(f"Being({being_id}) is not saved")
+        return being
 
     def find_by_id(self, being_id: BeingId) -> Being | None:
         snapshot = self.find_snapshot_by_id(being_id)

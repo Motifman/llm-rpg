@@ -55,7 +55,7 @@ NOW = ObservedTime(display="1日目 9:00")
 
 
 class _Beings:
-    def find_by_id(self, being_id: BeingId) -> Being | None:
+    def get(self, being_id: BeingId) -> Being:
         attachment = BeingAttachment(environment_id="mine_village_v2#1", environment_name="廃坑の山村")
         return Being(being_id=GEN, persona=Persona(name="ゲン"), attachment=attachment)
 
