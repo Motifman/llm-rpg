@@ -97,7 +97,9 @@ def _tools(choices: ActionChoices, being_tools: OfferedBeingTools = TOOLS) -> Ac
 
 
 def _table(choices: ActionChoices) -> list[str]:
-    return _tools(choices).candidate_table().text.split("\n")
+    text = _tools(choices).candidate_table().text
+    assert isinstance(text, str)
+    return text.split("\n")
 
 
 class TestActionToolDefinitions:
