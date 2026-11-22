@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 from ai_rpg_world.being.application.action_tools import ActionTools
@@ -445,3 +447,82 @@ class TestCallText:
     def test_tool_that_was_not_offered_has_no_call_text(self) -> None:
         """出していないツールの名前なら None を返す。"""
         assert _tools(_gen_in_the_office()).call_text("gather", {}) is None
+
+
+class _Rechoose:
+    """呼ばれた問いを覚え、決めた答えを返す選び直し。"""
+
+    def __init__(self, answers: dict[str, str | None] | None = None) -> None:
+        self.asked: list[tuple[str, str, dict[str, str | None], str | None]] = []
+        self._answers = answers or {}
+
+    def __call__(
+        self, written: str, label: str, candidates: Mapping[str, str | None], parent: str | None
+    ) -> str | None:
+        self.asked.append((written, label, dict(candidates), parent))
+        return self._answers.get(written)
+
+
+class TestNamesMatched:
+    """ActionTools.with_names_matched が、候補から選ぶ値を候補の名前に合わせ、当たらない名前だけを選び直しに回すことを保証する。"""
+
+    def test_name_in_the_candidates_is_not_asked(self) -> None:
+        """候補に当たる名前 (金庫・番号を合わせて開ける) は、選び直しに回さず、そのまま返す。"""
+        rechoose = _Rechoose()
+        arguments = {"target": "金庫", "how": "番号を合わせて開ける", "details": {"code": "1907"}}
+
+        matched = _tools(ActionChoices((_interact(SAFE),))).with_names_matched("interact", arguments, rechoose)
+
+        assert matched == arguments and rechoose.asked == []
+
+    def test_copied_display_form_is_fixed_without_asking(self) -> None:
+        """引用符つきの名前 ("金庫") は、選び直しに回さず、候補の名前に直す。"""
+        rechoose = _Rechoose()
+
+        matched = _tools(ActionChoices((_interact(SAFE),))).with_names_matched(
+            "interact", {"target": '"金庫"', "how": "番号を合わせて開ける"}, rechoose
+        )
+
+        assert matched == {"target": "金庫", "how": "番号を合わせて開ける"} and rechoose.asked == []
+
+    def test_unmatched_target_is_rechosen_and_the_operation_under_it_is_matched(self) -> None:
+        """当たらない対象 (safe) は、対象の候補と、候補の下の操作を説明に添えて選び直しに回し、選び直した対象の下で操作を照合する。"""
+        rechoose = _Rechoose({"safe": "金庫"})
+
+        matched = _tools(ActionChoices((_interact(SAFE),))).with_names_matched(
+            "interact", {"target": "safe", "how": "番号を合わせて開ける"}, rechoose
+        )
+
+        assert matched == {"target": "金庫", "how": "番号を合わせて開ける"}
+        assert rechoose.asked == [("safe", "相手", {"金庫": "番号を合わせて開ける"}, None)]
+
+    def test_unmatched_operation_is_asked_under_its_target(self) -> None:
+        """当たらない操作 (open) は、どの候補の下の操作かを添えて選び直しに回す。"""
+        rechoose = _Rechoose({"open": "番号を合わせて開ける"})
+
+        matched = _tools(ActionChoices((_interact(SAFE),))).with_names_matched(
+            "interact", {"target": "金庫", "how": "open"}, rechoose
+        )
+
+        assert matched == {"target": "金庫", "how": "番号を合わせて開ける"}
+        assert rechoose.asked == [("open", "操作", {"番号を合わせて開ける": None}, "金庫")]
+
+    def test_name_not_rechosen_is_left_as_written(self) -> None:
+        """選び直しが名前を返さなければ、書かれた名前のまま返す。世界が場面に合わないと断る。"""
+        matched = _tools(_gen_in_the_office()).with_names_matched("travel_to", {"destination": "天守閣"}, _Rechoose())
+
+        assert matched == {"destination": "天守閣"}
+
+    def test_value_without_candidates_is_not_asked(self) -> None:
+        """候補が空の値は、選び直しに回さない。伏せた候補の有無を、問いで漏らさないため。"""
+        rechoose = _Rechoose()
+        drop = ActionChoice(
+            name="drop_item",
+            label="置く",
+            outline=(ArgumentOutline(name="item", label="品物", required=True),),
+            values=(PickOne(name="item", label="品物", candidates=()),),
+        )
+
+        _tools(ActionChoices((drop,))).with_names_matched("drop_item", {"item": "ランプ"}, rechoose)
+
+        assert rechoose.asked == []
