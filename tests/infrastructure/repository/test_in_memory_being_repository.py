@@ -8,6 +8,7 @@ from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -94,3 +95,21 @@ class TestInMemoryBeingRepository:
         repo = InMemoryBeingRepository()
         with pytest.raises(TypeError):
             repo.find_by_id("ada")  # type: ignore[arg-type]
+
+
+class TestGetInMemoryBeingRepository:
+    """InMemoryBeingRepository.get が、保存した Being を返し、いない Being を BeingNotFoundException で断ることを保証する。"""
+
+    def test_get_returns_the_saved_being(self) -> None:
+        """アダを保存してから get すると、アダの Being が返る。"""
+        repo = InMemoryBeingRepository()
+        repo.save(_being("ada"))
+
+        assert repo.get(BeingId("ada")).persona.name == "アダ"
+
+    def test_get_refuses_a_being_not_saved(self) -> None:
+        """保存していない ID を get すると BeingNotFoundException を投げる。"""
+        repo = InMemoryBeingRepository()
+
+        with pytest.raises(BeingNotFoundException):
+            repo.get(BeingId("missing"))

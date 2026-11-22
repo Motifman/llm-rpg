@@ -24,9 +24,9 @@ from ai_rpg_world.being.domain.working_memory import Closing, MemoryTexts, Worki
 
 
 class BeingLookup(Protocol):
-    """Being の保存先のうち、ここで使う問い合わせ。保存先の型は、まだゲームの側 (#1469) にある。"""
-
-    def find_by_id(self, being_id: BeingId) -> Being | None: ...
+    def get(self, being_id: BeingId) -> Being:
+        """いなければ ``BeingNotFoundException`` で断る。"""
+        ...
 
 
 class CurrentWorkingMemory:
@@ -89,8 +89,8 @@ class CurrentWorkingMemory:
         return RecalledRisesToTop().select(self._episodes.list_by_being(being_id), limit=self._episode_index_limit)
 
     def _environment_name(self, being_id: BeingId) -> str:
-        being = self._beings.find_by_id(being_id)
-        if being is None or being.attachment is None:
+        being = self._beings.get(being_id)
+        if being.attachment is None:
             raise LookupError(f"Being {being_id.value} is not in any environment")
         return being.attachment.environment_name
 
