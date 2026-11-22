@@ -1,0 +1,148 @@
+"""環境が毎ターン Being に渡す行動の選択肢 (ActionChoice) の決まりを保証する (design_decisions D2226)。"""
+
+from __future__ import annotations
+
+import pytest
+
+from ai_rpg_world.being.contract import (
+    ActionChoice,
+    ActionChoices,
+    Candidate,
+    ContractViolation,
+    FreeText,
+    PersonInText,
+    PickOne,
+    TextWithPeople,
+    UnavailableAction,
+)
+
+_SAYO = PersonInText(handle=2, appearance="三つ編みの娘", visible_name="サヨ")
+_CODE = FreeText(name="code", label="番号")
+
+
+def _travel(*candidates: str) -> ActionChoice:
+    return ActionChoice(
+        name="travel_to",
+        label="行く",
+        values=(PickOne(name="destination", label="行き先", candidates=tuple(Candidate(label=c) for c in candidates)),),
+    )
+
+
+class TestActionChoice:
+    """行動の種類ごとに 1 つの選択肢が、相手の候補と、自由に書く文字と、いまはできない理由を持つことを保証する。"""
+
+    def test_gen_in_the_office_can_open_the_safe_with_a_code(self) -> None:
+        """「操作する」は、相手の候補 (金庫・サヨ) の下に操作の候補を持ち、金庫の「番号を合わせて開ける」は番号を自由に書く文字で受ける。"""
+        open_safe = Candidate(label="番号を合わせて開ける", values=(_CODE,))
+        choice = ActionChoice(
+            name="interact",
+            label="操作する",
+            values=(
+                PickOne(
+                    name="target",
+                    label="相手",
+                    candidates=(
+                        Candidate(label="金庫", values=(PickOne(name="how", label="操作", candidates=(open_safe,)),)),
+                        Candidate(
+                            label=_SAYO,
+                            values=(PickOne(name="how", label="操作", candidates=(Candidate(label="肩を叩く"),)),),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        [target] = choice.values
+        assert isinstance(target, PickOne)
+        assert [c.label for c in target.candidates] == ["金庫", _SAYO]
+        assert choice.can_be_chosen()
+
+    def test_holding_the_lamp_is_unavailable_with_a_reason(self) -> None:
+        """「持つ」のランプがいまはできないなら、候補に入れず、選んだ道筋と理由を unavailable に持つ。ほかに候補が無ければ選べない。"""
+        choice = ActionChoice(
+            name="hold_item",
+            label="手に持つ",
+            values=(PickOne(name="item", label="品物", candidates=()),),
+            unavailable=(UnavailableAction(picked=("ランプ",), reason="両手がふさがっている"),),
+        )
+
+        assert choice.unavailable[0].picked == ("ランプ",)
+        assert not choice.can_be_chosen()
+
+    def test_action_without_values_is_chosen_as_it_is(self) -> None:
+        """値の無い行動 (耳を澄ます) は、いまはできない理由が無ければ選べる。"""
+        assert ActionChoice(name="listen", label="耳を澄ます").can_be_chosen()
+
+    def test_whole_action_unavailable_cannot_be_chosen(self) -> None:
+        """選んだ道筋の無い理由 (行っているあいだ) を持つ行動は、選べない。"""
+        choice = ActionChoice(
+            name="listen", label="耳を澄ます", unavailable=(UnavailableAction(picked=(), reason="手が離せない"),)
+        )
+
+        assert not choice.can_be_chosen()
+
+    def test_reason_may_name_people(self) -> None:
+        """理由には、人のプレースホルダーを持つ文を使える。"""
+        reason = TextWithPeople(template="{target}は眠っている", people={"target": _SAYO})
+
+        unavailable = UnavailableAction(picked=(_SAYO,), reason=reason)
+
+        assert unavailable.reason == reason
+
+    def test_whole_action_unavailable_with_candidates_is_rejected(self) -> None:
+        """行動ごと選べない理由を持ちながら、候補を持つ選択肢は拒む。"""
+        with pytest.raises(ContractViolation, match="unavailable"):
+            ActionChoice(
+                name="travel_to",
+                label="行く",
+                values=_travel("井戸").values,
+                unavailable=(UnavailableAction(picked=(), reason="手が離せない"),),
+            )
+
+    @pytest.mark.parametrize("name", ["行く", "travel to", "", "1st"])
+    def test_name_must_be_an_ascii_identifier(self, name: str) -> None:
+        """選択肢と値の名前は、LLM のツールと引数の名前になるので、ASCII の識別子でないと拒む。"""
+        with pytest.raises(ContractViolation, match="name"):
+            ActionChoice(name=name, label="行く")
+        with pytest.raises(ContractViolation, match="name"):
+            FreeText(name=name, label="番号")
+
+    def test_same_text_candidate_twice_is_rejected(self) -> None:
+        """1 つの候補の並びに、同じ文字の候補が 2 つあると拒む。同じ名前の品物は数を添えた 1 つの候補にする。"""
+        with pytest.raises(ContractViolation, match="candidates"):
+            _travel("井戸", "井戸")
+
+    def test_same_person_twice_is_rejected_but_people_with_the_same_look_are_kept(self) -> None:
+        """同じ印 (handle) の人が 2 回並ぶと拒む。見た目が同じでも印が違えば別の候補で、呼び分けは Being が付ける。"""
+        twin = PersonInText(handle=3, appearance=_SAYO.appearance, visible_name=None)
+        stranger = PersonInText(handle=4, appearance=_SAYO.appearance, visible_name=None)
+
+        PickOne(name="target", label="相手", candidates=(Candidate(label=twin), Candidate(label=stranger)))
+        with pytest.raises(ContractViolation, match="candidates"):
+            PickOne(name="target", label="相手", candidates=(Candidate(label=_SAYO), Candidate(label=_SAYO)))
+
+    def test_items_with_the_same_name_are_one_candidate_with_a_count(self) -> None:
+        """同じ名前の品物は、数 (count) を添えた 1 つの候補になる。数は 1 以上。"""
+        assert Candidate(label="ランプの油", count=3).count == 3
+        with pytest.raises(ContractViolation, match="count"):
+            Candidate(label="ランプの油", count=0)
+
+    def test_same_value_name_twice_is_rejected(self) -> None:
+        """1 つの値の並びに、同じ名前の値が 2 つあると拒む。"""
+        with pytest.raises(ContractViolation, match="values"):
+            Candidate(label="金庫", values=(_CODE, FreeText(name="code", label="合言葉")))
+
+
+class TestActionChoices:
+    """1 ターン分の行動の選択肢の並びの決まりを保証する。"""
+
+    def test_choices_are_kept_in_order(self) -> None:
+        """渡した順のまま読める。"""
+        listen = ActionChoice(name="listen", label="耳を澄ます")
+
+        assert ActionChoices((_travel("井戸"), listen)).choices == (_travel("井戸"), listen)
+
+    def test_same_choice_name_twice_is_rejected(self) -> None:
+        """同じ名前の選択肢が 2 つあると拒む。名前は LLM のツールの名前になる。"""
+        with pytest.raises(ContractViolation, match="choices"):
+            ActionChoices((_travel("井戸"), _travel("鍛冶場")))
