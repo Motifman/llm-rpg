@@ -12,6 +12,7 @@ from ai_rpg_world.game_world.domain.action.available_actions import Doable, NotN
 from ai_rpg_world.game_world.domain.action.offered_action import (
     CONTENT,
     DESTINATION,
+    HOW,
     ITEM,
     LISTENER,
     REACH,
@@ -65,6 +66,43 @@ class TestOffersOfOneTurn:
 
         assert len(choices.choices) == len(ActionChoiceKind)
         assert [choice.name for choice in choices.choices if choice.can_be_chosen()] == ["explore", "wait", "listen"]
+
+    def test_outline_of_interact_stays_the_same_with_or_without_the_safe(self) -> None:
+        """操作できる物が無いターンと、金庫を番号で開けられるターンで、interact の見取り図 (target・how・say_inline) と takes_details が同じになる。"""
+        open_safe = OfferedAction(
+            ActionChoiceKind.INTERACT,
+            (OfferedStep(TARGET, DisplayName("金庫")), OfferedStep(HOW, DisplayName("番号を合わせて開ける"))),
+            (OfferedFreeText(OfferedValue("code", "番号")),),
+        )
+
+        empty = _choice(_choices(), ActionChoiceKind.INTERACT)
+        at_the_safe = _choice(_choices((open_safe, Doable())), ActionChoiceKind.INTERACT)
+
+        assert (empty.outline, empty.takes_details) == (at_the_safe.outline, at_the_safe.takes_details)
+        assert [o.name for o in at_the_safe.outline] == ["target", "how", "say_inline"] and at_the_safe.takes_details
+
+    def test_say_inline_is_outlined_on_the_tools_that_took_it_in_the_old_run(self) -> None:
+        """行動しながらの一言 (say_inline) は、古い run で付けていた 9 つの選択肢の見取り図だけに載る。"""
+        choices = _choices()
+
+        assert [c.name for c in choices.choices if "say_inline" in {o.name for o in c.outline}] == [
+            "travel_to",
+            "explore",
+            "interact",
+            "wait",
+            "use_item",
+            "drop_item",
+            "pickup_item",
+            "give_item",
+            "tend_to_player",
+        ]
+
+    def test_only_interact_takes_details(self) -> None:
+        """操作の宣言にある引数を details で受けるのは interact だけで、話すときの中身は見取り図の上の段に並ぶ。"""
+        choices = _choices()
+
+        assert [choice.name for choice in choices.choices if choice.takes_details] == ["interact"]
+        assert [o.name for o in _choice(choices, ActionChoiceKind.SPEAK).outline] == ["reach", "to", "content"]
 
     def test_items_with_the_same_name_become_one_candidate_with_a_count(self) -> None:
         """同じ名前の油 3 つを置く試みは、数 3 の 1 つの候補になる。"""

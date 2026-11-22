@@ -6,6 +6,7 @@ from typing import final
 from ai_rpg_world.being.contract import (
     ActionChoice,
     ActionChoices,
+    ArgumentOutline,
     Candidate,
     ChoiceValue,
     FreeText,
@@ -72,7 +73,17 @@ class OffersOfOneTurn:
         if kind.first_value is None and root.is_reached:
             unavailable = {}
         values: tuple[ChoiceValue, ...] = () if kind.first_value is None else (root.pick(kind.first_value),)
-        return ActionChoice(name=kind.choice_name, label=kind.label, values=values, unavailable=tuple(unavailable))
+        return ActionChoice(
+            name=kind.choice_name,
+            label=kind.label,
+            outline=tuple(
+                ArgumentOutline(name=value.name, label=value.label, required=value is kind.first_value)
+                for value in kind.outline
+            ),
+            takes_details=kind.takes_details,
+            values=values,
+            unavailable=tuple(unavailable),
+        )
 
 
 @dataclass

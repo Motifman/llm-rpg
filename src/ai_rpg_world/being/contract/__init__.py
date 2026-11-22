@@ -3,6 +3,7 @@
 from ai_rpg_world.being.contract.action_choice import (
     ActionChoice,
     ActionChoices,
+    ArgumentOutline,
     Candidate,
     ChoiceValue,
     FreeText,
@@ -42,6 +43,7 @@ __all__ = [
     "ActionChoice",
     "ActionChoices",
     "AgentMove",
+    "ArgumentOutline",
     "Candidate",
     "ChoiceValue",
     "ContractViolation",

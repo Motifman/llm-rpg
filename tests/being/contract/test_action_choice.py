@@ -7,6 +7,7 @@ import pytest
 from ai_rpg_world.being.contract import (
     ActionChoice,
     ActionChoices,
+    ArgumentOutline,
     Candidate,
     ContractViolation,
     FreeText,
@@ -14,16 +15,23 @@ from ai_rpg_world.being.contract import (
     PickOne,
     TextWithPeople,
     UnavailableAction,
+    UnidentifiedPerson,
 )
 
 _SAYO = PersonInText(handle=2, appearance="三つ編みの娘", visible_name="サヨ")
 _CODE = FreeText(name="code", label="番号")
+_TRAVEL_OUTLINE = (ArgumentOutline(name="destination", label="行き先", required=True),)
+_INTERACT_OUTLINE = (
+    ArgumentOutline(name="target", label="相手", required=True),
+    ArgumentOutline(name="how", label="操作"),
+)
 
 
 def _travel(*candidates: str) -> ActionChoice:
     return ActionChoice(
         name="travel_to",
         label="行く",
+        outline=_TRAVEL_OUTLINE,
         values=(PickOne(name="destination", label="行き先", candidates=tuple(Candidate(label=c) for c in candidates)),),
     )
 
@@ -37,6 +45,8 @@ class TestActionChoice:
         choice = ActionChoice(
             name="interact",
             label="操作する",
+            outline=_INTERACT_OUTLINE,
+            takes_details=True,
             values=(
                 PickOne(
                     name="target",
@@ -66,6 +76,7 @@ class TestActionChoice:
         choice = ActionChoice(
             name="hold_item",
             label="手に持つ",
+            outline=(ArgumentOutline(name="item", label="品物", required=True),),
             values=(PickOne(name="item", label="品物", candidates=()),),
             unavailable=(UnavailableAction(picked=("ランプ",), reason="両手がふさがっている"),),
         )
@@ -102,6 +113,7 @@ class TestActionChoice:
             ActionChoice(
                 name="tend_to_player",
                 label="介抱する",
+                outline=(ArgumentOutline(name="target", label="相手", required=True),),
                 values=(PickOne(name="target", label="相手", candidates=()),),
                 unavailable=(asleep, asleep),
             )
@@ -112,6 +124,7 @@ class TestActionChoice:
             ActionChoice(
                 name="travel_to",
                 label="行く",
+                outline=_TRAVEL_OUTLINE,
                 values=_travel("井戸").values,
                 unavailable=(UnavailableAction(picked=("井戸",), reason="道が埋まっている"),),
             )
@@ -121,7 +134,13 @@ class TestActionChoice:
         blocked = UnavailableAction(picked=("北の坑道",), reason="道が通じていない")
 
         with pytest.raises(ContractViolation, match="unavailable"):
-            ActionChoice(name="travel_to", label="行く", values=_travel().values, unavailable=(blocked, blocked))
+            ActionChoice(
+                name="travel_to",
+                label="行く",
+                outline=_TRAVEL_OUTLINE,
+                values=_travel().values,
+                unavailable=(blocked, blocked),
+            )
 
     def test_value_name_repeated_along_a_path_is_rejected_but_siblings_may_share_it(self) -> None:
         """候補の下の値が、外側の値と同じ名前だと拒む。別々の候補の下で同じ名前 (how) を使うのはよい。"""
@@ -137,9 +156,13 @@ class TestActionChoice:
             candidates=(Candidate(label="扉", values=(FreeText(name="target", label="宛先"),)),),
         )
 
-        ActionChoice(name="interact", label="操作する", values=(siblings,))
+        ActionChoice(
+            name="interact", label="操作する", outline=_INTERACT_OUTLINE, takes_details=True, values=(siblings,)
+        )
         with pytest.raises(ContractViolation, match="path"):
-            ActionChoice(name="interact", label="操作する", values=(repeated,))
+            ActionChoice(
+                name="interact", label="操作する", outline=_INTERACT_OUTLINE, takes_details=True, values=(repeated,)
+            )
 
     def test_nested_pick_without_candidates_is_rejected(self) -> None:
         """候補の下の「候補から選ぶ値」が空だと、選んでも行き止まりになるので拒む。いちばん上の空は、選べない選択肢として通す。"""
@@ -150,7 +173,9 @@ class TestActionChoice:
         )
 
         with pytest.raises(ContractViolation, match="nested"):
-            ActionChoice(name="interact", label="操作する", values=(dead_end,))
+            ActionChoice(
+                name="interact", label="操作する", outline=_INTERACT_OUTLINE, takes_details=True, values=(dead_end,)
+            )
 
     def test_whole_action_unavailable_with_candidates_is_rejected(self) -> None:
         """行動ごと選べない理由を持ちながら、候補を持つ選択肢は拒む。"""
@@ -158,6 +183,7 @@ class TestActionChoice:
             ActionChoice(
                 name="travel_to",
                 label="行く",
+                outline=_TRAVEL_OUTLINE,
                 values=_travel("井戸").values,
                 unavailable=(UnavailableAction(picked=(), reason="手が離せない"),),
             )
@@ -198,6 +224,71 @@ class TestActionChoice:
             Candidate(label="金庫", values=(_CODE, FreeText(name="code", label="合言葉")))
 
 
+class TestArgumentOutline:
+    """行動の種類ごとに変わらない引数の見取り図 (outline・takes_details) と、値の名前との決まりを保証する。"""
+
+    def test_top_level_value_missing_from_outline_is_rejected(self) -> None:
+        """いちばん上の値の名前が見取り図に無いと拒む。上の段の引数は、候補の無いターンにも同じ顔ぶれで並べるため。"""
+        with pytest.raises(ContractViolation, match="outline"):
+            ActionChoice(
+                name="travel_to",
+                label="行く",
+                values=(PickOne(name="destination", label="行き先", candidates=()),),
+            )
+
+    def test_nested_value_outside_outline_needs_takes_details(self) -> None:
+        """候補の下の、見取り図に無い値 (金庫の番号) は、takes_details が偽だと拒み、真なら通す。"""
+        safe = PickOne(
+            name="target",
+            label="相手",
+            candidates=(
+                Candidate(
+                    label="金庫",
+                    values=(
+                        PickOne(
+                            name="how",
+                            label="操作",
+                            candidates=(Candidate(label="番号を合わせて開ける", values=(_CODE,)),),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        ActionChoice(name="interact", label="操作する", outline=_INTERACT_OUTLINE, takes_details=True, values=(safe,))
+        with pytest.raises(ContractViolation, match="outline"):
+            ActionChoice(name="interact", label="操作する", outline=_INTERACT_OUTLINE, values=(safe,))
+
+    def test_required_outline_without_its_top_level_value_is_rejected(self) -> None:
+        """必須の見取り図 (行き先) に当たるいちばん上の値が無いと拒む。値の無いターンにツールの必須の引数が消えないため。"""
+        with pytest.raises(ContractViolation, match="required"):
+            ActionChoice(name="travel_to", label="行く", outline=_TRAVEL_OUTLINE)
+
+    def test_top_level_value_for_an_optional_outline_is_rejected(self) -> None:
+        """必須でない見取り図 (how) の名前で、いちばん上に値を置くと拒む。いちばん上の値は毎ターン必ず渡る引数だけにする。"""
+        how = PickOne(name="how", label="操作", candidates=())
+
+        with pytest.raises(ContractViolation, match="required"):
+            ActionChoice(
+                name="interact",
+                label="操作する",
+                outline=_INTERACT_OUTLINE,
+                values=(PickOne(name="target", label="相手", candidates=()), how),
+            )
+
+    def test_outline_repeating_a_name_is_rejected(self) -> None:
+        """見取り図に同じ名前が 2 つあると拒む。名前はツールの引数の名前になる。"""
+        target = ArgumentOutline(name="target", label="相手")
+
+        with pytest.raises(ContractViolation, match="outline"):
+            ActionChoice(name="interact", label="操作する", outline=(target, target))
+
+    def test_outline_name_must_be_a_short_ascii_identifier(self) -> None:
+        """見取り図の名前は、64 文字までの ASCII の識別子でないと拒む。"""
+        with pytest.raises(ContractViolation, match="name"):
+            ArgumentOutline(name="相手", label="相手")
+
+
 class TestActionChoices:
     """1 ターン分の行動の選択肢の並びの決まりを保証する。"""
 
@@ -206,6 +297,23 @@ class TestActionChoices:
         listen = ActionChoice(name="listen", label="耳を澄ます")
 
         assert ActionChoices((_travel("井戸"), listen)).choices == (_travel("井戸"), listen)
+
+    def test_people_in_candidates_paths_and_reasons_are_collected(self) -> None:
+        """候補、いまはできない道筋、理由の文に出る人を、すべて拾う。見分けられない人は拾わない。"""
+        stranger = PersonInText(handle=7, appearance="煤けた上着の男", visible_name=None)
+        watcher = PersonInText(handle=9, appearance="背の高い男", visible_name=None)
+        reason = TextWithPeople(
+            template="{who}と{other}が見ている", people={"who": watcher, "other": UnidentifiedPerson()}
+        )
+        tend = ActionChoice(
+            name="tend_to_player",
+            label="介抱する",
+            outline=(ArgumentOutline(name="target", label="相手", required=True),),
+            values=(PickOne(name="target", label="相手", candidates=(Candidate(label=_SAYO),)),),
+            unavailable=(UnavailableAction(picked=(stranger,), reason=reason),),
+        )
+
+        assert set(ActionChoices((tend,)).people()) == {_SAYO, stranger, watcher}
 
     def test_same_choice_name_twice_is_rejected(self) -> None:
         """同じ名前の選択肢が 2 つあると拒む。名前は LLM のツールの名前になる。"""

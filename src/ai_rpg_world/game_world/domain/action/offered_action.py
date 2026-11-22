@@ -27,6 +27,7 @@ ITEM = OfferedValue("item", "品物")
 RECIPIENT = OfferedValue("to", "渡す相手")
 DECISION = OfferedValue("decision", "決めごと")
 BALLOT = OfferedValue("choice", "選び先")
+SAY_INLINE = OfferedValue("say_inline", "この行動をしながら、同じ場所の人にかける一言 (任意)")
 
 
 _NAME_LIMIT = 64
@@ -43,26 +44,30 @@ def offered_value_name_problems(name: str) -> tuple[str, ...]:
 
 
 class ActionChoiceKind(Enum):
-    TRAVEL_TO = ("travel_to", "行く", DESTINATION)
-    SET_SUB_LOCATION = ("set_sub_location", "区画に出入りする", SECTION_MOVE)
-    EXPLORE = ("explore", "探す", None)
-    INTERACT = ("interact", "操作する", TARGET)
-    WAIT = ("wait", "待つ", None)
-    LISTEN = ("listen", "耳を澄ます", None)
-    SPEAK = ("speak", "話す", REACH)
-    USE_ITEM = ("use_item", "使う", ITEM)
-    DROP_ITEM = ("drop_item", "置く", ITEM)
-    PICKUP_ITEM = ("pickup_item", "拾う", ITEM)
-    GIVE_ITEM = ("give_item", "渡す", RECIPIENT)
-    TEND_TO_PLAYER = ("tend_to_player", "介抱する", TARGET)
-    VOTE = ("vote", "投票する", DECISION)
-    HOLD_ITEM = ("hold_item", "手に持つ", ITEM)
-    PUT_AWAY_ITEM = ("put_away_item", "しまう", ITEM)
+    TRAVEL_TO = ("travel_to", "行く", (DESTINATION, SAY_INLINE))
+    SET_SUB_LOCATION = ("set_sub_location", "区画に出入りする", (SECTION_MOVE,))
+    EXPLORE = ("explore", "探す", (SAY_INLINE,))
+    INTERACT = ("interact", "操作する", (TARGET, HOW, SAY_INLINE), True)
+    WAIT = ("wait", "待つ", (SAY_INLINE,))
+    LISTEN = ("listen", "耳を澄ます", ())
+    SPEAK = ("speak", "話す", (REACH, LISTENER, CONTENT))
+    USE_ITEM = ("use_item", "使う", (ITEM, SAY_INLINE))
+    DROP_ITEM = ("drop_item", "置く", (ITEM, SAY_INLINE))
+    PICKUP_ITEM = ("pickup_item", "拾う", (ITEM, SAY_INLINE))
+    GIVE_ITEM = ("give_item", "渡す", (RECIPIENT, ITEM, SAY_INLINE))
+    TEND_TO_PLAYER = ("tend_to_player", "介抱する", (TARGET, SAY_INLINE))
+    VOTE = ("vote", "投票する", (DECISION, BALLOT))
+    HOLD_ITEM = ("hold_item", "手に持つ", (ITEM,))
+    PUT_AWAY_ITEM = ("put_away_item", "しまう", (ITEM,))
 
-    def __init__(self, choice_name: str, label: str, first_value: OfferedValue | None) -> None:
+    def __init__(
+        self, choice_name: str, label: str, outline: tuple[OfferedValue, ...], takes_details: bool = False
+    ) -> None:
         self.choice_name = choice_name
         self.label = label
-        self.first_value = first_value
+        self.outline = outline
+        self.takes_details = takes_details
+        self.first_value = next((value for value in outline if value is not SAY_INLINE), None)
 
 
 @final
