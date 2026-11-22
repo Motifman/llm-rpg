@@ -349,12 +349,11 @@ def _dict_to_attempt_result(data: dict[str, Any] | None) -> Outcome:
 
 
 def _dict_to_attempt(data: dict[str, Any], *, result: Outcome = UnknownOutcome()) -> Attempt:
-    # 行動の見出しとメモの理由を足す前 (D2240) の試みには、どちらも無い。見出しの無い試みは、前の形の行で出る。
+    # 書けなかったメモの理由を足す前 (D2240) の試みには、理由が無い。
     return Attempt(
         turn=data["turn"],
         move=_dict_to_move(data["move"]),
         result=result,
-        action_heading=data["action_heading"] if "action_heading" in data else None,
         memo_rejections=tuple(data["memo_rejections"]) if "memo_rejections" in data else (),
     )
 
@@ -403,7 +402,6 @@ def _move_and_turn_to_dict(attempt: Attempt) -> dict[str, Any]:
     return {
         "turn": attempt.turn,
         "move": _move_to_dict(attempt.move),
-        "action_heading": attempt.action_heading,
         "memo_rejections": list(attempt.memo_rejections),
     }
 

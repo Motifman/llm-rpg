@@ -15,6 +15,7 @@ from ai_rpg_world.being.application.memo_argument import (
 from ai_rpg_world.being.application.memo_arguments import (
     feedback_text,
     read_memo_operations,
+    rejection_lines,
     rejection_text,
 )
 from ai_rpg_world.being.application.memo_writing import (
@@ -86,7 +87,7 @@ def apply_memo_from_call(
         acting = runtime._acting_being_for(player_id)
         if acting is None:
             trace["skipped_reason"] = "no_acting_being"
-            return MemoCallOutcome(feedback=feedback_text([(None, WRITING_FAILED_TEXT)]))
+            return MemoCallOutcome(feedback=feedback_text(rejection_lines([(None, WRITING_FAILED_TEXT)])))
         being_id = acting.being_id
         trace["being_id"] = being_id.value
         turn = runtime._memory_turn_clock.current_turn(being_id)
@@ -115,11 +116,11 @@ def apply_memo_from_call(
         logger.exception("memo writing failed for player=%s", player_id.value)
         trace["skipped_reason"] = "writing_failed"
         trace["error"] = f"{type(exc).__name__}: {exc}"
-        return MemoCallOutcome(feedback=feedback_text([(None, WRITING_FAILED_TEXT)]))
+        return MemoCallOutcome(feedback=feedback_text(rejection_lines([(None, WRITING_FAILED_TEXT)])))
     finally:
         _record(runtime, player_id, trace)
     feedback.sort(key=lambda item: -1 if item[0] is None else item[0])
-    return MemoCallOutcome(feedback=feedback_text(feedback), added_memo_ids=added)
+    return MemoCallOutcome(feedback=feedback_text(rejection_lines(feedback)), added_memo_ids=added)
 
 
 def _episode_handles(runtime: Any, being_id: Any) -> frozenset[str]:

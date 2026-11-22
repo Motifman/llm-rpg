@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from ai_rpg_world.being.application.memo_arguments import feedback_text
 from ai_rpg_world.being.contract import Observation, ObservedTime
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
@@ -26,10 +27,8 @@ def _line(time: ObservedTime, body: str, inner_thought: str | None = None) -> st
 
 
 def _attempt_line(attempt: Attempt, time: ObservedTime, result_body: str) -> str:
-    # 見出しを持たない試み (古い run と古い snapshot) は、結果の本文だけの行のまま出す (D2240)。
-    body = result_body if attempt.action_heading is None else f"{attempt.action_heading} → {result_body}"
-    memo = "".join(f"\n  (メモ: {rejection})" for rejection in attempt.memo_rejections)
-    return _line(time, body, attempt.move.inner_thought) + memo
+    # 古い run と同じく、書けなかったメモの操作は結果の文の末尾に足す (D2240)。
+    return _line(time, result_body + feedback_text(attempt.memo_rejections), attempt.move.inner_thought)
 
 
 class _Line:

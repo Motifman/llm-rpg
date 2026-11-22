@@ -198,32 +198,21 @@ class TestActAndReceiveResult:
         assert memory.awaiting == Attempt(turn=5, move=_move())
         assert memory.recent() == ()
 
-    def test_action_heading_and_memo_rejections_stay_with_the_move_after_its_result(self) -> None:
-        """行動の見出しとメモを書けなかった理由を添えて 1 手を選ぶと、結果を受け取ったあとの Attempt にもそのまま残る。"""
+    def test_memo_rejections_stay_with_the_move_after_its_result(self) -> None:
+        """メモを書けなかった理由を添えて 1 手を選ぶと、結果を受け取ったあとの Attempt にもそのまま残る。"""
         memory = _empty()
         result = _result()
 
         memory.act(
             _move(),
             current_turn=5,
-            action_heading="操作する: 金庫 / 番号を合わせて開ける (番号: 1907)",
             memo_rejections=("2 件目: m_3f2a7b というメモはありません。",),
         )
         memory.receive_result(result, current_turn=5)
 
         [attempt] = memory.recent()
         assert isinstance(attempt, Attempt)
-        assert attempt.action_heading == "操作する: 金庫 / 番号を合わせて開ける (番号: 1907)"
         assert attempt.memo_rejections == ("2 件目: m_3f2a7b というメモはありません。",)
-
-    @pytest.mark.parametrize("heading", ["", "   "])
-    def test_blank_action_heading_is_rejected(self, heading: str) -> None:
-        """行動の見出しが空か空白だけなら ShortTermMemoryValidationException を投げ、1 手は待たない。"""
-        memory = _empty()
-
-        with pytest.raises(ShortTermMemoryValidationException):
-            memory.act(_move(), current_turn=5, action_heading=heading)
-        assert memory.awaiting is None
 
     def test_blank_memo_rejection_is_rejected(self) -> None:
         """メモを書けなかった理由に空の文があれば ShortTermMemoryValidationException を投げる。"""

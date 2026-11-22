@@ -92,58 +92,25 @@ class TestRecentEventsText:
 
         assert recent_events_text(memory) == "- [1日目 昼] [行動] 思い出した → [結果] 鍵は事務所\n  心の声: 思い出そう"
 
-    def test_attempt_with_an_action_heading_reads_action_then_result(self) -> None:
-        """行動の見出しを持つ試みは「見出し → 結果の本文」の 1 行になり、心の声の続き行が付く。"""
+    def test_memo_rejections_are_added_after_the_result_like_the_old_run(self) -> None:
+        """書けなかったメモの操作は、古い run と同じく、結果の文の末尾に [メモ] の段落として足し、心の声はその後に付く。"""
         memory = ShortTermMemory.empty(ADA)
         memory.act(
-            _move("call-1", inner_thought="あの番号を試す"),
+            _move("call-1", inner_thought="灯りをつける"),
             current_turn=1,
-            action_heading="操作する: 金庫 / 番号を合わせて開ける (番号: 1907)",
+            memo_rejections=("2 件目: m_3f2a7b というメモはありません。",),
         )
         memory.receive_result(
-            ObservedOutcome(_observation("番号が違った。", route=OwnActionResult(call_id="call-1", succeeded=False))),
-            current_turn=1,
-        )
-
-        assert recent_events_text(memory) == (
-            "- [1日目 朝] 操作する: 金庫 / 番号を合わせて開ける (番号: 1907) → 番号が違った。\n  心の声: あの番号を試す"
-        )
-
-    def test_memo_rejections_follow_the_attempt_line(self) -> None:
-        """メモを書けなかった理由は、試みの行 (と心の声) の下に、理由ごとに (メモ: …) の続き行で付く。"""
-        memory = ShortTermMemory.empty(ADA)
-        memory.act(
-            _move("call-1", inner_thought="耳を澄ます"),
-            current_turn=1,
-            action_heading="耳を澄ます",
-            memo_rejections=(
-                "1 件目: kind は todo / fact / person のどれかです。",
-                "2 件目: m_3f というメモはありません。",
-            ),
-        )
-        memory.receive_result(
-            ObservedOutcome(_observation("できた。", route=OwnActionResult(call_id="call-1", succeeded=True))),
-            current_turn=1,
-        )
-
-        assert recent_events_text(memory) == (
-            "- [1日目 朝] 耳を澄ます → できた。\n  心の声: 耳を澄ます\n"
-            "  (メモ: 1 件目: kind は todo / fact / person のどれかです。)\n"
-            "  (メモ: 2 件目: m_3f というメモはありません。)"
-        )
-
-    def test_memory_operation_with_an_action_heading_reads_action_then_result(self) -> None:
-        """記憶の道具の試みも、行動の見出しを持てば「見出し → 記憶の結果」の 1 行になる。"""
-        memory = ShortTermMemory.empty(ADA)
-        memory.act(_move("call-1"), current_turn=1, action_heading="思い出す: ep_3f2a7b")
-        memory.receive_result(
-            MemoryOperationOutcome(
-                call_id="call-1", body="[ep_3f2a7b] 金庫の話", time=ObservedTime(display="1日目 昼")
+            ObservedOutcome(
+                _observation("カンテラに火を入れた。", route=OwnActionResult(call_id="call-1", succeeded=True))
             ),
             current_turn=1,
         )
 
-        assert recent_events_text(memory) == "- [1日目 昼] 思い出す: ep_3f2a7b → [ep_3f2a7b] 金庫の話"
+        assert recent_events_text(memory) == (
+            "- [1日目 朝] カンテラに火を入れた。\n\n[メモ] 次の操作は書けませんでした。\n"
+            "- 2 件目: m_3f2a7b というメモはありません。\n  心の声: 灯りをつける"
+        )
 
     def test_lapse_is_a_line_without_inner_thought(self) -> None:
         """1 手を出せなかったことは「- [時刻] 本文」の 1 行になる。"""

@@ -7,7 +7,7 @@ provider は JSON の形を強制しないので、受け取った側で操作�
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -199,9 +199,8 @@ def rejection_lines(rejections: Iterable[tuple[int | None, str]]) -> tuple[str, 
     return tuple(f"{'memo' if index is None else f'{index + 1} 件目'}: {text}" for index, text in rejections)
 
 
-def feedback_text(rejections: Iterable[tuple[int | None, str]]) -> str:
-    """``rejections`` は (配列の中の位置, 理由の文)。無ければ空文字。"""
-    lines = rejection_lines(rejections)
+def feedback_text(lines: Sequence[str]) -> str:
+    """``lines`` は ``rejection_lines`` の行。無ければ空文字。"""
     if not lines:
         return ""
     return "\n\n[メモ] 次の操作は書けませんでした。\n" + "\n".join(f"- {line}" for line in lines)

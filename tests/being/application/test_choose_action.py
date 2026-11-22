@@ -379,21 +379,8 @@ class TestWritingMemoWithTheMove:
         assert memories.get(GEN).unsummarized() == () and clock.current_turn(GEN) == 0
 
 
-class TestHowTheBeingReadsItsOwnMove:
-    """ChooseAction が、自分の 1 手を読む見出しと、書けなかったメモの理由を試みに添えることを保証する。"""
-
-    def test_chosen_move_carries_its_heading(self) -> None:
-        """金庫を番号で開けると、試みに「操作する: 金庫 / 番号を合わせて開ける (番号: 1907)」の見出しが付く。"""
-        memories = InMemoryShortTermMemoryRepository()
-
-        _choose(
-            _reply("interact", {"target": "金庫", "how": "番号を合わせて開ける", "details": {"code": "1907"}}),
-            memories=memories,
-        )
-
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt)
-        assert attempt.action_heading == "操作する: 金庫 / 番号を合わせて開ける (番号: 1907)"
+class TestMemoOperationsThatCouldNotBeWritten:
+    """ChooseAction が、書けなかったメモの操作の理由を、世界の結果を待つ試みに添えることを保証する。"""
 
     def test_memo_operations_that_could_not_be_written_stay_with_the_attempt(self) -> None:
         """書けたメモはメモ帳に入り、書けなかった操作の理由は、配列の位置を添えて試みに残る。"""
@@ -414,24 +401,6 @@ class TestHowTheBeingReadsItsOwnMove:
             "2 件目: m_3f2a7b というメモはありません。",
             "3 件目: do は add / edit / remove のどれかです。",
         )
-
-    def test_recall_reads_as_recalling_the_handles(self) -> None:
-        """思い出すツールの試みは「思い出す: 呼び名」の見出しになる。"""
-        memories = InMemoryShortTermMemoryRepository()
-
-        _choose(_reply("episode_recall", {"handles": ["ep_ffffff"]}), being_tools=WITH_MEMORY, memories=memories)
-
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and attempt.action_heading == "思い出す: ep_ffffff"
-
-    def test_unknown_tool_reads_as_its_name(self) -> None:
-        """出していないツールの試みは、呼んだツールの名前が見出しになる。"""
-        memories = InMemoryShortTermMemoryRepository()
-
-        _choose(_reply("pickup", {"item": "ランプ"}), memories=memories)
-
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and attempt.action_heading == "pickup"
 
 
 class TestRecallingEpisodes:

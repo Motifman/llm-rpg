@@ -199,22 +199,19 @@ class UnknownOutcome(Outcome):
 class Attempt(Experience):
     """Being が選んだ 1 手と、その結果。
 
-    ``action_heading`` は、Being が自分の選んだ行動を読む見出し。``memo_rejections`` は、行動と一緒に書こうとして
-    書けなかったメモの操作の理由。どちらも Being が選んだときに決まり、結果を受け取っても変わらない。
+    ``memo_rejections`` は、行動と一緒に書こうとして書けなかったメモの操作の理由。Being が選んだときに決まり、
+    結果を受け取っても変わらない。
     """
 
     turn: int
     move: AgentMove
     result: Outcome = UnknownOutcome()
-    action_heading: str | None = None
     memo_rejections: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_turn(self.turn, "turn")
         if not isinstance(self.move, AgentMove):
             raise ShortTermMemoryValidationException("move must be AgentMove")
-        if self.action_heading is not None:
-            _require_text(self.action_heading, "action_heading")
         if not isinstance(self.memo_rejections, tuple):
             raise ShortTermMemoryValidationException("memo_rejections must be a tuple")
         for rejection in self.memo_rejections:
@@ -427,14 +424,12 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         move: AgentMove,
         *,
         current_turn: int,
-        action_heading: str | None = None,
         memo_rejections: tuple[str, ...] = (),
     ) -> None:
         """前の 1 手の結果がまだ来ていなければ、前の 1 手を結果の分からない試みとして残す。"""
         attempt = Attempt(
             turn=_require_turn(current_turn, "current_turn"),
             move=move,
-            action_heading=action_heading,
             memo_rejections=memo_rejections,
         )
         experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
