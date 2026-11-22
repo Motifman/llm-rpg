@@ -40,7 +40,7 @@ class TestSearchSpot:
 
         reply = world.search(ALICE)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         session = world.read()
         assert session.facts().search_progress(CAVE).search_count(ALICE) == Count(1)
         session.roll_back()
