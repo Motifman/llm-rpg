@@ -31,7 +31,7 @@ class TestStartTravelDone:
 
         reply = world.travel(ALICE, SHAFT)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         facts = world.read().facts()
         location = facts.whereabouts().location_of(PersonBody(ALICE))
         assert isinstance(location, TravelInProgress)

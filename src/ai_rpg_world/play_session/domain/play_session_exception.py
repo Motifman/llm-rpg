@@ -20,3 +20,27 @@ class CastNotFoundException(PlaySessionDomainException):
 
 class PersonAlreadyBriefedException(PlaySessionDomainException):
     error_code = "PLAY_SESSION.PERSON_ALREADY_BRIEFED"
+
+
+class RoundValidationException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.ROUND_VALIDATION"
+
+
+class RoundAlreadyOpenException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.ROUND_ALREADY_OPEN"
+
+
+class RoundNotOpenException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.ROUND_NOT_OPEN"
+
+
+class RoundStillHasTurnsException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.ROUND_STILL_HAS_TURNS"
+
+
+class TurnNotDueException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.TURN_NOT_DUE"
+
+
+class TurnRoundsNotFoundException(PlaySessionDomainException):
+    error_code = "PLAY_SESSION.TURN_ROUNDS_NOT_FOUND"

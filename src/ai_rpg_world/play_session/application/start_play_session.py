@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.application.name_person import NamePerson, NamePers
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId
 from ai_rpg_world.play_session.domain.cast import Cast, Casting, CastRepository
+from ai_rpg_world.play_session.domain.turn_rounds import RoundCount, TurnRounds, TurnRoundsRepository
 
 
 @final
@@ -33,6 +34,8 @@ class StartPlaySessionCommand:
     environment_name: str
     roles: tuple[Role, ...]
     casting: Casting
+    round_limit: RoundCount
+    wake_waiting_after: RoundCount
 
 
 @final
@@ -46,6 +49,7 @@ class StartPlaySession:
         prepare_being: PrepareBeing,
         enter_environment: EnterEnvironment,
         casts: CastRepository,
+        turn_rounds: TurnRoundsRepository,
     ) -> None:
         self._open_world = open_world
         self._name_person = name_person
@@ -53,6 +57,7 @@ class StartPlaySession:
         self._prepare_being = prepare_being
         self._enter_environment = enter_environment
         self._casts = casts
+        self._turn_rounds = turn_rounds
 
     def __call__(self, command: StartPlaySessionCommand) -> None:
         world = command.open_world.world_id
@@ -77,6 +82,10 @@ class StartPlaySession:
             self._prepare_being.execute(
                 PrepareBeingCommand(being_id=cast.being_of(role.person), persona_fields=role.persona_fields)
             )
+        # 開いた世界から届く観測の呼びかけを受け取れるよう、巡りを先に置く
+        self._turn_rounds.save(
+            TurnRounds(world, round_limit=command.round_limit, wake_waiting_after=command.wake_waiting_after)
+        )
         self._open_world(command.open_world)
         # 世界は Being の名前を知らないので、入る前に名乗る名前を名簿に付ける (D2229-3)
         for name in names:

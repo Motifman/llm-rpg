@@ -51,7 +51,7 @@ class CarryOutAction:
             code = RefusalCode.of(exception)
             text = self._texts.world_state_text(code, aimed.actor)
             return self._note_refusal(ActionRefusal(attempt=aimed, reason=WorldStateRefusal(code), text=text))
-        return ActionDone()
+        return ActionDone(aimed)
 
     def _carry_out_aimed(
         self, attempt: _Attempt, steps: ActionSteps[_Attempt], session: WorldSession, facts: WorldFacts

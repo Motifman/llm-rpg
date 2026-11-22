@@ -28,7 +28,15 @@ _BEING_ENTRANCES = tuple(
     f"ai_rpg_world.being.application.{name}" for name in ("prepare_being", "enter_environment", "perceive_observation")
 )
 _WORLD_ENTRANCES = tuple(
-    f"ai_rpg_world.game_world.application.{name}" for name in ("open_world", "name_person", "brief_entering_person")
+    f"ai_rpg_world.game_world.application.{name}"
+    for name in (
+        "open_world",
+        "name_person",
+        "brief_entering_person",
+        "check_readiness_to_act",
+        "world_has_ended",
+        "accept_world_time_passage",
+    )
 )
 _APPLICATION = (*_EVERY_LAYER, f"{_PLAY_SESSION_PACKAGE}.application", *_BEING_ENTRANCES, *_WORLD_ENTRANCES)
 _INFRASTRUCTURE = (

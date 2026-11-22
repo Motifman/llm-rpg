@@ -72,6 +72,10 @@ class TestCastMembers:
         with pytest.raises(PersonNotCastException):
             _cast().brief(PersonId("mio"), orientation=_ORIENTATION, imposed_goal="外へ出る。", known_people=())
 
+    def test_people_lists_every_cast_person_in_cast_order(self) -> None:
+        """ゲン・サヨ・ハルの順に配役すると、people はその 3 人をその順で返す。"""
+        assert _cast().people() == (_GEN, _SAYO, _HARU)
+
 
 class TestCastBrief:
     """Cast.brief が、知っている人を Being の名前の紹介にした取り決めを持ち、渡したことをドメインイベントで知らせることを保証する。"""

@@ -53,7 +53,7 @@ class TestInteractWithNamedPerson:
 
         reply = world.tap(ALICE, BOB)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert _damaged(world, (ALICE, BOB, CAROL)) == [BOB]
 
 
@@ -66,9 +66,19 @@ class TestInteractWithSomeoneInTheDark:
 
         reply = world.tap(ALICE, SomeoneInTheDark())
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert _damaged(world, (ALICE, BOB, CAROL)) == [BOB]
         assert _acted_targets(world) == [BOB]
+
+    def test_done_reply_carries_the_attempt_with_the_chosen_target(self) -> None:
+        """一緒にいるのが bob だけのとき、暗がりの誰かの肩を叩くと、返事の ActionDone の試みの相手は bob になっている。"""
+        world = WorldForInteractions()
+
+        reply = world.tap(ALICE, SomeoneInTheDark())
+
+        assert isinstance(reply, ActionDone)
+        assert isinstance(reply.attempt, PersonInteractionAttempt)
+        assert reply.attempt.target == BOB
 
     def test_event_of_chosen_target_is_translated_into_target_stimulus(self) -> None:
         """相手への文を宣言した操作を暗がりの誰かに行うと、PersonActedEvent から選んだ bob に向けた見える刺激が作れる。"""

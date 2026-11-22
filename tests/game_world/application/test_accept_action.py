@@ -34,7 +34,7 @@ class TestAcceptActionInArrivalOrder:
         first_reply = world.board_cage(first)
         second_reply = world.board_cage(second)
 
-        assert first_reply == ActionDone()
+        assert isinstance(first_reply, ActionDone)
         assert isinstance(second_reply, ActionRefused)
         assert second_reply.refusal.reason == WorldStateRefusal(RefusalCode(SectionFullException.error_code))
         assert (world.in_cage(first), world.in_cage(second)) == (True, False)
