@@ -83,6 +83,7 @@ from ai_rpg_world.game_world.domain.world_progress.group_decision import Abstain
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
+    from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.action.unavailable_object_operation import UnavailableObjectOperation
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
@@ -106,11 +107,11 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
         return self
 
-    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
-        return self._about_this_act(design.action_texts.done_of(self._text_key()), design, item_specs)
+    def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._about_this_act(design.action_texts.done_of(self._text_key()), design, situation.item_specs)
 
-    def summary_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
-        return self._about_this_act(design.action_texts.summary_of(self._text_key()), design, item_specs)
+    def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._about_this_act(design.action_texts.summary_of(self._text_key()), design, situation.item_specs)
 
     def _text_key(self) -> ActionTextKey:
         return _TEXT_KEY_OF_KIND[self._KIND]
@@ -226,6 +227,21 @@ class TravelAttempt(_BuiltInAttempt):
 
     def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
         return {"destination": self.destination.name}
+
+    def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._from_where(design.action_texts.done_of(ActionTextKey.TRAVEL), design, situation)
+
+    def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._from_where(design.action_texts.summary_of(ActionTextKey.TRAVEL), design, situation)
+
+    def _from_where(
+        self, text: TextWithUnassignedPeople, design: WorldDesign, situation: ActorSituation
+    ) -> TextAboutPeople:
+        # 出発した場所は、移り始めると居場所から引けなくなるので、行う直前の居場所から書く
+        if not isinstance(situation.at_spot, SpotId):
+            raise OccupantNotAtRouteStartException(f"{self.actor.value} is not at any spot to set off from")
+        origin = design.nouns.spot_of(situation.at_spot).name
+        return text.about_named({"actor": self.actor}, {"origin": origin, "destination": self.destination.name})
 
     def actor_requirement(self) -> ActorRequirement:
         return LivingOrDeparted()
@@ -563,9 +579,9 @@ class EnterSectionAttempt(_BuiltInAttempt):
     def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
         return design.section_access(self.access.section.section_id).perceived_as
 
-    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+    def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         written = design.section_access(self.access.section.section_id).enter_text
-        return self._about_this_act(written, design, item_specs)
+        return self._about_this_act(written, design, situation.item_specs)
 
     def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
         return {"section": self.access.section.name}
@@ -593,9 +609,9 @@ class LeaveSectionAttempt(_BuiltInAttempt):
     def _perception(self, design: WorldDesign) -> PerceptionDeclaration:
         return design.section_access(self.access.section.section_id).perceived_as
 
-    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+    def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         written = design.section_access(self.access.section.section_id).leave_text
-        return self._about_this_act(written, design, item_specs)
+        return self._about_this_act(written, design, situation.item_specs)
 
     def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
         return {"section": self.access.section.name}

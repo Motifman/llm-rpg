@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.being.contract import Description, Orientation
+from ai_rpg_world.game_world.domain.action.offered_action import ActionChoiceKind
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
@@ -60,6 +61,7 @@ from ai_rpg_world.game_world.domain.exception.world_design_exception import (
     UndeclaredVerbException,
     WorldDesignFlawsException,
 )
+from ai_rpg_world.game_world.domain.perception.own_action_completion import OwnActionCompletion
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import (
     GroupDecisionId,
@@ -70,16 +72,20 @@ from ai_rpg_world.game_world.domain.value_object import (
     SpotId,
     SpotSectionId,
     WorldStageId,
+    WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.whereabouts.route import NoRoute, Route
+from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import Teleported
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
+    from ai_rpg_world.game_world.domain.perception.stimulus import Stimulus
+    from ai_rpg_world.game_world.domain.whereabouts import Occupant
 
 _WORLD_LOCATION = DesignLocation("world", "world", "")
 _ALWAYS = AllOfCondition(children=(), failure_text=NoText())
@@ -491,6 +497,23 @@ class WorldDesign:
         return self._briefing_headings.orientation(
             self._introduction, self.world_map_text(), self._ending.has_deadline()
         )
+
+    def arrival_stimuli(
+        self, where: SpotId, arriving: Occupant, origin: SpotId | Teleported, at: WorldTick
+    ) -> tuple[Stimulus, ...]:
+        seen = self._built_in_action_perceptions.arrival_seen_at(where, arriving, origin, self._nouns, at)
+        if isinstance(origin, Teleported):
+            return seen
+        names = {"destination": self._nouns.spot_of(where).name}
+        people = {"actor": arriving.person}
+        completion = OwnActionCompletion(
+            person=arriving.person,
+            summary=self._action_texts.summary_of(ActionTextKey.ARRIVAL).about_named(people, names),
+            text=self._action_texts.done_of(ActionTextKey.ARRIVAL).about_named(people, names),
+            tool=ActionChoiceKind.TRAVEL_TO.choice_name,
+            at=at,
+        )
+        return (completion, *seen)
 
     def world_map_text(self) -> str | None:
         if not self._introduction.shows_world_map:

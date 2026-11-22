@@ -120,9 +120,7 @@ class UntranslatedEventKindError(LookupError):
 
 
 def _arrival(event: OccupantEnteredSpotEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
-    return design.built_in_action_perceptions.arrival_seen_at(
-        event.spot, event.occupant, event.origin, design.nouns, event.at
-    )
+    return design.arrival_stimuli(event.spot, event.occupant, event.origin, event.at)
 
 
 def _acted(event: PersonActedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:

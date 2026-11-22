@@ -106,6 +106,8 @@ class BuiltInActionPerceptions:
             manner=Openly(),
             source=Noise(),
             present=WhoeverIsThere(),
+            # 着いた本人には、目撃の文ではなく自分の行動の結果として着いたことを返す
+            withheld_from=frozenset({arriving.person}),
         )
 
     def of_kind(self, kind: ActionKind) -> PerceptionDeclaration:
