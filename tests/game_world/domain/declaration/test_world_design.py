@@ -143,6 +143,7 @@ _DAY_NIGHT = DayNightDeclaration(
     phases=(
         DayPhaseDeclaration(
             name=DayPhaseName("morning"),
+            display_name=DisplayName("morning"),
             begins_at=TimeOfDay(0),
             dark=False,
             announcement=NoAnnouncement(),
@@ -150,6 +151,7 @@ _DAY_NIGHT = DayNightDeclaration(
         ),
         DayPhaseDeclaration(
             name=DayPhaseName("night"),
+            display_name=DisplayName("night"),
             begins_at=TimeOfDay(2),
             dark=True,
             announcement=NoAnnouncement(),

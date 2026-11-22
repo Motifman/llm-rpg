@@ -52,6 +52,7 @@ from ai_rpg_world.game_world.domain.declaration.world_design_review import (
 )
 from ai_rpg_world.game_world.domain.declaration.world_introduction import WorldIntroduction
 from ai_rpg_world.game_world.domain.declaration.world_map import WorldMap, WorldMapWording
+from ai_rpg_world.game_world.domain.declaration.world_words import WorldWords
 from ai_rpg_world.game_world.domain.design_flaw import DesignFlaw, DesignLocation, DesignWarning
 from ai_rpg_world.game_world.domain.effect.combined_effects import NoEffect
 from ai_rpg_world.game_world.domain.exception.objects_and_items_exception import ItemNotUsableException
@@ -120,6 +121,7 @@ class WorldDesign:
         surroundings_texts: SurroundingsTexts,
         clock_wording: ClockWording,
         world_map_wording: WorldMapWording,
+        world_words: WorldWords,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -155,6 +157,7 @@ class WorldDesign:
         self._surroundings_texts = surroundings_texts
         self._clock_wording = clock_wording
         self._world_map_wording = world_map_wording
+        self._world_words = world_words
         self._weather = weather
         self._day_night = day_night
         self._initial_stage = initial_stage
@@ -187,6 +190,7 @@ class WorldDesign:
         surroundings_texts: SurroundingsTexts,
         clock_wording: ClockWording,
         world_map_wording: WorldMapWording,
+        world_words: WorldWords,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
         initial_stage: WorldStageDeclaration | NoWorldStages,
@@ -438,6 +442,7 @@ class WorldDesign:
             surroundings_texts=surroundings_texts,
             clock_wording=clock_wording,
             world_map_wording=world_map_wording,
+            world_words=world_words,
             weather=weather,
             day_night=day_night,
             initial_stage=initial_stage,
@@ -490,6 +495,10 @@ class WorldDesign:
     @property
     def clock_wording(self) -> ClockWording:
         return self._clock_wording
+
+    @property
+    def world_words(self) -> WorldWords:
+        return self._world_words
 
     @property
     def weather(self) -> WeatherDeclaration | NoWeather:

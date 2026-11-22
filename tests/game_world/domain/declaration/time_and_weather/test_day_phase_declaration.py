@@ -47,7 +47,12 @@ _MORNING = TextWithUnassignedPeople("空が白み、朝になった。")
 
 def _morning(audience: PeopleSelection | EveryoneAwake) -> DayPhaseDeclaration:
     return DayPhaseDeclaration(
-        name=DayPhaseName("morning"), begins_at=TimeOfDay(12), dark=False, announcement=_MORNING, audience=audience
+        name=DayPhaseName("morning"),
+        display_name=DisplayName("morning"),
+        begins_at=TimeOfDay(12),
+        dark=False,
+        announcement=_MORNING,
+        audience=audience,
     )
 
 
