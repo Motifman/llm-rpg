@@ -42,7 +42,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     JudgmentResult,
     TypedJudgmentUnavailableException,
 )
-from ai_rpg_world.being.application.closest_tool_name import suggest_closest_tool_name
+from ai_rpg_world.being.application.closest_tool_name import format_unsupported_tool_message, suggest_closest_tool_name
 
 logger = logging.getLogger(__name__)
 
@@ -64,24 +64,6 @@ def build_unsupported_tool_message(*, requested: str, valid_tools: Iterable[str]
         valid_tools=valid_sorted,
         suggestion=suggest_closest_tool_name(requested, valid_sorted),
     )
-
-
-def format_unsupported_tool_message(*, requested: str, valid_tools: Iterable[str], suggestion: str | None) -> str:
-    """UNSUPPORTED_TOOL 用のエラーメッセージを組み立てる。
-
-    含む情報:
-    1. 呼ばれた名前
-    2. 提案 (「もしかして 'X' ですか?」、候補がある時のみ)
-    3. 使える tool の一覧 (提案が外れても選び直せるよう常に併記)
-    """
-    valid_sorted = sorted(v for v in valid_tools if isinstance(v, str) and v)
-    head = f"未対応のツールです: {requested}"
-    if suggestion:
-        head += f"。もしかして '{suggestion}' ですか?"
-    else:
-        head += "。"
-    tail = f" 現在使える tool: [{', '.join(valid_sorted)}]"
-    return head + tail
 
 
 @dataclass(frozen=True)

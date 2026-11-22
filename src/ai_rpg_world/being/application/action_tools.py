@@ -136,7 +136,14 @@ class ActionTools:
         return Description(heading=CANDIDATE_TABLE_HEADING, text="\n".join((*lines, CANDIDATE_TABLE_NOTE)))
 
     def _definition(self, choice: ActionChoice) -> dict[str, Any]:
-        properties: dict[str, Any] = {o.name: {"type": "string", "description": o.label} for o in choice.outline}
+        properties: dict[str, Any] = {
+            o.name: {
+                "type": "string",
+                "description": o.label,
+                **({} if o.max_length is None else {"maxLength": o.max_length}),
+            }
+            for o in choice.outline
+        }
         required = [o.name for o in choice.outline if o.required]
         inner_thought = self._being_tools.inner_thought
         memo = self._being_tools.memo

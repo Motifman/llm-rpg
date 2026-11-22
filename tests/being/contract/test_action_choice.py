@@ -227,6 +227,12 @@ class TestActionChoice:
 class TestArgumentOutline:
     """行動の種類ごとに変わらない引数の見取り図 (outline・takes_details) と、値の名前との決まりを保証する。"""
 
+    @pytest.mark.parametrize("max_length", [0, -1, True, 1.5])
+    def test_max_length_must_be_a_positive_int(self, max_length: object) -> None:
+        """長さの上限が正の整数でなければ拒む。上限を付けないなら None にする。"""
+        with pytest.raises(ContractViolation, match="max_length"):
+            ArgumentOutline(name="say_inline", label="一言", max_length=max_length)  # type: ignore[arg-type]
+
     @pytest.mark.parametrize("hidden_as", ["", "  "])
     def test_blank_hidden_as_is_rejected(self, hidden_as: str) -> None:
         """伏せるときの言葉が空か空白だけなら拒む。伏せないなら None にする。"""
