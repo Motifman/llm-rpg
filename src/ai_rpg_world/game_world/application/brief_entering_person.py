@@ -32,7 +32,9 @@ class BriefEnteringPerson:
     def __call__(self, command: BriefEnteringPersonCommand) -> EntryBriefing:
         character = self._design.nouns.character_of(command.person)
         return EntryBriefing(
-            orientation=self._design.briefing_headings.orientation(self._design.introduction, command.known_facts),
+            orientation=self._design.briefing_headings.orientation(
+                self._design.introduction, command.known_facts, self._design.world_map_text()
+            ),
             imposed_goal=command.objective.text,
             known_people=character.knows_at_start,
         )

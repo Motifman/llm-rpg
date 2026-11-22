@@ -55,7 +55,7 @@ class _GenInTheOffice:
         assert isinstance(design.day_night, DayNightDeclaration)
         self._take = TakeChosenAction(self.scope, design, SettleWorldConditions(self.scope, design))
         self.describe = DescribeActionResult(self.scope, design, design.day_night)
-        self.tell_time = TellCurrentTime(self.scope, design.day_night)
+        self.tell_time = TellCurrentTime(self.scope, design.day_night, design.clock_wording)
         self._pass_time = PassWorldTime(self.scope)
 
     def _move_to_office(self, session: WorldSession, design: WorldDesign) -> None:
@@ -164,25 +164,25 @@ class TestDescribeActionResult:
         assert "fly" in result.body
 
     def test_result_is_about_the_actor_at_the_current_time(self, mine_village: WorldDesign) -> None:
-        """1 日 48 tick で 0 時に始まる山村で 3 tick 経ってからゲンが待つと、結果は本人に向けた本人についての観測で、時刻は「1 日目 01:30」になる。"""
+        """1 日 48 tick で 0 時に始まる山村で 3 tick 経ってからゲンが待つと、結果は本人に向けた本人についての観測で、時刻は「Day 1 深夜 1:30」になる。"""
         gen = _GenInTheOffice(mine_village)
         gen.pass_ticks(3)
 
         result = gen.result_of("wait")
 
         assert (result.subject_is_self, result.addressed_to_self) == (True, True)
-        assert result.time.display == "1 日目 01:30"
+        assert result.time.display == "Day 1 深夜 1:30"
 
 
 class TestTellCurrentTime:
     """TellCurrentTime が、世界のいまの時刻を、観測と同じ何日目と時:分で答えることを保証する。"""
 
     def test_tells_the_day_and_clock_time(self, mine_village: WorldDesign) -> None:
-        """1 日 48 tick で 0 時に始まる山村では、開いたばかりで「1 日目 00:00」、3 tick 経つと「1 日目 01:30」と答える。"""
+        """1 日 48 tick で 0 時に始まる山村では、開いたばかりで「Day 1 深夜 0:00」、3 tick 経つと「Day 1 深夜 1:30」と答える。"""
         gen = _GenInTheOffice(mine_village)
         at_opening = gen.tell_time(TellCurrentTimeCommand())
 
         gen.pass_ticks(3)
 
-        assert at_opening.display == "1 日目 00:00"
-        assert gen.tell_time(TellCurrentTimeCommand()).display == "1 日目 01:30"
+        assert at_opening.display == "Day 1 深夜 0:00"
+        assert gen.tell_time(TellCurrentTimeCommand()).display == "Day 1 深夜 1:30"

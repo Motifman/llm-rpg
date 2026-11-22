@@ -18,6 +18,7 @@ from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import 
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.world_design_for_tests import (
     character,
+    clock_wording,
     compose_world,
     half_hour_ticks_from_midnight,
     nouns,
@@ -68,7 +69,7 @@ class _World:
         self.deliver = DeliverSurroundings(
             LookAround(self._scope, design),
             design,
-            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), self.received),
+            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), self.received),
         )
 
     def delivers_surroundings_to(self, person: PersonId) -> None:
@@ -96,7 +97,7 @@ class TestDeliverSurroundings:
         [observation] = world.received.by_person[_ALICE]
         assert isinstance(observation.body, TextWithPeople)
         assert observation.body.template == "ここには{person_1}がいる。{person_2}が倒れている。"
-        assert (observation.route, observation.time) == (SeenOrHeard(), ObservedTime(display="1 日目 01:30"))
+        assert (observation.route, observation.time) == (SeenOrHeard(), ObservedTime(display="Day 1 深夜 1:30"))
         assert set(world.received.by_person) == {_ALICE}
 
     def test_no_observation_when_no_one_else_is_there(self) -> None:
@@ -136,5 +137,5 @@ class TestDeliverSurroundingsOnArrivalHandler:
 
         assert set(world.received.by_person) == {_BOB}
         assert [observation.time for observation in world.received.by_person[_BOB]] == [
-            ObservedTime(display="1 日目 02:30")
+            ObservedTime(display="Day 1 深夜 2:30")
         ]
