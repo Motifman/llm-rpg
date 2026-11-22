@@ -25,10 +25,10 @@ class TestPeopleCalledApart:
         assert people.name_of(SAYO) == "サヨ"
 
     def test_people_with_same_name_are_numbered_by_handle_order(self) -> None:
-        """呼び方の重なる 2 人は、渡した順によらず、人の印の小さい順に「(1)」「(2)」が付く。"""
+        """呼び方の重なる 2 人は、渡した順によらず、人の印の小さい順に「 #1」「 #2」が付く。"""
         people = PeopleCalledApart(_name_or_appearance, [SHADOW_A, SAYO, SHADOW_B])
 
-        assert (people.name_of(SHADOW_B), people.name_of(SHADOW_A)) == ("誰か (1)", "誰か (2)")
+        assert (people.name_of(SHADOW_B), people.name_of(SHADOW_A)) == ("誰か #1", "誰か #2")
 
     def test_same_person_given_twice_is_not_numbered(self) -> None:
         """同じ人が候補と理由の両方に出て 2 回渡っても、別の人として番号を付けない。"""
@@ -40,7 +40,7 @@ class TestPeopleCalledApart:
         """番号を添えた呼び方から、その人に戻せる。"""
         people = PeopleCalledApart(_name_or_appearance, [SHADOW_A, SHADOW_B])
 
-        assert people.person_named("誰か (2)") == SHADOW_A
+        assert people.person_named("誰か #2") == SHADOW_A
 
     def test_unknown_name_leads_to_nobody(self) -> None:
         """このターンに出ていない呼び方や、番号を付けずに呼んだ重なる呼び方からは、誰にも戻らない。"""
@@ -53,4 +53,4 @@ class TestPeopleCalledApart:
         people = PeopleCalledApart(_name_or_appearance, [SHADOW_A, SHADOW_B])
         text = TextWithPeople(template="{a}が{b}を見ている", people={"a": SHADOW_A, "b": UnidentifiedPerson()})
 
-        assert people.text_of(text) == "誰か (2)が誰かを見ている"
+        assert people.text_of(text) == "誰か #2が誰かを見ている"

@@ -8,7 +8,7 @@ from ai_rpg_world.being.contract import PersonInText, PersonPlaceholderValue, Te
 
 
 class PeopleCalledApart:
-    """呼び方が重なった人にだけ、人の印の小さい順に「(1)」「(2)」を添える。
+    """呼び方が重なった人にだけ、人の印の小さい順に「 #1」「 #2」を添える (古い run と同じ添え方)。
 
     印の順にするのは、同じ顔ぶれならターンが変わっても同じ人に同じ番号が付くようにするため。
     """
@@ -22,7 +22,7 @@ class PeopleCalledApart:
         self._names: dict[int, str] = {}
         for name, same in called.items():
             for number, person in enumerate(same, start=1):
-                self._names[person.handle] = name if len(same) == 1 else f"{name} ({number})"
+                self._names[person.handle] = name if len(same) == 1 else f"{name} #{number}"
         self._people = {self._names[handle]: person for handle, person in by_handle.items()}
 
     def name_of(self, person: PersonInText) -> str:

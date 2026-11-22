@@ -35,6 +35,7 @@ from ai_rpg_world.being.contract import (
     UNKNOWN,
     ActionChoices,
     AgentMove,
+    Description,
     FrozenJsonObject,
     Here,
     Observation,
@@ -155,7 +156,7 @@ class ChooseAction:
     def execute(self, command: ChooseActionCommand) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
         tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
         scene = Scene(
-            descriptions=(*command.scene.descriptions, tools.candidate_table()),
+            descriptions=(*command.scene.descriptions, *_present(tools.candidate_table())),
             notices=command.scene.notices,
             here=command.scene.here,
         )
@@ -325,6 +326,10 @@ class ChooseAction:
             memory.receive_result(result, current_turn=turn)
         self._short_term_memories.save(memory)
         self._turn_clock.advance_turn(being_id)
+
+
+def _present(description: Description | None) -> tuple[Description, ...]:
+    return () if description is None else (description,)
 
 
 def _own_failure(body: str, *, call_id: str, now: ObservedTime, action_summary: str) -> Observation:
