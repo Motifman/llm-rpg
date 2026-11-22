@@ -21,6 +21,13 @@ from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.memo_arguments import read_memo_operations
 from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.names_for_people import name_for
+from ai_rpg_world.being.application.unwritten_memo_text import (
+    WHOLE_MEMO,
+    attempted_operation,
+    attempted_raw_operation,
+    short_reason,
+    unwritten_memo_line,
+)
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
 from ai_rpg_world.being.contract import (
     UNKNOWN,
@@ -191,8 +198,8 @@ class ChooseAction:
         if move is not None:
             # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
             # 行動が世界に断られても、書いたことは本人がしたことなので残る。
-            self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
-            self._act(being_id, move, turn=turn, result=None)
+            rejections = self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
+            self._act(being_id, move, turn=turn, memo_rejections=rejections, result=None)
             return ActionChosen(move=move, exchange=exchange)
         # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
         suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
@@ -217,9 +224,9 @@ class ChooseAction:
 
     def _write_memo(
         self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int
-    ) -> None:
+    ) -> tuple[str, ...]:
         if being_tools.memo is None or being_tools.memo not in arguments:
-            return
+            return ()
         episode_source_offered = being_tools.episode_index_shown
         read = read_memo_operations(
             {MEMO_FIELD_NAME: arguments[being_tools.memo]}, episode_source_offered=episode_source_offered
@@ -230,7 +237,7 @@ class ChooseAction:
             else frozenset()
         )
         book = self._memo_books.get(being_id)
-        apply_memo_operations(
+        outcome = apply_memo_operations(
             book,
             read.operations,
             turn=turn,
@@ -239,11 +246,30 @@ class ChooseAction:
             known_episode_handles=known_episode_handles,
         )
         self._memo_books.save(book)
+        unread = [
+            (r.index, WHOLE_MEMO if r.index is None else attempted_raw_operation(r.raw), short_reason(r.reason))
+            for r in read.rejected
+        ]
+        unwritten: list[tuple[int | None, str, str]] = [
+            (r.index, attempted_operation(r.operation), short_reason(r.reason, kind=r.kind)) for r in outcome.rejected
+        ]
+        return tuple(
+            unwritten_memo_line(attempted, reason)
+            for _, attempted, reason in sorted(unread + unwritten, key=lambda r: -1 if r[0] is None else r[0])
+        )
 
-    def _act(self, being_id: BeingId, move: AgentMove, *, turn: int, result: Outcome | None) -> None:
+    def _act(
+        self,
+        being_id: BeingId,
+        move: AgentMove,
+        *,
+        turn: int,
+        result: Outcome | None,
+        memo_rejections: tuple[str, ...] = (),
+    ) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。
         memory = self._short_term_memories.get(being_id)
-        memory.act(move, current_turn=turn)
+        memory.act(move, current_turn=turn, memo_rejections=memo_rejections)
         if result is not None:
             memory.receive_result(result, current_turn=turn)
         self._short_term_memories.save(memory)

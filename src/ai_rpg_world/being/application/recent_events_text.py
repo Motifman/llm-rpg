@@ -25,6 +25,12 @@ def _line(time: ObservedTime, body: str, inner_thought: str | None = None) -> st
     return f"[{time.display}] {body}" + (f"\n  心の声: {thought}" if thought else "")
 
 
+def _attempt_line(attempt: Attempt, time: ObservedTime, result_body: str) -> str:
+    return _line(time, result_body, attempt.move.inner_thought) + "".join(
+        f"\n  メモ: {line}" for line in attempt.memo_rejections
+    )
+
+
 class _Line:
     """出来事 1 つを行にする。行にしない出来事は None。"""
 
@@ -32,10 +38,10 @@ class _Line:
         return _line(perception.observation.time, perception.observation.body_without_people())
 
     def attempted(self, attempt: Attempt, result: Observation) -> str | None:
-        return _line(result.time, result.body_without_people(), attempt.move.inner_thought)
+        return _attempt_line(attempt, result.time, result.body_without_people())
 
     def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> str | None:
-        return _line(result.time, result.body, attempt.move.inner_thought)
+        return _attempt_line(attempt, result.time, result.body)
 
     def attempted_without_result(self, attempt: Attempt) -> str | None:
         # 切り替える前のプロンプトに無かった行なので、切り替えでは出さないと決めた (design_decisions D1824-22)。

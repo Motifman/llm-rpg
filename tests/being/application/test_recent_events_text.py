@@ -92,6 +92,30 @@ class TestRecentEventsText:
 
         assert recent_events_text(memory) == "- [1日目 昼] [行動] 思い出した → [結果] 鍵は事務所\n  心の声: 思い出そう"
 
+    def test_unwritten_memos_follow_the_inner_thought_one_line_each(self) -> None:
+        """書けなかったメモの操作は、試みの行の下に、心の声と同じ字下げで、心の声のあとに 1 つずつ「メモ:」の行で付く。"""
+        memory = ShortTermMemory.empty(ADA)
+        memory.act(
+            _move("call-1", inner_thought="灯りをつける"),
+            current_turn=1,
+            memo_rejections=(
+                "「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",
+                "「text が空のメモを足す」は書けなかった（理由: text が空）",
+            ),
+        )
+        memory.receive_result(
+            ObservedOutcome(
+                _observation("カンテラに火を入れた。", route=OwnActionResult(call_id="call-1", succeeded=True))
+            ),
+            current_turn=1,
+        )
+
+        assert recent_events_text(memory) == (
+            "- [1日目 朝] カンテラに火を入れた。\n  心の声: 灯りをつける\n"
+            "  メモ: 「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）\n"
+            "  メモ: 「text が空のメモを足す」は書けなかった（理由: text が空）"
+        )
+
     def test_lapse_is_a_line_without_inner_thought(self) -> None:
         """1 手を出せなかったことは「- [時刻] 本文」の 1 行になる。"""
         memory = ShortTermMemory.empty(ADA)

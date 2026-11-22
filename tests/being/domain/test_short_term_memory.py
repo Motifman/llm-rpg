@@ -198,6 +198,27 @@ class TestActAndReceiveResult:
         assert memory.awaiting == Attempt(turn=5, move=_move())
         assert memory.recent() == ()
 
+    def test_memo_rejections_stay_with_the_move_after_its_result(self) -> None:
+        """メモを書けなかった理由を添えて 1 手を選ぶと、結果を受け取ったあとの Attempt にもそのまま残る。"""
+        memory = _empty()
+        result = _result()
+
+        memory.act(
+            _move(),
+            current_turn=5,
+            memo_rejections=("2 件目: m_3f2a7b というメモはありません。",),
+        )
+        memory.receive_result(result, current_turn=5)
+
+        [attempt] = memory.recent()
+        assert isinstance(attempt, Attempt)
+        assert attempt.memo_rejections == ("2 件目: m_3f2a7b というメモはありません。",)
+
+    def test_blank_memo_rejection_is_rejected(self) -> None:
+        """メモを書けなかった理由に空の文があれば ShortTermMemoryValidationException を投げる。"""
+        with pytest.raises(ShortTermMemoryValidationException):
+            Attempt(turn=5, move=_move(), memo_rejections=("",))
+
     def test_result_without_awaiting_move_is_rejected(self) -> None:
         """待っている 1 手が無いときに結果を受け取ると ShortTermMemoryUnpairedResultException を投げ、短期記憶は変わらない。"""
         memory = _empty()

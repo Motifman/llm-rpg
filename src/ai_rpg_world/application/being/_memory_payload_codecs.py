@@ -325,7 +325,7 @@ class _ExperienceToDict:
         }
 
     def attempted_without_result(self, attempt: Attempt) -> dict[str, Any]:
-        return {"kind": "attempt", "turn": attempt.turn, "move": _move_to_dict(attempt.move), "result": None}
+        return {"kind": "attempt", **_attempt_fields_to_dict(attempt), "result": None}
 
     def lapsed(self, lapse: Lapse) -> dict[str, Any]:
         return {
@@ -351,8 +351,14 @@ def _dict_to_attempt_result(data: dict[str, Any] | None) -> Outcome:
     )
 
 
-def _dict_to_attempt(data: dict[str, Any]) -> Attempt:
-    return Attempt(turn=data["turn"], move=_dict_to_move(data["move"]), result=_dict_to_attempt_result(data["result"]))
+def _dict_to_attempt(data: dict[str, Any], *, result: Outcome = UnknownOutcome()) -> Attempt:
+    # 書けなかったメモの理由を足す前 (D2240) の試みには、理由が無い。
+    return Attempt(
+        turn=data["turn"],
+        move=_dict_to_move(data["move"]),
+        result=result,
+        memo_rejections=tuple(data["memo_rejections"]) if "memo_rejections" in data else (),
+    )
 
 
 def _dict_to_experience(data: dict[str, Any]) -> Perception | Attempt | Lapse:
@@ -360,7 +366,7 @@ def _dict_to_experience(data: dict[str, Any]) -> Perception | Attempt | Lapse:
     if kind == "perception":
         return Perception(turn=data["turn"], observation=_dict_to_observation(data["observation"]))
     if kind == "attempt":
-        return _dict_to_attempt(data)
+        return _dict_to_attempt(data, result=_dict_to_attempt_result(data["result"]))
     if kind == "lapse":
         return Lapse(
             turn=data["turn"],
@@ -384,7 +390,7 @@ def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
     return {
         "experiences": [experience.show_to(to_dict) for experience in memory.experiences],
         "recent_from": memory.recent_from,
-        "awaiting": None if memory.awaiting is None else _move_and_turn_to_dict(memory.awaiting),
+        "awaiting": None if memory.awaiting is None else _attempt_fields_to_dict(memory.awaiting),
         "awaited_backstory": None
         if memory.awaited_backstory is None
         else {"until_turn": memory.awaited_backstory.until_turn, "since_turn": memory.awaited_backstory.since_turn},
@@ -395,8 +401,12 @@ def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
     }
 
 
-def _move_and_turn_to_dict(attempt: Attempt) -> dict[str, Any]:
-    return {"turn": attempt.turn, "move": _move_to_dict(attempt.move)}
+def _attempt_fields_to_dict(attempt: Attempt) -> dict[str, Any]:
+    return {
+        "turn": attempt.turn,
+        "move": _move_to_dict(attempt.move),
+        "memo_rejections": list(attempt.memo_rejections),
+    }
 
 
 def _dict_to_awaited_backstory(data: dict[str, Any]) -> AwaitedBackstory | None:
@@ -433,7 +443,7 @@ def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) 
                 for b in data["backstories"]
             ),
             recent_from=data.get("recent_from", 1),
-            awaiting=None if awaiting is None else Attempt(turn=awaiting["turn"], move=_dict_to_move(awaiting["move"])),
+            awaiting=None if awaiting is None else _dict_to_attempt(awaiting),
             awaited_backstory=awaited,
         )
     except DomainException as exc:
