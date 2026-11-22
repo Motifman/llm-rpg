@@ -54,9 +54,9 @@ class ObservationExit:
         self._receiver.receive(
             perceived.perceiver,
             Observation(
-                body=_text_with_people(perceived.text),
+                body=text_with_people(perceived.text),
                 route=_ROUTES[type(perceived.quality)],
-                time=_time_of(self._day_night.day_and_clock_time_at(perceived.happened_at)),
+                time=observed_time_of(self._day_night.day_and_clock_time_at(perceived.happened_at)),
                 subject_is_self=False,
                 subject_name=UNKNOWN,
                 source=UNKNOWN,
@@ -68,11 +68,11 @@ class ObservationExit:
         )
 
 
-def _time_of(time: DayAndClockTime) -> ObservedTime:
+def observed_time_of(time: DayAndClockTime) -> ObservedTime:
     return ObservedTime(display=f"{time.day} 日目 {time.hour:02d}:{time.minute:02d}")
 
 
-def _text_with_people(text: TextWithAssignedPeople) -> TextWithPeople:
+def text_with_people(text: TextWithAssignedPeople) -> TextWithPeople:
     return TextWithPeople(
         template=text.template, people={key: _person_in_text(person) for key, person in text.people.items()}
     )

@@ -56,6 +56,7 @@ refusal_texts:
   world_state: {}
   hidden: 今はできない。
   unlisted: うまくいかなかった。
+  done: できた。
 
 built_in_action_perceptions:
   item_joiner: と

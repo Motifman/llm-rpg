@@ -90,6 +90,7 @@ TEXTS = RefusalTexts(
     world_state={},
     hidden=TextWithUnassignedPeople("今はできない。"),
     unlisted=TextWithUnassignedPeople("うまくいかなかった。"),
+    done=TextWithUnassignedPeople("できた。"),
 )
 
 _CHECK = ActionPrerequisiteCheck()
