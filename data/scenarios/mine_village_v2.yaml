@@ -928,7 +928,7 @@ characters:
     initial_groups: [team_north]
     knows_at_start: [mio]
     known_facts: |-
-      古い測量日誌を手がかりに、隊員のミオとこの村に来た。
+      調査隊の隊長として、隊員のミオと、古い測量日誌を手がかりにこの村に来た。
       古い測量日誌には、こうある。中層の分岐の大水門が開いているあいだ、下層の近道は水に浸かって通れない。別の頁には、機械室の排水ポンプで坑道の水を引かせた日のことが、短く書き留めてある。
     objective: ミオと二人そろって、坑道の奥の昇降機で外へ出る。
     being:
@@ -936,7 +936,7 @@ characters:
       first_person: 私
       speech: 落ち着いた常体
       traits: [落ち着いている, 慎重で、確かめてから動く]
-      background: 山の測量を請け負う調査隊の隊長。
+      background: 山の測量を請け負ってきた測量士。
   mio:
     appearance: 工具袋を腰に下げた若い女の子
     spawn_spot: north_shaft_head
@@ -944,7 +944,7 @@ characters:
     initial_groups: [team_north]
     knows_at_start: [haru]
     known_facts: |-
-      隊長のハルと、古い測量日誌を手がかりにこの村に来た。
+      調査隊の若い隊員として、隊長のハルと、古い測量日誌を手がかりにこの村に来た。
       古い測量日誌には、こうある。中層の分岐の大水門が開いているあいだ、下層の近道は水に浸かって通れない。別の頁には、機械室の排水ポンプで坑道の水を引かせた日のことが、短く書き留めてある。
     objective: ハルと二人そろって、坑道の奥の昇降機で外へ出る。
     being:
@@ -952,7 +952,6 @@ characters:
       first_person: あたし
       speech: 気さくな常体
       traits: [元気, 身軽で、先に行って様子を見るのが得意, 機械いじりが好き]
-      background: 調査隊の若い隊員。
   gen:
     appearance: 煤けた坑夫の上着を着た初老の男
     spawn_spot: south_adit_mouth
@@ -960,6 +959,7 @@ characters:
     initial_groups: [team_south]
     knows_at_start: [sayo]
     known_facts: |-
+      この鉱山で働いていた。家族のサヨと村に戻ってきた。
       働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。昇降機を動かす起動鍵も、その金庫にしまわれていた。
       坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。
     objective: サヨと二人そろって、坑道の奥の昇降機で外へ出る。
@@ -968,7 +968,7 @@ characters:
       first_person: 俺
       speech: ぶっきらぼうな常体
       traits: [口数は少ないが、坑道の空気には敏い]
-      background: この鉱山で働いていた元鉱夫。家族のサヨと村に戻ってきた。
+      background: 元鉱夫。
   sayo:
     appearance: 綿入れを着込んだ若い娘
     spawn_spot: south_adit_mouth
@@ -976,6 +976,7 @@ characters:
     initial_groups: [team_south]
     knows_at_start: [gen]
     known_facts: |-
+      ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。
       父から、事務所の金庫の番号は 1907 だと聞いている。昇降機を動かす起動鍵は、その金庫にしまわれていたそうだ。
       坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。
     objective: ゲンと二人そろって、坑道の奥の昇降機で外へ出る。
@@ -983,8 +984,7 @@ characters:
       name: サヨ
       first_person: 私
       speech: はきはきした敬体
-      traits: [物覚えがよい]
-      background: ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。
+      background: 物覚えのよい娘。
 
 outcomes:
   rescued: { name: 救出, announcement: "{each_person}は昇降機で外へ出た。" }

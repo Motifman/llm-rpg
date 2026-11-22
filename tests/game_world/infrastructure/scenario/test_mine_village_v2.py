@@ -93,8 +93,8 @@ class TestMineVillageLoads:
         assert set(mine_village.briefings) == set(starts)
 
 
-class TestWhatGenBringsIn:
-    """廃坑の山村のゲンが、人柄と、この世界での立場・目的を分けて持つことを保証する (D2222)。"""
+class TestPersonaApartFromBriefing:
+    """廃坑の山村の登場人物が、人柄と、この世界での立場・目的を分けて持つことを保証する (D2222、D2227)。"""
 
     def test_gen_persona_has_name_first_person_and_speech(self, mine_village: LoadedScenario) -> None:
         """ゲンの人柄は、名前「ゲン」・一人称「俺」・話し方「ぶっきらぼうな常体」を欄ごとに持ち、金庫の番号を含まない。"""
@@ -109,6 +109,23 @@ class TestWhatGenBringsIn:
 
         assert "1907" in briefing.known_facts.text
         assert briefing.objective == DescriptionText("サヨと二人そろって、坑道の奥の昇降機で外へ出る。")
+
+    def test_no_persona_mentions_other_people_or_places_of_this_world(self, mine_village: LoadedScenario) -> None:
+        """4 人の人柄の欄 (name を除く) は、登場人物の名前・この世界の場所の名前・「この」を含まない。それらは known_facts に書く。"""
+        names = {str(being["name"]) for being in mine_village.beings.values()}
+        spots = {spot.name.text for spot in mine_village.design.nouns.all_spots()}
+        words = names | spots | {"この"}
+
+        mentions = {
+            (str(being["name"]), word)
+            for being in mine_village.beings.values()
+            for key, value in being.items()
+            if key != "name"
+            for word in words
+            if word in repr(value)
+        }
+
+        assert mentions == set()
 
     def test_premises_do_not_repeat_the_objective(self, mine_village: LoadedScenario) -> None:
         """全員に同じ前提は「昇降機は一度しか動かない」を含み、「最終目標」の箇条を含まない。"""

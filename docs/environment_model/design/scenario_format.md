@@ -281,7 +281,7 @@ happenings:
 
 - 世界に渡す部分 (`appearance`、`spawn_spot` など)。読み込む側が `CharacterDeclaration` にする
 - この世界での立場 (`known_facts`) と本人の目的 (`objective`)。登場人物の直下に書く。読み込む側は世界の宣言に入れず、人ごとに入るときに渡す文 `CharacterBriefing` にして `LoadedScenario.briefings` に返す。立場は案内 (`Orientation`) に「あなたが知っていること」の見出しで、目的は課された目的 (`EnvironmentEntry.imposed_goal`) で Being に渡す
-- Being に渡す人柄 (`being:`)。鍵は人柄の型 (`Persona`) の欄の名前 (`name`、`first_person`、`speech`、`traits`、`values`、`fears`、`background`) と同じ。読み込む側は世界の宣言に入れず、`LoadedScenario.beings` に返す。世界をまたいで持ち越すものだけを書き、この世界でしか通じないこと (金庫の番号など) は `known_facts` に書く
+- Being に渡す人柄 (`being:`)。鍵は人柄の型 (`Persona`) の欄の名前 (`name`、`first_person`、`speech`、`traits`、`values`、`fears`、`background`) と同じ。読み込む側は世界の宣言に入れず、`LoadedScenario.beings` に返す。世界をまたいで持ち越すものだけを書く。この世界でしか通じないこと (金庫の番号など) と、ほかの登場人物やこの世界の場所に触れる文は `known_facts` に書く
 
 `knows_at_start` は最初から知っている人、`known_facts` は最初から知っている事柄。全員に同じ導入と前提は `introduction` だけに書き、人ごとには書かない。
 
@@ -293,6 +293,7 @@ characters:
     initial_groups: [team_south]
     knows_at_start: [sayo]
     known_facts: |-
+      この鉱山で働いていた。家族のサヨと村に戻ってきた。
       働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。昇降機を動かす起動鍵も、その金庫にしまわれていた。
       坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。
     objective: サヨと二人そろって、坑道の奥の昇降機で外へ出る。
@@ -301,7 +302,7 @@ characters:
       first_person: 俺
       speech: ぶっきらぼうな常体
       traits: [口数は少ないが、坑道の空気には敏い]
-      background: この鉱山で働いていた元鉱夫。家族のサヨと村に戻ってきた。
+      background: 元鉱夫。
 ```
 
 ## 決めたこと (#2052)
@@ -330,5 +331,5 @@ characters:
 ## 決めたこと (#2227)
 
 1. 登場人物の `being:`、`known_facts`、`objective` はどれも必須。書き忘れは `DesignFlaw`。「無い」の書き方は、要るシナリオが出たときに決める
-2. `being:` の中で必須なのは `name` だけ。`traits`、`values`、`fears` は文の一覧で書く。空白だけの文は `DesignFlaw`
+2. `being:` の中で必須なのは `name` だけ。ほかの登場人物や、この世界の場所に触れる文は `being:` に書かず、`known_facts` に書く。`traits`、`values`、`fears` は文の一覧で書く。空白だけの文は `DesignFlaw`
 3. 読み込む側は `Persona` を作らず、欄ごとに確かめた地図を `LoadedScenario.beings` に返す。`Persona` を作るのは Being を用意する側
