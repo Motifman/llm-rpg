@@ -350,8 +350,11 @@ shop_texts:                                       # ふつうは共通の部品�
   person_shop_label: "{owner}の店"
   scenario_shop_label: "{keeper}の店"
   closed_mark: 閉まっている
+  sold_out_mark: 売り切れ
+  filled_mark: 買い取り終了
   sold_notice: 店で{item}が{count}つ売れ、{gold}が入った。
   bought_notice: 店が{item}を{count}つ買い取り、{gold}を払った。
+  ran_out_notice: 店の{item}が{count}つ駄目になった。{ended_text}
 ```
 
 場面には「グスタフの店: 古い荷車を据えた露店」と、その品目が出る。トムが開いた店は、トムを知る人には「トムの店: 焼きたてのパンが並ぶ小さな露店」、知らない人には「煤けた上着の男の店: ……」と出る。

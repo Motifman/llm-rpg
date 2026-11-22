@@ -269,10 +269,13 @@ class Shop(AggregateRoot[ShopEvent]):             # 店ごと (D2224)
     def sell(self, buyer: PersonId, spec: ItemSpecId, count: Count, seen_unit_price: Gold) -> None: ...
         # 閉じていれば SHOP.CLOSED、品目が無ければ SHOP.NOT_LISTED、単価が違えば SHOP.PRICE_CHANGED、在庫が足りなければ SHOP.NOT_ENOUGH_STOCK
         # 預けた順の古いものから count 個を外し、ShopSoldItemsEvent に載せる。作者の店で尽きない在庫は、渡す品の種類と数だけを載せる
+        # 数が 0 になっても品目は残り、場面に売り切れと出る。品目が消えるのは unstock で 0 にしたときだけ
         # 作者の店は代金を自分のお金に足す。人の店の代金は持ち主に入る (ShopTrade)
     def buy(self, seller: PersonId, spec: ItemSpecId, items: tuple[ItemInstanceId, ...], seen_unit_price: Gold) -> None: ...
         # 閉じていれば SHOP.CLOSED、品目が無ければ SHOP.NOT_LISTED、単価が違えば SHOP.PRICE_CHANGED、買い取りの残りが足りなければ SHOP.NOT_ENOUGH_WANTED
         # 人の店は、品を受け取った品 (received) にため、預けたお金から代金を出す。作者の店は、品を世界から出すよう ShopBoughtItemsEvent に載せ、自分のお金から代金を出す (足りなければ SHOP.NOT_ENOUGH_WANTED)
+    def let_run_out(self, items: tuple[ItemInstanceId, ...]) -> None: ...
+        # 時間で消える品を、預けた品と受け取った品から外す。在庫はその分減り、品目は残る。ShopItemsRanOutEvent (人の店なら持ち主を載せる)
     def hand_over_received(self) -> None: ...     # 受け取った品を全部外し、ShopReceivedItemsCollectedEvent に載せる。無ければ SHOP.NOTHING_TO_COLLECT
     def close_for_gone_owner(self) -> None: ...   # 持ち主が死んだ・世界から外れた。閉じて、以後は開けない。ShopClosedEvent(reason=OWNER_GONE)
 
@@ -439,7 +442,7 @@ WorldTickAdvancedEvent, TimeOfDayChangedEvent
 ObjectStateChangedEvent, ObjectRevealedEvent, TextWrittenEvent
 ItemStateChangedEvent, ItemCameIntoWorldEvent, ItemLeftWorldEvent, ItemRanOutEvent
 ItemReceivedEvent, ItemGivenUpEvent, ItemHeldEvent, ItemPutAwayEvent, GoldEarnedEvent, GoldPaidEvent
-ShopOpenedEvent, ShopClosedEvent, ShopLookRewrittenEvent, ShopLineChangedEvent, ShopSoldItemsEvent, ShopBoughtItemsEvent, ShopReceivedItemsCollectedEvent
+ShopOpenedEvent, ShopClosedEvent, ShopLookRewrittenEvent, ShopLineChangedEvent, ShopSoldItemsEvent, ShopBoughtItemsEvent, ShopReceivedItemsCollectedEvent, ShopItemsRanOutEvent
 GroundItemPlacedEvent, GroundItemTakenEvent
 SpotSearchedEvent, DiscoverableFoundEvent
 WorldFlagRaisedEvent, WorldFlagLoweredEvent
@@ -465,6 +468,7 @@ PersonActedEvent, ActionAttemptFailedEvent
   - `ShopLineChangedEvent` は、売りか買い取りか・品物の種類と、変わる前と後の品目 (`ShopLine | NoLine`) を持つ。荷へ戻す品 (`removed`) と戻すお金 (`refunded`) も持ち、品目を編集するユースケースが持ち主の荷へ戻す
   - `ShopSoldItemsEvent` は店・買い手・品物の種類・渡した品・単価・合計と、人の店なら持ち主を持つ。見ていた人への刺激は買う行為 (`PersonActedEvent`) から作り、このイベントからは留守の持ち主への知らせだけを作る ([perception.md](perception.md))
   - `ShopBoughtItemsEvent` も同じ形で、売り手を持つ
+  - `ShopItemsRanOutEvent` は店・品物の種類ごとの数と、人の店なら持ち主を持つ。品物ごとの `ItemRanOutEvent` (`where` は `KeptInShop`) も出るが、刺激はこの店のイベントから持ち主への知らせだけを作る
   - `ShopClosedEvent` は閉じた理由 (`BY_OWNER` / `OWNER_GONE`) を持つ。持ち主が死んだ (`PersonDiedEvent`)・世界から外れた (`PersonOutcomeDecidedEvent`) ことへの反応で、ハンドラ (`CloseShopOfGoneOwnerHandler`) が `close_for_gone_owner` を呼ぶ。店を閉じなくても死や結末は果たせるので、ユースケースの手順に入れない
 - 店は世界の snapshot に入れる。預けた品と受け取った品の `ItemInstanceId` も店の中身として残す
 - 場所に着いたこと (`OccupantEnteredSpotEvent`) は、来た場所 (`origin`) と着いた時刻 (`at`) を持つ。来た場所は最後に歩き切った区間の出発点。区間を歩き切る前に通路が閉じて引き返したときや移動をやめたときは、歩いていた区間の向こうの端になる。teleport では `Teleported`。arrival の文の `{origin}` を、確定したあとの世界から読まずに埋めるため (#2152)

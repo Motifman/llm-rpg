@@ -692,10 +692,13 @@ class ShopTexts:                            # 店の呼び名と、店で起き�
     person_shop_label: TextWithUnassignedPeople   # 「{owner}の店」。{owner} は持ち主で、見る人ごとの呼び方で埋まる
     scenario_shop_label: str                      # 「{keeper}の店」。{keeper} は作者の店の keeper_name で埋める
     closed_mark: str                              # 閉じた店に添える文 (「閉まっている」)
+    sold_out_mark: str                            # 数が 0 になった売りの品目に添える文 (「売り切れ」)
+    filled_mark: str                              # 残りが 0 になった買い取りの品目に添える文 (「買い取り終了」)
     sold_notice: str                              # 留守でも持ち主に届く知らせ。「店で{item}が{count}つ売れ、{gold}が入った。」
     bought_notice: str                            # 「店が{item}を{count}つ買い取り、{gold}を払った。」
+    ran_out_notice: str                           # 店の品が時間で消えたとき。「店の{item}が{count}つ駄目になった。{ended_text}」。{ended_text} は品物の Lasts.ended_text
     # 知らせの文には人のプレースホルダーを書けない。誰が買ったかは持ち主に伝えない
-    # {item} は品物の名前、{count} は数、{gold} は gold_label で埋める。ほかの穴は書けない
+    # {item} は品物の名前、{count} は数、{gold} は gold_label で埋める。ran_out_notice だけは {gold} の代わりに {ended_text} を書ける。ほかの穴は書けない
 
 @final
 @dataclass(frozen=True)
