@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ai_rpg_world.application.being._memory_payload_codecs import _dict_to_route, _route_to_dict
-from ai_rpg_world.being.contract import OwnActionResult
+from ai_rpg_world.being.contract import OwnActionCompleted, OwnActionResult
 
 
 class TestOwnActionResultRouteCodec:
@@ -18,3 +18,19 @@ class TestOwnActionResultRouteCodec:
         saved = {"kind": "own_action_result", "call_id": "call-1", "succeeded": False}
 
         assert _dict_to_route(saved) == OwnActionResult(call_id="call-1", succeeded=False)
+
+
+class TestOwnActionCompletedRouteCodec:
+    """Being の snapshot が、あとから届いた自分の行動の結果の経路を、要約・ツールの名前・成否ごと読み書きすることを保証する。"""
+
+    def test_arrival_survives_a_round_trip(self) -> None:
+        """「「南の横坑の奥」に着いた」の成功は、書いて読み直しても同じ要約・ツール・成否を持つ。"""
+        route = OwnActionCompleted(action_summary="「南の横坑の奥」に着いた", tool="travel_to")
+
+        assert _dict_to_route(_route_to_dict(route)) == route
+
+    def test_blocked_travel_survives_a_round_trip(self) -> None:
+        """着けなかった失敗も、書いて読み直すと失敗のまま戻る。"""
+        route = OwnActionCompleted(action_summary="「南の坑道」へ向かった", tool="travel_to", succeeded=False)
+
+        assert _dict_to_route(_route_to_dict(route)) == route

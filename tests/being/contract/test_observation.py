@@ -15,6 +15,7 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
+    OwnActionCompleted,
     OwnActionResult,
     OwnBodyState,
     PersonInText,
@@ -63,8 +64,8 @@ class TestRequiredFields:
         with pytest.raises(ContractViolation):
             Observation(**_fields(subject_is_self=UNKNOWN))
 
-    def test_route_must_be_one_of_the_five_routes(self) -> None:
-        """経路に 5 つの選択肢以外の値を渡すと ContractViolation で拒む。"""
+    def test_route_must_be_one_of_the_routes(self) -> None:
+        """経路に決まった選択肢以外の値を渡すと ContractViolation で拒む。"""
         with pytest.raises(ContractViolation):
             Observation(**_fields(route="told"))
 
@@ -215,7 +216,16 @@ class TestOwnActionResultRoute:
         assert observation.route.call_id == "call-7"
         assert observation.route.succeeded is False
 
-    @pytest.mark.parametrize("route", [SeenOrHeard(), ToldOrWritten(), OwnBodyState(), EnvironmentNotice()])
+    @pytest.mark.parametrize(
+        "route",
+        [
+            SeenOrHeard(),
+            ToldOrWritten(),
+            OwnBodyState(),
+            EnvironmentNotice(),
+            OwnActionCompleted(action_summary="「南の坑道」に着いた", tool="travel_to"),
+        ],
+    )
     def test_other_routes_have_no_call_id(self, route: object) -> None:
         """「自分の行動の結果」以外の経路は、呼び出しの ID を持たない。"""
         assert not hasattr(route, "call_id")
@@ -247,6 +257,51 @@ class TestOwnActionResultSummary:
 
         assert isinstance(named.route, OwnActionResult)
         assert named.route.action_summary == "「サヨ」に囁いた"
+
+
+class TestOwnActionCompletedRoute:
+    """OwnActionCompleted が、呼び出しと 1 対 1 ではなくあとから届く自分の行動の結果を、要約・ツールの名前・成否で持つことを保証する。"""
+
+    _ARRIVED = "「南の横坑の奥」に着いた"
+
+    def test_completion_is_a_route_of_an_observation(self) -> None:
+        """着いたことは、要約とツールの名前を持つ経路として観測に載せられ、成否は省くと成功になる。"""
+        route = OwnActionCompleted(action_summary=self._ARRIVED, tool="travel_to")
+
+        observation = Observation(**_fields(route=route, body="「南の横坑の奥」に到着した。"))
+
+        assert observation.route == OwnActionCompleted(action_summary=self._ARRIVED, tool="travel_to", succeeded=True)
+
+    def test_blank_summary_is_rejected(self) -> None:
+        """空白だけの要約は ContractViolation で拒む。"""
+        with pytest.raises(ContractViolation, match="action_summary"):
+            OwnActionCompleted(action_summary=" ", tool="travel_to")
+
+    @pytest.mark.parametrize("tool", ["", "travel to", "移動"])
+    def test_tool_must_be_an_ascii_identifier(self, tool: str) -> None:
+        """ツールの名前が ASCII の識別子でなければ ContractViolation で拒む。呼び出しの行にそのまま出すため。"""
+        with pytest.raises(ContractViolation, match="tool"):
+            OwnActionCompleted(action_summary=self._ARRIVED, tool=tool)
+
+    def test_non_bool_success_is_rejected(self) -> None:
+        """成否が真偽値でなければ ContractViolation で拒む。"""
+        with pytest.raises(ContractViolation, match="succeeded"):
+            OwnActionCompleted(action_summary=self._ARRIVED, tool="travel_to", succeeded="yes")  # type: ignore[arg-type]
+
+    def test_people_in_the_summary_are_named_with_the_body(self) -> None:
+        """要約が人の穴つきの文のとき、観測の人の穴を呼び名で埋めると、要約も埋まる。"""
+        summary = TextWithPeople(
+            template="「{target}」のところに着いた",
+            people={"target": PersonInText(handle=2, appearance="髪を結った娘", visible_name="サヨ")},
+        )
+        observation = Observation(
+            **_fields(route=OwnActionCompleted(action_summary=summary, tool="travel_to"), body="着いた。")
+        )
+
+        named = observation.with_people_named(lambda text: text.template.replace("{target}", "サヨ"))
+
+        assert isinstance(named.route, OwnActionCompleted)
+        assert named.route.action_summary == "「サヨ」のところに着いた"
 
 
 class TestObservedTime:

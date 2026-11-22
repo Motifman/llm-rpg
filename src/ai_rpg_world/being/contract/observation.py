@@ -76,11 +76,35 @@ class OwnActionResult:
 
 
 @dataclass(frozen=True)
+class OwnActionCompleted:
+    """呼び出しと 1 対 1 ではなく、あとから届く自分の行動の結果 (移動先に着いた、道がふさがって着けなかった、など)。
+
+    呼び出しの ID は持たない。``tool`` は、結果のもとになった行動のツールの名前。
+    """
+
+    action_summary: str | TextWithPeople
+    tool: str
+    succeeded: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.action_summary, TextWithPeople):
+            require_text(self.action_summary, "action_summary")
+        if not isinstance(self.tool, str) or not self.tool.isascii() or not self.tool.isidentifier():
+            raise ContractViolation("tool must be an ASCII identifier")
+        require_bool(self.succeeded, "succeeded")
+
+    def with_people_named(self, name: Callable[[TextWithPeople], str]) -> OwnActionCompleted:
+        if not isinstance(self.action_summary, TextWithPeople):
+            return self
+        return replace(self, action_summary=name(self.action_summary))
+
+
+@dataclass(frozen=True)
 class EnvironmentNotice:
     """環境からの知らせ。"""
 
 
-Route = Union[SeenOrHeard, ToldOrWritten, OwnBodyState, OwnActionResult, EnvironmentNotice]
+Route = Union[SeenOrHeard, ToldOrWritten, OwnBodyState, OwnActionResult, OwnActionCompleted, EnvironmentNotice]
 _ROUTE_TYPES: Final = get_args(Route)
 
 
@@ -177,7 +201,7 @@ class Observation:
         if not isinstance(self.body, TextWithPeople):
             require_text(self.body, "body")
         if not isinstance(self.route, _ROUTE_TYPES):
-            raise ContractViolation("route must be one of the five routes")
+            raise ContractViolation("route must be one of the routes")
         if not isinstance(self.time, ObservedTime):
             raise ContractViolation("time must be ObservedTime")
         require_bool(self.subject_is_self, "subject_is_self")
@@ -203,7 +227,11 @@ class Observation:
                 raise ContractViolation("withheld_if_subject_unknown and body_if_subject_unknown are exclusive")
 
     def with_people_named(self, name: Callable[[TextWithPeople], str]) -> Observation:
-        route = self.route.with_people_named(name) if isinstance(self.route, OwnActionResult) else self.route
+        route = (
+            self.route.with_people_named(name)
+            if isinstance(self.route, (OwnActionResult, OwnActionCompleted))
+            else self.route
+        )
         body = name(self.body) if isinstance(self.body, TextWithPeople) else self.body
         return replace(self, body=body, route=route)
 

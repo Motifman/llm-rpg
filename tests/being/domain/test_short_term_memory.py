@@ -11,6 +11,7 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
+    OwnActionCompleted,
     OwnActionResult,
     OwnBodyState,
     PersonInText,
@@ -143,7 +144,16 @@ def _state(memory: ShortTermMemory) -> tuple[object, ...]:
 class TestPerceive:
     """ShortTermMemory.perceive が、観測を、それを見る次の 1 手の番号で残すことを保証する (design_decisions D1824-5)。"""
 
-    @pytest.mark.parametrize("route", [SeenOrHeard(), ToldOrWritten(), OwnBodyState(), EnvironmentNotice()])
+    @pytest.mark.parametrize(
+        "route",
+        [
+            SeenOrHeard(),
+            ToldOrWritten(),
+            OwnBodyState(),
+            EnvironmentNotice(),
+            OwnActionCompleted(action_summary="「南の坑道」に着いた", tool="travel_to"),
+        ],
+    )
     def test_observation_is_kept_with_the_next_turn(self, route: object) -> None:
         """今のターンが 5 なら、どの経路の観測も番号 6 の Perception として残る。"""
         memory = _empty()
@@ -152,6 +162,18 @@ class TestPerceive:
         memory.perceive(observation, current_turn=5)
 
         assert memory.recent() == (Perception(turn=6, observation=observation),)
+
+    def test_completion_with_an_unnamed_summary_is_rejected(self) -> None:
+        """あとから届いた自分の行動の結果の要約に人の穴が残っていると ShortTermMemoryValidationException を投げ、短期記憶は変わらない。"""
+        memory = _empty()
+        summary = TextWithPeople(
+            template="「{target}」のところに着いた",
+            people={"target": PersonInText(handle=2, appearance="髪を結った娘", visible_name="サヨ")},
+        )
+
+        with pytest.raises(ShortTermMemoryValidationException, match="action summary"):
+            memory.perceive(_observation(OwnActionCompleted(action_summary=summary, tool="travel_to")), current_turn=5)
+        assert memory.recent() == ()
 
     def test_own_action_result_cannot_be_perceived(self) -> None:
         """自分の行動の結果を観測として渡すと、1 手と組にできないので ShortTermMemoryValidationException を投げ、短期記憶は変わらない。"""

@@ -7,7 +7,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ai_rpg_world.being.contract import ContractViolation, Observation, ObservedTime, OwnActionResult, TextWithPeople
+from ai_rpg_world.being.contract import (
+    ContractViolation,
+    Observation,
+    ObservedTime,
+    OwnActionCompleted,
+    OwnActionResult,
+    TextWithPeople,
+)
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Experience,
@@ -30,22 +37,31 @@ def _attempt_line(
 ) -> str:
     # 要約の無い試み (古い run と、要約を足す前の snapshot) は、結果の文だけの行のまま出す。古い run の結果の文は、
     # すでに古い run の行の形になっている。
-    if summary is None:
-        body = result_body
-    elif succeeded:
-        call = "" if attempt.call_text is None else f"\n  呼び出し: {attempt.call_text}"
-        body = f"[行動] {summary} → [結果] {result_body}{call}"
-    else:
-        body = f"[行動] {summary} → [失敗] | {result_body}"
+    body = (
+        result_body
+        if summary is None
+        else _own_move_body(summary, result_body, succeeded=succeeded, call_text=attempt.call_text)
+    )
     return _line(time, body, attempt.move.inner_thought) + "".join(
         f"\n  メモ: {line}" for line in attempt.memo_rejections
     )
 
 
+def _own_move_body(summary: str, result_body: str, *, succeeded: bool, call_text: str | None) -> str:
+    """失敗には呼び出しの行を付けない。"""
+    if not succeeded:
+        return f"[行動] {summary} → [失敗] | {result_body}"
+    call = "" if call_text is None else f"\n  呼び出し: {call_text}"
+    return f"[行動] {summary} → [結果] {result_body}{call}"
+
+
 def _summary_of(route: object) -> str | None:
-    if not isinstance(route, OwnActionResult):
+    if not isinstance(route, OwnActionResult) or route.action_summary is None:
         return None
-    summary = route.action_summary
+    return _summary_text(route.action_summary)
+
+
+def _summary_text(summary: str | TextWithPeople) -> str:
     if isinstance(summary, TextWithPeople):
         raise ContractViolation("an action summary with people placeholders cannot be read before they are filled in")
     return summary
@@ -55,7 +71,18 @@ class _Line:
     """出来事 1 つを行にする。行にしない出来事は None。"""
 
     def perceived(self, perception: Perception) -> str | None:
-        return _line(perception.observation.time, perception.observation.body_without_people())
+        observation = perception.observation
+        route = observation.route
+        if isinstance(route, OwnActionCompleted):
+            # あとから届く結果は呼び出しと 1 対 1 ではないので、古い run と同じく引数の無い呼び出しの行を付ける。
+            body = _own_move_body(
+                _summary_text(route.action_summary),
+                observation.body_without_people(),
+                succeeded=route.succeeded,
+                call_text=f"{route.tool}()",
+            )
+            return _line(observation.time, body)
+        return _line(observation.time, observation.body_without_people())
 
     def attempted(self, attempt: Attempt, result: Observation) -> str | None:
         route = result.route
