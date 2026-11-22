@@ -230,7 +230,18 @@ class ChooseAction:
             being_id,
             AgentMove(call_id=call_id, tool_name=call.tool_name, arguments={}),
             turn=turn,
-            result=ObservedOutcome(_own_failure(body, call_id=call_id, now=command.now)),
+            result=ObservedOutcome(
+                _own_failure(
+                    body,
+                    call_id=call_id,
+                    now=command.now,
+                    action_summary=own_tool_summary(
+                        call.tool_name,
+                        call.arguments,
+                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
+                    ),
+                )
+            ),
         )
         return ActionNotChosen(requested_tool=call.tool_name, suggestion=suggestion, exchange=exchange)
 
@@ -299,10 +310,10 @@ class ChooseAction:
         self._turn_clock.advance_turn(being_id)
 
 
-def _own_failure(body: str, *, call_id: str, now: ObservedTime) -> Observation:
+def _own_failure(body: str, *, call_id: str, now: ObservedTime, action_summary: str) -> Observation:
     return Observation(
         body=body,
-        route=OwnActionResult(call_id=call_id, succeeded=False),
+        route=OwnActionResult(call_id=call_id, succeeded=False, action_summary=action_summary),
         time=now,
         subject_is_self=True,
         subject_name=UNKNOWN,

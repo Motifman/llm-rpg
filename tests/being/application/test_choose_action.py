@@ -305,6 +305,9 @@ class TestChooseAction:
             "いま使えるツール: [interact, speak, pickup_item]"
         )
         assert attempt.result.observation.time == NOW
+        assert attempt.result.observation.route == OwnActionResult(
+            call_id="call_9", succeeded=False, action_summary='pickup({"item": "ランプ"}) を実行しました。'
+        )
 
     def test_unknown_tool_without_a_close_name_is_remembered_without_suggestion(self) -> None:
         """近い名前が無い (gather) ときは、提案を添えず、使えるツールの一覧だけを添えて残す。"""
