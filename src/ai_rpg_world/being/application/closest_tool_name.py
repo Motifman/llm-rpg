@@ -62,9 +62,6 @@ def _closest(requested: str, valid_list: list[str]) -> tuple[str | None, float]:
     return best, best_score
 
 
-__all__ = ["suggest_closest_tool_name"]
-
-
 def format_unsupported_tool_message(*, requested: str, valid_tools: Iterable[str], suggestion: str | None) -> str:
     """使える tool の一覧は、提案が外れても選び直せるよう、提案の有無によらず添える。"""
     valid_sorted = sorted(v for v in valid_tools if isinstance(v, str) and v)
@@ -75,3 +72,6 @@ def format_unsupported_tool_message(*, requested: str, valid_tools: Iterable[str
         head += "。"
     tail = f" 現在使える tool: [{', '.join(valid_sorted)}]"
     return head + tail
+
+
+__all__ = ["format_unsupported_tool_message", "suggest_closest_tool_name"]
