@@ -7,6 +7,7 @@ import pytest
 from ai_rpg_world.being.contract import (
     ContractViolation,
     Description,
+    Here,
     Orientation,
     PersonInText,
     Scene,
@@ -107,3 +108,44 @@ class TestSceneNotices:
         """知らせに Description 以外を混ぜると拒む。"""
         with pytest.raises(ContractViolation):
             Scene((), notices=["停電"])  # type: ignore[list-item]
+
+
+class TestSceneHere:
+    """Scene.here が、現在地の区画を、場所の名前・見出し・現在地の行より下の本文で、ほかの説明と分けて持つことを保証する。"""
+
+    _SURROUNDINGS = '  上層の南の坑道。\n接続先:\n  - "防火扉" → "北の坑道"（通行可）'
+
+    def test_here_is_kept_apart_from_descriptions(self) -> None:
+        """現在地の区画は here に入り、descriptions には入らない。省くと None。"""
+        here = Here(place="南の坑道", heading="現在地と周囲", text=self._SURROUNDINGS)
+
+        scene = Scene(descriptions=(Description(heading="選べる対象", text="金庫"),), here=here)
+
+        assert scene.here == here and [d.heading for d in scene.descriptions] == ["選べる対象"]
+        assert Scene().here is None
+
+    def test_text_may_name_people_with_placeholders(self) -> None:
+        """本文に人の穴を持てる。"""
+        here = Here(place="南の横坑口", heading="現在地と周囲", text=_SAYO_IS_HERE)
+
+        assert here.text == _SAYO_IS_HERE
+
+    @pytest.mark.parametrize(("field", "value"), [("place", " "), ("heading", ""), ("text", "  ")])
+    def test_blank_field_is_rejected(self, field: str, value: str) -> None:
+        """場所の名前・見出し・本文のどれかが空なら拒む。"""
+        fields = {"place": "南の坑道", "heading": "現在地と周囲", "text": self._SURROUNDINGS, field: value}
+
+        with pytest.raises(ContractViolation):
+            Here(**fields)
+
+    def test_heading_with_brackets_is_rejected(self) -> None:
+        """見出しに【】が入っていれば拒む。囲むのは Being が文にするときの書き方。"""
+        with pytest.raises(ContractViolation):
+            Here(place="南の坑道", heading="【現在地と周囲】", text=self._SURROUNDINGS)
+
+    def test_heading_shared_with_a_description_is_rejected(self) -> None:
+        """現在地の区画の見出しが、ほかの説明や知らせの見出しと重なれば拒む。"""
+        here = Here(place="南の坑道", heading="現在地と周囲", text=self._SURROUNDINGS)
+
+        with pytest.raises(ContractViolation, match="現在地と周囲"):
+            Scene(notices=(Description(heading="現在地と周囲", text="揺れた"),), here=here)

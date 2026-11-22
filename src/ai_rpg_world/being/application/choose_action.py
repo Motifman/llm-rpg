@@ -151,7 +151,9 @@ class ChooseAction:
     def execute(self, command: ChooseActionCommand) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
         tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
         scene = Scene(
-            descriptions=(*command.scene.descriptions, tools.candidate_table()), notices=command.scene.notices
+            descriptions=(*command.scene.descriptions, tools.candidate_table()),
+            notices=command.scene.notices,
+            here=command.scene.here,
         )
         memory = self._working_memory.of(
             command.being_id,

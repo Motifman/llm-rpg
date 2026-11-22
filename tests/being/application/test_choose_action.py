@@ -21,6 +21,7 @@ from ai_rpg_world.being.contract import (
     Candidate,
     Description,
     FreeText,
+    Here,
     Observation,
     ObservedTime,
     OfferedBeingTools,
@@ -118,7 +119,7 @@ def _command(being_tools: OfferedBeingTools) -> ChooseActionCommand:
         orientation=Orientation([Description(heading="ペルソナ", text="あなたはゲン。")]),
         being_tools=being_tools,
         imposed_goal="金庫の中を確かめる",
-        scene=Scene([Description(heading="現在地と周囲", text="事務所")]),
+        scene=Scene(here=Here(place="鉱山会社の事務所", heading="現在地と周囲", text="  埃をかぶった机と金庫がある。")),
         closing=Closing(instruction="行動を 1 つ選んでください。"),
         choices=_choices(),
         now=NOW,
@@ -219,6 +220,14 @@ class TestChooseAction:
         assert [t["function"]["name"] for t in call.tools] == ["interact", "speak", "pickup_item"]
         assert "【行動の候補】" in call.messages[1]["content"]
         assert call.messages[0]["role"] == "system" and not call.reasoning_off
+
+    def test_llm_reads_the_current_place_before_the_candidate_table(self) -> None:
+        """LLM には、現在地の区画が「現在地: 場所」の行つきで、行動の候補より先に見える。"""
+        _, completion = _choose(_reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}))
+
+        message = completion.calls[0].messages[1]["content"]
+        assert "【現在地と周囲】\n現在地: 鉱山会社の事務所\n  埃をかぶった机と金庫がある。" in message
+        assert message.index("【現在地と周囲】") < message.index("【行動の候補】")
 
     def test_whisper_to_sayo_returns_her_mark_not_her_name(self) -> None:
         """サヨへのささやきは、呼び方「サヨ」ではなく人の印 {"person": 2} で返り、中身の文字はそのまま返る。"""

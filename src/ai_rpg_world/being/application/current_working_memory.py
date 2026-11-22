@@ -12,7 +12,7 @@ from ai_rpg_world.being.application.known_people import render_known_people
 from ai_rpg_world.being.application.memo_book_text import format_memo_book
 from ai_rpg_world.being.application.names_for_people import text_naming_people
 from ai_rpg_world.being.application.recent_events_text import recent_events_text
-from ai_rpg_world.being.contract import Description, OfferedBeingTools, Orientation, Scene, TextWithPeople
+from ai_rpg_world.being.contract import Description, Here, OfferedBeingTools, Orientation, Scene, TextWithPeople
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -21,6 +21,8 @@ from ai_rpg_world.being.domain.episode_index_selection import RecalledRisesToTop
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
 from ai_rpg_world.being.domain.working_memory import Closing, MemoryTexts, WorkingMemory
+
+CURRENT_PLACE_LABEL = "現在地"
 
 
 class BeingLookup(Protocol):
@@ -80,7 +82,7 @@ class CurrentWorkingMemory:
             conduct=conduct_text(being_tools),
             imposed_goal=imposed_goal,
             memory=memory,
-            scene=Scene(_named(scene.descriptions), notices=_named(scene.notices)),
+            scene=Scene((*_surroundings(scene.here), *_named(scene.descriptions)), notices=_named(scene.notices)),
             closing=closing,
         )
 
@@ -94,6 +96,13 @@ class CurrentWorkingMemory:
         if being.attachment is None:
             raise LookupError(f"Being {being_id.value} is not in any environment")
         return being.attachment.environment_name
+
+
+def _surroundings(here: Here | None) -> tuple[Description, ...]:
+    if here is None:
+        return ()
+    text = text_naming_people(here.text) if isinstance(here.text, TextWithPeople) else here.text
+    return (Description(heading=here.heading, text=f"{CURRENT_PLACE_LABEL}: {here.place}\n{text}"),)
 
 
 def _named(descriptions: Sequence[Description]) -> tuple[Description, ...]:
