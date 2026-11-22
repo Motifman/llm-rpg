@@ -163,10 +163,13 @@ class MemoryOperationOutcome(Outcome):
     time: ObservedTime
     order: OccurrenceOrder | None = None
     succeeded: bool = True
+    action_summary: str | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.call_id, "call_id")
         _require_text(self.body, "body")
+        if self.action_summary is not None:
+            _require_text(self.action_summary, "action_summary")
         if not isinstance(self.time, ObservedTime):
             raise ShortTermMemoryValidationException("time must be ObservedTime")
         _require_order(self.order)

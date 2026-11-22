@@ -764,6 +764,7 @@ def _every_field_short_term_memory(being: BeingId = BeingId("ada")) -> ShortTerm
                 time=ObservedTime(display="1日目 昼", seconds=43200.0),
                 order=OccurrenceOrder(environment="廃坑の山村", value=1729000002.0),
                 succeeded=False,
+                action_summary='memo_add({"text": "鍵を探す"}) を実行しました。',
             ),
         ),
         Attempt(turn=14, move=AgentMove(call_id="call-4", tool_name="interact", arguments={"target": "弁"})),
@@ -860,6 +861,7 @@ class TestShortTermMemoryPayload:
             item.pop("call_text", None)
             if item.get("result") and "memory_operation" in item["result"]:
                 item["result"]["memory_operation"].pop("succeeded")
+                item["result"]["memory_operation"].pop("action_summary")
         (dst_svc, dst_stores) = _make_service()
 
         dst_svc.restore(being, json.dumps(payload))
@@ -869,7 +871,7 @@ class TestShortTermMemoryPayload:
         assert attempts and restored.awaiting is not None
         assert all(a.memo_rejections == () and a.call_text is None for a in [*attempts, restored.awaiting])
         operations = [a.result for a in attempts if isinstance(a.result, MemoryOperationOutcome)]
-        assert operations and all(o.succeeded for o in operations)
+        assert operations and all(o.succeeded and o.action_summary is None for o in operations)
 
     def test_more_than_one_memory_is_rejected(self) -> None:
         """1 つの Being に短期記憶が 2 つ書かれた payload は FormatError。"""

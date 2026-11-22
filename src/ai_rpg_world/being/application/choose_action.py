@@ -21,6 +21,7 @@ from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.memo_arguments import read_memo_operations, rejection_lines, rejection_text
 from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.names_for_people import name_for
+from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
 from ai_rpg_world.being.contract import (
     UNKNOWN,
@@ -187,7 +188,17 @@ class ChooseAction:
                 being_id,
                 recall,
                 turn=turn,
-                result=MemoryOperationOutcome(call_id=call_id, body=body, time=command.now, succeeded=succeeded),
+                result=MemoryOperationOutcome(
+                    call_id=call_id,
+                    body=body,
+                    time=command.now,
+                    succeeded=succeeded,
+                    action_summary=own_tool_summary(
+                        call.tool_name,
+                        call.arguments,
+                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
+                    ),
+                ),
             )
             return TurnSpentRecalling(move=recall, exchange=exchange)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=call.arguments)
