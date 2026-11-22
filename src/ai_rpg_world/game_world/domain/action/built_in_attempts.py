@@ -81,7 +81,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
     from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
-    from ai_rpg_world.game_world.domain.people import NameInText
+    from ai_rpg_world.game_world.domain.people import NameInText, TextAboutPeople
 
 _Reply = TypeVar("_Reply")
 
@@ -96,6 +96,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
 
     def chosen_with(self, values: Mapping[str, TextArgumentValue | ItemInstanceId]) -> Self:
         return self
+
+    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople:
+        return design.refusal_texts.done_text(self.actor)
 
     def kind(self) -> ActionKind:
         return self._KIND

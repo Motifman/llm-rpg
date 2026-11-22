@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.aggregate_readings import PersonVitalsReading
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+    from ai_rpg_world.game_world.domain.people import TextAboutPeople
     from ai_rpg_world.game_world.domain.person import PersonVitals
     from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 
@@ -166,6 +167,8 @@ class ActionAttempt(Protocol):
     def operates(self, obj: ObjectId, interaction: InteractionId) -> bool: ...
 
     def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct: ...
+
+    def done_text_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> TextAboutPeople: ...
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark: ...
 

@@ -94,6 +94,7 @@ class SoundStimulus:
     salience: Salience
     at: WorldTick
     present: PeoplePresent = field(default_factory=WhoeverIsThere)
+    withheld_from: frozenset[PersonId] = frozenset()
 
     @property
     def counts_toward_one_per_person(self) -> bool:
@@ -112,6 +113,8 @@ class SoundStimulus:
         )
 
     def perceived_in(self, perceiver: Perceiver, senses: PerceptionSenses) -> PerceptionOutcome:
+        if perceiver.person in self.withheld_from:
+            return NotPerceived(NotPerceivedReason.OWN_ACT)
         return self.perceived_by(
             self.present.position(perceiver),
             senses.reach_of(self.origin, self.loudness),

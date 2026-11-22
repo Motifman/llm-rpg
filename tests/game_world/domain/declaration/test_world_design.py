@@ -78,6 +78,7 @@ from ai_rpg_world.game_world.domain.effect.combined_effects import ConditionalEf
 from ai_rpg_world.game_world.domain.effect.effect import Effect
 from ai_rpg_world.game_world.domain.effect.flag_effects import RaiseFlagEffect
 from ai_rpg_world.game_world.domain.effect.world_progress_effects import CloseGroupDecisionEffect
+from ai_rpg_world.game_world.domain.exception.condition_exception import UnknownPersonPlaceholderException
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UndeclaredVerbException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import Notable
@@ -295,6 +296,40 @@ class TestSubjectsOutsideActions:
         assert [flaw.location for flaw in flaws] == [
             DesignLocation("world", "world", "time.day_night.phases.morning.audience")
         ]
+
+
+class TestSuccessTextPeople:
+    """操作の成功の文に書いた人の穴を、compose が読み込みのときに確かめることを保証する。"""
+
+    def test_target_in_the_success_text_of_an_object_interaction_is_a_flaw(self) -> None:
+        """相手のいない扉の操作 open の成功の文に {target} を書くと、success_text を場所とする DesignFlaw になる。"""
+        door = _open_door()
+        opened = replace(
+            door, interaction=replace(door.interaction, success_text=TextWithUnassignedPeople("{target}が扉を開けた。"))
+        )
+
+        flaws = flaws_of_composing(object_interactions=(opened,))
+
+        assert [flaw.location for flaw in flaws] == [DesignLocation("object_interaction", "door/open", "success_text")]
+
+    def test_unknown_person_in_the_success_text_is_refused(self) -> None:
+        """成功の文に、人の穴として使えない {origin} を書くと、compose が UnknownPersonPlaceholderException で断る。"""
+        door = _open_door()
+        opened = replace(
+            door, interaction=replace(door.interaction, success_text=TextWithUnassignedPeople("{origin}から開けた。"))
+        )
+
+        with pytest.raises(UnknownPersonPlaceholderException):
+            compose_world(object_interactions=(opened,))
+
+    def test_actor_in_the_success_text_is_allowed(self) -> None:
+        """成功の文に {actor} を書いても、compose は断らない。"""
+        door = _open_door()
+        opened = replace(
+            door, interaction=replace(door.interaction, success_text=TextWithUnassignedPeople("{actor}は扉を開けた。"))
+        )
+
+        compose_world(object_interactions=(opened,))
 
 
 class TestArgumentsRead:

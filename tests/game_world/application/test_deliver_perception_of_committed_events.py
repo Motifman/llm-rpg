@@ -265,7 +265,7 @@ class TestReportOfDelivery:
     """届けるたびに作る記録 (PerceptionDeliveryReport) に、原因・tick・刺激・人ごとの結果が残ることを保証する。"""
 
     def test_report_carries_cause_tick_stimuli_and_results(self) -> None:
-        """扉を壊した記録には、ハルの行為・tick 0・見える刺激と音の刺激が残り、見える刺激は広場のハルとサヨに、音は広間のゲン・ナツ・フユに届く。"""
+        """扉を壊した記録には、ハルの行為・tick 0・見える刺激と音の刺激が残り、見える刺激は広場のサヨに、音は広間のゲン・ナツ・フユに届く。壊したハル本人には届かず、理由「自分の行為」が残る。"""
         world = _World()
 
         world.breaks_the_door(_HARU)
@@ -281,8 +281,12 @@ class TestReportOfDelivery:
             ),
         ]
         sight, sound = report.stimuli
-        assert set(sight.perceived_by) == {_HARU, _SAYO}
+        assert set(sight.perceived_by) == {_SAYO}
         assert set(sound.perceived_by) == {_GEN, _NATSU, _FUYU}
+        assert (sight.missed_by[_HARU], sound.missed_by[_HARU]) == (
+            NotPerceivedReason.OWN_ACT,
+            NotPerceivedReason.OWN_ACT,
+        )
 
     def test_aki_far_away_does_not_hear_and_the_reason_is_far(self) -> None:
         """道のつながらない坑道の奥のアキには壊れる音が届かず、記録に理由「遠い」が残る。"""

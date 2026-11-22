@@ -16,3 +16,4 @@ class NotPerceivedReason(Enum):
     LEFT_THE_WORLD = "left_the_world"
     DEAD = "dead"
     ALREADY_PERCEIVED = "already_perceived"
+    OWN_ACT = "own_act"
