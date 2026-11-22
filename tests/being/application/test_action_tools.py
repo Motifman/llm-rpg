@@ -223,6 +223,43 @@ class TestCandidateTable:
             '- speak.to ("ささやく"): "煤けた上着の男 #1", "煤けた上着の男 #2"'
         )
 
+    def test_person_only_in_an_unavailable_reason_is_not_counted(self) -> None:
+        """同じ見た目の人がいまはできない理由にだけ出るときは、表に出る 1 人に番号を付けない。"""
+        content = FreeText(name="content", label="中身")
+        speak = ActionChoice(
+            name="speak",
+            label="話す",
+            outline=(
+                ArgumentOutline(name="reach", label="届け方", required=True),
+                ArgumentOutline(name="to", label="相手"),
+                ArgumentOutline(name="content", label="中身"),
+            ),
+            values=(
+                PickOne(
+                    name="reach",
+                    label="届け方",
+                    candidates=(
+                        Candidate(
+                            label="ささやく",
+                            values=(
+                                PickOne(
+                                    name="to", label="相手", candidates=(Candidate(label=SHADOW_A, values=(content,)),)
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            unavailable=(
+                UnavailableAction(
+                    picked=("ささやく", SHADOW_B),
+                    reason=TextWithPeople(template="{who}は眠っている", people={"who": SHADOW_B}),
+                ),
+            ),
+        )
+
+        assert _table(ActionChoices((speak,)))[1] == '- speak.to ("ささやく"): "煤けた上着の男"'
+
     def test_items_with_the_same_name_are_listed_once(self) -> None:
         """同じ名前の品物は、数を添えず 1 回だけ出る。"""
         drop = ActionChoice(

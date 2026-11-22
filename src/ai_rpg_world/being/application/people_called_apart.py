@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 
-from ai_rpg_world.being.contract import PersonInText, PersonPlaceholderValue, TextWithPeople
+from ai_rpg_world.being.contract import PersonInText, PersonPlaceholderValue
 
 
 class PeopleCalledApart:
-    """呼び方が重なった人にだけ、人の印の小さい順に「 #1」「 #2」を添える (古い run と同じ添え方)。
+    """呼び方が重なった人にだけ、人の印の小さい順に「 #1」「 #2」を添える。
 
     印の順にするのは、同じ顔ぶれならターンが変わっても同じ人に同じ番号が付くようにするため。
     """
@@ -30,14 +30,6 @@ class PeopleCalledApart:
 
     def person_named(self, name: str) -> PersonInText | None:
         return self._people.get(name)
-
-    def text_of(self, text: TextWithPeople) -> str:
-        return text.template.format(
-            **{
-                key: self.name_of(person) if isinstance(person, PersonInText) else self._name_for(person)
-                for key, person in text.people.items()
-            }
-        )
 
 
 __all__ = ["PeopleCalledApart"]

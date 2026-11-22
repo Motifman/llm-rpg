@@ -47,10 +47,3 @@ class TestPeopleCalledApart:
         people = PeopleCalledApart(_name_or_appearance, [SHADOW_A, SHADOW_B])
 
         assert (people.person_named("ゲン"), people.person_named("誰か")) == (None, None)
-
-    def test_text_fills_people_with_numbered_names(self) -> None:
-        """文の人の穴は番号を添えた呼び方で埋まり、見分けられない人は基本の呼び方の部品の言い方になる。"""
-        people = PeopleCalledApart(_name_or_appearance, [SHADOW_A, SHADOW_B])
-        text = TextWithPeople(template="{a}が{b}を見ている", people={"a": SHADOW_A, "b": UnidentifiedPerson()})
-
-        assert people.text_of(text) == "誰か #2が誰かを見ている"

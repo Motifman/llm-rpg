@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from itertools import product
 from typing import Any
 
 from ai_rpg_world.being.application.episode_recall_tool import episode_recall_description, episode_recall_parameters
@@ -14,7 +13,6 @@ from ai_rpg_world.being.contract import (
     ActionChoice,
     ActionChoices,
     AgentMove,
-    Candidate,
     ChoiceValue,
     Description,
     FreeText,
@@ -23,8 +21,6 @@ from ai_rpg_world.being.contract import (
     PersonInText,
     PersonPlaceholderValue,
     PickOne,
-    TextWithPeople,
-    UnavailableAction,
 )
 
 CANDIDATE_TABLE_HEADING = "現在選べる対象引数"
@@ -32,8 +28,6 @@ CANDIDATE_TABLE_NOTE = "※ 一覧にあることは操作の成功を保証し�
 DETAILS = "details"
 HIDDEN_TEXT = "本文"
 _INNER_THOUGHT_MAX_LENGTH = 500
-
-_Pairs = tuple[tuple[str, str], ...]
 
 
 class ActionTools:
@@ -51,7 +45,17 @@ class ActionTools:
     ) -> None:
         self._choices = choices
         self._being_tools = being_tools
-        self._people = PeopleCalledApart(name_for, choices.people())
+        # 番号は表に出る候補の人だけで数える。いまはできない理由にだけ出る人を数えると、表に 1 人しか出ないのに番号が付く。
+        self._people = PeopleCalledApart(
+            name_for,
+            tuple(
+                p
+                for choice in choices.choices
+                for value in choice.values
+                if isinstance(value, PickOne)
+                for p in value.people()
+            ),
+        )
         self._recall_limit = recall_limit
 
     def definitions(self) -> tuple[dict[str, Any], ...]:
@@ -121,7 +125,6 @@ class ActionTools:
         return f"{tool_name}({', '.join(parts)})"
 
     def candidate_table(self) -> Description | None:
-        """どの行動にも候補から選ぶ値が無ければ None。"""
         lines = [
             f"- {choice.name}.{name}{'' if parent is None else f' ({_quoted(parent)})'}: "
             + ", ".join(_quoted(label) for label in labels)
