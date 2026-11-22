@@ -97,7 +97,8 @@ class ActionTools:
     def call_text(self, tool_name: str, arguments: Mapping[str, object]) -> str | None:
         """出していないツールの名前なら None。
 
-        候補から選んだ値だけを引用し、ほかは「本文」と伏せる。自由に書いた文を引用すると、手本として写されるため。
+        候補から選んだ値だけを引用し、ほかは見取り図の伏せる言葉 (無ければ「本文」) で伏せる。自由に書いた文を引用すると、
+        手本として写されるため。
         独白とメモは別の行や欄に出るので出さない。
         """
         choice = next((c for c in self._choices.choices if c.name == tool_name), None)
@@ -112,8 +113,9 @@ class ActionTools:
             key=lambda item: order.index(item[0]) if item[0] in order else len(order),
         )
         quoted = [(name, value) for name, value in given if name in picked and isinstance(value, str)]
+        hidden_as = {o.name: o.hidden_as for o in choice.outline if o.hidden_as is not None}
         parts = [f"{name}={json.dumps(value, ensure_ascii=False)}" for name, value in quoted] + [
-            f"{name}={HIDDEN_TEXT}" for name, value in given if (name, value) not in quoted
+            f"{name}={hidden_as.get(name, HIDDEN_TEXT)}" for name, value in given if (name, value) not in quoted
         ]
         return f"{tool_name}({', '.join(parts)})"
 

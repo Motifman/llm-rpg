@@ -368,6 +368,21 @@ class TestCallText:
 
         assert call == 'interact(target="金庫", how="番号を合わせて開ける", say_inline=本文, details=本文)'
 
+    def test_value_is_hidden_with_the_word_the_outline_gives(self) -> None:
+        """見取り図が伏せる言葉 (発言) を持つ引数は、その言葉で伏せ、持たない引数は「本文」で伏せる。"""
+        wait = ActionChoice(
+            name="wait",
+            label="待つ",
+            outline=(
+                ArgumentOutline(name="say_inline", label="一言", hidden_as="発言"),
+                ArgumentOutline(name="note", label="覚え"),
+            ),
+        )
+
+        call = _tools(ActionChoices((wait,))).call_text("wait", {"note": "あとで", "say_inline": "待つぞ"})
+
+        assert call == "wait(say_inline=発言, note=本文)"
+
     def test_tool_that_was_not_offered_has_no_call_text(self) -> None:
         """出していないツールの名前なら None を返す。"""
         assert _tools(_gen_in_the_office()).call_text("gather", {}) is None
