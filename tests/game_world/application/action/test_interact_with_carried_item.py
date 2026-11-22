@@ -21,7 +21,7 @@ class TestInteractWithCarriedItem:
 
         reply = world.rub(ALICE, lamp)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.read().facts().flags().is_raised(LAMP_RUBBED) is True
 
     def test_item_carried_by_someone_else_is_refused_as_not_carrying(self) -> None:

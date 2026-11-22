@@ -20,7 +20,7 @@ class TestDropItem:
 
         reply = DropItem(world.carry_out)(DropItemCommand(ItemDropAttempt(ALICE, rope, Openly())))
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.carried_by(ALICE) == ()
         assert world.on_ground_at_camp() == (rope,)
 

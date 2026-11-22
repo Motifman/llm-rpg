@@ -25,12 +25,13 @@ class TestCarryOutActionDone:
     """CarryOutAction が、通った行為を世界に確定させ、行った記録と行っているあいだを残すことを保証する。"""
 
     def test_done_action_is_noted_in_latest_actions(self) -> None:
-        """通った行為は ActionDone を返し、LatestActions に行った tick が残り、PersonActedEvent が配られる。"""
+        """通った行為は、確定した試みを持つ ActionDone を返し、LatestActions に行った tick が残り、PersonActedEvent が配られる。"""
         world = WorldForActions()
 
         reply = world.enter_cage(ALICE)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
+        assert (reply.attempt.actor, reply.attempt.kind()) == (ALICE, ActionKind.ENTER_SECTION)
         assert world.read().facts().latest_actions().last_done_at(ALICE, ActionKind.ENTER_SECTION) == WorldTick(0)
         assert any(isinstance(event, PersonActedEvent) for event in world.events())
 

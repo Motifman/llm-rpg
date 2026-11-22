@@ -27,5 +27,5 @@ class TestWorldHasEnded:
 
         reply = world.board_cage(ALICE)
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert WorldHasEnded(world.scope)(WorldHasEndedCommand()) is True

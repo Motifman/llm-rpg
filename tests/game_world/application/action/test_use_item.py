@@ -24,7 +24,7 @@ class TestUseItem:
 
         reply = world.use(ALICE, world.item_of(ALICE, LAMP))
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.read().facts().flags().is_raised(LAMP_LIT) is True
 
     def test_item_without_declared_use_is_refused_as_not_usable(self) -> None:

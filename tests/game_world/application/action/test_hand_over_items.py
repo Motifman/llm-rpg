@@ -31,7 +31,7 @@ class TestHandOverItems:
 
         reply = HandOverItems(world.carry_out)(HandOverItemsCommand(ItemHandOverAttempt(ALICE, BOB, items, Openly())))
 
-        assert reply == ActionDone()
+        assert isinstance(reply, ActionDone)
         assert world.carried_by(ALICE) == ()
         assert world.carried_by(BOB) == items
 
