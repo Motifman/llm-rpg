@@ -24,8 +24,9 @@ time:
     ticks_per_day: 48
     starts_at: 0
     phases:
-      predawn: { begins_at: 0, dark: true, announcement: 夜明け前の、いちばん冷える時刻になった。 }
+      predawn: { display: 未明, begins_at: 0, dark: true, announcement: 夜明け前の、いちばん冷える時刻になった。 }
       morning:
+        display: 朝
         begins_at: 12
         dark: false
         announcement: 空が白み、朝になった。
@@ -37,8 +38,8 @@ time:
               - is_at_spot: { who: each_person, spot: village_square }
               - is_at_spot: { who: each_person, spot: well }
               - is_at_spot: { who: each_person, spot: south_adit_mouth }
-      noon: { begins_at: 24, dark: false, announcement: 日が高くなり、昼になった。, audience: *outdoors }
-      night: { begins_at: 36, dark: true, announcement: 日が落ち、夜になった。, audience: *outdoors }
+      noon: { display: 昼, begins_at: 24, dark: false, announcement: 日が高くなり、昼になった。, audience: *outdoors }
+      night: { display: 夜, begins_at: 36, dark: true, announcement: 日が落ち、夜になった。, audience: *outdoors }
   weather:
     initial: snow
     changes: null

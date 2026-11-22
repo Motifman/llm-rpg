@@ -7,6 +7,8 @@ from ai_rpg_world.being.contract import Scene
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SurroundingsTexts
+    from ai_rpg_world.game_world.domain.declaration.time_and_weather.clock_wording import ClockWording
+    from ai_rpg_world.game_world.domain.declaration.world_words import WorldWords
     from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
     from ai_rpg_world.game_world.domain.perception.surroundings import NamesInScene
     from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
@@ -18,5 +20,7 @@ class NothingInView:
     def perceived_by(self, viewer: PersonId, texts: SurroundingsTexts, at: WorldTick) -> tuple[Perceived, ...]:
         return ()
 
-    def scene_with(self, texts: SurroundingsTexts, names: NamesInScene) -> Scene:
+    def scene_with(
+        self, texts: SurroundingsTexts, names: NamesInScene, words: WorldWords, clock: ClockWording
+    ) -> Scene:
         return Scene()

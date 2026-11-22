@@ -515,6 +515,7 @@ _DAWN_AT_TICK_1 = DayNightDeclaration(
     phases=(
         DayPhaseDeclaration(
             name=DayPhaseName("night"),
+            display_name=DisplayName("night"),
             begins_at=TimeOfDay(0),
             dark=True,
             announcement=NoAnnouncement(),
@@ -522,6 +523,7 @@ _DAWN_AT_TICK_1 = DayNightDeclaration(
         ),
         DayPhaseDeclaration(
             name=DayPhaseName("morning"),
+            display_name=DisplayName("morning"),
             begins_at=TimeOfDay(1),
             dark=False,
             announcement=_DAWN,

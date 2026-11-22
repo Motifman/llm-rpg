@@ -479,6 +479,7 @@ class TestClockPeopleAndNouns:
             phases=(
                 DayPhaseDeclaration(
                     name=DayPhaseName("昼"),
+                    display_name=DisplayName("昼"),
                     begins_at=TimeOfDay(6),
                     dark=False,
                     announcement=NoAnnouncement(),

@@ -16,7 +16,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.everyone_awake import EveryoneAwake
 from ai_rpg_world.game_world.domain.person import PersonVitals
-from ai_rpg_world.game_world.domain.value_object import HitPoints, PersonId, Ticks, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import DisplayName, HitPoints, PersonId, Ticks, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.game_world.domain.world_progress import TimeOfDayChangedEvent, WorldClock, WorldTickAdvancedEvent
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
@@ -58,6 +58,7 @@ def _day_night(starts_at: int, day_audience: PeopleSelection | EveryoneAwake = E
         phases=(
             DayPhaseDeclaration(
                 name=DayPhaseName("昼"),
+                display_name=DisplayName("昼"),
                 begins_at=TimeOfDay(6),
                 dark=False,
                 announcement=NoAnnouncement(),
@@ -65,6 +66,7 @@ def _day_night(starts_at: int, day_audience: PeopleSelection | EveryoneAwake = E
             ),
             DayPhaseDeclaration(
                 name=DayPhaseName("夜"),
+                display_name=DisplayName("夜"),
                 begins_at=TimeOfDay(18),
                 dark=True,
                 announcement=NoAnnouncement(),
