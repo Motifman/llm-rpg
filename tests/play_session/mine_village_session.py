@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.application.deliver_perception import DeliverPercep
 from ai_rpg_world.game_world.application.name_person import NamePerson
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration
 from ai_rpg_world.game_world.domain.value_object import WorldId
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
@@ -75,10 +76,12 @@ class MineVillageSession:
         )
 
         self.short_term_memories = InMemoryShortTermMemoryRepository()
+        day_night = scenario.design.day_night
+        assert isinstance(day_night, DayNightDeclaration)
         receiver = HandObservationToBeing(WORLD, self.casts, PerceiveObservation(self.short_term_memories, self.clock))
         self.deliver_perception = DeliverPerception(
             scope,
-            ObservationExit(WORLD, receiver),
+            ObservationExit(WORLD, day_night, receiver),
             PerceptionReportsReceived(),
         )
 
