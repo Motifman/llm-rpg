@@ -3,6 +3,7 @@ from __future__ import annotations
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.being_repository import BeingRepository
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 
 
 def _copy(being: Being) -> Being:
@@ -15,12 +16,16 @@ class InMemoryBeingRepository(BeingRepository):
     def __init__(self) -> None:
         self._by_id: dict[BeingId, Being] = {}
 
-    def find_by_id(self, being_id: BeingId) -> Being | None:
-        stored = self._by_id.get(being_id)
-        return None if stored is None else _copy(stored)
+    def get(self, being_id: BeingId) -> Being:
+        if being_id not in self._by_id:
+            raise BeingNotFoundException(f"Being({being_id}) is not prepared")
+        return _copy(self._by_id[being_id])
 
     def save(self, being: Being) -> None:
         self._by_id[being.being_id] = _copy(being)
+
+    def add_if_absent(self, being: Being) -> None:
+        self._by_id.setdefault(being.being_id, _copy(being))
 
 
 __all__ = ["InMemoryBeingRepository"]

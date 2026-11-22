@@ -7,7 +7,7 @@ from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.infrastructure.in_memory_being_repository import InMemoryBeingRepository
-from ai_rpg_world.domain.being.exception.being_exceptions import PersonaValidationException
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException, PersonaValidationException
 
 GEN = BeingId("gen")
 
@@ -30,8 +30,7 @@ class TestPrepareBeing:
             )
         )
 
-        prepared = beings.find_by_id(GEN)
-        assert prepared is not None
+        prepared = beings.get(GEN)
         assert prepared.persona == Persona(
             name="ゲン", first_person="俺", traits=("口数は少ないが、坑道の空気には敏い",)
         )
@@ -46,8 +45,7 @@ class TestPrepareBeing:
             PrepareBeingCommand(being_id=GEN, persona_fields={"name": "ゲン", "first_person": "俺"})
         )
 
-        prepared = beings.find_by_id(GEN)
-        assert prepared is not None
+        prepared = beings.get(GEN)
         assert prepared.persona.first_person == "わし"
 
     def test_unknown_field_is_refused_and_nothing_is_saved(self) -> None:
@@ -59,7 +57,8 @@ class TestPrepareBeing:
                 PrepareBeingCommand(being_id=GEN, persona_fields={"name": "ゲン", "objective": "外へ出る"})
             )
 
-        assert beings.find_by_id(GEN) is None
+        with pytest.raises(BeingNotFoundException):
+            beings.get(GEN)
 
     def test_unknown_field_is_refused_even_for_existing_being(self) -> None:
         """同じ BeingId の Being がもういても、人柄に無い欄があれば PersonaValidationException を投げ、シナリオの誤りを見逃さない。"""

@@ -7,7 +7,6 @@ from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.being_repository import BeingRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
-from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotFoundException
 
 
 @dataclass(frozen=True)
@@ -26,9 +25,7 @@ class EnterEnvironment:
         self._turn_reader = turn_reader
 
     def execute(self, command: EnterEnvironmentCommand) -> None:
-        being = self._beings.find_by_id(command.being_id)
-        if being is None:
-            raise BeingNotFoundException(f"Being({command.being_id}) is not prepared")
+        being = self._beings.get(command.being_id)
         being.enter(command.environment_id, command.entry)
         turn = self._turn_reader.current_turn(command.being_id)
         # 入ったことを先に保存すると、紹介の記録で失敗したとき、同じコマンドをやり直しても入り直せず断られる。

@@ -20,11 +20,7 @@ class PrepareBeing:
         self._beings = beings
 
     def execute(self, command: PrepareBeingCommand) -> None:
-        persona = Persona.from_fields(command.persona_fields)
-        # 人柄は Being が世界をまたいで持つもので、入る世界のシナリオが書き換えるものではない (D1928-3)
-        if self._beings.find_by_id(command.being_id) is not None:
-            return
-        self._beings.save(Being(command.being_id, persona))
+        self._beings.add_if_absent(Being(command.being_id, Persona.from_fields(command.persona_fields)))
 
 
 __all__ = ["PrepareBeing", "PrepareBeingCommand"]

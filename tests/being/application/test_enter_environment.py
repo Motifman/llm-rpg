@@ -46,8 +46,7 @@ class TestEnterEnvironment:
             )
         )
 
-        entered = parts.beings.find_by_id(GEN)
-        assert entered is not None
+        entered = parts.beings.get(GEN)
         assert entered.attachment == BeingAttachment(environment_id="mine#1", environment_name=MINE)
 
     def test_introduced_people_are_known_from_the_current_turn(self) -> None:
@@ -87,8 +86,7 @@ class TestEnterEnvironment:
                 )
             )
 
-        entered = parts.beings.find_by_id(GEN)
-        assert entered is not None
+        entered = parts.beings.get(GEN)
         assert entered.attachment is None
         assert parts.acquaintances.list_by_being(GEN) == ()
 
@@ -116,13 +114,11 @@ class TestEnterEnvironment:
 
         with pytest.raises(RuntimeError):
             EnterEnvironment(parts.beings, failing, parts.clock).execute(command)
-        left = parts.beings.find_by_id(GEN)
+        left = parts.beings.get(GEN)
         EnterEnvironment(parts.beings, failing, parts.clock).execute(command)
 
-        assert left is not None
         assert left.attachment is None
-        entered = parts.beings.find_by_id(GEN)
-        assert entered is not None
+        entered = parts.beings.get(GEN)
         assert entered.attachment == BeingAttachment(environment_id="mine#1", environment_name=MINE)
         assert [a.name for a in parts.acquaintances.list_by_being(GEN)] == ["サヨ"]
 
