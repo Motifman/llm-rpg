@@ -61,6 +61,13 @@ class TestRechooseName:
 
         assert (rechoice.replaced_with, rechoice.accepted, rechoice.chosen) == (None, False, "東の祭壇")
 
+    @pytest.mark.parametrize(("probability", "confidence"), [(0.85, 0.9), (0.93, 0.85), (0.85, None)])
+    def test_choice_exactly_at_the_threshold_is_taken(self, probability: float, confidence: float | None) -> None:
+        """確率と確信がちょうど下限 0.85 なら寄せる。確信の無い答えは確率だけで決める。"""
+        rechoice = _rechoose(_Judging(_answer("東の祭壇", probability, confidence)))
+
+        assert (rechoice.replaced_with, rechoice.accepted) == ("東の祭壇", True)
+
     def test_no_match_is_never_replaced(self) -> None:
         """Jev が「該当なし」を選べば、確信が高くても置き換えない。一番近いものに化けさせない。"""
         rechoice = _rechoose(_Judging(_answer(NO_MATCH_OPTION, 0.99, 0.99)))
