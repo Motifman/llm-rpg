@@ -62,6 +62,12 @@ class BeingAlreadyAttachedException(BeingDomainException, StateException):
     error_code = "BEING.ALREADY_ATTACHED"
 
 
+class BeingIntroducedToItselfException(BeingDomainException, BusinessRuleException):
+    """環境に入るときの紹介に、自分の名前が入っていた。"""
+
+    error_code = "BEING.INTRODUCED_TO_ITSELF"
+
+
 class BeingNotAttachedException(BeingDomainException, StateException):
     """どの環境にも入っていない Being を、環境から外そうとした。"""
 
