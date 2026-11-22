@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Union
 
-from ai_rpg_world.being.contract.errors import ContractViolation, require_text
+from ai_rpg_world.being.contract.errors import ContractViolation, require_bool, require_text
 from ai_rpg_world.being.contract.text_with_people import PersonInText, TextWithPeople
 
 _NAME_LIMIT = 64
@@ -49,6 +49,10 @@ class Candidate:
         if isinstance(self.count, bool) or not isinstance(self.count, int) or self.count < 1:
             raise ContractViolation(f"count must be a positive int, got {self.count!r}")
 
+    def people(self) -> tuple[PersonInText, ...]:
+        own = (self.label,) if isinstance(self.label, PersonInText) else ()
+        return own + _people_in(self.values)
+
 
 @dataclass(frozen=True, kw_only=True)
 class PickOne:
@@ -67,6 +71,9 @@ class PickOne:
             raise ContractViolation(f"candidates must not repeat a label in {self.name!r}")
         object.__setattr__(self, "candidates", candidates)
 
+    def people(self) -> tuple[PersonInText, ...]:
+        return tuple(person for candidate in self.candidates for person in candidate.people())
+
 
 ChoiceValue = Union[FreeText, PickOne]
 
@@ -79,6 +86,24 @@ def _values(items: Sequence[ChoiceValue]) -> tuple[ChoiceValue, ...]:
     if len(set(names)) != len(names):
         raise ContractViolation(f"values must not repeat a name: {names}")
     return values
+
+
+def _people_in(values: Sequence[ChoiceValue]) -> tuple[PersonInText, ...]:
+    return tuple(person for value in values if isinstance(value, PickOne) for person in value.people())
+
+
+@dataclass(frozen=True, kw_only=True)
+class ArgumentOutline:
+    """``required`` は、いちばん上の値として毎ターン必ず渡る引数。"""
+
+    name: str
+    label: str
+    required: bool = False
+
+    def __post_init__(self) -> None:
+        _require_name(self.name, "name")
+        require_text(self.label, "label")
+        require_bool(self.required, "required")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,18 +124,39 @@ class UnavailableAction:
     def covers_whole_action(self) -> bool:
         return not self.picked
 
+    def people(self) -> tuple[PersonInText, ...]:
+        in_reason = self.reason.people.values() if isinstance(self.reason, TextWithPeople) else ()
+        return tuple(p for p in (*self.picked, *in_reason) if isinstance(p, PersonInText))
+
 
 @dataclass(frozen=True, kw_only=True)
 class ActionChoice:
+    """``outline`` と ``takes_details`` を、候補によらず行動の種類ごとに変えないのは、ターンごとの値から
+    引数を組むと、候補の無いターンに引数が消えてツールの定義が変わるため。
+    """
+
     name: str
     label: str
+    outline: Sequence[ArgumentOutline] = field(default_factory=tuple)
+    takes_details: bool = False
     values: Sequence[ChoiceValue] = field(default_factory=tuple)
     unavailable: Sequence[UnavailableAction] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         _require_name(self.name, "name")
         require_text(self.label, "label")
+        outline = tuple(self.outline)
+        if not all(isinstance(o, ArgumentOutline) for o in outline):
+            raise ContractViolation("outline must be ArgumentOutline items")
+        outline_names = [o.name for o in outline]
+        if len(set(outline_names)) != len(outline_names):
+            raise ContractViolation(f"outline must not repeat a name: {outline_names}")
+        require_bool(self.takes_details, "takes_details")
         values = _values(self.values)
+        _require_outlined(values, frozenset(outline_names), self.takes_details, top=True)
+        required = [o.name for o in outline if o.required]
+        if [v.name for v in values] != required:
+            raise ContractViolation(f"values must give the required outline {required} in order")
         unavailable = tuple(self.unavailable)
         if not all(isinstance(u, UnavailableAction) for u in unavailable):
             raise ContractViolation("unavailable must be UnavailableAction items")
@@ -122,6 +168,7 @@ class ActionChoice:
             if u.picked and _leads_to_a_candidate(values, tuple(_label_key(label) for label in u.picked)):
                 raise ContractViolation(f"{self.name!r} offers {u.picked!r} as a candidate and as unavailable")
         _require_paths(values, frozenset(), nested=False)
+        object.__setattr__(self, "outline", outline)
         object.__setattr__(self, "values", values)
         object.__setattr__(self, "unavailable", unavailable)
 
@@ -129,6 +176,20 @@ class ActionChoice:
         if any(u.covers_whole_action() for u in self.unavailable):
             return False
         return all(v.candidates for v in self.values if isinstance(v, PickOne))
+
+    def people(self) -> tuple[PersonInText, ...]:
+        return _people_in(self.values) + tuple(p for u in self.unavailable for p in u.people())
+
+
+def _require_outlined(
+    values: Sequence[ChoiceValue], outline_names: frozenset[str], takes_details: bool, *, top: bool
+) -> None:
+    for value in values:
+        if value.name not in outline_names and (top or not takes_details):
+            raise ContractViolation(f"value {value.name!r} is not in the outline")
+        if isinstance(value, PickOne):
+            for candidate in value.candidates:
+                _require_outlined(candidate.values, outline_names, takes_details, top=False)
 
 
 def _offers_candidates(values: tuple[ChoiceValue, ...]) -> bool:
@@ -173,3 +234,7 @@ class ActionChoices:
         if len(set(names)) != len(names):
             raise ContractViolation(f"choices must not repeat a name: {names}")
         object.__setattr__(self, "choices", choices)
+
+    def people(self) -> tuple[PersonInText, ...]:
+        """候補・いまはできない道筋・理由の文に出る人。同じ人が何度も出ることがある。"""
+        return tuple(person for choice in self.choices for person in choice.people())

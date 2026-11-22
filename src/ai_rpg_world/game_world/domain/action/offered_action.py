@@ -27,11 +27,11 @@ ITEM = OfferedValue("item", "品物")
 RECIPIENT = OfferedValue("to", "渡す相手")
 DECISION = OfferedValue("decision", "決めごと")
 BALLOT = OfferedValue("choice", "選び先")
-INLINE_SPEECH = "say_inline"
+SAY_INLINE = OfferedValue("say_inline", "この行動をしながら、同じ場所の人にかける一言 (任意)")
 
 
 _NAME_LIMIT = 64
-_NAMES_TAKEN_BY_THE_CHOICE = frozenset({TARGET.name, HOW.name, INLINE_SPEECH})
+_NAMES_TAKEN_BY_THE_CHOICE = frozenset({TARGET.name, HOW.name, SAY_INLINE.name})
 
 
 def offered_value_name_problems(name: str) -> tuple[str, ...]:
@@ -45,30 +45,34 @@ def offered_value_name_problems(name: str) -> tuple[str, ...]:
 
 
 class ActionChoiceKind(Enum):
-    # 行動しながらの一言を添えられるかは、古い run のツールに合わせる (D2231)。
-    TRAVEL_TO = ("travel_to", "行く", DESTINATION, True)
-    SET_SUB_LOCATION = ("set_sub_location", "区画に出入りする", SECTION_MOVE, True)
-    EXPLORE = ("explore", "探す", None, True)
-    INTERACT = ("interact", "操作する", TARGET, True)
-    WAIT = ("wait", "待つ", None, True)
-    LISTEN = ("listen", "耳を澄ます", None, False)
-    SPEAK = ("speak", "話す", REACH, False)
-    USE_ITEM = ("use_item", "使う", ITEM, True)
-    DROP_ITEM = ("drop_item", "置く", ITEM, True)
-    PICKUP_ITEM = ("pickup_item", "拾う", ITEM, True)
-    GIVE_ITEM = ("give_item", "渡す", RECIPIENT, True)
-    TEND_TO_PLAYER = ("tend_to_player", "介抱する", TARGET, True)
-    VOTE = ("vote", "投票する", DECISION, False)
-    HOLD_ITEM = ("hold_item", "手に持つ", ITEM, True)
-    PUT_AWAY_ITEM = ("put_away_item", "しまう", ITEM, True)
+    TRAVEL_TO = ("travel_to", "行く", (DESTINATION, SAY_INLINE))
+    SET_SUB_LOCATION = ("set_sub_location", "区画に出入りする", (SECTION_MOVE,))
+    EXPLORE = ("explore", "探す", (SAY_INLINE,))
+    INTERACT = ("interact", "操作する", (TARGET, HOW, SAY_INLINE), True)
+    WAIT = ("wait", "待つ", (SAY_INLINE,))
+    LISTEN = ("listen", "耳を澄ます", ())
+    SPEAK = ("speak", "話す", (REACH, LISTENER, CONTENT))
+    USE_ITEM = ("use_item", "使う", (ITEM, SAY_INLINE))
+    DROP_ITEM = ("drop_item", "置く", (ITEM, SAY_INLINE))
+    PICKUP_ITEM = ("pickup_item", "拾う", (ITEM, SAY_INLINE))
+    GIVE_ITEM = ("give_item", "渡す", (RECIPIENT, ITEM, SAY_INLINE))
+    TEND_TO_PLAYER = ("tend_to_player", "介抱する", (TARGET, SAY_INLINE))
+    VOTE = ("vote", "投票する", (DECISION, BALLOT))
+    HOLD_ITEM = ("hold_item", "手に持つ", (ITEM,))
+    PUT_AWAY_ITEM = ("put_away_item", "しまう", (ITEM,))
 
     def __init__(
-        self, choice_name: str, label: str, first_value: OfferedValue | None, takes_inline_speech: bool
+        self, choice_name: str, label: str, outline: tuple[OfferedValue, ...], takes_details: bool = False
     ) -> None:
         self.choice_name = choice_name
         self.label = label
-        self.first_value = first_value
-        self.takes_inline_speech = takes_inline_speech
+        self.outline = outline
+        self.takes_details = takes_details
+        self.first_value = next((value for value in outline if value is not SAY_INLINE), None)
+
+    @property
+    def takes_inline_speech(self) -> bool:
+        return SAY_INLINE in self.outline
 
 
 @final

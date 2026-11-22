@@ -12,7 +12,7 @@ from ai_rpg_world.game_world.domain.action.available_actions import AvailableAct
 from ai_rpg_world.game_world.domain.action.built_in_attempts import SpeechAttempt
 from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 from ai_rpg_world.game_world.domain.action.offered_action import (
-    INLINE_SPEECH,
+    SAY_INLINE,
     ActionChoiceKind,
     OfferedAction,
     OfferedFreeText,
@@ -66,7 +66,7 @@ class ChosenActionReading:
         if kind is None:
             return MisfitChosenAction(f"「{move.tool_name}」という行動は無い。")
         arguments = move.arguments
-        inline_speech = self._inline_speech(kind, arguments.get(INLINE_SPEECH))
+        inline_speech = self._inline_speech(kind, arguments.get(SAY_INLINE.name))
         if isinstance(inline_speech, MisfitChosenAction):
             return inline_speech
         offers = [(attempt, offered) for attempt, offered in self._offers if offered.kind is kind]
@@ -80,7 +80,7 @@ class ChosenActionReading:
             return MisfitChosenAction(_unpicked(kind, offers, arguments))
         attempt, offered = chosen
         # 読まない引数を黙って捨てると、エージェントは伝えたつもりのことが起きなかったと気づけない。
-        read = {INLINE_SPEECH, *(step.value.name for step in offered.steps), *(i.value.name for i in offered.inputs)}
+        read = {SAY_INLINE.name, *(step.value.name for step in offered.steps), *(i.value.name for i in offered.inputs)}
         unread = sorted(name for name in arguments if name not in read)
         if unread:
             return MisfitChosenAction(f"「{kind.label}」では「{unread[0]}」を選べない。")
