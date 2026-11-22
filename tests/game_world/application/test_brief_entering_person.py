@@ -31,10 +31,11 @@ class TestBriefEnteringPerson:
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
         descriptions = tuple(briefing.orientation.descriptions)
+        introduction, premises, known_facts = (d.text for d in descriptions)
         assert [d.heading for d in descriptions] == ["この世界について", "この世界の前提", "あなたが知っていること"]
-        assert descriptions[0].text.startswith("冬が近い山あいの廃村。")
-        assert "昇降機は一度しか動かない。" in descriptions[1].text
-        assert "1907" in descriptions[2].text
+        assert isinstance(introduction, str) and introduction.startswith("冬が近い山あいの廃村。")
+        assert isinstance(premises, str) and "昇降機は一度しか動かない。" in premises
+        assert isinstance(known_facts, str) and "1907" in known_facts
 
     def test_imposed_goal_is_only_gens_objective(self, scenario: LoadedScenario) -> None:
         """ゲンに課す目的は、ゲンの objective「サヨと二人そろって、坑道の奥の昇降機で外へ出る。」だけになる。"""
