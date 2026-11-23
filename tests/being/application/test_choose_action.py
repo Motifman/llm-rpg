@@ -12,6 +12,7 @@ from ai_rpg_world.being.application.choose_action import (
     TurnSpentRecalling,
 )
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
 from ai_rpg_world.being.application.rechoose_name import NameChoiceAnswer, RechooseName
 from ai_rpg_world.being.contract import (
@@ -158,6 +159,7 @@ def _choose(
     memo_books: MemoBookRepository | None = None,
     visited_places: VisitedPlacesRepository | None = None,
     name_choosing: ScriptedNameChoosing | None = None,
+    writing_in_background: MemoryWritingInBackground | None = None,
 ) -> tuple[ActionChosen | ActionNotChosen | TurnSpentRecalling, ScriptedActionChoosing]:
     short_term_memories = memories or InMemoryShortTermMemoryRepository()
     clock = clock or InMemoryMemoryTurnClock()
@@ -184,6 +186,7 @@ def _choose(
         visited_places=visited_places,
         recall_limit=2,
         rechoose_name=None if name_choosing is None else RechooseName(name_choosing, min_confidence=0.85),
+        writing_in_background=writing_in_background,
     )
     return choose.execute(_command(being_tools)), completion
 
@@ -688,3 +691,45 @@ class TestNamesRechosenBeforeTheMove:
         assert isinstance(outcome, ActionChosen)
         assert outcome.move.arguments["target"] == "ドア"
         assert [(r.original, r.accepted) for r in outcome.name_rechoices] == [("ドア", False)]
+
+
+class _EpisodeFinishedInBackground(MemoryWritingInBackground):
+    """裏で書き終わったエピソードが 1 件あり、入れるよう頼まれたら記憶に入れる。"""
+
+    def __init__(self, episodes: EpisodeRepository, finished: Episode) -> None:
+        self._episodes = episodes
+        self._finished: list[Episode] = [finished]
+        self.asked: list[BeingId] = []
+
+    def take_in_finished(self, being_id: BeingId) -> None:
+        self.asked.append(being_id)
+        for episode in self._finished:
+            self._episodes.add(episode)
+        self._finished.clear()
+
+    def finish(self, being_id: BeingId) -> bool:
+        raise AssertionError("行動を選ぶときは書きかけを待たない")
+
+
+class TestTakingInWhatWasWrittenInBackground:
+    """ChooseAction が、行動を選ぶ前に、裏で書き終わった記憶をその Being の分だけ入れることを保証する。"""
+
+    def test_episode_finished_in_background_is_in_the_index_of_this_turn(self) -> None:
+        """裏で「親方が金庫の番号を口にした」を書き終えていれば、このターンのプロンプトの目次にもう出ていて、書きかけは待たない。"""
+        episodes = InMemoryEpisodeRepository(handoff=discard_events)
+        finished = Episode.write(
+            being_id=GEN,
+            episode_id="3f2a7b00-0000-4000-8000-00000000abcd",
+            environment_name="廃坑の山村",
+            written_turn=1,
+            index=EpisodeIndex(summary="親方が金庫の番号を口にした", recall_when="金庫の話が出たとき"),
+            body="親方は酔って、金庫は 1907 で開くと言った。",
+        )
+        background = _EpisodeFinishedInBackground(episodes, finished)
+
+        _, completion = _choose(
+            _reply("wait", {}), being_tools=WITH_MEMORY, episodes=episodes, writing_in_background=background
+        )
+
+        assert background.asked == [GEN]
+        assert "親方が金庫の番号を口にした" in completion.calls[0].messages[1]["content"]

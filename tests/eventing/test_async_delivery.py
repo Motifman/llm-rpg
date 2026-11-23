@@ -1,7 +1,7 @@
 """非同期のハンドラが本人ごとの順序と、結果を反映するスレッドを守る。"""
 
 from datetime import datetime, timezone
-from threading import Event, get_ident
+from threading import Event, Thread, get_ident
 
 import pytest
 
@@ -204,3 +204,75 @@ def test_apply_failure_does_not_stop_the_rest_of_the_results() -> None:
 
     assert sorted(applied) == [2, 3]
     assert [(f.reason, f.key, str(f.error)) for f in failures] == [("application_failed", "a", "apply failed")]
+
+
+def test_waiting_for_a_recipient_returns_once_its_work_has_finished() -> None:
+    """本人 A の仕事が動いているあいだ待つと、仕事が終わってから True で戻り、結果は反映を頼むまで反映されない。"""
+    entered, release = Event(), Event()
+    applied: list[int] = []
+    executor = AsyncEventExecutor(failure_observer=lambda failure: None)
+
+    def work(event: DomainEvent) -> int:
+        entered.set()
+        assert release.wait(2)
+        return event.event_id
+
+    try:
+        executor.submit(
+            key="a", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work, apply_result=applied.append
+        )
+        assert entered.wait(2)
+        assert executor.wait_for("a", timeout=0.05) is False
+        release.set()
+        assert executor.wait_for("a", timeout=2) is True
+        assert applied == []
+        executor.apply_results("a")
+        assert applied == [1]
+    finally:
+        release.set()
+        executor.shutdown(timeout=2)
+
+
+def test_waiting_for_a_recipient_without_work_returns_at_once() -> None:
+    """本人に実行待ちも実行中の仕事も無ければ、ほかの本人の仕事が止まっていても待たずに True で戻る。"""
+    entered, release = Event(), Event()
+    executor = AsyncEventExecutor(failure_observer=lambda failure: None)
+
+    def work(event: DomainEvent) -> None:
+        entered.set()
+        assert release.wait(2)
+
+    try:
+        executor.submit(key="b", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work, apply_result=print)
+        assert entered.wait(2)
+        assert executor.wait_for("a", timeout=0) is True
+    finally:
+        release.set()
+        executor.shutdown(timeout=2)
+
+
+def test_shutdown_wakes_a_recipient_being_waited_for() -> None:
+    """本人 A の仕事を待っているあいだに受付を止めると、止めた時点で待ちが起きて戻る。止めたあとに A の仕事は残らない。"""
+    entered, release, returned = Event(), Event(), Event()
+    executor = AsyncEventExecutor(failure_observer=lambda failure: None)
+    waited: list[bool] = []
+
+    def work(event: DomainEvent) -> None:
+        entered.set()
+        assert release.wait(10)
+
+    def wait() -> None:
+        waited.append(executor.wait_for("a", timeout=5))
+        returned.set()
+
+    try:
+        executor.submit(key="a", event=DomainEvent(1, datetime.now(timezone.utc)), handler=work, apply_result=print)
+        assert entered.wait(2)
+        waiter = Thread(target=wait)
+        waiter.start()
+        assert not returned.wait(0.1)
+        executor.shutdown(timeout=0)
+        assert returned.wait(2)
+        assert waited == [True]
+    finally:
+        release.set()

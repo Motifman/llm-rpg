@@ -1949,9 +1949,8 @@ class WorldRuntime:
         acting = self._acting_being_for(player_id)
         if acting is None:
             return
-        turn = self._memory_turn_clock.current_turn(acting.being_id)
-        EndBeingTurn(self._being_short_term_memory_store).execute(
-            EndBeingTurnCommand(being_id=acting.being_id, turn=turn)
+        EndBeingTurn(self._being_short_term_memory_store, self._memory_turn_clock).execute(
+            EndBeingTurnCommand(being_id=acting.being_id)
         )
 
     def being_persona(self, being_id: BeingId) -> Persona:

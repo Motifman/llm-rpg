@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Hashable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from threading import RLock
+from threading import Condition, RLock
 from typing import Any, Literal, TypeVar
 
 from ai_rpg_world.eventing.async_event_handler import AsyncEventHandler
@@ -62,6 +62,7 @@ class AsyncEventExecutor:
         self._max_pending = max_pending
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="eventing")
         self._lock = RLock()
+        self._recipient_done = Condition(self._lock)
         self._futures: set[Future[None]] = set()
         self._queues: dict[Hashable, deque[int]] = {}
         self._unfinished: dict[int, _Work] = {}
@@ -138,6 +139,7 @@ class AsyncEventExecutor:
                 queue = self._queues.get(key)
                 if not queue:
                     self._queues.pop(key, None)
+                    self._recipient_done.notify_all()
                     return
                 number = queue.popleft()
                 work = self._unfinished[number]
@@ -151,6 +153,13 @@ class AsyncEventExecutor:
                 with self._lock:
                     if self._unfinished.pop(number, None) is not None:
                         self._ready[key].append((work, result))
+
+    def wait_for(self, key: Hashable, *, timeout: float) -> bool:
+        """本人の実行待ちと実行中の仕事が無くなるまで待ち、期限までに無くなったかを返す。結果は反映しない。"""
+        if isinstance(timeout, bool) or not math.isfinite(timeout) or timeout < 0:
+            raise ValueError("timeoutは0以上の有限の秒数である必要があります")
+        with self._lock:
+            return self._recipient_done.wait_for(lambda: key not in self._queues, timeout=timeout)
 
     def apply_results(self, key: Hashable) -> None:
         """本人の完了した結果だけを、呼び出したスレッドで反映する。
@@ -196,6 +205,7 @@ class AsyncEventExecutor:
             abandoned = tuple(self._unfinished.values())
             self._unfinished.clear()
             self._queues.clear()
+            self._recipient_done.notify_all()
             for work in abandoned:
                 self._notify(AsyncFailure("shutdown_timeout", work.key, work.event, work.handler))
         # 実行中の Python スレッドは止められない。遅れて返った結果は上の表に無いので捨てる。
