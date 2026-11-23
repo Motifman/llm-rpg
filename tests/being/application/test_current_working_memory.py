@@ -78,12 +78,13 @@ def _of(
     stores: dict[str, object],
     being_id: BeingId = HAL,
     scene: Scene = Scene([Description(heading="現在地と周囲", text="北の竪坑口")]),
+    being_tools: OfferedBeingTools = OfferedBeingTools(memo="memo"),
 ) -> WorkingMemory:
     current = CurrentWorkingMemory(episode_index_limit=5, **stores)  # type: ignore[arg-type]
     return current.of(
         being_id,
         orientation=Orientation([Description(heading="ペルソナ", text="あなたはハル。")]),
-        being_tools=OfferedBeingTools(),
+        being_tools=being_tools,
         imposed_goal="外へ出る",
         scene=scene,
         closing=Closing(instruction="行動を 1 つ選んでください。"),
@@ -162,6 +163,12 @@ class TestGathering:
         headings = [s.heading for s in _of(stores).message]
 
         assert {"思い出せる出来事", "メモ"} <= set(headings)
+
+    def test_memo_is_left_out_when_the_memo_argument_is_not_offered(self, stores: dict[str, object]) -> None:
+        """行動の tool にメモの引数を出していなければ、【メモ】の区画も出さない。書けないメモ帳を見せない。"""
+        headings = [s.heading for s in _of(stores, being_tools=OfferedBeingTools()).message]
+
+        assert "メモ" not in headings
 
     def test_being_outside_any_environment_raises(self, stores: dict[str, object]) -> None:
         """どの環境にも入っていない Being の作業記憶は組めず、LookupError を投げる。"""

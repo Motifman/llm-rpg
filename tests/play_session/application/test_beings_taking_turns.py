@@ -289,3 +289,33 @@ class TestBodyChangeSinceTheLastScene:
         hunger_line = next(line for line in second.splitlines() if line.startswith("  空腹: "))
         assert "前回" not in first
         assert "、前回 +" in hunger_line
+
+
+class TestMemoOfferedToBeings:
+    """新しい世界が Being にメモの引数を出し、書いたメモが次のターンの【メモ】に出ることを保証する。"""
+
+    def test_first_prompt_explains_the_memo_and_every_action_takes_it(self) -> None:
+        """1 ターン目から、システムプロンプトに古い run と同じ【メモの書き方】が出て、行動のツールはどれも memo の引数を持つ。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        completion = ScriptedActionChoosing(_listening(4))
+
+        session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
+
+        first = completion.calls[0]
+        assert (
+            "【メモの書き方】\n- 行動の tool の `memo` に、あとで使いたいことを書ける。" in first.messages[0]["content"]
+        )
+        assert all("memo" in tool["function"]["parameters"]["properties"] for tool in first.tools)
+
+    def test_memo_written_with_an_action_appears_in_the_next_turn(self) -> None:
+        """ゲンが耳を澄ますついでにやることを書くと、次のターンの【メモ】のやることにその文が出る。"""
+        session = MineVillageSession(round_limit=2, delivers_world_events=True).started()
+        todo = {"do": "add", "kind": "todo", "text": "倉庫でカンテラの油を探す"}
+        answers = _AnswersByPerson(session, {_GEN: [_reply("listen", "l1", memo=[todo])]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        first, second = [prompt for person, prompt in answers.prompts if person == _GEN]
+        assert "倉庫でカンテラの油を探す" not in first
+        memo = second[second.index("【メモ】") : second.index("【現在地と周囲】")]
+        assert "やること:" in memo and "倉庫でカンテラの油を探す" in memo
