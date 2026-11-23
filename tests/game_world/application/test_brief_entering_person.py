@@ -27,10 +27,10 @@ class TestBriefEnteringPerson:
     """BriefEnteringPerson が、廃坑の山村 v2 に入るゲンに、案内・課す目的・最初から知っている人を返すことを保証する。"""
 
     def test_orientation_is_the_world_premises_like_the_old_run(self, scenario: LoadedScenario) -> None:
-        """ゲンの案内は「世界の前提」1 つで、古い run と同じく題名と概要の 2 段落、空行、地図の見出しの順に始まり、知っていること (金庫の番号) は入らない。知っていることは Being が【ペルソナ】に出す (D2267)。"""
+        """ゲンの案内の 1 つ目は「世界の前提」で、古い run と同じく題名と概要の 2 段落、空行、地図の見出しの順に始まり、知っていること (金庫の番号) は入らない。知っていることは Being が【ペルソナ】に出す (D2267)。"""
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
-        [premises] = tuple(briefing.orientation.descriptions)
+        premises, _ = tuple(briefing.orientation.descriptions)
         assert premises.heading == "世界の前提"
         assert isinstance(premises.text, str) and premises.text.splitlines()[:6] == [
             "- 舞台のタイトル: 廃坑の山村",
@@ -43,18 +43,32 @@ class TestBriefEnteringPerson:
         ]
         assert "1907" not in premises.text
 
+    def test_world_rules_follow_the_premises_like_the_old_run(self, scenario: LoadedScenario) -> None:
+        """ゲンの案内の 2 つ目は「この世界の決まり」で、古い run と同じく、ラベル・一言 (say_inline)・勝利条件の行がこの順に並ぶ。"""
+        briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
+
+        _, rules = tuple(briefing.orientation.descriptions)
+
+        assert rules.heading == "この世界の決まり"
+        assert isinstance(rules.text, str)
+        lines = rules.text.splitlines()
+        assert len(lines) == 3
+        assert lines[0].startswith("- ラベル（接続先・オブジェクト・相手プレイヤー等）は")
+        assert lines[1].startswith("- `say_inline` を持つツールでは")
+        assert lines[2].startswith("- **このシナリオの勝利条件")
+
     def test_mine_village_has_no_deadline_line(self, scenario: LoadedScenario) -> None:
         """山村 v2 は時間で終わらないので、世界の前提に「行動の制限」の行は出ない。"""
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
-        [premises] = tuple(briefing.orientation.descriptions)
+        premises, _ = tuple(briefing.orientation.descriptions)
         assert isinstance(premises.text, str) and "行動の制限" not in premises.text
 
     def test_map_lists_every_place_with_its_neighbours_in_minutes(self, scenario: LoadedScenario) -> None:
         """世界の前提の中の「【この場所の造り】」は 21 の場所を 1 行ずつ載せ、屋外の北の竪坑口の行は明るさを「昼は明るい」と書き、1 tick を 30 分として近い順に行き先を並べる。屋内の昇降機の乗り場の明るさには「昼は」を付けない。"""
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
-        [premises] = tuple(briefing.orientation.descriptions)
+        premises, _ = tuple(briefing.orientation.descriptions)
         assert isinstance(premises.text, str)
         lines = premises.text.split("【この場所の造り】\n")[1].splitlines()
         assert len(lines) == 21

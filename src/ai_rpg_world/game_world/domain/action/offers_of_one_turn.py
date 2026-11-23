@@ -73,7 +73,13 @@ class OffersOfOneTurn:
             name=kind.choice_name,
             label=kind.label,
             outline=tuple(
-                ArgumentOutline(name=value.name, label=value.label, required=value is kind.first_value)
+                ArgumentOutline(
+                    name=value.name,
+                    label=value.label,
+                    required=value is kind.first_value,
+                    hidden_as=value.hidden_as,
+                    max_length=value.max_length,
+                )
                 for value in kind.outline
             ),
             takes_details=kind.takes_details,

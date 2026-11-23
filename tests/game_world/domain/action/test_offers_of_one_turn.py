@@ -97,6 +97,16 @@ class TestOffersOfOneTurn:
             "tend_to_player",
         ]
 
+    def test_say_inline_is_outlined_like_the_old_run(self) -> None:
+        """say_inline の見取り図は、古い run と同じ説明・200 字の上限・【直近の出来事】で伏せる言葉「発言」を持つ。"""
+        [say_inline] = [o for o in _choice(_choices(), ActionChoiceKind.WAIT).outline if o.name == "say_inline"]
+
+        assert (say_inline.label, say_inline.max_length, say_inline.hidden_as) == (
+            "この行動をしながら発する一言 (任意、200 字以内)。書き方は【この世界の決まり】。",
+            200,
+            "発言",
+        )
+
     def test_only_interact_takes_details(self) -> None:
         """操作の宣言にある引数を details で受けるのは interact だけで、話すときの中身は見取り図の上の段に並ぶ。"""
         choices = _choices()
