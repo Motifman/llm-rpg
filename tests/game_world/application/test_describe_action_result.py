@@ -109,13 +109,13 @@ class TestDescribeActionResult:
     def test_done_built_in_action_becomes_a_successful_result_with_the_text_of_the_kind(
         self, mine_village: WorldDesign
     ) -> None:
-        """組み込みの行為 (耳を澄ます) では、要約と本文は、共通の部品に行為ごとに書いた「耳を澄ました」と成功の文になる。"""
+        """組み込みの行為 (待つ) では、要約と本文は、共通の部品に行為ごとに書いた「その場で待機した」と成功の文になる。"""
         gen = _GenInTheOffice(mine_village)
 
-        result = gen.result_of("listen")
+        result = gen.result_of("wait")
 
-        assert _succeeded_and_summary(result) == (True, "耳を澄ました")
-        assert _template(result.body) == "耳を澄まし、周囲の音や人の気配を確かめた。"
+        assert _succeeded_and_summary(result) == (True, "その場で待機した")
+        assert _template(result.body) == "しばらく行動を控えて、様子を見た"
 
     def test_names_of_things_are_filled_into_the_summary_and_the_text(self, mine_village: WorldDesign) -> None:
         """ゲンが事務所から井戸へ移動を始めると、要約は古い run と同じ「「鉱山会社の事務所」から「井戸」へ向かって出発した」になり、本文の行き先に「井戸」が入る。"""

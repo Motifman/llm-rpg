@@ -36,8 +36,12 @@ def _reply(tool_name: str, call_id: str, **arguments: object) -> ActionChoosingR
     return ActionChoosingReply(tool_call=ToolCallReply(tool_name=tool_name, arguments=arguments, call_id=call_id))
 
 
-def _listening(count: int) -> list[ActionChoosingReply]:
-    return [_reply("listen", f"listen_{i}") for i in range(count)]
+def _murmur(call_id: str) -> ActionChoosingReply:
+    return _reply("speak", call_id, reach="ふつうの声で話す", content="ふむ")
+
+
+def _murmuring(count: int) -> list[ActionChoosingReply]:
+    return [_murmur(f"murmur_{i}") for i in range(count)]
 
 
 def _turn_order(session: MineVillageSession) -> tuple[PersonId, ...]:
@@ -53,7 +57,7 @@ def _answered_attempts(session: MineVillageSession, person: PersonId) -> list[At
 
 
 class _AnswersByPerson(ActionChoosingCompletion):
-    """1 人ずつ頼まれるので、巡りの残りのターンの先頭を、いま頼まれている人とみなして答えを選ぶ。決めていない人は耳を澄ます。"""
+    """1 人ずつ頼まれるので、巡りの残りのターンの先頭を、いま頼まれている人とみなして答えを選ぶ。決めていない人はふつうの声で一言つぶやく。"""
 
     def __init__(self, session: MineVillageSession, answers: dict[PersonId, list[ActionChoosingReply]]) -> None:
         self._session = session
@@ -68,7 +72,7 @@ class _AnswersByPerson(ActionChoosingCompletion):
         self.asked.append(person)
         self.prompts.append((person, messages[-1]["content"]))
         planned = self._answers.get(person, [])
-        return planned.pop(0) if planned else _reply("listen", f"listen_{len(self.asked)}")
+        return planned.pop(0) if planned else _murmur(f"murmur_{len(self.asked)}")
 
 
 class _FailingFor(_AnswersByPerson):
@@ -107,7 +111,7 @@ class TestBeingsTakingTurnsOneByOne:
     def test_each_of_the_four_gets_a_scene_and_choices_every_round(self) -> None:
         """スタブの LLM で廃坑の山村 v2 を 2 巡り回すと、4 人に毎巡り 1 回ずつ、場面と行動の候補とツールが渡る (#2230 の完了条件)。"""
         session = MineVillageSession(round_limit=2, delivers_world_events=True).started()
-        completion = ScriptedActionChoosing(_listening(8))
+        completion = ScriptedActionChoosing(_murmuring(8))
 
         stopped = session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
@@ -118,32 +122,43 @@ class TestBeingsTakingTurnsOneByOne:
         for call in completion.calls:
             assert "【現在地と周囲】" in call.messages[1]["content"]
             assert "【現在選べる対象引数】" in call.messages[1]["content"]
-            assert "listen" in {tool["function"]["name"] for tool in call.tools}
+            assert "speak" in {tool["function"]["name"] for tool in call.tools}
+
+    def test_listening_never_reaches_the_beings(self) -> None:
+        """耳を澄ます行為は世界に残っているが、2 巡り回しても 4 人のどのツールの名前・説明にもプロンプトにも listen と「耳を澄ま」が出ない (#2305 まで)。"""
+        session = MineVillageSession(round_limit=2, delivers_world_events=True).started()
+        completion = ScriptedActionChoosing(_murmuring(8))
+
+        session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
+
+        assert len(completion.calls) == 8
+        for call in completion.calls:
+            shown = repr(call.tools) + "".join(message["content"] for message in call.messages)
+            assert "listen" not in shown and "耳を澄ま" not in shown
 
     def test_result_of_the_chosen_action_answers_the_attempt(self) -> None:
-        """1 巡り目に全員が耳を澄ますと、ゲンの短期記憶の試みに、耳を澄ます行為の成功の文と行動の要約「耳を澄ました」が結び付く。"""
+        """1 巡り目に全員がふつうの声で「ふむ」と言うと、ゲンの短期記憶の試みに、話す行為の成功の文と行動の要約が結び付く。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
 
-        session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(_listening(4))))(
+        session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(_murmuring(4))))(
             PlayRoundsCommand(WORLD)
         )
 
         [attempt] = _answered_attempts(session, _GEN)
         assert isinstance(attempt.result, ObservedOutcome)
-        assert attempt.result.observation.body == "耳を澄まし、周囲の音や人の気配を確かめた。"
+        assert attempt.result.observation.body == "「ふむ」と言った。"
         route = attempt.result.observation.route
         assert isinstance(route, OwnActionResult)
-        assert (route.succeeded, route.action_summary) == (True, "耳を澄ました")
+        assert (route.succeeded, route.action_summary) == (True, "あなたは言った: 「ふむ」")
 
     def test_choosing_to_wait_skips_the_next_round(self) -> None:
         """1 巡り目にゲンだけが待つを選ぶと、2 巡り目はゲンを除く 3 人にだけ頼む。"""
         session = MineVillageSession(round_limit=2).started()
         order = _turn_order(session)
         first_round = [
-            _reply("wait", "wait_gen") if person == _GEN else _reply("listen", f"listen_{person.value}")
-            for person in order
+            _reply("wait", "wait_gen") if person == _GEN else _murmur(f"murmur_{person.value}") for person in order
         ]
-        completion = ScriptedActionChoosing([*first_round, *_listening(3)])
+        completion = ScriptedActionChoosing([*first_round, *_murmuring(3)])
 
         session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
@@ -154,16 +169,16 @@ class TestBeingsTakingTurnsOneByOne:
         session = MineVillageSession(round_limit=2).started()
         order = _turn_order(session)
         first_round = [
-            ActionChoosingReply(tool_call=None) if person == _GEN else _reply("listen", f"listen_{person.value}")
+            ActionChoosingReply(tool_call=None) if person == _GEN else _murmur(f"murmur_{person.value}")
             for person in order
         ]
-        completion = ScriptedActionChoosing([*first_round, *_listening(4)])
+        completion = ScriptedActionChoosing([*first_round, *_murmuring(4)])
 
         session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
         assert len(completion.calls) == 8
         assert [a.move.call_id for a in _answered_attempts(session, _GEN)] != []
-        assert all(a.move.tool_name == "listen" for a in _answered_attempts(session, _GEN))
+        assert all(a.move.tool_name == "speak" for a in _answered_attempts(session, _GEN))
 
     def test_destination_not_offered_is_answered_with_the_worlds_guidance(self) -> None:
         """ゲンが行き先の候補に無い「北の坑道」へ行こうとすると、試みには失敗の結果として世界の案内が結び付く。"""
@@ -172,7 +187,7 @@ class TestBeingsTakingTurnsOneByOne:
         replies = [
             _reply("travel_to", "go_north", destination="北の坑道")
             if person == _GEN
-            else _reply("listen", f"listen_{person.value}")
+            else _murmur(f"murmur_{person.value}")
             for person in order
         ]
 
@@ -263,7 +278,7 @@ class TestBelongingsComingAndGoing:
         session = MineVillageSession(delivers_world_events=True, round_limit=4).started()
         answers = _AnswersByPerson(
             session,
-            {_GEN: [_reply("listen", "l0"), _reply("give_item", "g1", to="サヨ", item="カンテラの油")]},
+            {_GEN: [_murmur("l0"), _reply("give_item", "g1", to="サヨ", item="カンテラの油")]},
         )
 
         session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
@@ -297,7 +312,7 @@ class TestMemoOfferedToBeings:
     def test_first_prompt_explains_the_memo_and_every_action_takes_it(self) -> None:
         """1 ターン目から、システムプロンプトに古い run と同じ【メモの書き方】が出て、思い出す道具を除く行動のツールはどれも memo の引数を持つ。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
-        completion = ScriptedActionChoosing(_listening(4))
+        completion = ScriptedActionChoosing(_murmuring(4))
 
         session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
@@ -309,10 +324,12 @@ class TestMemoOfferedToBeings:
         assert actions and all("memo" in tool["function"]["parameters"]["properties"] for tool in actions)
 
     def test_memo_written_with_an_action_appears_in_the_next_turn(self) -> None:
-        """ゲンが耳を澄ますついでにやることを書くと、次のターンの【メモ】のやることにその文が出る。"""
+        """ゲンが一言つぶやくついでにやることを書くと、次のターンの【メモ】のやることにその文が出る。"""
         session = MineVillageSession(round_limit=2, delivers_world_events=True).started()
         todo = {"do": "add", "kind": "todo", "text": "倉庫でカンテラの油を探す"}
-        answers = _AnswersByPerson(session, {_GEN: [_reply("listen", "l1", memo=[todo])]})
+        answers = _AnswersByPerson(
+            session, {_GEN: [_reply("speak", "l1", reach="ふつうの声で話す", content="ふむ", memo=[todo])]}
+        )
 
         session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
 
@@ -328,7 +345,7 @@ class TestEpisodesWrittenWhileTakingTurns:
     def test_first_prompt_offers_recalling_and_explains_the_index(self) -> None:
         """1 ターン目から、思い出す道具 episode_recall が出て、【渡される文面の読み方】に古い run と同じ目次の読み方の行が出る。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
-        completion = ScriptedActionChoosing(_listening(4))
+        completion = ScriptedActionChoosing(_murmuring(4))
 
         session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
@@ -346,7 +363,7 @@ class TestEpisodesWrittenWhileTakingTurns:
         """
         session = MineVillageSession(round_limit=20, delivers_world_events=True).started()
         answers = _AnswersByPerson(session, {})
-        next_turn = ScriptedActionChoosing(_listening(1))
+        next_turn = ScriptedActionChoosing(_murmuring(1))
         try:
             session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
             assert session.memory_writing.finish(BeingId(_GEN.value)) is True
@@ -363,7 +380,7 @@ class TestEpisodesWrittenWhileTakingTurns:
     def test_ending_the_session_writes_what_was_not_yet_written(self) -> None:
         """2 巡りで終えると、4 人それぞれの、まだまとめていない出来事が 1 件ずつエピソードになる。"""
         session = MineVillageSession(round_limit=2, delivers_world_events=True).started()
-        session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(_listening(8))))(
+        session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(_murmuring(8))))(
             PlayRoundsCommand(WORLD)
         )
 
@@ -371,4 +388,4 @@ class TestEpisodesWrittenWhileTakingTurns:
 
         for person in _turn_order(session):
             [episode] = session.episodes.list_by_being(BeingId(person.value))
-            assert episode.environment_name == "廃坑の山村" and "耳を澄ま" in episode.body
+            assert episode.environment_name == "廃坑の山村" and "ふむ" in episode.body
