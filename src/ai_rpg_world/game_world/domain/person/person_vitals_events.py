@@ -5,6 +5,7 @@ from typing import final
 
 from ai_rpg_world.eventing.domain_event import DomainEvent
 from ai_rpg_world.game_world.domain.person.life_state import FallCause
+from ai_rpg_world.game_world.domain.person.shown_body import ShownBody
 from ai_rpg_world.game_world.domain.person.status_effect import NoPreviousStatusEffect, StatusEffect
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueLevel
 from ai_rpg_world.game_world.domain.rules.hunger_rule import HungerLevel
@@ -39,6 +40,11 @@ class PersonDiedEvent(PersonVitalsEvent):
 class PersonHealedEvent(PersonVitalsEvent):
     hp_before: HitPoints
     hp_after: HitPoints
+
+
+@dataclass(frozen=True, kw_only=True)
+class PersonBodyShownEvent(PersonVitalsEvent):
+    shown: ShownBody
 
 
 @dataclass(frozen=True, kw_only=True)

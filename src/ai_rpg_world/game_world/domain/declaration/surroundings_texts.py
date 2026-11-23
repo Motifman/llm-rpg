@@ -59,9 +59,10 @@ SCENE_LINE_NAMES = {
     "belonging_description": ("description",),
     "belonging_held": (),
     "body": (),
-    "hit_points": ("tier", "current", "maximum"),
-    "hunger": ("tier", "amount", "limit"),
-    "fatigue": ("tier", "amount", "limit"),
+    "hit_points": ("tier", "current", "maximum", "change"),
+    "hunger": ("tier", "amount", "limit", "change"),
+    "fatigue": ("tier", "amount", "limit", "change"),
+    "body_change": ("change",),
     "fatigue_felt": ("feel",),
 }
 
@@ -113,6 +114,7 @@ class SceneTexts:
     hunger: str
     fatigue: str
     fatigue_felt: str
+    body_change: str
     need_tiers: NeedTiers
     hit_points_tiers: HitPointsTiers
     ground_items: DisplayName

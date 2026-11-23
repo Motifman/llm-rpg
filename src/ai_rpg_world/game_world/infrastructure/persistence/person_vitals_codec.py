@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.person.life_state import (
     WorldHappening,
 )
 from ai_rpg_world.game_world.domain.person.person_vitals import NotBusy, PersonVitalsMemento
+from ai_rpg_world.game_world.domain.person.shown_body import LastShownBody, NothingShownYet, ShownBody
 from ai_rpg_world.game_world.domain.person.status_effect import StatusEffect, StatusEffectType
 from ai_rpg_world.game_world.domain.value_object import FatigueAmount, HitPoints, HungerAmount, WorldTick
 from ai_rpg_world.game_world.infrastructure.persistence.json_parts import (
@@ -66,6 +67,34 @@ _BUSY_UNTIL: JsonUnion[WorldTick | NotBusy] = JsonUnion(
 )
 
 
+def _shown_body_from_json(raw: object) -> ShownBody:
+    fields = exact_fields(raw, ("hp", "hunger", "fatigue"))
+    return ShownBody(
+        hp=_hit_points_from_json(fields["hp"]),
+        hunger=HungerAmount(json_int(fields["hunger"])),
+        fatigue=FatigueAmount(json_int(fields["fatigue"])),
+    )
+
+
+def _hit_points_to_json(hp: HitPoints) -> object:
+    return {"current": hp.current, "maximum": hp.maximum}
+
+
+_LAST_SHOWN: JsonUnion[LastShownBody] = JsonUnion(
+    JsonUnionMember(
+        "shown",
+        ShownBody,
+        lambda shown: {
+            "hp": _hit_points_to_json(shown.hp),
+            "hunger": shown.hunger.value,
+            "fatigue": shown.fatigue.value,
+        },
+        _shown_body_from_json,
+    ),
+    JsonUnionMember.fieldless("nothing_shown_yet", NothingShownYet()),
+)
+
+
 def _hit_points_from_json(raw: object) -> HitPoints:
     fields = exact_fields(raw, ("current", "maximum"))
     return HitPoints(current=json_int(fields["current"]), maximum=json_int(fields["maximum"]))
@@ -79,13 +108,13 @@ def _status_effect_from_json(raw: object) -> StatusEffect:
 @final
 class PersonVitalsCodec:
     kind = "person_vitals"
-    version = 1
+    version = 2
     memento_type = PersonVitalsMemento
 
     def to_json(self, memento: PersonVitalsMemento) -> object:
         return {
             "person": memento.person.value,
-            "hp": {"current": memento.hp.current, "maximum": memento.hp.maximum},
+            "hp": _hit_points_to_json(memento.hp),
             "life_state": _LIFE_STATE.to_json(memento.life_state),
             "hunger": memento.hunger.value,
             "fatigue": memento.fatigue.value,
@@ -94,10 +123,13 @@ class PersonVitalsCodec:
                 for effect in sorted(memento.status_effects, key=lambda effect: effect.kind.value)
             ],
             "busy_until": _BUSY_UNTIL.to_json(memento.busy_until),
+            "last_shown": _LAST_SHOWN.to_json(memento.last_shown),
         }
 
     def from_json(self, raw: object) -> PersonVitalsMemento:
-        fields = exact_fields(raw, ("person", "hp", "life_state", "hunger", "fatigue", "status_effects", "busy_until"))
+        fields = exact_fields(
+            raw, ("person", "hp", "life_state", "hunger", "fatigue", "status_effects", "busy_until", "last_shown")
+        )
         return PersonVitalsMemento(
             person=person_id_from_json(fields["person"]),
             hp=_hit_points_from_json(fields["hp"]),
@@ -106,4 +138,5 @@ class PersonVitalsCodec:
             fatigue=FatigueAmount(json_int(fields["fatigue"])),
             status_effects=distinct_items(fields["status_effects"], _status_effect_from_json),
             busy_until=_BUSY_UNTIL.from_json(fields["busy_until"]),
+            last_shown=_LAST_SHOWN.from_json(fields["last_shown"]),
         )

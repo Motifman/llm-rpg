@@ -35,6 +35,7 @@ from ai_rpg_world.game_world.application.deliver_perception_of_committed_events 
 )
 from ai_rpg_world.game_world.application.describe_action_result import DescribeActionResult
 from ai_rpg_world.game_world.application.describe_scene import DescribeScene
+from ai_rpg_world.game_world.application.mark_body_as_shown import MarkBodyAsShown
 from ai_rpg_world.game_world.application.name_person import NamePerson
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.offer_action_choices import OfferActionChoices
@@ -170,6 +171,7 @@ class MineVillageSession:
             being_tools=OfferedBeingTools(inner_thought="inner_thought"),
             closing=Closing(instruction=closing),
             describe_scene=DescribeScene(self.scope, design),
+            mark_body_as_shown=MarkBodyAsShown(self.scope),
             offer_choices=OfferActionChoices(self.scope, design),
             tell_time=TellCurrentTime(self.scope, day_night, _scenario().design.clock_wording),
             choose_action=ChooseAction(

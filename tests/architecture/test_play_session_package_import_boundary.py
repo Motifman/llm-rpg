@@ -38,6 +38,7 @@ _WORLD_ENTRANCES = tuple(
         "world_has_ended",
         "accept_world_time_passage",
         "describe_scene",
+        "mark_body_as_shown",
         "offer_action_choices",
         "take_chosen_action",
         "tell_current_time",

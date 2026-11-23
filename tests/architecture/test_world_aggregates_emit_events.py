@@ -531,6 +531,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
     ),
     "PersonVitals.exert": lambda: _with(_vitals(), lambda v: v.exert(_fatigue_rule())),
     "PersonVitals.rest": lambda: _with(_tired(), lambda v: v.rest(FatigueAmount(2), _fatigue_rule())),
+    "PersonVitals.note_shown": lambda: _with(_vitals(), lambda v: v.note_shown()),
     "PersonVitals.start_action": lambda: _with(_vitals(), lambda v: v.start_action(WorldTick(3))),
     "PersonVitals.start_acting": lambda: _with(
         _vitals(), lambda v: v.start_acting(UsesBody(), WorldTick(3), _fatigue_rule())
