@@ -86,10 +86,7 @@ class ActionPrerequisiteCheck:
         if isinstance(failure, FailureReason):
             return AvailableAction(
                 attempt=attempt,
-                standing=NotNow(
-                    refusal_texts.precondition_text(failure, attempt.actor),
-                    about_object_state=failure.about_object_state,
-                ),
+                standing=NotNow(refusal_texts.precondition_text(failure, attempt.actor)),
             )
         return AvailableAction(attempt=attempt, standing=Doable())
 

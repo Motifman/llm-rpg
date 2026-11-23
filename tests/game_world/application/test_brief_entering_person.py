@@ -56,7 +56,7 @@ class TestBriefEnteringPerson:
         assert lines[0].startswith("- ラベル（接続先・オブジェクト・相手プレイヤー等）は")
         assert (
             lines[1]
-            == "- 行動は条件を満たさないと拒否されることがある。操作は【現在選べる対象引数】に並んだものの中から選ぶこと。"
+            == "- 行動は条件を満たさないと拒否されることがある。操作は【現在選べる対象引数】に並んだものの中から選ぶこと。いまできない操作は、【現在選べる対象引数】の「いまできない:」に理由とともに出る。"
         )
         assert lines[2].startswith("- `say_inline` を持つツールでは")
         assert lines[3].startswith("- **このシナリオの勝利条件")

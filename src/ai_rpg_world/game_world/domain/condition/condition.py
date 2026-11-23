@@ -34,7 +34,6 @@ class NoText:
 class FailureReason:
     failed_part: ConditionPath
     text: TextAboutPeople | NoText
-    about_object_state: bool = False
 
 
 @final

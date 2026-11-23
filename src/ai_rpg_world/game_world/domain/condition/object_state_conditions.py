@@ -46,9 +46,6 @@ class ObjectValueIsCondition(LeafCondition):
     def _requirements_besides_text(self) -> Requirements:
         return Requirements.nothing()
 
-    def is_about_object_state(self) -> bool:
-        return True
-
 
 @final
 @dataclass(frozen=True)
@@ -65,9 +62,6 @@ class ObjectCountAtLeastCondition(LeafCondition):
 
     def _requirements_besides_text(self) -> Requirements:
         return Requirements.nothing()
-
-    def is_about_object_state(self) -> bool:
-        return True
 
 
 @final
@@ -87,9 +81,6 @@ class ObjectCountGreaterThanCondition(LeafCondition):
     def _requirements_besides_text(self) -> Requirements:
         return Requirements.nothing()
 
-    def is_about_object_state(self) -> bool:
-        return True
-
 
 @final
 @dataclass(frozen=True)
@@ -106,6 +97,3 @@ class ObjectStockAtLeastCondition(LeafCondition):
 
     def _requirements_besides_text(self) -> Requirements:
         return Requirements.nothing()
-
-    def is_about_object_state(self) -> bool:
-        return True

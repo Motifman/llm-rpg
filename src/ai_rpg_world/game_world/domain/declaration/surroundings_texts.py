@@ -41,9 +41,6 @@ SCENE_LINE_NAMES = {
     "no_objects": (),
     "no_objects_in_dark": (),
     "objects_in_dark": (),
-    "unavailable": ("operations",),
-    "unavailable_operation": ("label", "reason"),
-    "unavailable_joiner": (),
     "people": (),
     "no_people": (),
     "person": ("person", "condition", "carried"),
@@ -92,9 +89,6 @@ class SceneTexts:
     no_objects: str
     no_objects_in_dark: str
     objects_in_dark: str
-    unavailable: str
-    unavailable_operation: str
-    unavailable_joiner: str
     people: str
     no_people: str
     person: str
