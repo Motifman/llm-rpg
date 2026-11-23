@@ -80,7 +80,11 @@ class CurrentWorkingMemory:
             backstory=backstory_text(short_term),
             recent_events=recent_events_text(short_term),
             episode_index=format_episode_index(shown_episodes, current_environment_name=environment_name),
-            memo=format_memo_book(self._memo_books.get(being_id), current_environment_name=environment_name),
+            memo=(
+                ""
+                if being_tools.memo is None
+                else format_memo_book(self._memo_books.get(being_id), current_environment_name=environment_name)
+            ),
         )
         return WorkingMemory.compose(
             orientation=Orientation(_named(orientation.descriptions)),

@@ -8,6 +8,7 @@ from typing import cast
 from ai_rpg_world.being.application.choose_action import ActionChoosingCompletion, ChooseAction
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.enter_environment import EnterEnvironment
+from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.perceive_observation import PerceiveObservation
 from ai_rpg_world.being.application.prepare_being import PrepareBeing
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult
@@ -171,7 +172,7 @@ class MineVillageSession:
         return BeingsTakingTurnsOneByOne(
             world=WORLD,
             casts=self.casts,
-            being_tools=OfferedBeingTools(inner_thought="inner_thought"),
+            being_tools=OfferedBeingTools(inner_thought="inner_thought", memo=MEMO_FIELD_NAME),
             closing=Closing(instruction=closing),
             describe_scene=DescribeScene(self.scope, design),
             mark_body_as_shown=MarkBodyAsShown(self.scope),
