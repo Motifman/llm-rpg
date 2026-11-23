@@ -92,5 +92,5 @@ class ChoiceWording:
     def _argument(self, argument: ArgumentDeclaration, items: tuple[ItemInstanceId, ...]) -> OfferedInput:
         value = OfferedValue(argument.name.value, argument.name.value)
         if isinstance(argument.kind, TextArgument):
-            return OfferedFreeText(value)
+            return OfferedFreeText(value, writes=argument.kind.writes)
         return OfferedItemPick(value, tuple(self.item(value, item) for item in items))

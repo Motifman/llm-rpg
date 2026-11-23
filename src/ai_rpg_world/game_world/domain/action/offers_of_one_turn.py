@@ -145,7 +145,11 @@ class _Node:
 
 def _input(offered: OfferedInput) -> ChoiceValue:
     if isinstance(offered, OfferedFreeText):
-        return FreeText(name=offered.value.name, label=offered.value.label)
+        return FreeText(
+            name=offered.value.name,
+            label=offered.value.label,
+            writes=None if offered.writes is None else offered.writes.text,
+        )
     pick = _Node()
     for step in offered.items:
         pick.add((step,), ())

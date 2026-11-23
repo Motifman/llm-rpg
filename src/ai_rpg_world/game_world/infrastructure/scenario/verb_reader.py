@@ -26,7 +26,7 @@ from ai_rpg_world.game_world.domain.declaration.verb import (
     WorldStageEffectsDeclaration,
     WrittenTextOf,
 )
-from ai_rpg_world.game_world.domain.value_object import InteractionId, ObjectId, SpotId
+from ai_rpg_world.game_world.domain.value_object import DisplayName, InteractionId, ObjectId, SpotId
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from ai_rpg_world.game_world.domain.value_object.discoverable_id import DiscoverableId
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
@@ -84,7 +84,6 @@ _ACCESS_FIELDS = (
     "entry_condition",
     "perceived_as",
 )
-_ARGUMENT_KINDS: dict[str, TextArgument | ItemArgument] = {"text": TextArgument(), "item": ItemArgument()}
 _FINDINGS: dict[str, Finding] = {"once_in_world": Finding.ONCE_IN_WORLD, "once_per_person": Finding.ONCE_PER_PERSON}
 _SHOWN_KINDS = ("people_count_at", "written_text_of")
 
@@ -107,6 +106,14 @@ class ReadVerbs:
     discoverables: list[DiscoverableDeclaration] = field(default_factory=list)
     joint_actions: list[JointActionDeclaration] = field(default_factory=list)
     person_interactions: list[InteractionDeclaration] = field(default_factory=list)
+
+
+def _argument_kind(node: YamlNode) -> TextArgument | ItemArgument:
+    # 自分で書く値は、何を書くかを【現在選べる対象引数】で案内するので、案内の言葉なしには宣言させない
+    if node.is_mapping():
+        fields = node.fields("text")
+        return node.build(lambda: TextArgument(writes=DisplayName(fields.required("text").text())))
+    return words(node, {"item": ItemArgument()})
 
 
 class VerbReader:
@@ -183,7 +190,7 @@ class VerbReader:
                 duration=duration(fields.required("duration")),
                 allows_stealth=fields.required("allows_stealth").boolean(),
                 arguments=tuple(
-                    ArgumentDeclaration(name=ArgumentName(argument_name), kind=words(kind, _ARGUMENT_KINDS))
+                    ArgumentDeclaration(name=ArgumentName(argument_name), kind=_argument_kind(kind))
                     for argument_name, kind in fields.required("arguments").entries()
                 ),
                 hidden_while_unmet=fields.required("hidden_while_unmet").boolean(),

@@ -233,7 +233,7 @@ spots:
         interactions:
           open_safe:
             display_label: 番号を合わせて金庫を開ける
-            arguments: { code: text }
+            arguments: { code: { text: 金庫の番号 } }
             precondition:
               all_of:
                 - not: { flag_is_raised: safe_opened }

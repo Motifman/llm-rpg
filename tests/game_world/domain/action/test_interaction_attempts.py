@@ -262,7 +262,7 @@ class TestArguments:
         interaction = InteractionForTests(
             InteractionId("write"),
             arguments=(
-                ArgumentDeclaration(WORDS, TextArgument()),
+                ArgumentDeclaration(WORDS, TextArgument(writes=DisplayName("書く言葉"))),
                 ArgumentDeclaration(ArgumentName("pen"), ItemArgument()),
             ),
         )
@@ -310,7 +310,8 @@ class TestArguments:
     def test_arguments_not_matching_declaration_raise(self, arguments: ActionArguments) -> None:
         """宣言の引数が欠けている、宣言に無い名前がある、文の引数に品物を渡したとき、作るときに ArgumentsDoNotMatchDeclarationException を投げる。"""
         interaction = InteractionForTests(
-            InteractionId("write"), arguments=(ArgumentDeclaration(WORDS, TextArgument()),)
+            InteractionId("write"),
+            arguments=(ArgumentDeclaration(WORDS, TextArgument(writes=DisplayName("書く言葉"))),),
         )
 
         with pytest.raises(ArgumentsDoNotMatchDeclarationException):
@@ -338,7 +339,7 @@ class TestItemsHandled:
             arguments=(
                 ArgumentDeclaration(ArgumentName("gift"), ItemArgument()),
                 ArgumentDeclaration(ArgumentName("price"), ItemArgument()),
-                ArgumentDeclaration(WORDS, TextArgument()),
+                ArgumentDeclaration(WORDS, TextArgument(writes=DisplayName("書く言葉"))),
             ),
         )
         gift, price = ItemInstanceId("flower_1"), ItemInstanceId("coin_1")
