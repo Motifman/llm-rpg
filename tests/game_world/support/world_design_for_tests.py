@@ -6,6 +6,7 @@ import pytest
 
 from ai_rpg_world.game_world.domain.action.action_attempt import DoesNotUseBody
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.action.offered_action import ActionChoiceKind
 from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
 from ai_rpg_world.game_world.domain.declaration.body_tiers import HitPointsTier, HitPointsTiers, NeedTier, NeedTiers
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
@@ -15,6 +16,7 @@ from ai_rpg_world.game_world.domain.declaration.character import (
     GroupingDeclaration,
 )
 from ai_rpg_world.game_world.domain.declaration.character.character_declaration import UsesWorldDefault
+from ai_rpg_world.game_world.domain.declaration.choice_descriptions import ChoiceDescriptions
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import (
@@ -322,6 +324,23 @@ def clock_wording() -> ClockWording:
     return ClockWording(day="Day {day}", late_night="深夜 ", late_night_before_hour=6)
 
 
+def choice_descriptions() -> ChoiceDescriptions:
+    return ChoiceDescriptions(
+        by_choice={
+            kind.choice_name: (
+                "{revive_percent}% で戻り、{death_after} で死ぬ。"
+                if kind is ActionChoiceKind.TEND_TO_PLAYER
+                else f"{kind.label}。"
+            )
+            for kind in ActionChoiceKind
+        },
+        tend_without_tending="介抱はできない。",
+        duration_hours="{hours} 時間ほど",
+        duration_minutes="{minutes} 分ほど",
+        duration_turns="{turns} ターンぶんほど",
+    )
+
+
 def world_map_wording() -> WorldMapWording:
     return WorldMapWording(
         place="  {spot} ({lighting}) → {exits}",
@@ -329,7 +348,7 @@ def world_map_wording() -> WorldMapWording:
         exit="{spot} まで {time}",
         joiner=" / ",
         minutes="{minutes} 分",
-        turns="{turns} 手ぶん",
+        turns="{turns} ターンぶん",
         lighting={
             Lighting.BRIGHT: "明るい",
             Lighting.DUSKY: "薄暗い",
@@ -503,6 +522,7 @@ def compose_world(
         clock_wording=clock_wording(),
         belongings_texts=belongings_texts(),
         world_map_wording=world_map_wording(),
+        choice_descriptions=choice_descriptions(),
         world_words=world_words(),
         weather=weather,
         day_night=day_night,

@@ -227,3 +227,21 @@ class TestOperationsNotPossibleNow:
         unavailable = _choice(_Office(mine_village, SpotId("north_tunnel")).choices_of_gen(), "interact").unavailable
 
         assert all("水門を閉じる" not in u.picked for u in unavailable)
+
+
+class TestToolDescriptions:
+    """OfferActionChoices が、山村 v2 の行動の選択肢に、共通の部品に書いたツールの説明を、介抱は世界の規則の値を埋めて付けることを保証する。"""
+
+    def test_tending_says_the_rate_and_hours_of_mine_village(self, mine_village: WorldDesign) -> None:
+        """山村 v2 の介抱の説明は、起こしたときの HP「60%」と、倒れてから死ぬまでの「15 時間ほど」を書く。"""
+        tend = _choice(_Office(mine_village).choices_of_gen(), "tend_to_player")
+
+        assert "HP は最大値の 60% で戻る。倒れたまま 15 時間ほど経つと死ぬ。" in tend.description
+
+    def test_waiting_does_not_say_a_turn(self, mine_village: WorldDesign) -> None:
+        """待つの説明は、ユーザーが決めた「その場で待つ。気になる出来事が起きるか、しばらく経つまで、次の行動を選ばない。」で始まる。"""
+        wait = _choice(_Office(mine_village).choices_of_gen(), "wait")
+
+        assert wait.description.startswith(
+            "その場で待つ。気になる出来事が起きるか、しばらく経つまで、次の行動を選ばない。"
+        )

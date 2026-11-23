@@ -38,6 +38,7 @@ def _name_for(person: PersonPlaceholderValue) -> str:
 
 def _travel(*destinations: str) -> ActionChoice:
     return ActionChoice(
+        description="説明。",
         name="travel_to",
         label="行く",
         outline=(ArgumentOutline(name="destination", label="行き先", required=True), SAY_INLINE),
@@ -56,6 +57,7 @@ def _speak(*listeners: PersonInText) -> ActionChoice:
     if listeners:
         reaches.append(Candidate(label="ささやく", values=(whisper,)))
     return ActionChoice(
+        description="説明。",
         name="speak",
         label="話す",
         outline=(
@@ -69,6 +71,7 @@ def _speak(*listeners: PersonInText) -> ActionChoice:
 
 def _interact(*targets: Candidate) -> ActionChoice:
     return ActionChoice(
+        description="説明。",
         name="interact",
         label="操作する",
         outline=(
@@ -124,11 +127,11 @@ class TestActionToolDefinitions:
         assert [d["function"]["name"] for d in definitions] == ["travel_to", "speak", "interact"]
 
     def test_description_says_to_copy_what_can_be_done_now(self) -> None:
-        """行く (travel_to) の説明は「行く。候補のある引数には【現在選べる対象引数】の「いまできる」の文字をそのまま書く。」になる。"""
+        """ツールの説明は、世界が渡した行動の説明のあとに「候補のある引数には【現在選べる対象引数】の「いまできる」の文字をそのまま書く。」が続く。"""
         [travel] = _tools(ActionChoices((_travel("井戸"),))).definitions()
 
         assert travel["function"]["description"] == (
-            "行く。候補のある引数には【現在選べる対象引数】の「いまできる」の文字をそのまま書く。"
+            "説明。候補のある引数には【現在選べる対象引数】の「いまできる」の文字をそのまま書く。"
         )
 
     def test_definitions_stay_the_same_after_moving_to_the_well(self) -> None:
@@ -147,7 +150,7 @@ class TestActionToolDefinitions:
 
     def test_optional_say_inline_is_not_required(self) -> None:
         """見取り図に say_inline しか無い待つは、say_inline を必須にせず、独白だけを必須にする。"""
-        wait = ActionChoice(name="wait", label="待つ", outline=(SAY_INLINE,))
+        wait = ActionChoice(description="説明。", name="wait", label="待つ", outline=(SAY_INLINE,))
 
         [definition] = _tools(ActionChoices((wait,))).definitions()
 
@@ -156,6 +159,7 @@ class TestActionToolDefinitions:
     def test_max_length_of_the_outline_limits_the_argument(self) -> None:
         """見取り図が長さの上限 (200) を持つ引数は、ツールの定義の maxLength になり、持たない引数には付かない。"""
         wait = ActionChoice(
+            description="説明。",
             name="wait",
             label="待つ",
             outline=(
@@ -178,14 +182,21 @@ class TestActionToolDefinitions:
 
     def test_inner_thought_is_left_out_when_not_offered(self) -> None:
         """独白の引数を環境が出していなければ、ツールに独白の引数を付けない。"""
-        [wait] = _tools(ActionChoices((ActionChoice(name="wait", label="待つ"),)), OfferedBeingTools()).definitions()
+        [wait] = _tools(
+            ActionChoices((ActionChoice(description="説明。", name="wait", label="待つ"),)), OfferedBeingTools()
+        ).definitions()
 
         assert wait["function"]["parameters"] == {"type": "object", "properties": {}, "required": []}
 
     @pytest.mark.parametrize("reserved", ["details", "inner_thought", "memo"])
     def test_outline_name_reserved_by_the_being_is_rejected(self, reserved: str) -> None:
         """見取り図に Being の使う引数の名前 (details・独白・メモ) があると、ツールの引数が重なるので ValueError を投げる。"""
-        choice = ActionChoice(name="wait", label="待つ", outline=(ArgumentOutline(name=reserved, label="細かいこと"),))
+        choice = ActionChoice(
+            description="説明。",
+            name="wait",
+            label="待つ",
+            outline=(ArgumentOutline(name=reserved, label="細かいこと"),),
+        )
 
         with pytest.raises(ValueError, match=reserved):
             _tools(ActionChoices((choice,)), WITH_MEMORY).definitions()
@@ -207,7 +218,9 @@ class TestActionToolDefinitions:
         """メモの出どころに episode を出すのは、呼び名の載る【思い出せる出来事】を出しているときだけ。"""
         being_tools = OfferedBeingTools(memo="memo", episode_index_shown=index_shown)
 
-        [wait] = _tools(ActionChoices((ActionChoice(name="wait", label="待つ"),)), being_tools).definitions()
+        [wait] = _tools(
+            ActionChoices((ActionChoice(description="説明。", name="wait", label="待つ"),)), being_tools
+        ).definitions()
 
         assert wait["function"]["parameters"]["properties"]["memo"]["items"]["properties"]["source"]["enum"] == sources
 
@@ -253,6 +266,7 @@ class TestCandidateTable:
         locked = UnavailableAction(picked=("金庫", "開ける"), argument="how", reason="鍵が掛かっている。")
         interact = _interact(SAFE)
         choice = ActionChoice(
+            description="説明。",
             name=interact.name,
             label=interact.label,
             outline=interact.outline,
@@ -273,6 +287,7 @@ class TestCandidateTable:
         """通れない行き先は、行き先の見出しの「いまできない:」に出る。"""
         travel = _travel("井戸")
         choice = ActionChoice(
+            description="説明。",
             name=travel.name,
             label=travel.label,
             outline=travel.outline,
@@ -297,6 +312,7 @@ class TestCandidateTable:
         """物置の操作がどれもいまできず物置が候補に並ばなくても、物置の操作の見出しを立て、いまできるものは「(なし)」と出す。"""
         interact = _interact(SAFE)
         choice = ActionChoice(
+            description="説明。",
             name=interact.name,
             label=interact.label,
             outline=interact.outline,
@@ -392,6 +408,7 @@ class TestCandidateTable:
     def _whisper(unavailable: UnavailableAction) -> ActionChoice:
         content = FreeText(name="content", label="中身")
         return ActionChoice(
+            description="説明。",
             name="speak",
             label="話す",
             outline=(
@@ -421,6 +438,7 @@ class TestCandidateTable:
     def test_items_with_the_same_name_are_listed_once(self) -> None:
         """同じ名前の品物は、数を添えず 1 回だけ出る。"""
         drop = ActionChoice(
+            description="説明。",
             name="drop_item",
             label="置く",
             outline=(ArgumentOutline(name="item", label="品物", required=True),),
@@ -441,13 +459,16 @@ class TestCandidateTable:
     def test_actions_without_candidates_are_left_out(self) -> None:
         """選ぶ値の無い行動 (待つ) と、候補もいまはできないものも無い行動は、見出しを持たない。"""
         drop = ActionChoice(
+            description="説明。",
             name="drop_item",
             label="置く",
             outline=(ArgumentOutline(name="item", label="品物", required=True),),
             values=(PickOne(name="item", label="品物", candidates=()),),
         )
 
-        assert _table(ActionChoices((ActionChoice(name="wait", label="待つ"), drop, _travel("井戸")))) == [
+        assert _table(
+            ActionChoices((ActionChoice(description="説明。", name="wait", label="待つ"), drop, _travel("井戸")))
+        ) == [
             "- travel_to.destination:",
             "    いまできる:",
             '      "井戸"',
@@ -456,12 +477,18 @@ class TestCandidateTable:
 
     def test_no_candidate_at_all_gives_no_table(self) -> None:
         """どの行動にも候補もいまはできないものも無ければ、候補表を出さない。"""
-        assert _tools(ActionChoices((ActionChoice(name="wait", label="待つ"),))).candidate_table() is None
+        assert (
+            _tools(ActionChoices((ActionChoice(description="説明。", name="wait", label="待つ"),))).candidate_table()
+            is None
+        )
 
     def test_whole_action_unavailable_stays_out_of_the_table(self) -> None:
         """行動ごといまはできない (耳を澄ます) ものは、置く見出しが無いので候補表に出さない。"""
         listen = ActionChoice(
-            name="listen", label="耳を澄ます", unavailable=(UnavailableAction(picked=(), reason="手が離せない"),)
+            description="説明。",
+            name="listen",
+            label="耳を澄ます",
+            unavailable=(UnavailableAction(picked=(), reason="手が離せない"),),
         )
 
         assert _table(ActionChoices((listen, _travel("井戸")))) == [
@@ -565,6 +592,7 @@ class TestCallText:
     def test_value_is_hidden_with_the_word_the_outline_gives(self) -> None:
         """見取り図が伏せる言葉 (発言) を持つ引数は、その言葉で伏せ、持たない引数は「本文」で伏せる。"""
         wait = ActionChoice(
+            description="説明。",
             name="wait",
             label="待つ",
             outline=(
@@ -606,6 +634,7 @@ def _safe_that_cannot_be_opened() -> ActionChoice:
     """金庫は番号を合わせて開けられるが、ただ「開ける」ことはできず、物置は操作がどれもできない。"""
     interact = _interact(SAFE)
     return ActionChoice(
+        description="説明。",
         name=interact.name,
         label=interact.label,
         outline=interact.outline,
@@ -692,6 +721,7 @@ class TestNamesMatched:
         )
         interact = _safe_that_cannot_be_opened()
         choice = ActionChoice(
+            description="説明。",
             name=interact.name,
             label=interact.label,
             outline=interact.outline,
@@ -715,6 +745,7 @@ class TestNamesMatched:
         """候補が空の値は、選び直しに回さない。伏せた候補の有無を、問いで漏らさないため。"""
         rechoose = _Rechoose()
         drop = ActionChoice(
+            description="説明。",
             name="drop_item",
             label="置く",
             outline=(ArgumentOutline(name="item", label="品物", required=True),),
@@ -761,6 +792,7 @@ class TestNamesMatched:
         """details を取らない行動では、details に書いた操作は行為に渡らないので、選び直しに回さない。"""
         rechoose = _Rechoose({"open": "番号を合わせて開ける"})
         interact = ActionChoice(
+            description="説明。",
             name="interact",
             label="操作する",
             outline=(
@@ -785,6 +817,7 @@ LOCKED_SAFE = Candidate(
 
 def _interact_without_how() -> ActionChoice:
     return ActionChoice(
+        description="説明。",
         name="interact",
         label="操作する",
         outline=(ArgumentOutline(name="target", label="相手", required=True),),

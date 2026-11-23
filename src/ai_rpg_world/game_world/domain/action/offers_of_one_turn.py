@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import final
 
@@ -34,15 +35,27 @@ _Label = DisplayName | PersonRef
 
 @final
 class OffersOfOneTurn:
-    def __init__(self, offers: tuple[tuple[OfferedAction, Doable | NotNow], ...], people: PeopleAsSeen) -> None:
+    def __init__(
+        self,
+        offers: tuple[tuple[OfferedAction, Doable | NotNow], ...],
+        people: PeopleAsSeen,
+        descriptions: Mapping[ActionChoiceKind, str],
+    ) -> None:
         self._offers = offers
         self._people = people
+        self._descriptions = descriptions
 
     @classmethod
     def of(cls, available: AvailableActions, wording: ChoiceWording) -> OffersOfOneTurn:
         return cls(
             tuple((action.attempt.offered_as(wording), action.standing) for action in available.actions),
             wording.people,
+            {
+                kind: wording.design.choice_descriptions.description_of(
+                    kind, wording.facts.rules(), wording.facts.day_night()
+                )
+                for kind in ActionChoiceKind
+            },
         )
 
     def as_action_choices(self) -> ActionChoices:
@@ -73,6 +86,7 @@ class OffersOfOneTurn:
         return ActionChoice(
             name=kind.choice_name,
             label=kind.label,
+            description=self._descriptions[kind],
             outline=tuple(
                 ArgumentOutline(
                     name=value.name,

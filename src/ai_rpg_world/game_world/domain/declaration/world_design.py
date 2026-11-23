@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import AllOfCondition
 from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
+from ai_rpg_world.game_world.domain.declaration.choice_descriptions import ChoiceDescriptions
 from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
 from ai_rpg_world.game_world.domain.declaration.initial_world import InitialWorld
 from ai_rpg_world.game_world.domain.declaration.progress import WorldStageDeclaration
@@ -129,6 +130,7 @@ class WorldDesign:
         clock_wording: ClockWording,
         belongings_texts: BelongingsTexts,
         world_map_wording: WorldMapWording,
+        choice_descriptions: ChoiceDescriptions,
         world_words: WorldWords,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
@@ -166,6 +168,7 @@ class WorldDesign:
         self._clock_wording = clock_wording
         self._belongings_texts = belongings_texts
         self._world_map_wording = world_map_wording
+        self._choice_descriptions = choice_descriptions
         self._world_words = world_words
         self._weather = weather
         self._day_night = day_night
@@ -200,6 +203,7 @@ class WorldDesign:
         clock_wording: ClockWording,
         belongings_texts: BelongingsTexts,
         world_map_wording: WorldMapWording,
+        choice_descriptions: ChoiceDescriptions,
         world_words: WorldWords,
         weather: WeatherDeclaration | NoWeather,
         day_night: DayNightDeclaration | NoDayNight,
@@ -453,6 +457,7 @@ class WorldDesign:
             clock_wording=clock_wording,
             belongings_texts=belongings_texts,
             world_map_wording=world_map_wording,
+            choice_descriptions=choice_descriptions,
             world_words=world_words,
             weather=weather,
             day_night=day_night,
@@ -524,6 +529,10 @@ class WorldDesign:
         if not self._introduction.shows_world_map:
             return None
         return WorldMap.drawn_from(self._nouns).written_with(self._world_map_wording, self._day_night)
+
+    @property
+    def choice_descriptions(self) -> ChoiceDescriptions:
+        return self._choice_descriptions
 
     @property
     def clock_wording(self) -> ClockWording:

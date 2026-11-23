@@ -38,6 +38,7 @@ from tests.game_world.support.world_design_for_tests import (
     belongings_texts,
     briefing_headings,
     built_in_action_perceptions,
+    choice_descriptions,
     clock_wording,
     introduction,
     refusal_texts,
@@ -175,6 +176,7 @@ def _design(
         clock_wording=clock_wording(),
         belongings_texts=belongings_texts(),
         world_map_wording=world_map_wording(),
+        choice_descriptions=choice_descriptions(),
         world_words=world_words(),
         weather=(
             NoWeather()
