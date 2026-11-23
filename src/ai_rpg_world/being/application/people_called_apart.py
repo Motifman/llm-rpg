@@ -28,6 +28,12 @@ class PeopleCalledApart:
     def name_of(self, person: PersonInText) -> str:
         return self._names[person.handle]
 
+    def called(self, person: PersonPlaceholderValue) -> str:
+        """理由の文にだけ出る人は、番号を付けずに呼ぶ。表に出ない人に番号を付けると、表の人と取り違える。"""
+        if isinstance(person, PersonInText) and person.handle in self._names:
+            return self._names[person.handle]
+        return self._name_for(person)
+
     def person_named(self, name: str) -> PersonInText | None:
         return self._people.get(name)
 
