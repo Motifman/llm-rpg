@@ -44,7 +44,7 @@ class TestBriefEnteringPerson:
         assert "1907" not in premises.text
 
     def test_world_rules_follow_the_premises_like_the_old_run(self, scenario: LoadedScenario) -> None:
-        """ゲンの案内の 2 つ目は「この世界の決まり」で、古い run と同じく、ラベル・一言 (say_inline)・勝利条件の行がこの順に並ぶ。"""
+        """ゲンの案内の 2 つ目は「この世界の決まり」で、ラベル・操作の選び方・一言 (say_inline)・勝利条件の行が古い run と同じ順に並ぶ。操作の選び方の行だけは古い run と文が違い、【現在選べる対象引数】から選ぶ文になる。"""
         briefing = BriefEnteringPerson(scenario.design)(_brief_gen(scenario))
 
         _, rules = tuple(briefing.orientation.descriptions)
@@ -52,10 +52,14 @@ class TestBriefEnteringPerson:
         assert rules.heading == "この世界の決まり"
         assert isinstance(rules.text, str)
         lines = rules.text.splitlines()
-        assert len(lines) == 3
+        assert len(lines) == 4
         assert lines[0].startswith("- ラベル（接続先・オブジェクト・相手プレイヤー等）は")
-        assert lines[1].startswith("- `say_inline` を持つツールでは")
-        assert lines[2].startswith("- **このシナリオの勝利条件")
+        assert (
+            lines[1]
+            == "- 行動は条件を満たさないと拒否されることがある。操作は【現在選べる対象引数】に並んだものの中から選ぶこと。"
+        )
+        assert lines[2].startswith("- `say_inline` を持つツールでは")
+        assert lines[3].startswith("- **このシナリオの勝利条件")
 
     def test_mine_village_has_no_deadline_line(self, scenario: LoadedScenario) -> None:
         """山村 v2 は時間で終わらないので、世界の前提に「行動の制限」の行は出ない。"""
