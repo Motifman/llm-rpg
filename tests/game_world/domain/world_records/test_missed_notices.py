@@ -4,6 +4,7 @@ from ai_rpg_world.game_world.domain.people.text_with_assigned_people import Text
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.perceived_quality import NoticedOnWaking
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 from ai_rpg_world.game_world.domain.world_records import MissedNotices
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
@@ -88,6 +89,7 @@ class TestMissedNoticesPerceivedOnWaking:
                 happened_at=WorldTick(9),
                 calls_attention=False,
                 addressed_to_perceiver=False,
+                conveys=WhatPerceivedConveys.WHAT_HAPPENED,
             )
             for notice in (lighter, bell)
         )

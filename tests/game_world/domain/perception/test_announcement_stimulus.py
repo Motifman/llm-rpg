@@ -6,6 +6,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Told
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from tests.game_world.domain.perception._builders import ALICE, BOB, CAROL, HALL, VIEW, about, awake, departed, fallen
 
@@ -30,6 +31,7 @@ class TestAnnouncementStimulusPerceivedBy:
             happened_at=WorldTick(7),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_someone_outside_the_audience_is_not_told(self) -> None:

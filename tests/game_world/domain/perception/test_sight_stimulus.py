@@ -20,6 +20,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.perception.sight_stimulus import SightStimulus, SightTarget, SightTexts
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from tests.game_world.domain.perception._builders import (
     ALICE,
@@ -107,6 +108,7 @@ class TestSightStimulusLighting:
             happened_at=WorldTick(5),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_in_the_dark_the_dim_text_is_seen_with_nobody_identified(self) -> None:
@@ -316,6 +318,7 @@ class TestSightStimulusDepartedActor:
             happened_at=WorldTick(5),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_a_living_viewer_sees_nothing_without_an_unseen_actor_text(self) -> None:

@@ -24,6 +24,7 @@ from ai_rpg_world.game_world.domain.perception import (
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, Told
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import NotWhispered
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.sound import HearingValues, HearsClearly, Loudness, SoundLevel, SoundReach
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, SpotId, WorldTick
@@ -119,6 +120,7 @@ class TestSightStimulusPerceivedIn:
             happened_at=_AT,
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_bright_spot_gives_the_clear_text_seen_by_the_perceiver(self) -> None:
@@ -134,6 +136,7 @@ class TestSightStimulusPerceivedIn:
             happened_at=_AT,
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
 
@@ -169,6 +172,7 @@ class TestSoundStimulusPerceivedIn:
             happened_at=_AT,
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_WAS_SAID,
         )
 
     def test_reach_of_another_loudness_is_not_used(self) -> None:
@@ -197,6 +201,7 @@ class TestBodilyAndAnnouncementPerceivedIn:
             happened_at=_AT,
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_announcement_text_is_seen_by_the_person_told(self) -> None:
@@ -213,4 +218,5 @@ class TestBodilyAndAnnouncementPerceivedIn:
             happened_at=_AT,
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )

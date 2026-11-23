@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import Noise, NotWhispered, SoundStimulus, Voice
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.sound import (
     HearingValues,
     HearsClearly,
@@ -81,6 +82,7 @@ class TestSoundStimulusHearingQuality:
             happened_at=WorldTick(9),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_WAS_SAID,
         )
 
     def test_a_muffled_voice_arrives_with_nobody_identified(self) -> None:
@@ -94,6 +96,7 @@ class TestSoundStimulusHearingQuality:
             happened_at=WorldTick(9),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_a_sound_below_faint_is_not_heard(self) -> None:
@@ -126,6 +129,7 @@ class TestSoundStimulusHearingQuality:
             happened_at=WorldTick(9),
             calls_attention=False,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
 
@@ -143,6 +147,7 @@ class TestSoundStimulusNoise:
             happened_at=WorldTick(9),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
 
@@ -166,6 +171,7 @@ class TestSoundStimulusWhisper:
             happened_at=WorldTick(9),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_WAS_SAID,
         )
 
     def test_someone_else_at_the_spot_hears_it_faintly(self) -> None:
@@ -298,6 +304,7 @@ class TestSoundStimulusDepartedListener:
             happened_at=WorldTick(9),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_WAS_SAID,
         )
 
     def test_a_departed_listener_hears_a_noise_without_identifying_anyone(self) -> None:

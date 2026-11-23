@@ -10,7 +10,7 @@ from ai_rpg_world.being.application.choose_action import (
 )
 from ai_rpg_world.being.contract import OwnActionResult
 from ai_rpg_world.being.domain.being_id import BeingId
-from ai_rpg_world.being.domain.short_term_memory import Attempt, ObservedOutcome
+from ai_rpg_world.being.domain.short_term_memory import Attempt, ObservedOutcome, Perception
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldConditionsSettling
@@ -304,6 +304,66 @@ class TestWhoIsAskedWhileOthersAct:
         assert [s for s in second[0].skipped if s.person == _GEN] == [
             SkippedTurn(_GEN, TurnSkipReason.IN_THE_MIDDLE_OF_ACTION_AND_NOT_ADDRESSED)
         ]
+
+
+def _bring_haru_to_the_south_adit_mouth(session: WorldSession) -> None:
+    facts, world = session.facts(), session.aggregates()
+    world.whereabouts().teleport(
+        PersonBody(PersonId("haru")), facts.nouns().spot_of(SpotId("south_adit_mouth")), facts.now()
+    )
+
+
+class TestWordsReachThoseNearby:
+    """同じ場所で話した言葉が、見える文に押しのけられず、声をはっきり聞いた人に届くことを保証する。"""
+
+    _SAYO = PersonId("sayo")
+
+    def _perceived_by(self, person: PersonId, session: MineVillageSession) -> list[str]:
+        return [
+            e.observation.body
+            for e in session.short_term_memories.get(BeingId(person.value)).unsummarized()
+            if isinstance(e, Perception)
+        ]
+
+    def test_gen_hears_what_sayo_says_beside_him(self) -> None:
+        """同じ場所でサヨがふつうの声で「灯りを点けよう」と言うと、ゲンには「サヨが「灯りを点けよう」と言った。」が届き、「サヨが何か話している。」は届かない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        answers = _AnswersByPerson(
+            session, {self._SAYO: [_reply("speak", "s1", reach="ふつうの声で話す", content="灯りを点けよう")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        heard = self._perceived_by(_GEN, session)
+        assert "サヨが「灯りを点けよう」と言った。" in heard
+        assert "サヨが何か話している。" not in heard
+
+    def test_gen_hears_what_sayo_whispers_to_him(self) -> None:
+        """サヨがゲンに「秘密だ」とささやくと、ゲンには「サヨが「秘密だ」とささやいた。」が届き、「サヨがあなたに顔を寄せた。」は届かない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        answers = _AnswersByPerson(
+            session, {self._SAYO: [_reply("speak", "w1", reach="ささやく", to="ゲン", content="秘密だ")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        heard = self._perceived_by(_GEN, session)
+        assert "サヨが「秘密だ」とささやいた。" in heard
+        assert "サヨがあなたに顔を寄せた。" not in heard
+
+    def test_haru_beside_them_sees_only_that_sayo_whispered(self) -> None:
+        """同じ場所にいるハルには、サヨがゲンにささやいた言葉は届かず、いまどおり「…が…に何かささやいた。」の見える文が届く。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        session.scope.run(_bring_haru_to_the_south_adit_mouth)
+        answers = _AnswersByPerson(
+            session, {self._SAYO: [_reply("speak", "w1", reach="ささやく", to="ゲン", content="秘密だ")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        heard = self._perceived_by(PersonId("haru"), session)
+        assert any(body.endswith("に何かささやいた。") for body in heard)
+        assert not any("秘密だ" in body for body in heard)
 
 
 class TestBelongingsComingAndGoing:

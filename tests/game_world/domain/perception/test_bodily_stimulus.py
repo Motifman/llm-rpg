@@ -6,6 +6,7 @@ from ai_rpg_world.game_world.domain.perception.bodily_stimulus import BodilyStim
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from tests.game_world.domain.perception._builders import ALICE, BOB, VIEW, about, awake, departed, fallen
 
@@ -30,6 +31,7 @@ class TestBodilyStimulusPerceivedBy:
             happened_at=WorldTick(4),
             calls_attention=True,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_someone_else_does_not_feel_it(self) -> None:

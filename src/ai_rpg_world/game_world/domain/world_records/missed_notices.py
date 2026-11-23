@@ -7,6 +7,7 @@ from typing import final
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.perceived_quality import NoticedOnWaking
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
 
@@ -56,6 +57,7 @@ class MissedNotices:
                 happened_at=woke_at,
                 calls_attention=False,
                 addressed_to_perceiver=False,
+                conveys=WhatPerceivedConveys.WHAT_HAPPENED,
             )
             for notice in self._notices
         )

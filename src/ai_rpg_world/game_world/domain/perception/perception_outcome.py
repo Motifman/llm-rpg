@@ -17,6 +17,7 @@ from ai_rpg_world.game_world.domain.perception.perceived_quality import (
     PerceivedQuality,
     Told,
 )
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.sound.hearing_quality import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 
@@ -38,6 +39,7 @@ class Perceived:
     happened_at: WorldTick
     calls_attention: bool
     addressed_to_perceiver: bool
+    conveys: WhatPerceivedConveys
 
     def hand_over(self, perceiver: PersonId, recipient: PerceptionRecipient) -> None:
         recipient.perceived(self)

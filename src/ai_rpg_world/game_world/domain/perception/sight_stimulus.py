@@ -25,6 +25,7 @@ from ai_rpg_world.game_world.domain.perception.perception_delivery_report import
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.rules.stealth_rule import StealthRule
 from ai_rpg_world.game_world.domain.value_object import PersonId, Probability, SpotId, WorldTick
 
@@ -93,6 +94,9 @@ class SightStimulus:
 
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.SIGHT, self.salience)
+
+    def most_it_can_convey(self) -> WhatPerceivedConveys:
+        return WhatPerceivedConveys.WHAT_HAPPENED
 
     def described(self) -> StimulusDescription:
         return StimulusDescription(
@@ -192,4 +196,5 @@ class _Sighting:
             happened_at=self.stimulus.at,
             calls_attention=self.calls_attention,
             addressed_to_perceiver=self.stimulus.addressee == self.perceiver.person,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
