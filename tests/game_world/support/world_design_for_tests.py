@@ -409,9 +409,9 @@ def scene_texts() -> SceneTexts:
         belonging_description=" — {description}",
         belonging_held=" (手に持っている)",
         body="身体の状態:",
-        hit_points="  HP: {tier}（{current}/{maximum}{change}）",
-        hunger="  空腹: {tier}（{amount}/{limit}{change}）",
-        fatigue="  疲労: {tier}（{amount}/{limit}{change}）",
+        hit_points="  HP: {tier}（{current}/{maximum}）{change}",
+        hunger="  空腹: {tier}（{amount}/{limit}）{change}",
+        fatigue="  疲労: {tier}（{amount}/{limit}）{change}",
         body_change="、前回 {change}",
         fatigue_felt="  → {feel}",
         need_tiers=NeedTiers(

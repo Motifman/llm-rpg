@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ai_rpg_world.being.application.choose_action import (
@@ -294,7 +295,7 @@ class TestBodyChangeSinceTheLastScene:
     """身体の状態の「、前回 ±N」が、その人に前に渡した場面の値からの増減になることを保証する。"""
 
     def test_hunger_grown_between_two_scenes_is_written_as_the_change(self) -> None:
-        """1 巡り目のゲンの場面には「前回」が無く、時間が進んで空腹が増えた 2 巡り目の場面の空腹の行には「、前回 +」が付く。"""
+        """1 巡り目のゲンの場面には「前回」が無く、時間が進んで空腹が増えた 2 巡り目の場面の空腹の行は、古い run と同じく値のかっこの外に「、前回 +N」が付く (例: 「空腹: 問題なし（1/100）、前回 +1」)。"""
         session = MineVillageSession(round_limit=2).started()
         answers = _AnswersByPerson(session, {})
 
@@ -303,7 +304,7 @@ class TestBodyChangeSinceTheLastScene:
         first, second = [prompt for person, prompt in answers.prompts if person == _GEN][:2]
         hunger_line = next(line for line in second.splitlines() if line.startswith("  空腹: "))
         assert "前回" not in first
-        assert "、前回 +" in hunger_line
+        assert re.fullmatch(r"  空腹: \S+（\d+/\d+）、前回 \+\d+", hunger_line)
 
 
 class TestMemoOfferedToBeings:
