@@ -5,26 +5,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
 from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
 
 
 @dataclass(frozen=True)
 class EndBeingTurnCommand:
-    """``turn`` は終わったターン (Being の記憶のターン数)。"""
-
     being_id: BeingId
-    turn: int
 
 
 class EndBeingTurn:
     """起きたことは短期記憶がドメインイベントとしてため、保存するときに配送器に渡る。"""
 
-    def __init__(self, store: ShortTermMemoryRepository) -> None:
+    def __init__(self, store: ShortTermMemoryRepository, turn_reader: MemoryTurnReader) -> None:
         self._store = store
+        self._turn_reader = turn_reader
 
     def execute(self, command: EndBeingTurnCommand) -> None:
         memory = self._store.get(command.being_id)
-        memory.end_turn(turn=command.turn)
+        memory.end_turn(turn=self._turn_reader.current_turn(command.being_id))
         self._store.save(memory)
 
 

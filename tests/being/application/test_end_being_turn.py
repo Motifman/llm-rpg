@@ -4,6 +4,7 @@ from ai_rpg_world.being.application.end_being_turn import EndBeingTurn, EndBeing
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.short_term_memory import AwaitedBackstory, ShortTermMemoryRangeFilledEvent
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
 )
@@ -24,11 +25,17 @@ def _seen() -> Observation:
     )
 
 
+def _clock_at(turn: int) -> InMemoryMemoryTurnClock:
+    clock = InMemoryMemoryTurnClock()
+    clock.replace_all_by_being(ADA, turn=turn)
+    return clock
+
+
 class TestEndBeingTurn:
     """EndBeingTurn が、その Being の短期記憶のターンを終わらせて保存することを保証する (design_decisions D1824-21)。"""
 
     def test_turn_end_is_saved_and_its_events_are_handed_off(self) -> None:
-        """範囲が埋まるターンを終わらせると、短期記憶はいきさつを待ち始めて保存され、範囲が埋まったイベントが配送器に渡る。"""
+        """Being の記憶の時計が 20 のときにターンを終わらせると、短期記憶はいきさつを待ち始めて保存され、範囲が埋まったイベントが配送器に渡る。"""
         handed: list[object] = []
         store = InMemoryShortTermMemoryRepository(handoff=handed.extend)
         memory = store.get(ADA)
@@ -36,7 +43,7 @@ class TestEndBeingTurn:
             memory.perceive(_seen(), current_turn=turn)
         store.save(memory)
 
-        EndBeingTurn(store).execute(EndBeingTurnCommand(being_id=ADA, turn=20))
+        EndBeingTurn(store, _clock_at(20)).execute(EndBeingTurnCommand(being_id=ADA))
 
         assert store.get(ADA).awaited_backstory == AwaitedBackstory(until_turn=10, since_turn=20)
         assert [type(e) for e in handed] == [ShortTermMemoryRangeFilledEvent]
@@ -46,6 +53,6 @@ class TestEndBeingTurn:
         handed: list[object] = []
         store = InMemoryShortTermMemoryRepository(handoff=handed.extend)
 
-        EndBeingTurn(store).execute(EndBeingTurnCommand(being_id=ADA, turn=3))
+        EndBeingTurn(store, _clock_at(3)).execute(EndBeingTurnCommand(being_id=ADA))
 
         assert (store.get(ADA).is_empty(), handed) == (True, [])

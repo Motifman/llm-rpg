@@ -21,6 +21,7 @@ from ai_rpg_world.being.application.episode_recall_tool import (
 from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.memo_arguments import read_memo_operations
 from ai_rpg_world.being.application.memo_writing import apply_memo_operations
+from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
 from ai_rpg_world.being.application.names_for_people import name_for
 from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
 from ai_rpg_world.being.application.rechoose_name import NameRechoice, RechooseName
@@ -144,6 +145,7 @@ class ChooseAction:
         visited_places: VisitedPlacesRepository,
         recall_limit: int,
         rechoose_name: RechooseName | None = None,
+        writing_in_background: MemoryWritingInBackground | None = None,
     ) -> None:
         if recall_limit < 1:
             raise ValueError("recall_limit must be >= 1")
@@ -156,8 +158,11 @@ class ChooseAction:
         self._visited_places = visited_places
         self._recall_limit = recall_limit
         self._rechoose_name = rechoose_name
+        self._writing_in_background = writing_in_background
 
     def execute(self, command: ChooseActionCommand) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
+        if self._writing_in_background is not None:
+            self._writing_in_background.take_in_finished(command.being_id)
         tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
         scene = Scene(
             descriptions=(*command.scene.descriptions, *_present(tools.candidate_table())),
