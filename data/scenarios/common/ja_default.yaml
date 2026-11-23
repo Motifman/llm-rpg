@@ -173,7 +173,7 @@ built_in_action_perceptions:
   item_joiner: と
   travel:
     witness:
-      clear: "{actor}が{destination}へ去っていった。"
+      clear: "{actor}が〈{passage}〉を抜けて「{destination}」へ去っていった。"
       dim: "{actor}がどこかへ去っていった。"
     sound: { loudness: whisper, clear: 足音が遠ざかっていった。, muffled: かすかな足音がした。 }
   arrival:

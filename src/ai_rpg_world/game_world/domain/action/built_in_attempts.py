@@ -107,20 +107,20 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
         return self
 
     def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
-        return self._about_this_act(design.action_texts.done_of(self._text_key()), design, situation.item_specs)
+        return self._about_this_act(design.action_texts.done_of(self._text_key()), design, situation)
 
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
-        return self._about_this_act(design.action_texts.summary_of(self._text_key()), design, situation.item_specs)
+        return self._about_this_act(design.action_texts.summary_of(self._text_key()), design, situation)
 
     def _text_key(self) -> ActionTextKey:
         return _TEXT_KEY_OF_KIND[self._KIND]
 
     def _about_this_act(
-        self, text: TextWithUnassignedPeople, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]
+        self, text: TextWithUnassignedPeople, design: WorldDesign, situation: ActorSituation
     ) -> TextAboutPeople:
         target = self._target_in_texts()
         people = {"actor": self.actor} | ({"target": target} if isinstance(target, PersonId) else {})
-        return text.about_named(people, self._names(design, item_specs))
+        return text.about_named(people, self._names(design, situation))
 
     def _target_in_texts(self) -> PersonId | NoTarget:
         return self._witnessed_target()
@@ -163,10 +163,10 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     def fall_cause_for(self, victim: PersonId) -> FallCause:
         return fall_cause_from(self.acting_person(), victim)
 
-    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+    def witnessed_in(self, design: WorldDesign, situation: ActorSituation) -> WitnessedAct:
         return WitnessedAct(
             perception=self._perception(design),
-            names=self._names(design, item_specs),
+            names=self._names(design, situation),
             target=self._witnessed_target(),
             manner=self._witnessed_manner(),
             source=Noise(),
@@ -178,7 +178,7 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
         return self
 
-    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+    def _names(self, design: WorldDesign, situation: ActorSituation) -> Mapping[str, NameInText]:
         return {}
 
     def _witnessed_target(self) -> PersonId | NoTarget:
@@ -194,8 +194,8 @@ class _OnOneItem(_BuiltInAttempt):
     def this_item(self) -> ItemInstanceId:
         return self.item
 
-    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
-        return {"item": item_names((self.item,), item_specs, design)}
+    def _names(self, design: WorldDesign, situation: ActorSituation) -> Mapping[str, NameInText]:
+        return {"item": item_names((self.item,), situation.item_specs, design)}
 
     def items_handled(self) -> tuple[ItemInstanceId, ...]:
         return (self.item,)
@@ -219,8 +219,11 @@ class TravelAttempt(_BuiltInAttempt):
     def exertion(self) -> Exertion:
         return UsesBody()
 
-    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
-        return {"destination": self.destination.name}
+    def _names(self, design: WorldDesign, situation: ActorSituation) -> Mapping[str, NameInText]:
+        names: dict[str, NameInText] = {"destination": self.destination.name}
+        if isinstance(situation.at_spot, SpotId):
+            names["passage"] = design.nouns.first_passage_between(situation.at_spot, self.destination.spot_id).name
+        return names
 
     def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         return self._from_where(design.action_texts.done_of(ActionTextKey.TRAVEL), design, situation)
@@ -306,7 +309,7 @@ class SpeechAttempt(_BuiltInAttempt):
         self._chosen_content()
         return Ticks(0)
 
-    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+    def witnessed_in(self, design: WorldDesign, situation: ActorSituation) -> WitnessedAct:
         content = self._chosen_content()
         return WitnessedAct(
             perception=design.built_in_action_perceptions.speech(self.reach),
@@ -322,7 +325,7 @@ class SpeechAttempt(_BuiltInAttempt):
     def _text_key(self) -> ActionTextKey:
         return _TEXT_KEY_OF_REACH[type(self.reach)]
 
-    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+    def _names(self, design: WorldDesign, situation: ActorSituation) -> Mapping[str, NameInText]:
         return {"speech": self._chosen_content()}
 
     def _witnessed_target(self) -> PersonId | NoTarget:
@@ -444,8 +447,8 @@ class ItemHandOverAttempt(_BuiltInAttempt):
     def copresence_requirements(self) -> tuple[CopresenceRequirement, ...]:
         return (WithPerson(self.to),)
 
-    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
-        return {"item": item_names(self.items, item_specs, design)}
+    def _names(self, design: WorldDesign, situation: ActorSituation) -> Mapping[str, NameInText]:
+        return {"item": item_names(self.items, situation.item_specs, design)}
 
     def _witnessed_target(self) -> PersonId | NoTarget:
         return self.to
@@ -575,9 +578,9 @@ class EnterSectionAttempt(_BuiltInAttempt):
 
     def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         written = design.section_access(self.access.section.section_id).enter_text
-        return self._about_this_act(written, design, situation.item_specs)
+        return self._about_this_act(written, design, situation)
 
-    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+    def _names(self, design: WorldDesign, situation: ActorSituation) -> Mapping[str, NameInText]:
         return {"section": self.access.section.name}
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
@@ -605,9 +608,9 @@ class LeaveSectionAttempt(_BuiltInAttempt):
 
     def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         written = design.section_access(self.access.section.section_id).leave_text
-        return self._about_this_act(written, design, situation.item_specs)
+        return self._about_this_act(written, design, situation)
 
-    def _names(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> Mapping[str, NameInText]:
+    def _names(self, design: WorldDesign, situation: ActorSituation) -> Mapping[str, NameInText]:
         return {"section": self.access.section.name}
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:

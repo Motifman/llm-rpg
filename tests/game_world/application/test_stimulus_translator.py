@@ -288,7 +288,7 @@ def _acts_design(failure_witness: bool = False) -> WorldDesign:
             _seen("{actor}が{item}を拾った。"),
             on_failure=seen_clearly_only("{actor}が拾い損ねた。") if failure_witness else NoFailureWitness(),
         ),
-        ActionKind.TRAVEL: _seen("{actor}が{destination}へ去っていった。"),
+        ActionKind.TRAVEL: _seen("{actor}が〈{passage}〉を抜けて「{destination}」へ去っていった。"),
         ActionKind.HAND_OVER: _seen("{actor}が{item}を{target}に渡した。", "{actor}があなたに{item}を渡した。"),
         ActionKind.TEND: tend,
     }
@@ -310,6 +310,7 @@ def _acts_design(failure_witness: bool = False) -> WorldDesign:
     return compose_world(
         nouns(
             spots=(replace(spot("plaza"), name=DisplayName("広場")), spot("well")),
+            passages=(passage("street", ("well", "plaza")),),
             objects=(lever,),
             item_specs=(
                 pickaxe,
@@ -378,12 +379,12 @@ class TestStimulusTranslatorBuiltInActs:
         )
 
     def test_travelling_fills_the_destination_name_at_the_spot_left(self) -> None:
-        """ハルが井戸から広場へ向かうと、井戸の見える刺激の文は「{actor}が広場へ去っていった。」になる。"""
+        """ハルが井戸から広場へ向かうと、井戸の見える刺激の文は、古い run と同じく通ってゆく通路の名前つきの「{actor}が〈通り〉を抜けて「広場」へ去っていった。」になる。"""
         stimulus = _sight(TravelAttempt(_HAL, replace(spot("plaza"), name=DisplayName("広場"))))
 
         assert (stimulus.where, stimulus.witness.clear.template.template) == (
             SpotId("well"),
-            "{actor}が広場へ去っていった。",
+            "{actor}が〈street の通路〉を抜けて「広場」へ去っていった。",
         )
 
     def test_handing_over_two_items_joins_their_names_and_tells_the_recipient(self) -> None:
