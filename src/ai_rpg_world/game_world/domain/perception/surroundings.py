@@ -520,7 +520,7 @@ def _condition_and_carried(seen: SeenPerson, wording: SceneTexts, names: NamesIn
 
 
 def _carried(seen: SeenPerson, wording: SceneTexts, names: NamesInScene) -> str:
-    # 暗くて持ち物が見えないときに「手ぶら」と書くと、持っていない事実と取り違えられる
+    # 暗くて持ち物が見えないときに何も持っていないと書くと、持っていない事実と取り違えられる
     if not seen.items_in_sight:
         return ""
     if not seen.visible_items:

@@ -200,20 +200,20 @@ class TestPeopleHere:
         assert _people_lines(surroundings) == ["同じ場所にいるプレイヤー:", '  - "{person_1}" (疲れている)']
 
     def test_fallen_person_shows_what_is_still_carried(self) -> None:
-        """倒れている人は「(倒れて動かない)」に続けて、荷の中まで含めた持ち物を「〔〕」に「、」でつないで書く。"""
+        """倒れている人は「(倒れて動かない)」に続けて、荷の中まで含めた持ち物を「持ち物:」のあとに「、」でつないで書く。"""
         fallen = person(1, held=(item("rope"),), carried=(item("oil_1"),), condition=Down())
 
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(bodies=(fallen,)), conditions())
 
-        assert _people_lines(surroundings)[1] == '  - "{person_1}" (倒れて動かない) 〔縄、ランプの油〕'
+        assert _people_lines(surroundings)[1] == '  - "{person_1}" (倒れて動かない) 持ち物: 縄、ランプの油'
 
     def test_fallen_person_with_nothing_is_empty_handed(self) -> None:
-        """何も持たずに倒れている人は「〔手ぶら〕」と書く。"""
+        """何も持たずに倒れている人は「持ち物: なし」と書く。"""
         surroundings = VisibleSurroundings.seen_with(
             SeesClearly(), contents(bodies=(person(1, condition=Down()),)), conditions()
         )
 
-        assert _people_lines(surroundings)[1] == '  - "{person_1}" (倒れて動かない) 〔手ぶら〕'
+        assert _people_lines(surroundings)[1] == '  - "{person_1}" (倒れて動かない) 持ち物: なし'
 
     def test_dead_person_says_so_with_what_is_carried(self) -> None:
         """死んでいる人は「(死亡している)」に続けて持ち物を書く。"""
@@ -221,10 +221,10 @@ class TestPeopleHere:
 
         surroundings = VisibleSurroundings.seen_with(SeesClearly(), contents(bodies=(dead,)), conditions())
 
-        assert _people_lines(surroundings)[1] == '  - "{person_1}" (死亡している) 〔縄〕'
+        assert _people_lines(surroundings)[1] == '  - "{person_1}" (死亡している) 持ち物: 縄'
 
     def test_fallen_person_in_the_dark_says_nothing_about_belongings(self) -> None:
-        """薄暗くて持ち物が見えないとき、倒れている人に「〔手ぶら〕」を書かない。持っていないことと取り違えないため。"""
+        """薄暗くて持ち物が見えないとき、倒れている人に「持ち物: なし」を書かない。持っていないことと取り違えないため。"""
         fallen = person(1, carried=(item("rope"),), condition=Down())
 
         surroundings = VisibleSurroundings.seen_with(SeesShapes(), contents(bodies=(fallen,)), conditions())
@@ -240,7 +240,7 @@ class TestPeopleHere:
         text = _text(surroundings)
 
         assert isinstance(text, TextWithPeople)
-        assert _people_lines(surroundings)[1:] == ['  - "{person_1}"', '  - "{person_2}" (倒れて動かない) 〔手ぶら〕']
+        assert _people_lines(surroundings)[1:] == ['  - "{person_1}"', '  - "{person_2}" (倒れて動かない) 持ち物: なし']
         assert [text.people[key] for key in ("person_1", "person_2")] == [
             PersonInText(handle=1, appearance="1 番の見た目", visible_name=None),
             PersonInText(handle=2, appearance="2 番の見た目", visible_name=None),
