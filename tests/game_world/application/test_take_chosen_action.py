@@ -251,15 +251,6 @@ class TestTakeChosenAction:
         assert reply == TurnGuidance(_GEN, "「話す」には一言を添えられない。", WorldTick(0))
         assert office.acted() == []
 
-    def test_listening_takes_effect(self, mine_village: WorldDesign) -> None:
-        """耳を澄ますを選ぶと、引数なしで確定する。"""
-        office = _Office(mine_village)
-
-        reply = office.gen_chooses("listen")
-
-        assert isinstance(reply, ActionDone)
-        assert [type(attempt).__name__ for attempt in office.acted()] == ["ListeningAttempt"]
-
     def test_inline_speech_is_not_spoken_when_the_main_action_is_guided(self, mine_village: WorldDesign) -> None:
         """主の行為が案内になったときは、添えた一言も話す試みにならず、世界に何も起きない。"""
         office = _Office(mine_village)

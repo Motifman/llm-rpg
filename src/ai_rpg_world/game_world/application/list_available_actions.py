@@ -80,7 +80,7 @@ class ListAvailableActions:
         return AvailableActions(
             actions=(
                 *judge(candidates.spot_searches(), self._search_spot),
-                *judge(candidates.listening_and_waiting(), CommonRulesOnly()),
+                *judge(candidates.waiting(), CommonRulesOnly()),
                 *judge(candidates.speeches(), self._speak),
                 *judge(candidates.travels(), self._start_travel),
                 *judge(candidates.pickups(), self._pick_up),

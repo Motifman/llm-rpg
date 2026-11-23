@@ -56,6 +56,7 @@ from ai_rpg_world.game_world.domain.declaration.spot import SpotDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.action_texts import ActionTextKey
 from ai_rpg_world.game_world.domain.declaration.verb.default_duration import DefaultDuration
 from ai_rpg_world.game_world.domain.exception.action_exception import (
+    ActionNotOfferedException,
     HandOverToSelfException,
     NothingToHandOverException,
     SeveralItemsNotOfferedException,
@@ -345,12 +346,14 @@ class SpeechAttempt(_BuiltInAttempt):
 @dataclass(frozen=True)
 class ListeningAttempt(_BuiltInAttempt):
     _KIND = ActionKind.LISTEN
-    _CHOICE = ActionChoiceKind.LISTEN
 
     def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply:
         return entrances.listen(self)
 
     actor: PersonId
+
+    def offered_as(self, wording: ChoiceWording) -> OfferedAction:
+        raise ActionNotOfferedException(f"{type(self).__name__} is not offered to beings")
 
     def take_effect(self, facts: WorldFacts) -> Ticks:
         return facts.rules().duration_of(self._KIND, DefaultDuration())

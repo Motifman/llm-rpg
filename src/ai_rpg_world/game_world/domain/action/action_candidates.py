@@ -13,7 +13,6 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     ItemHandOverAttempt,
     ItemUseAttempt,
     LeaveSectionAttempt,
-    ListeningAttempt,
     PutAwayItemAttempt,
     SpeechAttempt,
     SpotSearchAttempt,
@@ -75,8 +74,8 @@ class ActionCandidates:
     def spot_searches(self) -> tuple[SpotSearchAttempt, ...]:
         return (SpotSearchAttempt(self._actor),)
 
-    def listening_and_waiting(self) -> tuple[ListeningAttempt | WaitAttempt, ...]:
-        return (ListeningAttempt(self._actor), WaitAttempt(self._actor, NoReason()))
+    def waiting(self) -> tuple[WaitAttempt, ...]:
+        return (WaitAttempt(self._actor, NoReason()),)
 
     def speeches(self) -> tuple[SpeechAttempt, ...]:
         words = SpeechContentNotChosen()

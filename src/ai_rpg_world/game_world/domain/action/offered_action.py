@@ -57,7 +57,6 @@ class ActionChoiceKind(Enum):
     EXPLORE = ("explore", "探す", (SAY_INLINE,))
     INTERACT = ("interact", "操作する", (TARGET, HOW, SAY_INLINE), True)
     WAIT = ("wait", "待つ", (SAY_INLINE,))
-    LISTEN = ("listen", "耳を澄ます", ())
     SPEAK = ("speak", "話す", (REACH, LISTENER, CONTENT))
     USE_ITEM = ("use_item", "使う", (ITEM, SAY_INLINE))
     DROP_ITEM = ("drop_item", "置く", (ITEM, SAY_INLINE))

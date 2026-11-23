@@ -97,7 +97,7 @@ class TestOfferActionChoices:
     """OfferActionChoices が、事務所にいるゲンに、D2226 の決まりどおりの行動の選択肢を渡すことを保証する。"""
 
     def test_every_choice_of_the_d2226_table_is_offered_in_a_fixed_order(self, mine_village: WorldDesign) -> None:
-        """選べるものが無い行動も含めて、15 の選択肢がいつも同じ顔ぶれと順で並ぶ。"""
+        """選べるものが無い行動も含めて、14 の選択肢がいつも同じ顔ぶれと順で並ぶ。"""
         choices = _Office(mine_village).choices_of_gen()
 
         assert [choice.name for choice in choices.choices] == [
@@ -106,7 +106,6 @@ class TestOfferActionChoices:
             "explore",
             "interact",
             "wait",
-            "listen",
             "speak",
             "use_item",
             "drop_item",
