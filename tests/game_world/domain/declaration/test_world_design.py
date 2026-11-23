@@ -238,7 +238,7 @@ def _happening(name: str, condition: Condition | None = None, effect: Effect | N
     )
 
 
-_PASSWORD = ArgumentDeclaration(name=ArgumentName("password"), kind=TextArgument())
+_PASSWORD = ArgumentDeclaration(name=ArgumentName("password"), kind=TextArgument(writes=DisplayName("書く言葉")))
 _HURT_CHOSEN = DamageEffect(who=ChosenByGroup(), amount=Damage(1))
 
 
@@ -381,7 +381,7 @@ class TestNamesShownInActionChoices:
     @pytest.mark.parametrize("name", ["番号", "1st", "target", "how", "say_inline"])
     def test_argument_name_that_cannot_be_a_choice_value_is_a_flaw(self, name: str) -> None:
         """引数の名前が ASCII の識別子でないか、操作の道筋に並ぶ target・how か、行動しながらの一言の say_inline と同じだと、操作の arguments を指す DesignFlaw になる。"""
-        argument = ArgumentDeclaration(name=ArgumentName(name), kind=TextArgument())
+        argument = ArgumentDeclaration(name=ArgumentName(name), kind=TextArgument(writes=DisplayName("書く言葉")))
 
         flaws = flaws_of_composing(object_interactions=(_open_door(arguments=(argument,)),))
 

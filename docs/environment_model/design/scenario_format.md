@@ -103,7 +103,7 @@ precondition:
 - 状態の鍵は `<名前>: { kind, initial }`。`kind` は `flag` / `count` / `written_text` / `{ choice: [...] }` / `{ stock: { capacity, refills_every } }` (`refills_every: null` は補充しない)。`initial` は種類に合わせて真偽・数・選択肢の名前で、書いた文の鍵は `null`
 - 状態の鍵を指すときは `<物か品物>.<鍵>` (`lift_panel.power`、`lamp.lit`)
 - 行為は組み込みの行為の名前か `{ interaction: <名前> }`。人の結末は結末の名前か `died`
-- `exertion` は `uses_body` / `does_not_use_body`、`actor_requirement` は `living_only` / `living_or_departed`、`salience` は `notable` / `background`、`duration` は tick の数か `default`、操作の引数は `<名前>: text` / `<名前>: item`
+- `exertion` は `uses_body` / `does_not_use_body`、`actor_requirement` は `living_only` / `living_or_departed`、`salience` は `notable` / `background`、`duration` は tick の数か `default`、操作の引数は `<名前>: { text: <何を書くか> }` / `<名前>: item`。自分で書く値は、何を書くか (例: 金庫の番号) を【現在選べる対象引数】で案内するので、`text` とだけは書けない
 - 知らせ (`notice`) は `sight_at: { spot, texts, salience }` / `sound_from: { spot, sound, salience }` / `announcement_to: { audience, text, salience }`
 - 作者の店の「尽きない」は `unlimited` と書く (`UnlimitedSupply`)
 - 体力 `max_hp` と荷 `pack_capacity` を書かない登場人物は、`rules` の `person_max_hp` と `pack_capacity` で始まる (#2055)

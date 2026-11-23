@@ -223,11 +223,39 @@ class TestCandidateTable:
         ]
 
     def test_value_chosen_under_a_candidate_names_that_candidate(self) -> None:
-        """金庫の下で選ぶ操作は、どの候補の下かを括弧に添えた行になり、自由に書く値 (番号) は出ない。"""
+        """金庫の下で選ぶ操作は、どの候補の下かを括弧に添えた行になる。番号の値は何を書くか (writes) を持たないので、表に出ない。"""
         assert _table(ActionChoices((_interact(SAFE),)))[:-1] == [
             '- interact.target: "金庫"',
             '- interact.how ("金庫"): "番号を合わせて開ける"',
         ]
+
+    def test_free_text_with_writes_says_what_to_write_under_its_candidate(self) -> None:
+        """何を書くか (金庫の番号) を持つ自由に書く値は、候補の下の行に「- interact.details.code ("番号を合わせて開ける"): 金庫の番号を書く」と出る。"""
+        guided = Candidate(
+            label="金庫",
+            values=(
+                PickOne(
+                    name="how",
+                    label="操作",
+                    candidates=(
+                        Candidate(
+                            label="番号を合わせて開ける",
+                            values=(FreeText(name="code", label="code", writes="金庫の番号"),),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assert _table(ActionChoices((_interact(guided),)))[:-1] == [
+            '- interact.target: "金庫"',
+            '- interact.how ("金庫"): "番号を合わせて開ける"',
+            '- interact.details.code ("番号を合わせて開ける"): 金庫の番号を書く',
+        ]
+
+    def test_speech_content_without_writes_stays_out_of_the_table(self) -> None:
+        """何を書くかを持たない話す中身 (content) は、ツールの引数の説明で分かるので、表に出ない。"""
+        assert all("content" not in line for line in _table(ActionChoices((_speak(SAYO),))))
 
     def test_whisper_to_sayo_names_her_by_her_visible_name(self) -> None:
         """ささやく相手のサヨは、人の印ではなく見えている名前で、ささやくの下の行に出る。"""

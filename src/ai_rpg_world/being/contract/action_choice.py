@@ -31,10 +31,12 @@ def _label_key(label: str | PersonInText) -> object:
 class FreeText:
     name: str
     label: str
+    writes: str | None = None
 
     def __post_init__(self) -> None:
         _require_name(self.name, "name")
         require_text(self.label, "label")
+        require_optional_text(self.writes, "writes")
 
 
 @dataclass(frozen=True, kw_only=True)

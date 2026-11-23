@@ -214,13 +214,13 @@ _WOLVES = GroupDeclaration(
 )
 _NOT_A_WOLF_TEXT = "仲間ではない。"
 _CARVE = replace(
-    pull_lever((ArgumentDeclaration(ArgumentName("words"), TextArgument()),)),
+    pull_lever((ArgumentDeclaration(ArgumentName("words"), TextArgument(writes=DisplayName("書く言葉"))),)),
     interaction_id=InteractionId("carve"),
     display_label=DisplayName("carve"),
 )
 _ALREADY_OPEN_TEXT = "扉はもう開いている。"
 _OPEN_WITH_CODE = replace(
-    pull_lever((ArgumentDeclaration(ArgumentName("code"), TextArgument()),)),
+    pull_lever((ArgumentDeclaration(ArgumentName("code"), TextArgument(writes=DisplayName("書く言葉"))),)),
     interaction_id=InteractionId("open_with_code"),
     display_label=DisplayName("open_with_code"),
     precondition=AllOfCondition(
@@ -733,7 +733,7 @@ class TestOfferedActions:
         assert offered == OfferedAction(
             ActionChoiceKind.INTERACT,
             (OfferedStep(TARGET, DisplayName("door")), OfferedStep(HOW, _CARVE.display_label)),
-            (OfferedFreeText(OfferedValue("words", "words")),),
+            (OfferedFreeText(OfferedValue("words", "words"), writes=DisplayName("書く言葉")),),
         )
 
     def test_carried_item_is_a_target_that_remembers_which_item_it_is(self) -> None:

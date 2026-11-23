@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.game_world.domain.action.argument_declaration import TextArgument
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice
 from ai_rpg_world.game_world.domain.condition.condition import NoText
@@ -1258,3 +1259,30 @@ def test_fatigue_level_reads_what_the_person_feels(tmp_path: Path) -> None:
     levels = _load(tmp_path, text).design.world_rules.fatigue.levels
 
     assert [level.felt_as for level in levels] == [None, DisplayName("体を使う行動ができない。")]
+
+
+class TestArgumentsToWrite:
+    """操作の引数の宣言で、自分で書く値は何を書くかを添えて書かせ、品物は種類だけで書けることを保証する。"""
+
+    def test_text_argument_carries_what_to_write(self, tmp_path: Path) -> None:
+        """引数を { text: 合図の言葉 } と書くと、何を書くか「合図の言葉」を持つ自分で書く値として読まれる。"""
+        text = _LIFT_LANDING.replace(
+            "            display_label: 鍵を差して昇降機を動かす\n",
+            "            display_label: 鍵を差して昇降機を動かす\n            arguments: { word: { text: 合図の言葉 } }\n",
+        )
+
+        interaction = _load(tmp_path, text).design.interaction_on_object(
+            ObjectId("lift_panel"), InteractionId("start_lift")
+        )
+
+        [argument] = interaction.arguments
+        assert argument.kind == TextArgument(writes=DisplayName("合図の言葉"))
+
+    def test_bare_text_argument_is_refused(self, tmp_path: Path) -> None:
+        """何を書くかを添えずに text とだけ書いた引数は、その引数の場所を指す誤りになる。"""
+        text = _LIFT_LANDING.replace(
+            "            display_label: 鍵を差して昇降機を動かす\n",
+            "            display_label: 鍵を差して昇降機を動かす\n            arguments: { word: text }\n",
+        )
+
+        assert [flaw.location.field for flaw in _flaws(tmp_path, text)] == ["interactions.start_lift.arguments.word"]

@@ -4,6 +4,7 @@ import pytest
 
 from ai_rpg_world.game_world.domain.action.argument_declaration import ArgumentDeclaration, ItemArgument, TextArgument
 from ai_rpg_world.game_world.domain.exception.verb_declaration_exception import DuplicateArgumentNameException
+from ai_rpg_world.game_world.domain.value_object import DisplayName
 from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentName
 from tests.game_world.support.verb_declarations_for_tests import as_declared_interaction, pull_lever
 
@@ -16,14 +17,16 @@ class TestInteractionDeclarationArguments:
         with pytest.raises(DuplicateArgumentNameException):
             pull_lever(
                 arguments=(
-                    ArgumentDeclaration(name=ArgumentName("message"), kind=TextArgument()),
+                    ArgumentDeclaration(
+                        name=ArgumentName("message"), kind=TextArgument(writes=DisplayName("書く言葉"))
+                    ),
                     ArgumentDeclaration(name=ArgumentName("message"), kind=ItemArgument()),
                 )
             )
 
     def test_distinct_argument_names_are_kept_in_the_written_order(self) -> None:
         """arguments に別々の名前を書くと、断らずに書いた順のまま持ち、DeclaredInteraction としても同じ並びが読める。"""
-        message = ArgumentDeclaration(name=ArgumentName("message"), kind=TextArgument())
+        message = ArgumentDeclaration(name=ArgumentName("message"), kind=TextArgument(writes=DisplayName("書く言葉")))
         offering = ArgumentDeclaration(name=ArgumentName("offering"), kind=ItemArgument())
 
         declaration = as_declared_interaction(pull_lever(arguments=(message, offering)))

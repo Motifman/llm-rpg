@@ -135,7 +135,7 @@ class TestOfferActionChoices:
         [open_safe] = how.candidates
 
         assert open_safe.label == "番号を合わせて金庫を開ける"
-        assert open_safe.values == (FreeText(name="code", label="code"),)
+        assert open_safe.values == (FreeText(name="code", label="code", writes="金庫の番号"),)
 
     def test_three_bottles_of_lamp_oil_are_one_candidate_with_a_count(self, mine_village: WorldDesign) -> None:
         """「置く」の品物の候補で、3 つ持っているカンテラの油は、数 3 を添えた 1 つの候補になる。"""

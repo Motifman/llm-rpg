@@ -28,6 +28,7 @@ from ai_rpg_world.being.contract import (
 NameRechooser = Callable[[str, str, Mapping[str, str | None], str | None], str | None]
 
 CANDIDATE_TABLE_HEADING = "現在選べる対象引数"
+FREE_TEXT_WRITES = "{writes}を書く"
 CANDIDATE_TABLE_NOTE = "※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。"
 DETAILS = "details"
 HIDDEN_TEXT = "本文"
@@ -167,10 +168,9 @@ class ActionTools:
 
     def candidate_table(self) -> Description | None:
         lines = [
-            f"- {choice.name}.{name}{'' if parent is None else f' ({_quoted(parent)})'}: "
-            + ", ".join(_quoted(label) for label in labels)
+            f"- {choice.name}.{name}{'' if parent is None else f' ({_quoted(parent)})'}: {shown}"
             for choice in self._choices.choices
-            for name, parent, labels in self._picks(choice.values, frozenset(o.name for o in choice.outline), None)
+            for name, parent, shown in self._picks(choice.values, frozenset(o.name for o in choice.outline), None)
         ]
         if not lines:
             return None
@@ -215,14 +215,16 @@ class ActionTools:
 
     def _picks(
         self, values: Sequence[ChoiceValue], outlined: frozenset[str], parent: str | None
-    ) -> Iterator[tuple[str, str | None, tuple[str, ...]]]:
-        """候補から選ぶ値ごとに (引数の名前, どの候補の下か, 候補)。自由に書く値は候補が無いので出さない。"""
+    ) -> Iterator[tuple[str, str | None, str]]:
         for value in values:
+            name = value.name if value.name in outlined else f"{DETAILS}.{value.name}"
             if isinstance(value, FreeText):
+                if value.writes is not None:
+                    yield name, parent, FREE_TEXT_WRITES.format(writes=value.writes)
                 continue
             labels = tuple(dict.fromkeys(self._label(c.label) for c in value.candidates))
             if labels:
-                yield (value.name if value.name in outlined else f"{DETAILS}.{value.name}"), parent, labels
+                yield name, parent, ", ".join(_quoted(label) for label in labels)
             for candidate in value.candidates:
                 yield from self._picks(candidate.values, outlined, self._label(candidate.label))
 

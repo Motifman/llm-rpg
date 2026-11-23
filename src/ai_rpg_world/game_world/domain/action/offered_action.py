@@ -107,6 +107,7 @@ class OfferedItemPick:
 @dataclass(frozen=True)
 class OfferedFreeText:
     value: OfferedValue
+    writes: DisplayName | None = None
 
 
 OfferedInput = OfferedFreeText | OfferedItemPick
