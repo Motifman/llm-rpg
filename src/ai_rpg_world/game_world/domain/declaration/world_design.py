@@ -79,7 +79,7 @@ from ai_rpg_world.game_world.domain.value_object.argument_name import ArgumentNa
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.value_object.joint_action_id import JointActionId
 from ai_rpg_world.game_world.domain.whereabouts.route import NoRoute, Route
-from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import Teleported
+from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import CameThrough, Teleported
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.trigger import Trigger
@@ -504,7 +504,7 @@ class WorldDesign:
         )
 
     def arrival_stimuli(
-        self, where: SpotId, arriving: Occupant, origin: SpotId | Teleported, at: WorldTick
+        self, where: SpotId, arriving: Occupant, origin: CameThrough | Teleported, at: WorldTick
     ) -> tuple[Stimulus, ...]:
         seen = self._built_in_action_perceptions.arrival_seen_at(where, arriving, origin, self._nouns, at)
         if isinstance(origin, Teleported):

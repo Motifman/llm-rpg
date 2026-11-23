@@ -98,6 +98,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     ItemSpecId,
     ObjectId,
     OutcomeId,
+    PassageId,
     PersonId,
     Rate,
     SpotId,
@@ -108,6 +109,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
 from ai_rpg_world.game_world.domain.whereabouts import (
     AtSpot,
+    CameThrough,
     DepartedPerson,
     NotAtSpot,
     Occupant,
@@ -134,6 +136,7 @@ from tests.game_world.support.world_design_for_tests import (
     item_spec,
     nouns,
     obj,
+    passage,
     section,
     spot,
 )
@@ -151,7 +154,7 @@ def _design() -> WorldDesign:
     arrival = replace(
         lever_pulled_quietly(),
         witness=SightTextsDeclaration(
-            clear=TextWithUnassignedPeople("{actor}が{origin}からやって来た。"),
+            clear=TextWithUnassignedPeople("{actor}が「{origin}」から〈{passage}〉を通って{destination}にやってきた。"),
             dim=NotSeenInDim(),
             unseen_actor=NotSeenWithoutActor(),
             noticed_later=NotNoticedLater(),
@@ -160,12 +163,12 @@ def _design() -> WorldDesign:
     plaza = replace(spot("plaza"), name=DisplayName("広場"))
     lantern = replace(item_spec("lantern"), lasts=Lasts(ticks=Ticks(3), ended_text=DescriptionText(_RAN_OUT)))
     return compose_world(
-        nouns(spots=(plaza, spot("well")), item_specs=(lantern,)),
+        nouns(spots=(plaza, spot("well")), passages=(passage("street", ("plaza", "well")),), item_specs=(lantern,)),
         built_in_action_perceptions_=replace(perceptions, arrival=arrival),
     )
 
 
-def _entered(origin: SpotId | Teleported) -> OccupantEnteredSpotEvent:
+def _entered(origin: CameThrough | Teleported) -> OccupantEnteredSpotEvent:
     return OccupantEnteredSpotEvent(
         **new_event_stamp(), world_id=_WORLD, occupant=PersonBody(_HAL), spot=SpotId("well"), origin=origin, at=_NOW
     )
@@ -187,20 +190,24 @@ class TestStimulusTranslatorArrival:
     """StimulusTranslator が、場所に着いたイベントを、シナリオの arrival の文の刺激に変えることを保証する。"""
 
     def test_walking_in_becomes_the_arrival_sight_at_the_spot(self) -> None:
-        """ハルが広場から井戸に着くと、ハル自身には届けない井戸の見える刺激ができ、文は「{actor}が広場からやって来た。」でハルを指す。"""
-        [completion, stimulus] = StimulusTranslator().stimuli_of(_entered(SpotId("plaza")), _design())
+        """ハルが広場から通りを通って井戸に着くと、ハル自身には届けない井戸の見える刺激ができ、文は古い run と同じ「{actor}が「広場」から〈通り〉を通って井戸にやってきた。」の形でハルを指す。"""
+        [completion, stimulus] = StimulusTranslator().stimuli_of(
+            _entered(CameThrough(SpotId("plaza"), PassageId("street"))), _design()
+        )
 
         assert isinstance(completion, OwnActionCompletion) and isinstance(stimulus, SightStimulus)
         assert stimulus.withheld_from == frozenset({_HAL})
         assert (stimulus.where, stimulus.witness.clear.template.template, dict(stimulus.witness.clear.people)) == (
             SpotId("well"),
-            "{actor}が広場からやって来た。",
+            "{actor}が「広場」から〈street の通路〉を通ってwellにやってきた。",
             {"actor": _HAL},
         )
 
     def test_walking_in_tells_the_arriver_it_arrived_as_its_own_action(self) -> None:
         """ハルが広場から井戸に着くと、ハルにだけ、行く (travel_to) の続きとして、着いたことの要約と結果の文が届く刺激ができる。"""
-        completion = StimulusTranslator().stimuli_of(_entered(SpotId("plaza")), _design())[0]
+        completion = StimulusTranslator().stimuli_of(
+            _entered(CameThrough(SpotId("plaza"), PassageId("street"))), _design()
+        )[0]
 
         assert isinstance(completion, OwnActionCompletion)
         assert (completion.person, completion.tool, completion.summary.template.template) == (

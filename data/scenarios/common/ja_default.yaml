@@ -178,7 +178,7 @@ built_in_action_perceptions:
     sound: { loudness: whisper, clear: 足音が遠ざかっていった。, muffled: かすかな足音がした。 }
   arrival:
     witness:
-      clear: "{actor}が{origin}からやって来た。"
+      clear: "{actor}が「{origin}」から〈{passage}〉を通って{destination}にやってきた。"
       dim: "{actor}がどこからかやって来た。"
     sound: { loudness: whisper, clear: 足音が近づいてきた。, muffled: かすかな足音がした。 }
   whisper:
