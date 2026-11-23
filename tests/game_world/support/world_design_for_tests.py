@@ -430,6 +430,8 @@ def briefing_headings() -> BriefingHeadings:
         overview="- 概要: {text}",
         world_map="【この場所の造り】",
         deadline="- 行動の制限: 行動の総量には限りがある。",
+        rules="この世界の決まり",
+        rule_lines=("- ラベルは表示されたものだけを使う。",),
     )
 
 

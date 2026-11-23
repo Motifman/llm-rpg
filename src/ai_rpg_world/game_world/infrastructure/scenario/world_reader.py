@@ -289,7 +289,7 @@ def world_words(node: YamlNode) -> WorldWords:
 
 
 def briefing_headings(node: YamlNode) -> BriefingHeadings:
-    fields = node.fields("premises", "title", "overview", "world_map", "deadline")
+    fields = node.fields("premises", "title", "overview", "world_map", "deadline", "rules", "rule_lines")
     return node.build(
         lambda: BriefingHeadings(
             premises=fields.required("premises").text(),
@@ -297,6 +297,8 @@ def briefing_headings(node: YamlNode) -> BriefingHeadings:
             overview=fields.required("overview").text(),
             world_map=fields.required("world_map").text(),
             deadline=fields.required("deadline").text(),
+            rules=fields.required("rules").text(),
+            rule_lines=tuple(line.text() for line in fields.required("rule_lines").items()),
         )
     )
 

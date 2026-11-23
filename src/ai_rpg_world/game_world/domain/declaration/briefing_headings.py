@@ -22,13 +22,20 @@ class BriefingHeadings:
     overview: str
     world_map: str
     deadline: str
+    rules: str
+    rule_lines: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.premises, str) or not self.premises.strip() or any(c in self.premises for c in "【】\n"):
+        for heading in (self.premises, self.rules):
+            if not isinstance(heading, str) or not heading.strip() or any(c in heading for c in "【】\n"):
+                raise MalformedBriefingHeadingException(
+                    f"briefing heading must be a non-blank single line without 【】, got {heading!r}"
+                )
+        if not self.rule_lines or any("\n" in line for line in self.rule_lines):
             raise MalformedBriefingHeadingException(
-                f"briefing heading must be a non-blank single line without 【】, got {self.premises!r}"
+                f"BriefingHeadings.rule_lines must be single lines, at least one, got {self.rule_lines!r}"
             )
-        for line in (self.world_map, self.deadline):
+        for line in (self.world_map, self.deadline, *self.rule_lines):
             if not isinstance(line, str) or not line.strip():
                 raise MalformedBriefingHeadingException(f"briefing line must not be blank, got {line!r}")
         # 埋める値を書き忘れた言い回しは、題名や概要が静かに消えるので、読み込みで断る
@@ -53,4 +60,9 @@ class BriefingHeadings:
             lines += ["", self.world_map, world_map]
         if has_deadline:
             lines.append(self.deadline)
-        return Orientation((Description(heading=self.premises, text="\n".join(lines)),))
+        return Orientation(
+            (
+                Description(heading=self.premises, text="\n".join(lines)),
+                Description(heading=self.rules, text="\n".join(self.rule_lines)),
+            )
+        )

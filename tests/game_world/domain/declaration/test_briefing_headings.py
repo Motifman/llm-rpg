@@ -25,7 +25,7 @@ _TITLE_AND_OVERVIEW = (
 
 
 def _premises(introduction: WorldIntroduction, world_map: str | None, has_deadline: bool) -> object:
-    [premises] = briefing_headings().orientation(introduction, world_map, has_deadline).descriptions
+    premises, _ = briefing_headings().orientation(introduction, world_map, has_deadline).descriptions
     assert premises.heading == "世界の前提"
     return premises.text
 
@@ -53,6 +53,26 @@ class TestOrientation:
         assert _premises(introduction, None, has_deadline=False) == "\n".join(_TITLE_AND_OVERVIEW)
 
 
+class TestWorldRules:
+    """BriefingHeadings.orientation が、世界の前提のあとに【この世界の決まり】を 2 つ目の説明として渡すことを保証する。"""
+
+    def test_rules_follow_the_premises_as_their_own_description(self) -> None:
+        """案内は「世界の前提」「この世界の決まり」の順の 2 つで、決まりの本文は決まりの行をそのまま並べたもの。"""
+        premises, rules = briefing_headings().orientation(_INTRODUCTION, None, has_deadline=False).descriptions
+
+        assert (premises.heading, rules.heading, rules.text) == (
+            "世界の前提",
+            "この世界の決まり",
+            "- ラベルは表示されたものだけを使う。",
+        )
+
+    @pytest.mark.parametrize("lines", [(), ("",), ("- 一つ目\n- 二つ目",)])
+    def test_empty_or_blank_rule_lines_are_refused(self, lines: tuple[str, ...]) -> None:
+        """決まりの行が 1 つも無い、または空の行を含むと、MalformedBriefingHeadingException で断る。"""
+        with pytest.raises(MalformedBriefingHeadingException):
+            dataclasses.replace(briefing_headings(), rule_lines=lines)
+
+
 class TestBriefingHeadings:
     """BriefingHeadings が、使えない見出しと言い回しを宣言のときに断ることを保証する。"""
 
@@ -61,6 +81,12 @@ class TestBriefingHeadings:
         """空白だけ・【】を含む・2 行にわたる見出しは MalformedBriefingHeadingException で断る。"""
         with pytest.raises(MalformedBriefingHeadingException):
             dataclasses.replace(briefing_headings(), premises=heading)
+
+    @pytest.mark.parametrize("heading", ["", "【決まり】"])
+    def test_malformed_rules_heading_is_refused(self, heading: str) -> None:
+        """決まりの見出しも、空や【】を含むものは MalformedBriefingHeadingException で断る。"""
+        with pytest.raises(MalformedBriefingHeadingException):
+            dataclasses.replace(briefing_headings(), rules=heading)
 
     @pytest.mark.parametrize(("field", "text"), [("title", "- 舞台のタイトル"), ("overview", "- 概要: {title}")])
     def test_line_that_does_not_write_its_value_is_refused(self, field: str, text: str) -> None:

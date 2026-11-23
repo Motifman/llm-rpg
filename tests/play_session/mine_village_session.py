@@ -158,7 +158,10 @@ class MineVillageSession:
         self.visited_places = InMemoryVisitedPlacesRepository()
 
     def beings_taking_turns(
-        self, completion: ActionChoosingCompletion, *, closing: str = "行動を 1 つ選んでください。"
+        self,
+        completion: ActionChoosingCompletion,
+        *,
+        closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
     ) -> BeingsTakingTurnsOneByOne:
         design = _scenario().design
         day_night = design.day_night

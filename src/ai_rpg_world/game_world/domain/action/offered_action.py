@@ -14,6 +14,8 @@ from ai_rpg_world.game_world.domain.value_object import DisplayName
 class OfferedValue:
     name: str
     label: str
+    hidden_as: str | None = None
+    max_length: int | None = None
 
 
 DESTINATION = OfferedValue("destination", "行き先")
@@ -27,7 +29,12 @@ ITEM = OfferedValue("item", "品物")
 RECIPIENT = OfferedValue("to", "渡す相手")
 DECISION = OfferedValue("decision", "決めごと")
 BALLOT = OfferedValue("choice", "選び先")
-SAY_INLINE = OfferedValue("say_inline", "この行動をしながら、同じ場所の人にかける一言 (任意)")
+SAY_INLINE = OfferedValue(
+    "say_inline",
+    "この行動をしながら発する一言 (任意、200 字以内)。書き方は【この世界の決まり】。",
+    hidden_as="発言",
+    max_length=200,
+)
 
 
 _NAME_LIMIT = 64

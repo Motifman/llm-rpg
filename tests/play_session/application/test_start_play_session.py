@@ -59,12 +59,12 @@ class TestStartPlaySession:
         assert all(a is not None for a in attachments.values())
 
     def test_gens_orientation_is_the_world_premises(self) -> None:
-        """ゲンの案内には「世界の前提」だけが並び、知っていることは入らない。"""
+        """ゲンの案内には「世界の前提」と「この世界の決まり」が並び、知っていることは入らない。"""
         session = MineVillageSession().started()
 
         descriptions = tuple(session.casts.get(WORLD).orientation_of(_GEN).descriptions)
 
-        assert [d.heading for d in descriptions] == ["世界の前提"]
+        assert [d.heading for d in descriptions] == ["世界の前提", "この世界の決まり"]
 
     def test_what_gen_knows_comes_with_his_entry_and_stays_with_his_attachment(self) -> None:
         """ゲンがこの世界で知っていること (金庫の番号 1907) は、入るときの取り決めで渡り、ゲンの居場所が持つ。"""
@@ -108,7 +108,7 @@ class TestStartPlaySession:
             "サヨと二人そろって、坑道の奥の昇降機で外へ出る。",
             (Introduction(name="サヨ"),),
         )
-        assert [d.heading for d in gen.orientation.descriptions] == ["世界の前提"]
+        assert [d.heading for d in gen.orientation.descriptions] == ["世界の前提", "この世界の決まり"]
 
     def test_casting_decides_which_being_plays_each_person(self) -> None:
         """配役でゲンを Being wanderer に当てると、ゲンの人柄の Being wanderer が用意されて入り、Being gen は用意されない。"""
