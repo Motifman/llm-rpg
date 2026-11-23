@@ -198,10 +198,10 @@ class TestBuiltInActionPerceptions:
         assert telling == {"HAND_OVER", "TEND", "whisper"}
 
     def test_arrival_tells_where_the_actor_came_from(self, tmp_path: Path) -> None:
-        """着いた側の見た人の文は、来た場所の呼び名 {origin} を書いている。"""
+        """着いた側の見た人の文は、古い run と同じく、来た場所 {origin}・通ってきた通路 {passage}・着いた場所 {destination} の呼び名を書いている。"""
         arrival = _load_smallest_scenario(tmp_path).design.built_in_action_perceptions.arrival
 
-        assert "origin" in arrival.witness.clear.placeholders()
+        assert {"origin", "passage", "destination"} <= set(arrival.witness.clear.placeholders())
 
 
 class TestSurroundingsTexts:

@@ -23,6 +23,7 @@ from ai_rpg_world.game_world.domain.exception.whereabouts_exception import (
 from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, SpotSectionId, Ticks, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import (
     AtSpot,
+    CameThrough,
     DepartedPerson,
     NotAtSpot,
     OccupantEnteredSectionEvent,
@@ -828,10 +829,10 @@ class TestWhereaboutsMemento:
 
 
 class TestWhereaboutsArrivalOrigin:
-    """OccupantEnteredSpotEvent の origin が最後に歩いた区間の反対の端になり、at が着いた時刻になることを保証する。"""
+    """OccupantEnteredSpotEvent の origin が、最後に歩いた区間の反対の端とその区間の通路になり、at が着いた時刻になることを保証する。"""
 
     def test_walking_the_whole_route_comes_from_the_start_of_the_last_passage(self) -> None:
-        """広場から通りを歩いて井戸に着くと、origin は広場、at は着いた tick になる。"""
+        """広場から通りを歩いて井戸に着くと、origin は広場と通り、at は着いた tick になる。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
         whereabouts.advance_travels(frozenset(), WorldTick(1))
@@ -841,10 +842,14 @@ class TestWhereaboutsArrivalOrigin:
 
         [entered] = whereabouts.get_events()
         assert isinstance(entered, OccupantEnteredSpotEvent)
-        assert (entered.spot, entered.origin, entered.at) == (SpotId("well"), SpotId("plaza"), WorldTick(2))
+        assert (entered.spot, entered.origin, entered.at) == (
+            SpotId("well"),
+            CameThrough(SpotId("plaza"), PassageId("street")),
+            WorldTick(2),
+        )
 
     def test_walking_several_passages_in_one_tick_comes_from_the_start_of_the_last(self) -> None:
-        """1 tick の区間で井戸に着き、同じ tick に 0 tick の戸口を抜けて坑道の入り口に着くと、origin は戸口の出発点の井戸になる。"""
+        """1 tick の区間で井戸に着き、同じ tick に 0 tick の戸口を抜けて坑道の入り口に着くと、origin は戸口の出発点の井戸と戸口になる。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         step = path("step", "plaza", "well", ticks=1)
         doorway = path("doorway", "well", "mine_entrance", ticks=0)
@@ -855,10 +860,13 @@ class TestWhereaboutsArrivalOrigin:
 
         [entered] = whereabouts.get_events()
         assert isinstance(entered, OccupantEnteredSpotEvent)
-        assert (entered.spot, entered.origin) == (SpotId("mine_entrance"), SpotId("well"))
+        assert (entered.spot, entered.origin) == (
+            SpotId("mine_entrance"),
+            CameThrough(SpotId("well"), PassageId("doorway")),
+        )
 
     def test_turning_back_on_a_closed_passage_comes_from_its_far_end(self) -> None:
-        """通りを歩いている途中で通りが閉じて広場に戻ると、origin は通りの向こうの端の井戸になる。"""
+        """通りを歩いている途中で通りが閉じて広場に戻ると、origin は通りの向こうの端の井戸と通りになる。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
         whereabouts.clear_events()
@@ -867,10 +875,14 @@ class TestWhereaboutsArrivalOrigin:
 
         _, entered = whereabouts.get_events()
         assert isinstance(entered, OccupantEnteredSpotEvent)
-        assert (entered.spot, entered.origin, entered.at) == (SpotId("plaza"), SpotId("well"), WorldTick(1))
+        assert (entered.spot, entered.origin, entered.at) == (
+            SpotId("plaza"),
+            CameThrough(SpotId("well"), PassageId("street")),
+            WorldTick(1),
+        )
 
     def test_stopping_before_a_closed_next_passage_comes_from_the_passage_walked(self) -> None:
-        """通りを歩き切って井戸に着き、次の小道が閉じていて井戸で止まると、origin は歩いた通りの出発点の広場になる。"""
+        """通りを歩き切って井戸に着き、次の小道が閉じていて井戸で止まると、origin は歩いた通りの出発点の広場と通りになる。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET, LANE)))
         whereabouts.advance_travels(frozenset(), WorldTick(1))
@@ -880,10 +892,50 @@ class TestWhereaboutsArrivalOrigin:
 
         _, entered = whereabouts.get_events()
         assert isinstance(entered, OccupantEnteredSpotEvent)
-        assert (entered.spot, entered.origin, entered.at) == (SpotId("well"), SpotId("plaza"), WorldTick(2))
+        assert (entered.spot, entered.origin, entered.at) == (
+            SpotId("well"),
+            CameThrough(SpotId("plaza"), PassageId("street")),
+            WorldTick(2),
+        )
+
+    def test_turning_back_on_the_second_passage_comes_through_that_passage(self) -> None:
+        """段を上がって井戸に着き、続く長い坑道の途中で坑道が閉じて井戸に戻ると、origin は坑道の向こうの端と、段ではなく坑道になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        step = path("step", "plaza", "well", ticks=1)
+        tunnel = path("tunnel", "well", "mine_entrance", ticks=3)
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(step, tunnel)))
+        whereabouts.advance_travels(frozenset(), WorldTick(1))
+        whereabouts.clear_events()
+
+        whereabouts.advance_travels(frozenset({PassageId("tunnel")}), WorldTick(2))
+
+        _, entered = whereabouts.get_events()
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin) == (
+            SpotId("well"),
+            CameThrough(SpotId("mine_entrance"), PassageId("tunnel")),
+        )
+
+    def test_cancelling_on_the_second_passage_comes_through_that_passage(self) -> None:
+        """段を上がって井戸に着き、続く長い坑道の途中で移動をやめて井戸に戻ると、origin は坑道の向こうの端と、段ではなく坑道になる。"""
+        whereabouts = _whereabouts((ALICE, "plaza"))
+        step = path("step", "plaza", "well", ticks=1)
+        tunnel = path("tunnel", "well", "mine_entrance", ticks=3)
+        whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(step, tunnel)))
+        whereabouts.advance_travels(frozenset(), WorldTick(1))
+        whereabouts.clear_events()
+
+        whereabouts.cancel_travel(ALICE, WorldTick(2))
+
+        _, entered = whereabouts.get_events()
+        assert isinstance(entered, OccupantEnteredSpotEvent)
+        assert (entered.spot, entered.origin) == (
+            SpotId("well"),
+            CameThrough(SpotId("mine_entrance"), PassageId("tunnel")),
+        )
 
     def test_cancelling_on_a_passage_comes_from_its_far_end(self) -> None:
-        """通りを歩いている途中で移動をやめて広場に戻ると、origin は通りの向こうの端の井戸、at はやめた tick になる。"""
+        """通りを歩いている途中で移動をやめて広場に戻ると、origin は通りの向こうの端の井戸と通り、at はやめた tick になる。"""
         whereabouts = _whereabouts((ALICE, "plaza"))
         whereabouts.start_travel(ALICE, Route(start=SpotId("plaza"), passages=(STREET,)))
         whereabouts.advance_travels(frozenset(), WorldTick(1))
@@ -893,7 +945,11 @@ class TestWhereaboutsArrivalOrigin:
 
         _, entered = whereabouts.get_events()
         assert isinstance(entered, OccupantEnteredSpotEvent)
-        assert (entered.spot, entered.origin, entered.at) == (SpotId("plaza"), SpotId("well"), WorldTick(1))
+        assert (entered.spot, entered.origin, entered.at) == (
+            SpotId("plaza"),
+            CameThrough(SpotId("well"), PassageId("street")),
+            WorldTick(1),
+        )
 
     def test_teleporting_arrives_from_no_spot(self) -> None:
         """teleport で着くと、origin は Teleported、at は teleport した tick になる。"""

@@ -83,5 +83,8 @@ _SHOUT = BuiltInPerceptionRow(
     name="shout", target_is_down=False, has_target=False, names_of_things=frozenset({"speech"})
 )
 _ARRIVAL = BuiltInPerceptionRow(
-    name="arrival", target_is_down=False, has_target=False, names_of_things=frozenset({"origin"})
+    name="arrival",
+    target_is_down=False,
+    has_target=False,
+    names_of_things=frozenset({"origin", "passage", "destination"}),
 )
