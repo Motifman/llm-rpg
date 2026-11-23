@@ -78,7 +78,7 @@ def _of(
     stores: dict[str, object],
     being_id: BeingId = HAL,
     scene: Scene = Scene([Description(heading="現在地と周囲", text="北の竪坑口")]),
-    being_tools: OfferedBeingTools = OfferedBeingTools(memo="memo"),
+    being_tools: OfferedBeingTools = OfferedBeingTools(memo="memo", episode_index_shown=True),
 ) -> WorkingMemory:
     current = CurrentWorkingMemory(episode_index_limit=5, **stores)  # type: ignore[arg-type]
     return current.of(
@@ -163,6 +163,12 @@ class TestGathering:
         headings = [s.heading for s in _of(stores).message]
 
         assert {"思い出せる出来事", "メモ"} <= set(headings)
+
+    def test_index_is_left_out_when_it_is_not_offered(self, stores: dict[str, object]) -> None:
+        """目次を出さない環境では、【思い出せる出来事】の区画も出さない。思い出す手段の無い目次を見せない。"""
+        headings = [s.heading for s in _of(stores, being_tools=OfferedBeingTools(memo="memo")).message]
+
+        assert "思い出せる出来事" not in headings and "メモ" in headings
 
     def test_memo_is_left_out_when_the_memo_argument_is_not_offered(self, stores: dict[str, object]) -> None:
         """行動の tool にメモの引数を出していなければ、【メモ】の区画も出さない。書けないメモ帳を見せない。"""

@@ -4,8 +4,10 @@ from collections.abc import Iterator, Sequence
 from typing import final
 
 from ai_rpg_world.being.application.choose_action import ActionChosen, ChooseAction, ChooseActionCommand
+from ai_rpg_world.being.application.end_being_turn import EndBeingTurn, EndBeingTurnCommand
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
 from ai_rpg_world.being.contract import OfferedBeingTools
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.game_world.application.describe_action_result import (
     DescribeActionResult,
@@ -39,6 +41,7 @@ class BeingsTakingTurnsOneByOne(TurnTakers):
         take_chosen_action: TakeChosenAction,
         describe_result: DescribeActionResult,
         receive_result: ReceiveActionResult,
+        end_being_turn: EndBeingTurn,
     ) -> None:
         self._world = world
         self._casts = casts
@@ -52,14 +55,17 @@ class BeingsTakingTurnsOneByOne(TurnTakers):
         self._take_chosen_action = take_chosen_action
         self._describe_result = describe_result
         self._receive_result = receive_result
+        self._end_being_turn = end_being_turn
 
     def take_turns(self, people: Sequence[PersonId]) -> Iterator[FinishedTurn]:
         for person in people:
-            yield FinishedTurn(person, self._take_turn(person))
+            being_id = self._casts.get(self._world).being_of(person)
+            outcome = self._take_turn(person, being_id)
+            self._end_being_turn.execute(EndBeingTurnCommand(being_id))
+            yield FinishedTurn(person, outcome)
 
-    def _take_turn(self, person: PersonId) -> TurnOutcome:
+    def _take_turn(self, person: PersonId, being_id: BeingId) -> TurnOutcome:
         cast = self._casts.get(self._world)
-        being_id = cast.being_of(person)
         command = ChooseActionCommand(
             being_id=being_id,
             orientation=cast.orientation_of(person),

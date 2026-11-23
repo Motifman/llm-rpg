@@ -7,11 +7,16 @@ from typing import cast
 
 from ai_rpg_world.being.application.choose_action import ActionChoosingCompletion, ChooseAction
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.end_being_turn import EndBeingTurn
 from ai_rpg_world.being.application.enter_environment import EnterEnvironment
+from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
+from ai_rpg_world.being.application.leave_environment import LeaveEnvironment
 from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.perceive_observation import PerceiveObservation
 from ai_rpg_world.being.application.prepare_being import PrepareBeing
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult
+from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisodesOnLeaving
+from ai_rpg_world.being.application.writing_circumstances import CircumstancesOfBeings
 from ai_rpg_world.being.contract import OfferedBeingTools
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -25,6 +30,9 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
     InMemoryShortTermMemoryRepository,
 )
 from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
+from ai_rpg_world.being.infrastructure.memory_writing_on_threads import MemoryWritingOnThreads
+from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
+from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
 from ai_rpg_world.game_world.application.accept_world_time_passage import AcceptWorldTimePassage
 from ai_rpg_world.game_world.application.brief_entering_person import BriefEnteringPerson
 from ai_rpg_world.game_world.application.check_readiness_to_act import CheckReadinessToAct
@@ -63,6 +71,7 @@ from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import Load
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsOneByOne
+from ai_rpg_world.play_session.application.end_play_session import EndPlaySession, EndPlaySessionCommand
 from ai_rpg_world.play_session.application.hand_observation_to_being import HandObservationToBeing
 from ai_rpg_world.play_session.application.play_rounds import PlayRounds, TurnTakers
 from ai_rpg_world.play_session.application.start_play_session import StartPlaySession, StartPlaySessionCommand
@@ -142,7 +151,8 @@ class MineVillageSession:
             wake_waiting_after=RoundCount(wake_waiting_after),
         )
 
-        self.short_term_memories = InMemoryShortTermMemoryRepository()
+        self.memory_writing = MemoryWritingOnThreads(wait_limit_seconds=2.0)
+        self.short_term_memories = InMemoryShortTermMemoryRepository(handoff=self.memory_writing.handoff)
         day_night = scenario.design.day_night
         assert isinstance(day_night, DayNightDeclaration)
         receiver = HandObservationToBeing(
@@ -158,6 +168,26 @@ class MineVillageSession:
         self.episodes = InMemoryEpisodeRepository(handoff=discard_events)
         self.memo_books = InMemoryMemoBookRepository(handoff=discard_events)
         self.visited_places = InMemoryVisitedPlacesRepository()
+        self.episode_writer = ScriptedEpisodeWriter()
+        self.circumstances = CircumstancesOfBeings(self.beings)
+        self.memory_writing.write_with(
+            backstory_writer=ScriptedBackstoryWriter(),
+            episode_writer=self.episode_writer,
+            short_term_memories=self.short_term_memories,
+            episodes=self.episodes,
+            circumstances=self.circumstances,
+        )
+        self.end_play = EndPlaySession(
+            casts=self.casts,
+            leave_environment=LeaveEnvironment(
+                writing_in_background=self.memory_writing,
+                write_episodes=WriteEpisodesOnLeaving(
+                    self.short_term_memories, self.episode_writer, AddEpisodesToMemory(self.episodes)
+                ),
+                circumstances=self.circumstances,
+                turn_reader=self.clock,
+            ),
+        )
 
     def beings_taking_turns(
         self,
@@ -172,7 +202,12 @@ class MineVillageSession:
         return BeingsTakingTurnsOneByOne(
             world=WORLD,
             casts=self.casts,
-            being_tools=OfferedBeingTools(inner_thought="inner_thought", memo=MEMO_FIELD_NAME),
+            being_tools=OfferedBeingTools(
+                inner_thought="inner_thought",
+                memo=MEMO_FIELD_NAME,
+                episode_recall="episode_recall",
+                episode_index_shown=True,
+            ),
             closing=Closing(instruction=closing),
             describe_scene=DescribeScene(self.scope, design),
             mark_body_as_shown=MarkBodyAsShown(self.scope),
@@ -195,10 +230,12 @@ class MineVillageSession:
                 episodes=self.episodes,
                 visited_places=self.visited_places,
                 recall_limit=3,
+                writing_in_background=self.memory_writing,
             ),
             take_chosen_action=TakeChosenAction(self.scope, design, settle),
             describe_result=DescribeActionResult(self.scope, design, day_night),
             receive_result=ReceiveActionResult(self.short_term_memories, self.clock),
+            end_being_turn=EndBeingTurn(self.short_term_memories, self.clock),
         )
 
     def play_rounds(self, turn_takers: TurnTakers) -> PlayRounds:
@@ -213,6 +250,13 @@ class MineVillageSession:
                 self.scope, PassWorldTime(self.scope), SettleWorldConditions(self.scope, design)
             ),
         )
+
+    def ended(self) -> None:
+        """Being を世界から離し、裏の書き起こしを止める。"""
+        try:
+            self.end_play(EndPlaySessionCommand(WORLD))
+        finally:
+            self.memory_writing.shutdown()
 
     def started(self) -> MineVillageSession:
         self.start(self.command)

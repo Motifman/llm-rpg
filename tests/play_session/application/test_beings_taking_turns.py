@@ -295,7 +295,7 @@ class TestMemoOfferedToBeings:
     """新しい世界が Being にメモの引数を出し、書いたメモが次のターンの【メモ】に出ることを保証する。"""
 
     def test_first_prompt_explains_the_memo_and_every_action_takes_it(self) -> None:
-        """1 ターン目から、システムプロンプトに古い run と同じ【メモの書き方】が出て、行動のツールはどれも memo の引数を持つ。"""
+        """1 ターン目から、システムプロンプトに古い run と同じ【メモの書き方】が出て、思い出す道具を除く行動のツールはどれも memo の引数を持つ。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
         completion = ScriptedActionChoosing(_listening(4))
 
@@ -305,7 +305,8 @@ class TestMemoOfferedToBeings:
         assert (
             "【メモの書き方】\n- 行動の tool の `memo` に、あとで使いたいことを書ける。" in first.messages[0]["content"]
         )
-        assert all("memo" in tool["function"]["parameters"]["properties"] for tool in first.tools)
+        actions = [tool for tool in first.tools if tool["function"]["name"] != "episode_recall"]
+        assert actions and all("memo" in tool["function"]["parameters"]["properties"] for tool in actions)
 
     def test_memo_written_with_an_action_appears_in_the_next_turn(self) -> None:
         """ゲンが耳を澄ますついでにやることを書くと、次のターンの【メモ】のやることにその文が出る。"""
@@ -319,3 +320,55 @@ class TestMemoOfferedToBeings:
         assert "倉庫でカンテラの油を探す" not in first
         memo = second[second.index("【メモ】") : second.index("【現在地と周囲】")]
         assert "やること:" in memo and "倉庫でカンテラの油を探す" in memo
+
+
+class TestEpisodesWrittenWhileTakingTurns:
+    """遊びの進行がターンごとに Being のターンを終え、範囲が埋まると裏で書いたエピソードが次の場面に出て、終わりに残りも書かれることを保証する。"""
+
+    def test_first_prompt_offers_recalling_and_explains_the_index(self) -> None:
+        """1 ターン目から、思い出す道具 episode_recall が出て、【渡される文面の読み方】に古い run と同じ目次の読み方の行が出る。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        completion = ScriptedActionChoosing(_listening(4))
+
+        session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
+
+        first = completion.calls[0]
+        assert "episode_recall" in {tool["function"]["name"] for tool in first.tools}
+        assert (
+            "- 【思い出せる出来事】は、自分が昔の出来事を書き残した記憶の目次である。"
+            "本文は `episode_recall` で呼び名を指定して思い出したときだけ読める。目次の一行だけから細部を補わない。"
+        ) in first.messages[0]["content"]
+
+    def test_episode_written_when_the_range_fills_appears_in_a_later_index(self) -> None:
+        """ゲンが 20 回行動して短期記憶の範囲が埋まると、裏で書いたゲンのエピソードが、書き終わったあとの場面の【思い出せる出来事】に出る。
+
+        裏のスレッドの速さに頼らないよう、20 巡りのあとで書き終わるのを待ってから、ゲンにもう 1 ターン頼む。
+        """
+        session = MineVillageSession(round_limit=20, delivers_world_events=True).started()
+        answers = _AnswersByPerson(session, {})
+        next_turn = ScriptedActionChoosing(_listening(1))
+        try:
+            session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+            assert session.memory_writing.finish(BeingId(_GEN.value)) is True
+            list(session.beings_taking_turns(next_turn).take_turns([_GEN]))
+        finally:
+            session.memory_writing.shutdown()
+
+        gens = [prompt for person, prompt in answers.prompts if person == _GEN]
+        later = next_turn.calls[0].messages[1]["content"]
+        assert len(gens) == 20 and all("ゲンの記憶" not in prompt for prompt in gens)
+        assert "ゲンの記憶" in later[later.index("【思い出せる出来事】") : later.index("【メモ】")]
+        assert session.memory_writing.failures() == {}
+
+    def test_ending_the_session_writes_what_was_not_yet_written(self) -> None:
+        """2 巡りで終えると、4 人それぞれの、まだまとめていない出来事が 1 件ずつエピソードになる。"""
+        session = MineVillageSession(round_limit=2, delivers_world_events=True).started()
+        session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(_listening(8))))(
+            PlayRoundsCommand(WORLD)
+        )
+
+        session.ended()
+
+        for person in _turn_order(session):
+            [episode] = session.episodes.list_by_being(BeingId(person.value))
+            assert episode.environment_name == "廃坑の山村" and "耳を澄ま" in episode.body

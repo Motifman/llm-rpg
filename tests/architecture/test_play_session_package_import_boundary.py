@@ -26,7 +26,15 @@ _EVERY_LAYER = (
 )
 _BEING_ENTRANCES = tuple(
     f"ai_rpg_world.being.application.{name}"
-    for name in ("prepare_being", "enter_environment", "perceive_observation", "choose_action", "receive_action_result")
+    for name in (
+        "prepare_being",
+        "enter_environment",
+        "perceive_observation",
+        "choose_action",
+        "receive_action_result",
+        "end_being_turn",
+        "leave_environment",
+    )
 )
 _WORLD_ENTRANCES = tuple(
     f"ai_rpg_world.game_world.application.{name}"
