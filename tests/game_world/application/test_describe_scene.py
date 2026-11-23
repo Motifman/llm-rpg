@@ -151,8 +151,8 @@ def _object_lines(scene: Scene) -> list[str]:
     return lines[lines.index("オブジェクト:") + 1 :]
 
 
-def test_empty_bucket_says_drawing_water_is_not_possible_now(mine_village: WorldDesign) -> None:
-    """釣瓶の水が尽きると、釣瓶の行の下に「いまできない: 水を汲む」が理由つきで出る。物の数の条件で断られるため (古い run と同じ)。"""
+def test_empty_bucket_leaves_no_line_of_what_cannot_be_done_in_the_scene(mine_village: WorldDesign) -> None:
+    """釣瓶の水が尽きても、場面の釣瓶の行の下に「いまできない」は出ない。いまできない操作は【現在選べる対象引数】の側に出す (D2268-14)。"""
 
     def empty_the_bucket(session: WorldSession) -> None:
         water = mine_village.nouns.object_state_key("well_bucket", "water", _HERE_IN_TEST)
@@ -160,34 +160,7 @@ def test_empty_bucket_says_drawing_water_is_not_possible_now(mine_village: World
 
     lines = _object_lines(_scene_of_gen_at(mine_village, SpotId("well"), empty_the_bucket))
 
-    assert lines[:2] == [
-        '  - "井戸の釣瓶" — 滑車に掛かった古い釣瓶。',
-        "      いまできない: 水を汲む（釣瓶は空のまま上がってきた。底の水が溜まるのを待つしかない。）",
-    ]
-
-
-def test_opened_safe_shows_no_line_of_what_cannot_be_done(mine_village: WorldDesign) -> None:
-    """金庫を開けたあとも、金庫の行の下に「いまできない」は出ない。旗の条件で断られる操作は、古い run と同じく選べる操作の一覧に残すため。"""
-    lines = _object_lines(
-        _scene_of_gen_at(
-            mine_village,
-            _OFFICE,
-            lambda session: (
-                session.aggregates()
-                .flags()
-                .raise_flag(mine_village.nouns.flag("safe_opened", _HERE_IN_TEST), WorldTimePassing(WorldTick(0)))
-            ),
-        )
-    )
-
     assert not any("いまできない" in line for line in lines)
-
-
-def test_closed_gate_hides_closing_it(mine_village: WorldDesign) -> None:
-    """閉じている北の坑道の水門には、「水門を閉じる」がいまできないとしても出ない。伏せる印のある操作は、条件を満たさないあいだ存在ごと伏せるため。"""
-    lines = _object_lines(_scene_of_gen_at(mine_village, SpotId("north_tunnel")))
-
-    assert not any("水門を閉じる" in line for line in lines)
 
 
 def _body_and_belongings(scene: Scene) -> list[str]:

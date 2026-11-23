@@ -34,7 +34,7 @@ class OfferActionChoices:
 
     def _offer(self, session: WorldSession, person: PersonId) -> ActionChoices:
         wording = choice_wording_for(session, person, self._design)
-        available = self._list.available_in(session, person).offered_as_choices(self._design)
+        available = self._list.available_in(session, person)
         return OffersOfOneTurn.of(available, wording).as_action_choices()
 
 

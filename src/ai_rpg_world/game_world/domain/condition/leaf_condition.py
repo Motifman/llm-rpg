@@ -28,10 +28,7 @@ class LeafCondition(ABC):
     def failure_reason(self, facts: WorldFacts, trigger: Trigger) -> FailureReason | HiddenFailure | None:
         if self.holds(facts, trigger):
             return None
-        return own_failure(self.failure_text, trigger, about_object_state=self.is_about_object_state())
-
-    def is_about_object_state(self) -> bool:
-        return False
+        return own_failure(self.failure_text, trigger)
 
     def failure_reason_before_arguments(
         self, facts: WorldFacts, trigger: Trigger

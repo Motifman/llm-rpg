@@ -12,7 +12,17 @@ from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldC
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import UsesBody
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
-from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, SpotId, Ticks, WorldId, WorldTick
+from ai_rpg_world.game_world.domain.design_flaw.design_location import DesignLocation
+from ai_rpg_world.game_world.domain.value_object import (
+    Count,
+    DisplayName,
+    ObjectId,
+    PersonId,
+    SpotId,
+    Ticks,
+    WorldId,
+    WorldTick,
+)
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
@@ -22,6 +32,7 @@ _MINE_VILLAGE = Path(__file__).parents[3] / "data" / "scenarios" / "mine_village
 _WORLD = WorldId("world")
 _GEN, _SAYO = PersonId("gen"), PersonId("sayo")
 _OFFICE = SpotId("company_office")
+_HERE_IN_TEST = DesignLocation("test", "offer_action_choices", "nouns")
 
 
 @pytest.fixture(scope="module")
@@ -189,3 +200,31 @@ def test_busy_gen_still_does_not_see_closing_the_closed_gate(mine_village: World
     picked = [str(unavailable.picked) for unavailable in interact.unavailable]
     assert any("水門を開ける" in p for p in picked)
     assert not any("水門を閉じる" in p for p in picked)
+
+
+class TestOperationsNotPossibleNow:
+    """物の状態が理由でいまできない操作が、行動の候補の「いまできない」に、対象と操作の道筋と理由つきで渡ることを保証する。"""
+
+    def test_empty_bucket_puts_drawing_water_among_the_unavailable(self, mine_village: WorldDesign) -> None:
+        """釣瓶の水が尽きると、interact のいまできないに、道筋 (井戸の釣瓶, 水を汲む) と、釣瓶が空のまま上がってきた理由が並ぶ。"""
+        well = _Office(mine_village, SpotId("well"))
+        water = mine_village.nouns.object_state_key("well_bucket", "water", _HERE_IN_TEST)
+        well.scope.run(
+            lambda session: (
+                session.aggregates()
+                .object_state(ObjectId("well_bucket"))
+                .take_from_stock(water, Count(4), WorldTick(0))
+            )
+        )
+
+        unavailable = _choice(well.choices_of_gen(), "interact").unavailable
+
+        assert (("井戸の釣瓶", "水を汲む"), "釣瓶は空のまま上がってきた。底の水が溜まるのを待つしかない。") in [
+            (tuple(u.picked), u.reason) for u in unavailable
+        ]
+
+    def test_closed_gate_hides_closing_it(self, mine_village: WorldDesign) -> None:
+        """閉じている北の坑道の水門の「水門を閉じる」は、いまできないにも出ない。伏せる印のある操作は、条件を満たさないあいだ存在ごと伏せるため。"""
+        unavailable = _choice(_Office(mine_village, SpotId("north_tunnel")).choices_of_gen(), "interact").unavailable
+
+        assert all("水門を閉じる" not in u.picked for u in unavailable)
