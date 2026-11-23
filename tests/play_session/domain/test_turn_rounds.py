@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard, UnknownValue
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.game_world.domain.value_object.readiness_to_act import (
     FreeToAct,
@@ -23,9 +23,11 @@ from ai_rpg_world.play_session.domain.turn_rounds import (
     RoundClosedEvent,
     RoundCount,
     RoundOpenedEvent,
+    SkippedTurn,
     TurnFinishedEvent,
     TurnOutcome,
     TurnRounds,
+    TurnSkipReason,
     Waited,
 )
 
@@ -65,43 +67,68 @@ class TestWhoGetsATurn:
 
         assert rounds.due_turns() == (_MIO,)
 
-    def test_person_in_the_middle_of_action_gets_a_turn_after_a_call(self) -> None:
-        """移動中のハルも、前の巡りで呼びかけ (wants_wake の観測) を受けていれば、ターンが回る。"""
+    def test_person_in_the_middle_of_action_gets_a_turn_when_addressed(self) -> None:
+        """移動中のハルも、前の巡りで自分に向けた観測 (addressed_to_self=True) を受けていれば、ターンが回る。"""
         rounds = _rounds()
-        rounds.hear_call(_HARU)
+        rounds.notice_observation(_HARU, _observation(wants_wake=True, addressed_to_self=True))
 
         rounds.open_round({_HARU: InTheMiddleOfAction()})
 
         assert rounds.due_turns() == (_HARU,)
 
-    def test_call_is_used_up_by_the_turn(self) -> None:
-        """呼びかけで回ったターンを終えたら、次の巡りでは、移動中のハルにはもう回らない。"""
+    def test_person_in_the_middle_of_action_is_not_woken_by_what_only_calls_attention(self) -> None:
+        """移動中のハルは、目立つだけで自分に向けたものではない観測 (wants_wake=True、addressed_to_self=False) では、ターンが回らない。"""
         rounds = _rounds()
-        rounds.hear_call(_HARU)
+        rounds.notice_observation(_HARU, _observation(wants_wake=True, addressed_to_self=False))
+
+        rounds.open_round({_HARU: InTheMiddleOfAction()})
+
+        assert rounds.due_turns() == ()
+
+    def test_being_addressed_is_used_up_by_the_turn(self) -> None:
+        """自分に向けた観測で回ったターンを終えたら、次の巡りでは、移動中のハルにはもう回らない。"""
+        rounds = _rounds()
+        rounds.notice_observation(_HARU, _observation(wants_wake=True, addressed_to_self=True))
         _play_round(rounds, {_HARU: InTheMiddleOfAction()})
 
         rounds.open_round({_HARU: InTheMiddleOfAction()})
 
         assert rounds.due_turns() == ()
 
-    def test_call_heard_while_unable_is_not_carried_over(self) -> None:
-        """気を失っているあいだに受けた呼びかけは、その後に移動中になった巡りへ持ち越されない。"""
+    def test_being_addressed_while_unable_is_not_carried_over(self) -> None:
+        """気を失っているあいだに受けた自分に向けた観測は、その後に移動中になった巡りへ持ち越されない。"""
         rounds = _rounds()
-        rounds.hear_call(_SAYO)
+        rounds.notice_observation(_SAYO, _observation(wants_wake=True, addressed_to_self=True))
         _play_round(rounds, {_SAYO: UnableToAct()})
 
         rounds.open_round({_SAYO: InTheMiddleOfAction()})
 
         assert rounds.due_turns() == ()
 
-    def test_unable_person_gets_no_turn_even_after_a_call(self) -> None:
-        """気を失っているサヨには、呼びかけを受けてもターンは回らない。"""
+    def test_unable_person_gets_no_turn_even_when_addressed(self) -> None:
+        """気を失っているサヨには、自分に向けた観測を受けてもターンは回らない。"""
         rounds = _rounds()
-        rounds.hear_call(_SAYO)
+        rounds.notice_observation(_SAYO, _observation(wants_wake=True, addressed_to_self=True))
 
         rounds.open_round({_SAYO: UnableToAct()})
 
         assert rounds.due_turns() == ()
+
+    def test_round_opened_event_tells_who_was_skipped_and_why(self) -> None:
+        """D2225 の場面で巡りを開くと、RoundOpenedEvent に、ハルは行為の最中で自分に向けたものが無い、サヨは動けない、ゲンは待っている、と飛ばした理由が人ごとに残る。"""
+        rounds = _rounds()
+        _play_round(rounds, _ALL_FREE, gen=Waited())
+        rounds.notice_observation(_HARU, _observation(wants_wake=True, addressed_to_self=False))
+
+        rounds.open_round({_HARU: InTheMiddleOfAction(), _SAYO: UnableToAct(), _GEN: FreeToAct(), _MIO: FreeToAct()})
+
+        [opened] = [e for e in rounds.get_events() if isinstance(e, RoundOpenedEvent)][-1:]
+        assert opened.due == (_MIO,)
+        assert opened.skipped == (
+            SkippedTurn(_HARU, TurnSkipReason.IN_THE_MIDDLE_OF_ACTION_AND_NOT_ADDRESSED),
+            SkippedTurn(_SAYO, TurnSkipReason.UNABLE_TO_ACT),
+            SkippedTurn(_GEN, TurnSkipReason.WAITING),
+        )
 
 
 class TestWaiting:
@@ -126,7 +153,7 @@ class TestWaiting:
         """待っているゲンが呼びかけを受けると、次の巡りでターンが回る。"""
         rounds = _rounds(wake_waiting_after=3)
         _play_round(rounds, {_GEN: FreeToAct()}, gen=Waited())
-        rounds.hear_call(_GEN)
+        rounds.notice_observation(_GEN, _observation(wants_wake=True))
 
         rounds.open_round({_GEN: FreeToAct()})
 
@@ -136,7 +163,7 @@ class TestWaiting:
         """起こされたゲンが待つ以外を選ぶと、次の巡りからは毎回ターンが回る。"""
         rounds = _rounds(wake_waiting_after=3)
         _play_round(rounds, {_GEN: FreeToAct()}, gen=Waited())
-        rounds.hear_call(_GEN)
+        rounds.notice_observation(_GEN, _observation(wants_wake=True))
         _play_round(rounds, {_GEN: FreeToAct()})
 
         rounds.open_round({_GEN: FreeToAct()})
@@ -144,7 +171,7 @@ class TestWaiting:
         assert rounds.due_turns() == (_GEN,)
 
 
-def _observation(wants_wake: bool | None) -> Observation:
+def _observation(wants_wake: bool | None, addressed_to_self: bool | UnknownValue = UNKNOWN) -> Observation:
     return Observation(
         body="扉が壊れた",
         route=SeenOrHeard(),
@@ -153,7 +180,7 @@ def _observation(wants_wake: bool | None) -> Observation:
         subject_name=UNKNOWN,
         source=UNKNOWN,
         place=UNKNOWN,
-        addressed_to_self=UNKNOWN,
+        addressed_to_self=addressed_to_self,
         wants_wake=wants_wake,
     )
 

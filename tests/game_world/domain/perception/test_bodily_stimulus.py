@@ -29,6 +29,7 @@ class TestBodilyStimulusPerceivedBy:
             quality=Felt(),
             happened_at=WorldTick(4),
             calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
     def test_someone_else_does_not_feel_it(self) -> None:

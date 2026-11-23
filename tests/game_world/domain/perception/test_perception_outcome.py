@@ -33,6 +33,7 @@ class TestHandOver:
             quality=SeesClearly(),
             happened_at=WorldTick(3),
             calls_attention=False,
+            addressed_to_perceiver=False,
         )
         recipient = _Recipient()
 

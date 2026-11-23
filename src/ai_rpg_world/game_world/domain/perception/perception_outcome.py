@@ -37,6 +37,7 @@ class Perceived:
     quality: PerceivedQuality
     happened_at: WorldTick
     calls_attention: bool
+    addressed_to_perceiver: bool
 
     def hand_over(self, perceiver: PersonId, recipient: PerceptionRecipient) -> None:
         recipient.perceived(self)

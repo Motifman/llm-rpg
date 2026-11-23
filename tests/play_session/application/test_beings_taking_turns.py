@@ -27,7 +27,13 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
-from ai_rpg_world.play_session.domain.turn_rounds import ChoiceFailed, TurnFinishedEvent
+from ai_rpg_world.play_session.domain.turn_rounds import (
+    ChoiceFailed,
+    RoundOpenedEvent,
+    SkippedTurn,
+    TurnFinishedEvent,
+    TurnSkipReason,
+)
 from tests.play_session.mine_village_session import WORLD, MineVillageSession
 
 _GEN = PersonId("gen")
@@ -256,6 +262,48 @@ class TestArrivalComesBackAsOwnAction:
         )
         assert "  呼び出し: travel_to()" in recent
         assert "やって来た" not in recent
+
+
+class TestWhoIsAskedWhileOthersAct:
+    """行為の最中の人は自分に向けたものがあったときだけ、待っている人は目立つ出来事で、次の巡りに頼まれることを保証する。"""
+
+    _SAYO = PersonId("sayo")
+
+    def _asked_in_round_two(self, gen_does: ActionChoosingReply, sayo_does: ActionChoosingReply) -> bool:
+        session = MineVillageSession(delivers_world_events=True, round_limit=2).started()
+        answers = _AnswersByPerson(session, {_GEN: [gen_does], self._SAYO: [sayo_does]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        asked = answers.asked.count(_GEN)
+        assert asked in (1, 2), f"gen must act in round one, asked {asked} times"
+        return asked == 2
+
+    def test_gen_searching_is_not_asked_when_sayo_searches_beside_him(self) -> None:
+        """探している最中 (3 tick かかる) のゲンは、同じ場所でサヨが探すのを見ても、次の巡りに頼まれない。"""
+        assert not self._asked_in_round_two(_reply("explore", "e1"), _reply("explore", "e2"))
+
+    def test_gen_searching_is_asked_when_sayo_whispers_to_him(self) -> None:
+        """探している最中のゲンも、サヨにささやかれれば (to=ゲン)、次の巡りに頼まれる。"""
+        whisper = _reply("speak", "s1", reach="ささやく", to="ゲン", content="そっちはどう？")
+
+        assert self._asked_in_round_two(_reply("explore", "e1"), whisper)
+
+    def test_gen_waiting_is_woken_when_sayo_searches_beside_him(self) -> None:
+        """待つを選んだゲンは、同じ場所でサヨが探すのを見ると (目立つ出来事)、次の巡りに頼まれる。"""
+        assert self._asked_in_round_two(_reply("wait", "w1"), _reply("explore", "e2"))
+
+    def test_gen_searching_is_skipped_with_the_reason_in_the_round_opened_event(self) -> None:
+        """サヨが探すのを見ただけの探している最中のゲンは、2 巡り目の RoundOpenedEvent に「行為の最中で、自分に向けたものが無い」と飛ばした理由が残る。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=2).started()
+        answers = _AnswersByPerson(session, {_GEN: [_reply("explore", "e1")], self._SAYO: [_reply("explore", "e2")]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        second = [e for e in session.turn_round_events if isinstance(e, RoundOpenedEvent) and e.round == 2]
+        assert [s for s in second[0].skipped if s.person == _GEN] == [
+            SkippedTurn(_GEN, TurnSkipReason.IN_THE_MIDDLE_OF_ACTION_AND_NOT_ADDRESSED)
+        ]
 
 
 class TestBelongingsComingAndGoing:

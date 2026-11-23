@@ -63,4 +63,5 @@ class BodilyStimulus:
             quality=Felt(),
             happened_at=self.at,
             calls_attention=self.salience.stands_out(),
+            addressed_to_perceiver=False,
         )

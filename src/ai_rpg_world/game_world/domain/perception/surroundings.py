@@ -328,6 +328,7 @@ class VisibleSurroundings:
                 quality=self.sight,
                 happened_at=at,
                 calls_attention=False,
+                addressed_to_perceiver=False,
             ),
         )
 

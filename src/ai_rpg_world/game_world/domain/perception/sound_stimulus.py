@@ -9,6 +9,7 @@ from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeo
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.delivery_rank import DeliveryRank, Sense
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
+from ai_rpg_world.game_world.domain.perception.no_target import NoTarget
 from ai_rpg_world.game_world.domain.perception.not_noticed_later import NotNoticedLater
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.people_present import PeoplePresent, WhoeverIsThere
@@ -95,6 +96,7 @@ class SoundStimulus:
     at: WorldTick
     present: PeoplePresent = field(default_factory=WhoeverIsThere)
     withheld_from: frozenset[PersonId] = frozenset()
+    addressee: PersonId | NoTarget = field(default_factory=NoTarget)
 
     @property
     def counts_toward_one_per_person(self) -> bool:
@@ -169,6 +171,7 @@ class _Hearing:
                 happened_at=stimulus.at,
                 # かすかに聞こえただけのものは、関わっていても目立っても、考え直す目安にしない。
                 calls_attention=stands_out and (involved or stimulus.salience.stands_out()),
+                addressed_to_perceiver=stimulus.addressee == perceiver.person,
             ),
             on_waking=lambda: MissedNotice.from_text(stimulus.noticed_later, self.view, stimulus.at),
         )

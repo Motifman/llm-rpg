@@ -87,6 +87,7 @@ class TestMissedNoticesPerceivedOnWaking:
                 quality=NoticedOnWaking(),
                 happened_at=WorldTick(9),
                 calls_attention=False,
+                addressed_to_perceiver=False,
             )
             for notice in (lighter, bell)
         )

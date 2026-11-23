@@ -119,6 +119,38 @@ class TestPerceptionDeclarationSeenAt:
             at=_NOW,
         )
 
+    @pytest.mark.parametrize("failed", [False, True], ids=["done", "failed"])
+    def test_target_of_the_act_becomes_the_addressee_of_every_stimulus(self, failed: bool) -> None:
+        """ハルがミオに向けた行為は、できても断られても、見える刺激と聞こえる刺激のどちらにも、ミオを向けた相手 (addressee) として持たせる。"""
+        mio = PersonId("mio")
+        declaration = replace(
+            _arrival(),
+            sound=SoundDeclaration(
+                loudness=Loudness.WHISPER,
+                clear=TextWithUnassignedPeople("足音が近づいてきた。"),
+                muffled=TextWithUnassignedPeople("かすかな足音がした。"),
+            ),
+            on_failure=seen_clearly_only("{actor}が何かしかけてやめた。"),
+        )
+
+        if failed:
+            stimuli = declaration.failure_seen_at(
+                _WELL, PersonBody(_HAL), _FROM_PLAZA, _NOW, target=mio, manner=Openly()
+            )
+        else:
+            stimuli = declaration.seen_at(
+                _WELL,
+                PersonBody(_HAL),
+                _FROM_PLAZA,
+                _NOW,
+                target=mio,
+                manner=Openly(),
+                source=Noise(),
+                present=WhoeverIsThere(),
+            )
+
+        assert stimuli and all(isinstance(s, (SightStimulus, SoundStimulus)) and s.addressee == mio for s in stimuli)
+
     def test_departed_actor_is_marked_on_the_sight_stimulus(self) -> None:
         """去った人として動くハルが来たとき、見える刺激は行った人が去った人だと持つ。"""
         [stimulus] = _arrival().seen_at(
