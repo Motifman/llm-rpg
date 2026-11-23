@@ -156,6 +156,7 @@ class TestOffersOfOneTurn:
         assert speak.unavailable == (
             UnavailableAction(
                 picked=("ささやく", sayo),
+                argument="to",
                 reason=TextWithPeople(template="{target}は眠っている", people={"target": sayo}),
             ),
         )

@@ -62,6 +62,7 @@ class OffersOfOneTurn:
             UnavailableAction(
                 picked=tuple(_label(step.candidate) for step in offered.steps),
                 reason=standing.reason.seen_by(self._people).for_being(),
+                argument=offered.steps[-1].value.name if offered.steps else None,
             )
             for offered, standing in not_now
             if not root.reaches(tuple(_key(step.candidate) for step in offered.steps))

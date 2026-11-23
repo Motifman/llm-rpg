@@ -101,7 +101,10 @@ def _tools(choices: ActionChoices, being_tools: OfferedBeingTools = TOOLS) -> Ac
     return ActionTools(choices, being_tools, _name_for, recall_limit=3)
 
 
-NOTE = "※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。"
+NOTE = (
+    '※ 引数には「いまできる」の "" の中の文字をそのまま書く。「いまできない」は、（）の理由があるあいだは選んでも断られる。'
+    "一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。"
+)
 
 
 def _table(choices: ActionChoices) -> list[str]:
@@ -119,6 +122,14 @@ class TestActionToolDefinitions:
         definitions = _tools(_gen_in_the_office()).definitions()
 
         assert [d["function"]["name"] for d in definitions] == ["travel_to", "speak", "interact"]
+
+    def test_description_says_to_copy_what_can_be_done_now(self) -> None:
+        """行く (travel_to) の説明は「行く。候補のある引数には【現在選べる対象引数】の「いまできる」の文字をそのまま書く。」になる。"""
+        [travel] = _tools(ActionChoices((_travel("井戸"),))).definitions()
+
+        assert travel["function"]["description"] == (
+            "行く。候補のある引数には【現在選べる対象引数】の「いまできる」の文字をそのまま書く。"
+        )
 
     def test_definitions_stay_the_same_after_moving_to_the_well(self) -> None:
         """井戸に移って行き先・話し相手・操作できる物が変わっても、ツールの定義は 1 文字も変わらない。"""
@@ -213,24 +224,97 @@ class TestActionToolDefinitions:
 
 
 class TestCandidateTable:
-    """ActionTools.candidate_table が、このターンの候補を、古い run の【現在選べる対象引数】の形で場面の文にすることを保証する。"""
+    """ActionTools.candidate_table が、このターンの候補と、いまはできない候補を理由つきで、引数ごとの段の形で場面の文にすることを保証する。"""
 
-    def test_destinations_are_quoted_after_the_tool_and_argument_names(self) -> None:
-        """行き先は「- ツールの名前.引数の名前: "候補", …」の 1 行に並び、最後に注意書きが付く。"""
+    def test_destinations_are_listed_one_per_line_under_what_can_be_done_now(self) -> None:
+        """行き先は「- ツールの名前.引数の名前:」の下の「いまできる:」に 1 つ 1 行で並び、最後に注意書きが付く。"""
         assert _table(ActionChoices((_travel("井戸", "鍛冶場", "南の横坑口"),))) == [
-            '- travel_to.destination: "井戸", "鍛冶場", "南の横坑口"',
+            "- travel_to.destination:",
+            "    いまできる:",
+            '      "井戸"',
+            '      "鍛冶場"',
+            '      "南の横坑口"',
             NOTE,
         ]
 
     def test_value_chosen_under_a_candidate_names_that_candidate(self) -> None:
-        """金庫の下で選ぶ操作は、どの候補の下かを括弧に添えた行になる。番号の値は何を書くか (writes) を持たないので、表に出ない。"""
+        """金庫の下で選ぶ操作は、どの候補の下かを括弧に添えた見出しになる。番号の値は何を書くか (writes) を持たないので、表に出ない。"""
         assert _table(ActionChoices((_interact(SAFE),)))[:-1] == [
-            '- interact.target: "金庫"',
-            '- interact.how ("金庫"): "番号を合わせて開ける"',
+            "- interact.target:",
+            "    いまできる:",
+            '      "金庫"',
+            '- interact.how ("金庫"):',
+            "    いまできる:",
+            '      "番号を合わせて開ける"',
+        ]
+
+    def test_unavailable_operation_is_listed_with_its_reason_under_the_same_heading(self) -> None:
+        """金庫の「開ける」がいまできないなら、金庫の操作の見出しの「いまできない:」に、理由を全角の丸括弧に入れて出る。理由の句点は外す。"""
+        locked = UnavailableAction(picked=("金庫", "開ける"), argument="how", reason="鍵が掛かっている。")
+        interact = _interact(SAFE)
+        choice = ActionChoice(
+            name=interact.name,
+            label=interact.label,
+            outline=interact.outline,
+            takes_details=True,
+            values=interact.values,
+            unavailable=(locked,),
+        )
+
+        assert _table(ActionChoices((choice,)))[3:-1] == [
+            '- interact.how ("金庫"):',
+            "    いまできる:",
+            '      "番号を合わせて開ける"',
+            "    いまできない:",
+            '      "開ける"（鍵が掛かっている）',
+        ]
+
+    def test_unavailable_destination_follows_those_that_can_be_reached(self) -> None:
+        """通れない行き先は、行き先の見出しの「いまできない:」に出る。"""
+        travel = _travel("井戸")
+        choice = ActionChoice(
+            name=travel.name,
+            label=travel.label,
+            outline=travel.outline,
+            values=travel.values,
+            unavailable=(
+                UnavailableAction(
+                    picked=("北の竪坑の底",), argument="destination", reason="梯子が外れていて下りられない"
+                ),
+            ),
+        )
+
+        assert _table(ActionChoices((choice,))) == [
+            "- travel_to.destination:",
+            "    いまできる:",
+            '      "井戸"',
+            "    いまできない:",
+            '      "北の竪坑の底"（梯子が外れていて下りられない）',
+            NOTE,
+        ]
+
+    def test_operations_of_a_target_with_nothing_doable_get_their_own_heading(self) -> None:
+        """物置の操作がどれもいまできず物置が候補に並ばなくても、物置の操作の見出しを立て、いまできるものは「(なし)」と出す。"""
+        interact = _interact(SAFE)
+        choice = ActionChoice(
+            name=interact.name,
+            label=interact.label,
+            outline=interact.outline,
+            takes_details=True,
+            values=interact.values,
+            unavailable=(UnavailableAction(picked=("物置", "開ける"), argument="how", reason="錠前が錆びている"),),
+        )
+
+        assert _table(ActionChoices((choice,)))[6:-1] == [
+            '- interact.how ("物置"):',
+            "    いまできる:",
+            "      (なし)",
+            "    いまできない:",
+            '      "開ける"（錠前が錆びている）',
         ]
 
     def test_free_text_with_writes_says_what_to_write_under_its_candidate(self) -> None:
-        """何を書くか (金庫の番号) を持つ自由に書く値は、候補の下の行に「- interact.details.code ("番号を合わせて開ける"): 金庫の番号を書く」と出る。"""
+        """何を書くか (金庫の番号) を持つ自由に書く値は、段の形にせず「- interact.details.code ("番号を合わせて開ける"): 金庫の番号を書く」の 1 行で出る。"""
         guided = Candidate(
             label="金庫",
             values=(
@@ -247,33 +331,67 @@ class TestCandidateTable:
             ),
         )
 
-        assert _table(ActionChoices((_interact(guided),)))[:-1] == [
-            '- interact.target: "金庫"',
-            '- interact.how ("金庫"): "番号を合わせて開ける"',
-            '- interact.details.code ("番号を合わせて開ける"): 金庫の番号を書く',
-        ]
+        assert _table(ActionChoices((_interact(guided),)))[-2] == (
+            '- interact.details.code ("番号を合わせて開ける"): 金庫の番号を書く'
+        )
 
     def test_speech_content_without_writes_stays_out_of_the_table(self) -> None:
         """何を書くかを持たない話す中身 (content) は、ツールの引数の説明で分かるので、表に出ない。"""
         assert all("content" not in line for line in _table(ActionChoices((_speak(SAYO),))))
 
     def test_whisper_to_sayo_names_her_by_her_visible_name(self) -> None:
-        """ささやく相手のサヨは、人の印ではなく見えている名前で、ささやくの下の行に出る。"""
-        assert _table(ActionChoices((_speak(SAYO),)))[:-1] == [
-            '- speak.reach: "ふつうの声で話す", "ささやく"',
-            '- speak.to ("ささやく"): "サヨ"',
+        """ささやく相手のサヨは、人の印ではなく見えている名前で、ささやくの下の見出しに出る。"""
+        assert _table(ActionChoices((_speak(SAYO),)))[4:-1] == [
+            '- speak.to ("ささやく"):',
+            "    いまできる:",
+            '      "サヨ"',
         ]
 
     def test_people_who_look_alike_are_numbered(self) -> None:
         """見分けのつかない同じ見た目の 2 人は、古い run と同じく「 #1」「 #2」を添えて別々に出る。"""
-        assert _table(ActionChoices((_speak(SHADOW_A, SHADOW_B),)))[1] == (
-            '- speak.to ("ささやく"): "煤けた上着の男 #1", "煤けた上着の男 #2"'
+        assert _table(ActionChoices((_speak(SHADOW_A, SHADOW_B),)))[6:8] == [
+            '      "煤けた上着の男 #1"',
+            '      "煤けた上着の男 #2"',
+        ]
+
+    def test_person_who_cannot_be_whispered_to_is_numbered_with_the_one_who_can(self) -> None:
+        """ささやけない見た目の同じ人は「いまできない:」に出るので、ささやける人と番号で呼び分け、理由の中でも同じ番号で呼ぶ。"""
+        speak = self._whisper(
+            UnavailableAction(
+                picked=("ささやく", SHADOW_B),
+                argument="to",
+                reason=TextWithPeople(template="{who}は眠っている", people={"who": SHADOW_B}),
+            )
         )
+
+        assert _table(ActionChoices((speak,)))[3:-1] == [
+            '- speak.to ("ささやく"):',
+            "    いまできる:",
+            '      "煤けた上着の男 #1"',
+            "    いまできない:",
+            '      "煤けた上着の男 #2"（煤けた上着の男 #2は眠っている）',
+        ]
 
     def test_person_only_in_an_unavailable_reason_is_not_counted(self) -> None:
         """同じ見た目の人がいまはできない理由にだけ出るときは、表に出る 1 人に番号を付けない。"""
+        speak = self._whisper(
+            UnavailableAction(
+                picked=("ささやく", SAYO),
+                argument="to",
+                reason=TextWithPeople(template="{who}が見ている", people={"who": SHADOW_B}),
+            )
+        )
+
+        assert _table(ActionChoices((speak,)))[5:-1] == [
+            '      "煤けた上着の男"',
+            "    いまできない:",
+            '      "サヨ"（煤けた上着の男が見ている）',
+        ]
+
+    @staticmethod
+    def _whisper(unavailable: UnavailableAction) -> ActionChoice:
         content = FreeText(name="content", label="中身")
-        speak = ActionChoice(
+        return ActionChoice(
             name="speak",
             label="話す",
             outline=(
@@ -297,15 +415,8 @@ class TestCandidateTable:
                     ),
                 ),
             ),
-            unavailable=(
-                UnavailableAction(
-                    picked=("ささやく", SHADOW_B),
-                    reason=TextWithPeople(template="{who}は眠っている", people={"who": SHADOW_B}),
-                ),
-            ),
+            unavailable=(unavailable,),
         )
-
-        assert _table(ActionChoices((speak,)))[1] == '- speak.to ("ささやく"): "煤けた上着の男"'
 
     def test_items_with_the_same_name_are_listed_once(self) -> None:
         """同じ名前の品物は、数を添えず 1 回だけ出る。"""
@@ -316,19 +427,19 @@ class TestCandidateTable:
             values=(PickOne(name="item", label="品物", candidates=(Candidate(label="ランプの油", count=3),)),),
         )
 
-        assert _table(ActionChoices((drop,))) == ['- drop_item.item: "ランプの油"', NOTE]
+        assert _table(ActionChoices((drop,))) == ["- drop_item.item:", "    いまできる:", '      "ランプの油"', NOTE]
 
     def test_value_outside_the_outline_is_named_under_details(self) -> None:
-        """見取り図に無い、候補から選ぶ値は「details.名前」で出る。"""
+        """見取り図に無い、候補から選ぶ値は「details.名前」の見出しで出る。"""
         lever = Candidate(
             label="レバー",
             values=(PickOne(name="position", label="位置", candidates=(Candidate(label="上"), Candidate(label="下"))),),
         )
 
-        assert _table(ActionChoices((_interact(lever),)))[1] == '- interact.details.position ("レバー"): "上", "下"'
+        assert _table(ActionChoices((_interact(lever),)))[3] == '- interact.details.position ("レバー"):'
 
     def test_actions_without_candidates_are_left_out(self) -> None:
-        """選ぶ値の無い行動 (待つ) と、候補の無い行動は、行を持たない。"""
+        """選ぶ値の無い行動 (待つ) と、候補もいまはできないものも無い行動は、見出しを持たない。"""
         drop = ActionChoice(
             name="drop_item",
             label="置く",
@@ -337,28 +448,28 @@ class TestCandidateTable:
         )
 
         assert _table(ActionChoices((ActionChoice(name="wait", label="待つ"), drop, _travel("井戸")))) == [
-            '- travel_to.destination: "井戸"',
+            "- travel_to.destination:",
+            "    いまできる:",
+            '      "井戸"',
             NOTE,
         ]
 
     def test_no_candidate_at_all_gives_no_table(self) -> None:
-        """どの行動にも候補が無ければ、候補表を出さない。"""
+        """どの行動にも候補もいまはできないものも無ければ、候補表を出さない。"""
         assert _tools(ActionChoices((ActionChoice(name="wait", label="待つ"),))).candidate_table() is None
 
-    def test_unavailable_actions_are_left_out(self) -> None:
-        """いまはできない行動は、理由ごと候補表に出さない。古い run の候補表と同じく、選べる値だけを並べる。"""
-        hold = ActionChoice(
-            name="hold_item",
-            label="手に持つ",
-            outline=(ArgumentOutline(name="item", label="品物", required=True),),
-            values=(PickOne(name="item", label="品物", candidates=(Candidate(label="カンテラ"),)),),
-            unavailable=(UnavailableAction(picked=("ランプ",), reason="両手がふさがっている"),),
-        )
+    def test_whole_action_unavailable_stays_out_of_the_table(self) -> None:
+        """行動ごといまはできない (耳を澄ます) ものは、置く見出しが無いので候補表に出さない。"""
         listen = ActionChoice(
             name="listen", label="耳を澄ます", unavailable=(UnavailableAction(picked=(), reason="手が離せない"),)
         )
 
-        assert _table(ActionChoices((hold, listen))) == ['- hold_item.item: "カンテラ"', NOTE]
+        assert _table(ActionChoices((listen, _travel("井戸")))) == [
+            "- travel_to.destination:",
+            "    いまできる:",
+            '      "井戸"',
+            NOTE,
+        ]
 
 
 class TestMoveFrom:
@@ -491,6 +602,22 @@ class _Rechoose:
         return self._answers.get(written)
 
 
+def _safe_that_cannot_be_opened() -> ActionChoice:
+    """金庫は番号を合わせて開けられるが、ただ「開ける」ことはできず、物置は操作がどれもできない。"""
+    interact = _interact(SAFE)
+    return ActionChoice(
+        name=interact.name,
+        label=interact.label,
+        outline=interact.outline,
+        takes_details=True,
+        values=interact.values,
+        unavailable=(
+            UnavailableAction(picked=("金庫", "開ける"), argument="how", reason="鍵が掛かっている"),
+            UnavailableAction(picked=("物置", "開ける"), argument="how", reason="錠前が錆びている"),
+        ),
+    )
+
+
 class TestNamesMatched:
     """ActionTools.with_names_matched が、候補から選ぶ値を候補の名前に合わせ、当たらない名前だけを選び直しに回すことを保証する。"""
 
@@ -534,6 +661,49 @@ class TestNamesMatched:
 
         assert matched == {"target": "金庫", "how": "番号を合わせて開ける"}
         assert rechoose.asked == [("open", "操作", {"番号を合わせて開ける": None}, "金庫")]
+
+    def test_unavailable_operation_is_passed_on_without_asking(self) -> None:
+        """いまできない金庫の「開ける」を引用符つきで書くと、選び直しに回さず「開ける」に直して世界に渡す。世界が理由を付けて断る。
+
+        選び直しに回すと、当たる候補がいまできるものしか無いので、別の操作に寄せられるおそれがある。
+        """
+        rechoose = _Rechoose({"開ける": "番号を合わせて開ける"})
+
+        matched = _tools(ActionChoices((_safe_that_cannot_be_opened(),))).with_names_matched(
+            "interact", {"target": "金庫", "how": '"開ける"'}, rechoose
+        )
+
+        assert matched == {"target": "金庫", "how": "開ける"} and rechoose.asked == []
+
+    def test_target_whose_every_operation_is_unavailable_is_passed_on_without_asking(self) -> None:
+        """操作がどれもいまできず候補に並ばない物置とその「開ける」を引用符つきで書いても、選び直しに回さず、表記だけ直して世界に渡す。"""
+        rechoose = _Rechoose({"物置": "金庫"})
+
+        matched = _tools(ActionChoices((_safe_that_cannot_be_opened(),))).with_names_matched(
+            "interact", {"target": '"物置"', "how": '"開ける"'}, rechoose
+        )
+
+        assert matched == {"target": "物置", "how": "開ける"} and rechoose.asked == []
+
+    def test_unavailable_name_under_another_candidate_is_still_asked(self) -> None:
+        """金庫の下でいまできない「開ける」でも、別の対象 (レバー) の下に書けば、いまできない名前としては扱わず選び直しに回す。"""
+        lever = Candidate(
+            label="レバー", values=(PickOne(name="how", label="操作", candidates=(Candidate(label="引く"),)),)
+        )
+        interact = _safe_that_cannot_be_opened()
+        choice = ActionChoice(
+            name=interact.name,
+            label=interact.label,
+            outline=interact.outline,
+            takes_details=True,
+            values=(PickOne(name="target", label="相手", candidates=(SAFE, lever)),),
+            unavailable=interact.unavailable,
+        )
+        rechoose = _Rechoose()
+
+        _tools(ActionChoices((choice,))).with_names_matched("interact", {"target": "レバー", "how": "開ける"}, rechoose)
+
+        assert [asked[0] for asked in rechoose.asked] == ["開ける"]
 
     def test_name_not_rechosen_is_left_as_written(self) -> None:
         """選び直しが名前を返さなければ、書かれた名前のまま返す。世界が場面に合わないと断る。"""

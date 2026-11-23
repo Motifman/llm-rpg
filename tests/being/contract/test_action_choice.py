@@ -78,11 +78,31 @@ class TestActionChoice:
             label="手に持つ",
             outline=(ArgumentOutline(name="item", label="品物", required=True),),
             values=(PickOne(name="item", label="品物", candidates=()),),
-            unavailable=(UnavailableAction(picked=("ランプ",), reason="両手がふさがっている"),),
+            unavailable=(UnavailableAction(picked=("ランプ",), argument="item", reason="両手がふさがっている"),),
         )
 
         assert choice.unavailable[0].picked == ("ランプ",)
         assert not choice.can_be_chosen()
+
+    def test_unavailable_path_names_the_argument_of_its_last_step(self) -> None:
+        """道筋のある「いまはできない」は、最後の名前がどの引数の候補かを argument に持つ。無ければ表のどの行に置くか決まらないので拒む。"""
+        with pytest.raises(ContractViolation, match="argument"):
+            UnavailableAction(picked=("ランプ",), reason="両手がふさがっている")
+
+    def test_whole_action_unavailable_has_no_argument(self) -> None:
+        """道筋の無い「いまはできない」(行動ごとできない) に argument を付けると拒む。"""
+        with pytest.raises(ContractViolation, match="argument"):
+            UnavailableAction(picked=(), argument="item", reason="手が離せない")
+
+    def test_argument_outside_the_outline_is_rejected_unless_the_action_takes_details(self) -> None:
+        """見取り図に無い引数の名前は、details を取らない行動では拒む。details を取る行動では details の下の値として受け入れる。"""
+        oil = UnavailableAction(picked=("ランプ", "油を差す"), argument="how", reason="油が無い")
+        item = (ArgumentOutline(name="item", label="品物", required=True),)
+        values = (PickOne(name="item", label="品物", candidates=()),)
+
+        with pytest.raises(ContractViolation, match="argument"):
+            ActionChoice(name="hold_item", label="手に持つ", outline=item, values=values, unavailable=(oil,))
+        ActionChoice(name="use", label="使う", outline=item, takes_details=True, values=values, unavailable=(oil,))
 
     def test_action_without_values_is_chosen_as_it_is(self) -> None:
         """値の無い行動 (耳を澄ます) は、いまはできない理由が無ければ選べる。"""
@@ -100,14 +120,14 @@ class TestActionChoice:
         """理由には、人のプレースホルダーを持つ文を使える。空白だけの文字の理由は拒む。"""
         reason = TextWithPeople(template="{target}は眠っている", people={"target": _SAYO})
 
-        UnavailableAction(picked=(_SAYO,), reason=reason)
+        UnavailableAction(picked=(_SAYO,), argument="target", reason=reason)
         with pytest.raises(ContractViolation, match="reason"):
-            UnavailableAction(picked=(_SAYO,), reason="  ")
+            UnavailableAction(picked=(_SAYO,), argument="target", reason="  ")
 
     def test_same_reason_naming_people_twice_is_rejected_as_a_contract_violation(self) -> None:
         """人のプレースホルダーを持つ同じ理由の「いまはできない」が 2 回並ぶと、型の誤りではなく ContractViolation で拒む。"""
         reason = TextWithPeople(template="{target}は眠っている", people={"target": _SAYO})
-        asleep = UnavailableAction(picked=(_SAYO,), reason=reason)
+        asleep = UnavailableAction(picked=(_SAYO,), argument="target", reason=reason)
 
         with pytest.raises(ContractViolation, match="unavailable"):
             ActionChoice(
@@ -126,12 +146,12 @@ class TestActionChoice:
                 label="行く",
                 outline=_TRAVEL_OUTLINE,
                 values=_travel("井戸").values,
-                unavailable=(UnavailableAction(picked=("井戸",), reason="道が埋まっている"),),
+                unavailable=(UnavailableAction(picked=("井戸",), argument="destination", reason="道が埋まっている"),),
             )
 
     def test_same_unavailable_action_twice_is_rejected(self) -> None:
         """同じ道筋と理由の「いまはできない」が 2 回並ぶと拒む。"""
-        blocked = UnavailableAction(picked=("北の坑道",), reason="道が通じていない")
+        blocked = UnavailableAction(picked=("北の坑道",), argument="destination", reason="道が通じていない")
 
         with pytest.raises(ContractViolation, match="unavailable"):
             ActionChoice(
@@ -322,7 +342,7 @@ class TestActionChoices:
             label="介抱する",
             outline=(ArgumentOutline(name="target", label="相手", required=True),),
             values=(PickOne(name="target", label="相手", candidates=(Candidate(label=_SAYO),)),),
-            unavailable=(UnavailableAction(picked=(stranger,), reason=reason),),
+            unavailable=(UnavailableAction(picked=(stranger,), argument="target", reason=reason),),
         )
 
         assert set(ActionChoices((tend,)).people()) == {_SAYO, stranger, watcher}

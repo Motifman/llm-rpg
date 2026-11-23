@@ -121,15 +121,26 @@ class ArgumentOutline:
 
 @dataclass(frozen=True, kw_only=True)
 class UnavailableAction:
-    """``picked`` は、選べたなら選んだはずの候補の道筋。空なら行動ごと選べない。"""
+    """``picked`` は、選べたなら選んだはずの候補の道筋。空なら行動ごと選べない。
+
+    ``argument`` は、``picked`` の最後の名前がどの引数の候補か。道筋の途中の候補がいまは並ばないこともあるので、
+    候補の並びからは決められない。
+    """
 
     picked: Sequence[str | PersonInText]
     reason: str | TextWithPeople
+    argument: str | None = None
 
     def __post_init__(self) -> None:
         picked = tuple(self.picked)
         for label in picked:
             _require_label(label, "picked")
+        if picked and self.argument is None:
+            raise ContractViolation(f"unavailable path {picked!r} must name the argument of its last step")
+        if not picked and self.argument is not None:
+            raise ContractViolation("unavailable whole action must not name an argument")
+        if self.argument is not None:
+            _require_name(self.argument, "argument")
         if not isinstance(self.reason, TextWithPeople):
             require_text(self.reason, "reason")
         object.__setattr__(self, "picked", picked)
@@ -178,6 +189,8 @@ class ActionChoice:
         if len(set(unavailable)) != len(unavailable):
             raise ContractViolation(f"{self.name!r} repeats an unavailable action")
         for u in unavailable:
+            if u.argument is not None and u.argument not in outline_names and not self.takes_details:
+                raise ContractViolation(f"{self.name!r} has no argument {u.argument!r} for an unavailable action")
             if u.picked and _leads_to_a_candidate(values, tuple(_label_key(label) for label in u.picked)):
                 raise ContractViolation(f"{self.name!r} offers {u.picked!r} as a candidate and as unavailable")
         _require_paths(values, frozenset(), nested=False)
