@@ -336,6 +336,7 @@ def world_map_wording() -> WorldMapWording:
             Lighting.DARK: "暗い",
             Lighting.PITCH_DARK: "真っ暗",
         },
+        outdoor_lighting="昼は{lighting}",
     )
 
 

@@ -163,6 +163,7 @@ world_map:
   minutes: "{minutes} 分"
   turns: "{turns} 手ぶん"
   lighting: { bright: 明るい, dusky: 薄暗い, dark: 暗い, pitch_dark: 真っ暗 }
+  outdoor_lighting: 昼は{lighting}
 
 surroundings_texts:
   people_here: "ここには{people}がいる。"
