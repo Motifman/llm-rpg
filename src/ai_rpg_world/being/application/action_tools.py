@@ -7,6 +7,10 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai_rpg_world.being.application.episode_index_revision_tool import (
+    episode_index_revision_description,
+    episode_index_revision_parameters,
+)
 from ai_rpg_world.being.application.episode_recall_tool import episode_recall_description, episode_recall_parameters
 from ai_rpg_world.being.application.memo_argument import memo_field_property
 from ai_rpg_world.being.application.name_forms import name_forms
@@ -81,20 +85,26 @@ class ActionTools:
         self._recall_limit = recall_limit
 
     def definitions(self) -> tuple[dict[str, Any], ...]:
-        actions = tuple(self._definition(choice) for choice in self._choices.choices)
+        definitions = [self._definition(choice) for choice in self._choices.choices]
         recall = self._being_tools.episode_recall
-        if recall is None:
-            return actions
-        return (
-            *actions,
-            _function(
-                recall, episode_recall_description(self._recall_limit), episode_recall_parameters(self._recall_limit)
-            ),
-        )
+        if recall is not None:
+            definitions.append(
+                _function(
+                    recall,
+                    episode_recall_description(self._recall_limit),
+                    episode_recall_parameters(self._recall_limit),
+                )
+            )
+        revision = self._being_tools.episode_index_revision
+        if revision is not None:
+            definitions.append(
+                _function(revision, episode_index_revision_description(), episode_index_revision_parameters())
+            )
+        return tuple(definitions)
 
     def tool_names(self) -> tuple[str, ...]:
-        recall = self._being_tools.episode_recall
-        return tuple(choice.name for choice in self._choices.choices) + (() if recall is None else (recall,))
+        own = (self._being_tools.episode_recall, self._being_tools.episode_index_revision)
+        return tuple(choice.name for choice in self._choices.choices) + tuple(name for name in own if name is not None)
 
     def move_from(self, *, call_id: str, tool_name: str, arguments: Mapping[str, object]) -> AgentMove | None:
         """出していないツールの名前なら None。

@@ -10,8 +10,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
 )
+from ai_rpg_world.being.application.episode_index_revision_tool import (
+    episode_index_revision_description,
+    episode_index_revision_parameters,
+)
 from ai_rpg_world.being.application.episode_recall_tool import episode_recall_description, episode_recall_parameters
-from ai_rpg_world.being.domain.episode import INDEX_TEXT_MAX_LENGTH
 
 
 def episode_recall_definition(max_handles: int) -> ToolDefinitionDto:
@@ -26,32 +29,8 @@ def episode_recall_definition(max_handles: int) -> ToolDefinitionDto:
 
 EPISODE_REVISE_INDEX_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_EPISODE_REVISE_INDEX,
-    description=(
-        "【思い出せる出来事】の目次の一行 (どんな記憶か・どんな時に思い出すか) を書き直す。"
-        "呼び出した本文が目次の書き方と合っていなかったとき、"
-        "思い出すべき場面が目次に書いた場面と違ったときに使う。"
-        "本文は変わらず、前の目次も消えずに残る。直すのに手番を 1 回使う。"
-        f"about と recall_when はそれぞれ {INDEX_TEXT_MAX_LENGTH} 字まで。"
-        "世界の出来事は起こさない。"
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "handle": {
-                "type": "string",
-                "description": "直したい記憶の、【思い出せる出来事】の行の先頭にある ep_ で始まる呼び名。",
-            },
-            "about": {
-                "type": "string",
-                "description": "どんな記憶か。",
-            },
-            "recall_when": {
-                "type": "string",
-                "description": "どんな時に思い出すとよいか。「金庫や鍵の話が出たとき」のように場面で書く。",
-            },
-        },
-        "required": ["handle", "about", "recall_when"],
-    },
+    description=episode_index_revision_description(),
+    parameters=episode_index_revision_parameters(),
     category=ToolCategory.META_COGNITIVE,
 )
 

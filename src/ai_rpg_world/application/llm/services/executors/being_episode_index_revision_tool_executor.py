@@ -12,24 +12,20 @@ from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_REVISE_INDEX
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from ai_rpg_world.being.application.episode_index_text import EPISODE_INDEX_HEADING
-from ai_rpg_world.being.domain.episode import (
-    INDEX_TEXT_MAX_LENGTH,
-    EpisodeIndex,
-    EpisodeRepository,
+from ai_rpg_world.being.application.episode_index_revision_tool import (
+    HANDLE,
+    INDEX_NOT_REVISED_TEXT,
+    MALFORMED_INDEX_REVISION_TEXT,
+    index_revised_text,
+    read_index_revision,
+    unknown_handle_text,
 )
-from ai_rpg_world.being.domain.memory_turn_clock import (
-    MemoryTurnReader,
-)
+from ai_rpg_world.being.domain.episode import EpisodeIndex, EpisodeRepository
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
 from ai_rpg_world.domain.common.exception import DomainException
 
 _logger = logging.getLogger(__name__)
 
-_TEXT_KEYS = ("about", "recall_when")
-_MALFORMED_MESSAGE = (
-    f"handle には{EPISODE_INDEX_HEADING}の ep_ で始まる呼び名を、"
-    "about にはどんな記憶か、recall_when にはどんな時に思い出すかを、それぞれ文で書いてください。"
-)
 _ERROR_TEXT_MAX_LENGTH = 300
 
 
@@ -52,38 +48,25 @@ class BeingEpisodeIndexRevisionToolExecutor:
         return {TOOL_NAME_EPISODE_REVISE_INDEX: self._run}
 
     def _run(self, acting: ActingBeing, arguments: dict[str, Any]) -> LlmCommandResultDto:
-        handle = arguments.get("handle")
+        handle = arguments.get(HANDLE)
         base: dict[str, Any] = {
             "being_id": acting.being_id.value,
             "handle": handle if isinstance(handle, str) else None,
         }
-        raw = {key: arguments.get(key) for key in _TEXT_KEYS}
-        if (
-            not isinstance(handle, str)
-            or not handle.strip()
-            or not all(isinstance(v, str) and v.strip() for v in raw.values())
-        ):
+        request = read_index_revision(arguments)
+        if request is None:
             self._record(acting, outcome="rejected", reject_reason="malformed", **base)
-            return LlmCommandResultDto(success=False, message=_MALFORMED_MESSAGE, error_code="INVALID_ARGUMENT")
-        handle = handle.strip()
-        base["handle"] = handle
-        texts: dict[str, str] = {}
-        truncated: dict[str, int] = {}
-        for key, value in raw.items():
-            text = str(value).strip()
-            if len(text) > INDEX_TEXT_MAX_LENGTH:
-                truncated[key] = len(text)
-                text = text[:INDEX_TEXT_MAX_LENGTH]
-            texts[key] = text
-        episode = self.repository.find_by_handle(acting.being_id, handle)
+            return LlmCommandResultDto(
+                success=False, message=MALFORMED_INDEX_REVISION_TEXT, error_code="INVALID_ARGUMENT"
+            )
+        base["handle"] = request.handle
+        episode = self.repository.find_by_handle(acting.being_id, request.handle)
         if episode is None:
             self._record(acting, outcome="rejected", reject_reason="unknown_handle", **base)
             return LlmCommandResultDto(
-                success=False,
-                message=f"{handle} という記憶は無い。{EPISODE_INDEX_HEADING}の呼び名を使ってください。",
-                error_code="INVALID_ARGUMENT",
+                success=False, message=unknown_handle_text(request.handle), error_code="INVALID_ARGUMENT"
             )
-        index = EpisodeIndex(summary=texts["about"], recall_when=texts["recall_when"])
+        index = request.index
         try:
             turn = self.turn_reader.current_turn(acting.being_id)
             previous = episode.index
@@ -98,20 +81,17 @@ class BeingEpisodeIndexRevisionToolExecutor:
                 error=str(exc)[:_ERROR_TEXT_MAX_LENGTH],
                 **base,
             )
-            return LlmCommandResultDto(success=False, message="目次を直せなかった。", error_code="INVALID_STATE")
+            return LlmCommandResultDto(success=False, message=INDEX_NOT_REVISED_TEXT, error_code="INVALID_STATE")
         self._record(
             acting,
             outcome="revised",
             turn=turn,
             before=_index_payload(previous),
             after=_index_payload(index),
-            truncated=truncated,
+            truncated=request.truncated,
             **base,
         )
-        return LlmCommandResultDto(
-            success=True,
-            message=f"[{handle}] の目次を直した: {index.summary} — 思い出すとき: {index.recall_when}",
-        )
+        return LlmCommandResultDto(success=True, message=index_revised_text(request.handle, index))
 
     def _record(self, acting: ActingBeing, **payload: Any) -> None:
         try:

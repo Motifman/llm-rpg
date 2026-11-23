@@ -11,6 +11,16 @@ from uuid import uuid4
 from ai_rpg_world.being.application.action_tools import ActionTools
 from ai_rpg_world.being.application.closest_tool_name import format_unsupported_tool_message, suggest_closest_tool_name
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.episode_index_revision_tool import (
+    HANDLE,
+    INDEX_NOT_REVISED_TEXT,
+    MALFORMED_INDEX_REVISION_TEXT,
+    EpisodeIndexRevisionOutcome,
+    index_revised_text,
+    index_revision_call_text,
+    read_index_revision,
+    unknown_handle_text,
+)
 from ai_rpg_world.being.application.episode_recall_tool import (
     MALFORMED_HANDLES_TEXT,
     read_handles,
@@ -60,6 +70,7 @@ from ai_rpg_world.being.domain.short_term_memory import (
 )
 from ai_rpg_world.being.domain.visited_places import VisitedPlacesRepository
 from ai_rpg_world.being.domain.working_memory import Closing
+from ai_rpg_world.domain.being.exception.being_exceptions import EpisodeValidationException
 
 
 @dataclass(frozen=True)
@@ -122,6 +133,15 @@ class TurnSpentRecalling:
 
 
 @dataclass(frozen=True)
+class TurnSpentRevisingIndex:
+    """目次を直すツールを選んだ。世界には行為を渡さない。"""
+
+    move: AgentMove
+    exchange: LlmExchange
+    revision: EpisodeIndexRevisionOutcome
+
+
+@dataclass(frozen=True)
 class ActionNotChosen:
     """``requested_tool`` は出していないツールの名前。ツールを 1 つも呼ばなかったときは None。"""
 
@@ -160,7 +180,9 @@ class ChooseAction:
         self._rechoose_name = rechoose_name
         self._writing_in_background = writing_in_background
 
-    def execute(self, command: ChooseActionCommand) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
+    def execute(
+        self, command: ChooseActionCommand
+    ) -> ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen:
         if self._writing_in_background is not None:
             self._writing_in_background.take_in_finished(command.being_id)
         tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
@@ -238,7 +260,7 @@ class ChooseAction:
 
     def _outcome_of(
         self, call: ToolCallReply, tools: ActionTools, command: ChooseActionCommand, exchange: LlmExchange
-    ) -> ActionChosen | TurnSpentRecalling | ActionNotChosen:
+    ) -> ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen:
         call_id = call.call_id or f"call_{uuid4().hex}"
         being_id = command.being_id
         turn = self._turn_clock.current_turn(being_id) + 1
@@ -263,6 +285,27 @@ class ChooseAction:
                 ),
             )
             return TurnSpentRecalling(move=recall, exchange=exchange)
+        if call.tool_name == command.being_tools.episode_index_revision:
+            revise = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
+            body, revision = self._revise(being_id, call.arguments, turn=turn)
+            self._act(
+                being_id,
+                revise,
+                turn=turn,
+                call_text=index_revision_call_text(call.tool_name, call.arguments),
+                result=MemoryOperationOutcome(
+                    call_id=call_id,
+                    body=body,
+                    time=command.now,
+                    succeeded=revision.outcome == "revised",
+                    action_summary=own_tool_summary(
+                        call.tool_name,
+                        call.arguments,
+                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
+                    ),
+                ),
+            )
+            return TurnSpentRevisingIndex(move=revise, exchange=exchange, revision=revision)
         rechoices: list[NameRechoice] = []
         arguments = self._names_matched(call, tools, command.being_tools, rechoices)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=arguments)
@@ -312,6 +355,34 @@ class ChooseAction:
         if len(set(handles)) > self._recall_limit:
             return too_many_handles_text(self._recall_limit), False
         return recalled_text(recall_episodes(self._episodes, being_id, handles, turn=turn)), True
+
+    def _revise(
+        self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int
+    ) -> tuple[str, EpisodeIndexRevisionOutcome]:
+        handle = arguments.get(HANDLE)
+        request = read_index_revision(arguments)
+        if request is None:
+            return MALFORMED_INDEX_REVISION_TEXT, EpisodeIndexRevisionOutcome(
+                handle=handle if isinstance(handle, str) else None, outcome="rejected", reject_reason="malformed"
+            )
+        episode = self._episodes.find_by_handle(being_id, request.handle)
+        if episode is None:
+            return unknown_handle_text(request.handle), EpisodeIndexRevisionOutcome(
+                handle=request.handle, outcome="rejected", reject_reason="unknown_handle"
+            )
+        before = episode.index
+        try:
+            episode.revise_index(request.index, turn=turn)
+        except EpisodeValidationException:
+            return INDEX_NOT_REVISED_TEXT, EpisodeIndexRevisionOutcome(handle=request.handle, outcome="failed")
+        self._episodes.save(episode)
+        return index_revised_text(request.handle, request.index), EpisodeIndexRevisionOutcome(
+            handle=request.handle,
+            outcome="revised",
+            before=before,
+            after=request.index,
+            truncated=request.truncated,
+        )
 
     def _write_memo(
         self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int
@@ -395,4 +466,5 @@ __all__ = [
     "LlmExchange",
     "ToolCallReply",
     "TurnSpentRecalling",
+    "TurnSpentRevisingIndex",
 ]

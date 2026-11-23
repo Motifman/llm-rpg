@@ -10,6 +10,7 @@ from ai_rpg_world.being.application.choose_action import (
     ChooseActionCommand,
     ToolCallReply,
     TurnSpentRecalling,
+    TurnSpentRevisingIndex,
 )
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
@@ -64,7 +65,11 @@ GEN = BeingId("being_gen")
 SAYO = PersonInText(handle=2, appearance="綿入れを着込んだ若い娘", visible_name="サヨ")
 NOW = ObservedTime(display="1日目 9:00")
 WITH_MEMORY = OfferedBeingTools(
-    inner_thought="inner_thought", memo="memo", episode_recall="episode_recall", episode_index_shown=True
+    inner_thought="inner_thought",
+    memo="memo",
+    episode_recall="episode_recall",
+    episode_index_revision="episode_revise_index",
+    episode_index_shown=True,
 )
 
 
@@ -733,3 +738,129 @@ class TestTakingInWhatWasWrittenInBackground:
 
         assert background.asked == [GEN]
         assert "親方が金庫の番号を口にした" in completion.calls[0].messages[1]["content"]
+
+
+class TestRevisingTheEpisodeIndex:
+    """ChooseAction が、目次を直すツールを選ばれたら世界に行為を渡さず、目次を直して、その結果を自分の 1 手の結果として残すことを保証する。"""
+
+    def test_revising_replaces_the_index_and_keeps_the_previous_one(self) -> None:
+        """金庫の話の目次を「井戸でサヨと話した」に直すと、目次が新しい文になり、前の目次が直したターン 1 と一緒に履歴に残る。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        memories = InMemoryShortTermMemoryRepository()
+        arguments = {"handle": handle, "about": "井戸でサヨと話した", "recall_when": "井戸の話が出たとき"}
+
+        outcome, _ = _choose(
+            _reply("episode_revise_index", arguments, call_id="call_x"),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+            memories=memories,
+        )
+
+        revised = episodes.find_by_handle(GEN, handle)
+        assert revised is not None and revised.index == EpisodeIndex(
+            summary="井戸でサヨと話した", recall_when="井戸の話が出たとき"
+        )
+        [revision] = revised.index_history
+        assert (revision.previous.summary, revision.revised_turn) == ("親方が金庫の番号を口にした", 1)
+        assert isinstance(outcome, TurnSpentRevisingIndex) and outcome.revision.outcome == "revised"
+        assert outcome.revision.before == EpisodeIndex(
+            summary="親方が金庫の番号を口にした", recall_when="金庫の話が出たとき"
+        )
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
+        assert attempt.result.succeeded
+        assert (
+            attempt.result.body == f"[{handle}] の目次を直した: 井戸でサヨと話した — 思い出すとき: 井戸の話が出たとき"
+        )
+        assert attempt.call_text == f'episode_revise_index(handle="{handle}", about=話題, recall_when=本文)'
+
+    def test_unknown_handle_is_refused_and_changes_nothing(self) -> None:
+        """目次に無い呼び名を直そうとすると、断られて失敗の結果に残り、ほかのエピソードの目次は変わらない。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        memories = InMemoryShortTermMemoryRepository()
+
+        outcome, _ = _choose(
+            _reply("episode_revise_index", {"handle": "ep_ffffff", "about": "井戸", "recall_when": "井戸の話"}),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+            memories=memories,
+        )
+
+        kept = episodes.find_by_handle(GEN, handle)
+        assert kept is not None and kept.index_history == ()
+        assert isinstance(outcome, TurnSpentRevisingIndex)
+        assert (outcome.revision.outcome, outcome.revision.reject_reason) == ("rejected", "unknown_handle")
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
+        assert not attempt.result.succeeded
+        assert attempt.result.body == "ep_ffffff という記憶は無い。【思い出せる出来事】の呼び名を使ってください。"
+
+    def test_blank_text_is_refused_as_malformed(self) -> None:
+        """どんな記憶か (about) が空白だけなら、書き方を説明して断る。"""
+        episodes, handle = _episodes_with_the_safe_story()
+
+        outcome, _ = _choose(
+            _reply("episode_revise_index", {"handle": handle, "about": "  ", "recall_when": "井戸の話"}),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+        )
+
+        assert isinstance(outcome, TurnSpentRevisingIndex)
+        assert (outcome.revision.outcome, outcome.revision.reject_reason) == ("rejected", "malformed")
+
+    def test_text_over_the_limit_is_cut_to_forty_characters(self) -> None:
+        """41 字のどんな記憶かは 40 字に切って目次に入れ、切る前の長さを残す。"""
+        episodes, handle = _episodes_with_the_safe_story()
+
+        outcome, _ = _choose(
+            _reply("episode_revise_index", {"handle": handle, "about": "あ" * 41, "recall_when": "井戸の話"}),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+        )
+
+        revised = episodes.find_by_handle(GEN, handle)
+        assert revised is not None and revised.index.summary == "あ" * 40
+        assert isinstance(outcome, TurnSpentRevisingIndex) and outcome.revision.truncated == {"about": 41}
+
+    def test_revision_the_episode_refuses_is_reported_as_failed(self) -> None:
+        """書いたターン (5) より前のターンに直そうとすると、エピソードが断り、目次は変わらず、直せなかったと失敗の結果に残る。"""
+        episodes = InMemoryEpisodeRepository(handoff=discard_events)
+        later = Episode.write(
+            being_id=GEN,
+            episode_id="3f2a7b00-0000-4000-8000-00000000abcd",
+            environment_name="廃坑の山村",
+            written_turn=5,
+            index=EpisodeIndex(summary="親方が金庫の番号を口にした", recall_when="金庫の話が出たとき"),
+            body="親方は酔って、金庫は 1907 で開くと言った。",
+        )
+        episodes.add(later)
+        memories = InMemoryShortTermMemoryRepository()
+
+        outcome, _ = _choose(
+            _reply("episode_revise_index", {"handle": later.handle, "about": "井戸", "recall_when": "井戸の話"}),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+            memories=memories,
+        )
+
+        kept = episodes.find_by_handle(GEN, later.handle)
+        assert kept is not None and kept.index_history == ()
+        assert isinstance(outcome, TurnSpentRevisingIndex) and outcome.revision.outcome == "failed"
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt.result, MemoryOperationOutcome) and attempt.result.body == "目次を直せなかった。"
+
+    def test_revising_is_not_offered_when_the_environment_does_not_offer_it(self) -> None:
+        """環境が目次を直すツールを出していなければ、その名前は出していないツールとして断る。"""
+        tools = OfferedBeingTools(
+            inner_thought="inner_thought", episode_recall="episode_recall", episode_index_shown=True
+        )
+        episodes, handle = _episodes_with_the_safe_story()
+
+        outcome, completion = _choose(
+            _reply("episode_revise_index", {"handle": handle, "about": "井戸", "recall_when": "井戸"}),
+            being_tools=tools,
+            episodes=episodes,
+        )
+
+        assert isinstance(outcome, ActionNotChosen) and outcome.requested_tool == "episode_revise_index"
+        assert "episode_revise_index" not in {t["function"]["name"] for t in completion.calls[0].tools}

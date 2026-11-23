@@ -21,10 +21,12 @@ class OfferedBeingTools:
     """行動の tool に添えるメモ帳への書き込みの引数。"""
     episode_recall: str | None = None
     """呼び名を指定してエピソードの本文を思い出す tool。"""
+    episode_index_revision: str | None = None
+    """呼び名を指定してエピソードの目次の一行を書き直す tool。"""
     episode_index_shown: bool = False
     """【思い出せる出来事】(エピソードの目次) を毎ターン出すか。"""
 
     def __post_init__(self) -> None:
-        for name in ("inner_thought", "memo", "episode_recall"):
+        for name in ("inner_thought", "memo", "episode_recall", "episode_index_revision"):
             require_optional_text(getattr(self, name), name)
         require_bool(self.episode_index_shown, "episode_index_shown")
