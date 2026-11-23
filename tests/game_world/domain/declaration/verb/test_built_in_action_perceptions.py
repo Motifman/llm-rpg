@@ -23,14 +23,14 @@ from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import SightStimulus
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
-from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
-from ai_rpg_world.game_world.domain.whereabouts import PersonBody, Teleported
+from ai_rpg_world.game_world.domain.value_object import PassageId, PersonId, SpotId, WorldTick
+from ai_rpg_world.game_world.domain.whereabouts import CameThrough, PersonBody, Teleported
 from tests.game_world.support.verb_declarations_for_tests import (
     bell_rung_for_everyone,
     lever_pulled_quietly,
     seen_clearly_only,
 )
-from tests.game_world.support.world_design_for_tests import nouns, spot
+from tests.game_world.support.world_design_for_tests import nouns, passage, spot
 
 _REFUSED_KINDS = (
     ActionKind.INTERACT_WITH_OBJECT,
@@ -57,7 +57,7 @@ _KEPT_KINDS = (
 )
 
 
-_NOUNS = nouns(spots=(spot("plaza"), spot("well")))
+_NOUNS = nouns(spots=(spot("plaza"), spot("well")), passages=(passage("street", ("plaza", "well")),))
 _ORIGIN_UNFILLED = TextWithUnassignedPeople("{origin}の方から物音がした。")
 _NO_ONE = TextWithUnassignedPeople("物音がした。")
 
@@ -153,10 +153,10 @@ class TestBuiltInActionPerceptionsNames:
         with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
             _perceptions(**{field: _seen_as("{actor}が{target}に話しかけた。")})
 
-    def test_arrival_naming_destination_raises(self) -> None:
-        """着いた側の文に、移動の文でしか埋まらない {destination} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
+    def test_arrival_naming_target_raises(self) -> None:
+        """着いた側の文に、相手のいる行動でしか埋まらない {target} を書くと UnfilledNameInBuiltInActionPerceptionException を投げる。"""
         with pytest.raises(UnfilledNameInBuiltInActionPerceptionException):
-            _perceptions(arrival=_seen_as("{actor}が{destination}に着いた。"))
+            _perceptions(arrival=_seen_as("{actor}が{target}に着いた。"))
 
     @pytest.mark.parametrize(
         "perception",
@@ -283,16 +283,25 @@ class TestBuiltInActionPerceptionsAnnouncement:
 class TestBuiltInActionPerceptionsArrival:
     """BuiltInActionPerceptions.arrival_seen_at が、来た場所の呼び名で arrival の文を埋め、teleport では刺激を作らないことを保証する。"""
 
-    def test_walking_in_fills_origin_with_the_spot_name(self) -> None:
-        """広場から井戸に歩いて着くと、arrival の文の {origin} が広場の呼び名で埋まった見える刺激が 1 つできる。"""
-        perceptions = _perceptions(arrival=_seen_as("{actor}が{origin}から来た。"))
+    def test_walking_in_fills_origin_passage_and_destination(self) -> None:
+        """広場から通りを通って井戸に歩いて着くと、arrival の文の {origin}・{passage}・{destination} が、広場・通り・井戸の呼び名で埋まった見える刺激が 1 つできる。"""
+        perceptions = _perceptions(
+            arrival=_seen_as("{actor}が「{origin}」から〈{passage}〉を通って{destination}にやってきた。")
+        )
 
         [stimulus] = perceptions.arrival_seen_at(
-            SpotId("well"), PersonBody(PersonId("hal")), SpotId("plaza"), _NOUNS, WorldTick(2)
+            SpotId("well"),
+            PersonBody(PersonId("hal")),
+            CameThrough(SpotId("plaza"), PassageId("street")),
+            _NOUNS,
+            WorldTick(2),
         )
 
         assert isinstance(stimulus, SightStimulus)
-        assert stimulus.witness.clear.template.template == "{actor}がplazaから来た。"
+        assert (
+            stimulus.witness.clear.template.template
+            == "{actor}が「plaza」から〈street の通路〉を通ってwellにやってきた。"
+        )
 
     def test_teleporting_in_makes_no_stimulus(self) -> None:
         """teleport で着いたときは来た場所が無いので、刺激を作らない。"""

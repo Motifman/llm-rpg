@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any, final
 
 from ai_rpg_world.eventing import DomainEvent
+from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.objects_and_items.ground_items import (
     GroundItemPlacedEvent,
@@ -125,7 +126,8 @@ def _arrival(event: OccupantEnteredSpotEvent, design: WorldDesign) -> tuple[Stim
 
 
 def _acted(event: PersonActedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
-    return event.attempt.witnessed_in(design, event.item_specs).stimuli_at(
+    situation = ActorSituation(at_spot=event.at_spot, actor_as=event.actor_as, item_specs=event.item_specs)
+    return event.attempt.witnessed_in(design, situation).stimuli_at(
         event.at_spot, event.actor_as, event.present, event.at
     )
 

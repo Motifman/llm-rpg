@@ -42,7 +42,9 @@ class _SeenByGen:
 
 
 def _choices(*offers: tuple[OfferedAction, Doable | NotNow]) -> ActionChoices:
-    return OffersOfOneTurn(offers, _SeenByGen()).as_action_choices()
+    return OffersOfOneTurn(
+        offers, _SeenByGen(), {kind: f"{kind.label}。" for kind in ActionChoiceKind}
+    ).as_action_choices()
 
 
 def _choice(choices: ActionChoices, kind: ActionChoiceKind) -> ActionChoice:
@@ -61,11 +63,11 @@ class TestOffersOfOneTurn:
     """OffersOfOneTurn が、行為の試みごとの道筋を、行動の種類ごとの木にまとめて契約の型にする決まりを保証する。"""
 
     def test_every_choice_is_offered_even_without_any_attempt(self) -> None:
-        """試みが 1 つも無くても、15 の選択肢が並び、候補のある行動はどれも選べない。"""
+        """試みが 1 つも無くても、14 の選択肢が並び、候補のある行動はどれも選べない。"""
         choices = _choices()
 
         assert len(choices.choices) == len(ActionChoiceKind)
-        assert [choice.name for choice in choices.choices if choice.can_be_chosen()] == ["explore", "wait", "listen"]
+        assert [choice.name for choice in choices.choices if choice.can_be_chosen()] == ["explore", "wait"]
 
     def test_outline_of_interact_stays_the_same_with_or_without_the_safe(self) -> None:
         """操作できる物が無いターンと、金庫を番号で開けられるターンで、interact の見取り図 (target・how・say_inline) と takes_details が同じになる。"""
@@ -133,13 +135,13 @@ class TestOffersOfOneTurn:
         assert drop.unavailable == ()
 
     def test_action_without_steps_that_is_not_now_is_unavailable_as_a_whole(self) -> None:
-        """耳を澄ますがいまはできないと、道筋の無い「いまはできない」が理由つきで並び、選べない。"""
-        listen = _choice(
-            _choices((OfferedAction(ActionChoiceKind.LISTEN), _not_now("手が離せない"))), ActionChoiceKind.LISTEN
+        """探すがいまはできないと、道筋の無い「いまはできない」が理由つきで並び、選べない。"""
+        explore = _choice(
+            _choices((OfferedAction(ActionChoiceKind.EXPLORE), _not_now("手が離せない"))), ActionChoiceKind.EXPLORE
         )
 
-        assert listen.unavailable == (UnavailableAction(picked=(), reason="手が離せない"),)
-        assert not listen.can_be_chosen()
+        assert explore.unavailable == (UnavailableAction(picked=(), reason="手が離せない"),)
+        assert not explore.can_be_chosen()
 
     def test_reason_naming_a_person_is_passed_with_the_person_as_seen(self) -> None:
         """サヨを名指す理由は、名前の文字ではなく、見る人から見たサヨの印を持つ文で渡る。同じ理由が 2 つあれば 1 つにまとめる。"""

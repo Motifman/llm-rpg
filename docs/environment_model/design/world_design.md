@@ -657,7 +657,7 @@ class BuiltInPerceptionRow:                 # 組み込みの行為の知覚の�
     name: str                               # ActionKind の名前 (PICK_UP など)、または whisper / speak / shout / arrival
     has_target: bool                        # 渡す・介抱する・ささやくだけ相手がいる
     target_is_down: bool                    # 介抱だけ真。相手の文は NoticedOnWaking だけを持て、書かなければ気づかない (NoTarget)
-    names_of_things: frozenset[str]         # 人のほかに書ける呼び名 ({item}、{destination}、{speech}、{origin})
+    names_of_things: frozenset[str]         # 人のほかに書ける呼び名 ({item}、{destination}、{speech}、{origin}、{passage})
 
     @classmethod
     def of_kind(cls, kind: ActionKind) -> "BuiltInPerceptionRow": ...

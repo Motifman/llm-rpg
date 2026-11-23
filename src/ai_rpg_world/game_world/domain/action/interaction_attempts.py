@@ -164,9 +164,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     def fall_cause_for(self, victim: PersonId) -> FallCause:
         return fall_cause_from(self.acting_person(), victim)
 
-    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+    def witnessed_in(self, design: WorldDesign, situation: ActorSituation) -> WitnessedAct:
         return WitnessedAct(
-            perception=self._declared(design, item_specs).perceived_as,
+            perception=self._declared(design, situation.item_specs).perceived_as,
             names={},
             target=self._witnessed_target(),
             manner=self.manner,

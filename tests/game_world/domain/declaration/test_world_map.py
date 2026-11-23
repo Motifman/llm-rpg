@@ -93,7 +93,7 @@ class TestWorldMapWrittenWith:
 
         written = WorldMap.drawn_from(declared).written_with(world_map_wording(), NoDayNight())
 
-        assert written.splitlines()[0] == "  井戸 (明るい) → 広場 まで 3 手ぶん"
+        assert written.splitlines()[0] == "  井戸 (明るい) → 広場 まで 3 ターンぶん"
 
 
 def _outdoor(name: str) -> SpotDeclaration:

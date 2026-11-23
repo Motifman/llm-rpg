@@ -71,7 +71,7 @@ def test_change_since_shown_is_written_with_its_sign_and_zero_is_left_out() -> N
     )
 
     assert oneself.lines(scene_texts())[1:] == [
-        "  HP: 消耗（60/100、前回 +5）",
+        "  HP: 消耗（60/100）、前回 +5",
         "  空腹: 問題なし（10/100）",
-        "  疲労: 少し（30/100、前回 -2）",
+        "  疲労: 少し（30/100）、前回 -2",
     ]

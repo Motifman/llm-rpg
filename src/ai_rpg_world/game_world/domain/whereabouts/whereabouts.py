@@ -39,6 +39,7 @@ from ai_rpg_world.game_world.domain.whereabouts.location import (
 from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant, PersonBody
 from ai_rpg_world.game_world.domain.whereabouts.route import Route
 from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
+    CameThrough,
     OccupantEnteredSectionEvent,
     OccupantEnteredSpotEvent,
     OccupantLeftSectionEvent,
@@ -162,7 +163,13 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
             )
         )
         self._announce_arrival(
-            occupant, location.departed_from, location.route.end_of_passage(location.passage_index), now
+            occupant,
+            location.departed_from,
+            CameThrough(
+                spot=location.route.end_of_passage(location.passage_index),
+                passage=location.route.passages[location.passage_index].passage_id,
+            ),
+            now,
         )
 
     def teleport(self, occupant: Occupant, spot: SpotDeclaration, now: WorldTick) -> None:
@@ -252,7 +259,7 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
         ticks_left = travel.ticks_left_on_passage.value
         departed_from = travel.departed_from
         # 区間を 1 つも歩き切らずに出発点へ戻る人は、歩いていた区間の向こうの端から来たように見える。
-        came_from = route.end_of_passage(passage_index)
+        came_from = CameThrough(route.end_of_passage(passage_index), route.passages[passage_index].passage_id)
         spare = 1
         while True:
             passage_id = route.passages[passage_index].passage_id
@@ -278,7 +285,7 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
                 )
                 return
             spare -= ticks_left
-            came_from = departed_from
+            came_from = CameThrough(departed_from, passage_id)
             departed_from = route.end_of_passage(passage_index)
             if passage_index + 1 == len(route.passages):
                 self._stop_at(occupant, departed_from)
@@ -311,7 +318,9 @@ class Whereabouts(AggregateRoot[WhereaboutsEvent]):
     def _stop_at(self, occupant: Occupant, spot: SpotId) -> None:
         self._locations[occupant] = AtSpot(spot=spot, section=OpenArea())
 
-    def _announce_arrival(self, occupant: Occupant, spot: SpotId, origin: SpotId | Teleported, now: WorldTick) -> None:
+    def _announce_arrival(
+        self, occupant: Occupant, spot: SpotId, origin: CameThrough | Teleported, now: WorldTick
+    ) -> None:
         self.add_event(
             OccupantEnteredSpotEvent(
                 **new_event_stamp(), world_id=self._world_id, occupant=occupant, spot=spot, origin=origin, at=now

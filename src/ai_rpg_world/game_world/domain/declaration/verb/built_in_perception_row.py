@@ -59,7 +59,7 @@ _ROW_OF_KIND: Mapping[ActionKind, BuiltInPerceptionRow] = {
         names_of_things=frozenset(names_of_things),
     )
     for kind, has_target, names_of_things in (
-        (ActionKind.TRAVEL, False, {"destination"}),
+        (ActionKind.TRAVEL, False, {"destination", "passage"}),
         (ActionKind.HAND_OVER, True, {"item"}),
         (ActionKind.TEND, True, set()),
         (ActionKind.PICK_UP, False, {"item"}),
@@ -83,5 +83,8 @@ _SHOUT = BuiltInPerceptionRow(
     name="shout", target_is_down=False, has_target=False, names_of_things=frozenset({"speech"})
 )
 _ARRIVAL = BuiltInPerceptionRow(
-    name="arrival", target_is_down=False, has_target=False, names_of_things=frozenset({"origin"})
+    name="arrival",
+    target_is_down=False,
+    has_target=False,
+    names_of_things=frozenset({"origin", "passage", "destination"}),
 )

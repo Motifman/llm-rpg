@@ -33,6 +33,7 @@ from ai_rpg_world.game_world.domain.whereabouts.whereabouts import (
     WhereaboutsMemento,
 )
 from ai_rpg_world.game_world.domain.whereabouts.whereabouts_events import (
+    CameThrough,
     OccupantEnteredSectionEvent,
     OccupantEnteredSpotEvent,
     OccupantLeftSectionEvent,
@@ -62,6 +63,7 @@ __all__ = [
     "OccupantLocation",
     "OccupantPlacedEvent",
     "OccupantRemovedEvent",
+    "CameThrough",
     "OccupantTeleportedEvent",
     "Teleported",
     "OpenArea",

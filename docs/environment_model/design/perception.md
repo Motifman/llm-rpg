@@ -537,7 +537,7 @@ class VisibleSurroundings:
 - 持ち物、体の状態、時刻は、見えているものではなく自分が知っていること。場面に入れず、知覚を通さずに集約から読む。複数の集約にまたがるものはドメインサービスにする
 - 店は物と同じ見え方の決まりに従う。明るい・薄暗いときだけ場面に出し、暗い・真っ暗では出さない。物の `seen_in_dark` にあたる例外は店に無い。場面に出ない店とは売り買いできない ([action.md](action.md))。店に預けた品は地面の品物でも人の持ち物でもないので、`ground_items` や `visible_items` に入れず、品目の数としてだけ出す (D2224)
 - 場面は「何が見えるか」だけを持つ。「何ができるか」は `AvailableActions` ([action.md](action.md)) が持ち、行為の対象の候補は場面に出ているものに限る
-- 人が着いたことは、行為ではなく `OccupantEnteredSpotEvent` から、`BuiltInActionPerceptions.arrival` の文で、着いた場所にいた人へ刺激を作る。文には `{origin}` (来た場所の名前) を書ける。着いた本人には届けない (本人には場面が渡る) (#2061)
+- 人が着いたことは、行為ではなく `OccupantEnteredSpotEvent` から、`BuiltInActionPerceptions.arrival` の文で、着いた場所にいた人へ刺激を作る。文には `{origin}` (来た場所の名前)・`{passage}` (通ってきた通路の名前)・`{destination}` (着いた場所の名前) を書ける (D2268-15)。着いた本人には届けない (本人には場面が渡る) (#2061)
 - 話すことは、声の大きさ (`Whisper` / `OrdinaryVoice` / `Shout`) ごとの宣言 (`BuiltInActionPerceptions.speech`) で刺激を作る。音の大きさも、その宣言の `loudness` を使う (#2061)
 - 品物の時間が切れて消えたこと (`ItemRanOutEvent`) は、持っていた本人には本人の体の刺激、地面にあったときはその場所の見える刺激として、`Lasts.ended_text` で作る。店にあったとき (`KeptInShop`) はこのイベントから刺激を作らず、`ShopItemsRanOutEvent` から持ち主への知らせだけを作る。`ItemRanOutNotice` は刺激の並び (`tuple`) を返し、`when_kept_in_shop` は空を返す (D2224)。暗くなったことは `DeliverDarkeningHandler` が別に届ける (#2068)
 - 着いたとき、起き上がったとき、その場所の明るさが上がったとき (灯した、夜が明けた、明かりを持った人が来た) は、場面の人、倒れた体、モンスターを 1 つの観測にして渡す (`DeliverSurroundings`)。明るさが上がったかは、出来事の前後の `LightingConditions` を比べて決める

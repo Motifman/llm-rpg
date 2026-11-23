@@ -17,6 +17,13 @@ class Teleported:
 
 
 @final
+@dataclass(frozen=True)
+class CameThrough:
+    spot: SpotId
+    passage: PassageId
+
+
+@final
 @dataclass(frozen=True, kw_only=True)
 class OccupantPlacedEvent(DomainEvent):
     world_id: WorldId
@@ -54,7 +61,7 @@ class OccupantEnteredSpotEvent(DomainEvent):
     world_id: WorldId
     occupant: Occupant
     spot: SpotId
-    origin: SpotId | Teleported
+    origin: CameThrough | Teleported
     at: WorldTick
 
 

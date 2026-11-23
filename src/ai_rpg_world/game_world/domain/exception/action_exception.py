@@ -28,6 +28,10 @@ class HandOverToSelfException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.HAND_OVER_TO_SELF"
 
 
+class ActionNotOfferedException(GameWorldDomainException):
+    error_code = "GAME_WORLD.ACTION.NOT_OFFERED"
+
+
 class StealthNotAllowedException(GameWorldDomainException):
     error_code = "GAME_WORLD.ACTION.STEALTH_NOT_ALLOWED"
 

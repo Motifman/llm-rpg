@@ -128,6 +128,7 @@ from ai_rpg_world.game_world.domain.effect.body_effects import DamageEffect
 from ai_rpg_world.game_world.domain.effect.flag_effects import RaiseFlagEffect
 from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
 from ai_rpg_world.game_world.domain.exception.action_exception import (
+    ActionNotOfferedException,
     ArgumentsNotChosenException,
     SeveralItemsNotOfferedException,
 )
@@ -346,7 +347,7 @@ class _Mine:
             return InteractWithCarriedItem(carry_out, design)(InteractWithCarriedItemCommand(attempt))
         if isinstance(attempt, PersonInteractionAttempt):
             return InteractWithPerson(carry_out, design)(InteractWithPersonCommand(attempt))
-        if isinstance(attempt, ListeningAttempt | WaitAttempt):
+        if isinstance(attempt, WaitAttempt):
             return carry_out(attempt, _ChangesNothing())
         raise AssertionError(f"no use case for {attempt}")
 
@@ -480,7 +481,7 @@ class TestListAvailableActions:
     """ListAvailableActions が、場面に見えるものと持ち物を候補にし、試したときと同じ確認でできる・できないに分ける挙動を保証する。"""
 
     def test_bright_mine_lists_every_candidate_from_surroundings_and_belongings(self) -> None:
-        """明るい坑道で alice が一覧を求めると、探す・耳を澄ます・待つ、ふつうの声で話す・叫ぶ・carol にささやく、外への移動、ロープを拾う、ランプと石を置く、石を持つ、ランプをしまう・使う・磨く、bob の介抱、carol へランプと石を渡す、トロッコに乗る、扉を叩く、bob と carol に手を振る、ができるにこの順で並び、扉を開けるができないに並ぶ。"""
+        """明るい坑道で alice が一覧を求めると、探す・待つ、ふつうの声で話す・叫ぶ・carol にささやく、外への移動、ロープを拾う、ランプと石を置く、石を持つ、ランプをしまう・使う・磨く、bob の介抱、carol へランプと石を渡す、トロッコに乗る、扉を叩く、bob と carol に手を振る、ができるにこの順で並び、扉を開けるができないに並ぶ。"""
         mine = _Mine()
         lamp, rock = mine.lamp(), mine.rock()
         door, cart = mine.design.nouns.object_of(_DOOR.object_id), mine.design.section_access(_CART.section_id)
@@ -491,7 +492,6 @@ class TestListAvailableActions:
         assert _doable(actions) == list[ActionAttempt](
             [
                 SpotSearchAttempt(_ALICE),
-                ListeningAttempt(_ALICE),
                 WaitAttempt(_ALICE, NoReason()),
                 SpeechAttempt(_ALICE, OrdinaryVoice(), _UNWORDED),
                 SpeechAttempt(_ALICE, Shout(), _UNWORDED),
@@ -522,7 +522,7 @@ class TestListAvailableActions:
         replies = [(attempt, _Mine().tries(attempt)) for attempt in doable]
 
         assert [(attempt, reply) for attempt, reply in replies if not isinstance(reply, ActionDone)] == []
-        assert len(replies) == 18
+        assert len(replies) == 17
 
     def test_not_now_action_is_refused_when_tried_with_the_same_text(self) -> None:
         """鍵が無いあいだ、扉を開けるはできないに分かれ、理由は作者の failure_text。試すと同じ文で断られる。"""
@@ -798,11 +798,20 @@ class TestOfferedActions:
         with pytest.raises(SeveralItemsNotOfferedException):
             mine.offered(ItemHandOverAttempt(_ALICE, _CAROL, (mine.lamp(), mine.rock()), Openly()))
 
+    def test_listening_is_neither_listed_nor_offered(self) -> None:
+        """耳を澄ます試みは明るい坑道の一覧に出ず、行動の選択肢にしようとすると ActionNotOfferedException を投げる (#2305 まで)。"""
+        mine = _Mine()
+
+        listed = [type(available.attempt) for available in mine.lists()]
+
+        assert ListeningAttempt not in listed
+        with pytest.raises(ActionNotOfferedException):
+            mine.offered(ListeningAttempt(_ALICE))
+
     def test_every_listed_attempt_is_offered_as_the_choice_of_the_d2226_table(self) -> None:
         """明るい坑道とトロッコの中で一覧に出るどの試みも、D2226 の 4 節の表どおりの行動の選択肢と、最初の値の名前で返る。"""
         expected: dict[type, tuple[ActionChoiceKind, str | None]] = {
             SpotSearchAttempt: (ActionChoiceKind.EXPLORE, None),
-            ListeningAttempt: (ActionChoiceKind.LISTEN, None),
             WaitAttempt: (ActionChoiceKind.WAIT, None),
             SpeechAttempt: (ActionChoiceKind.SPEAK, "reach"),
             TravelAttempt: (ActionChoiceKind.TRAVEL_TO, "destination"),

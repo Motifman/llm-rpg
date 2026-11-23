@@ -28,7 +28,7 @@ from ai_rpg_world.game_world.domain.perception.people_present import WhoeverIsTh
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.world_rules import WorldRules
 from ai_rpg_world.game_world.domain.value_object import SpotId, WorldTick
-from ai_rpg_world.game_world.domain.whereabouts import Occupant, Teleported
+from ai_rpg_world.game_world.domain.whereabouts import CameThrough, Occupant, Teleported
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.declared_nouns import DeclaredNouns
@@ -93,14 +93,18 @@ class BuiltInActionPerceptions:
         assert_never(reach)
 
     def arrival_seen_at(
-        self, where: SpotId, arriving: Occupant, origin: SpotId | Teleported, nouns: DeclaredNouns, at: WorldTick
+        self, where: SpotId, arriving: Occupant, origin: CameThrough | Teleported, nouns: DeclaredNouns, at: WorldTick
     ) -> tuple[Stimulus, ...]:
         if isinstance(origin, Teleported):
             return ()
         return self.arrival.seen_at(
             where,
             arriving,
-            {"origin": nouns.spot_of(origin).name},
+            {
+                "origin": nouns.spot_of(origin.spot).name,
+                "passage": nouns.passage_of(origin.passage).name,
+                "destination": nouns.spot_of(where).name,
+            },
             at,
             target=NoTarget(),
             manner=Openly(),

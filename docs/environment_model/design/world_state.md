@@ -475,5 +475,5 @@ PersonActedEvent, ActionAttemptFailedEvent
   - `ShopItemsRanOutEvent` は店・品物の種類ごとの数と、人の店なら持ち主を持つ。品物ごとの `ItemRanOutEvent` (`where` は `KeptInShop`) も出るが、刺激はこの店のイベントから持ち主への知らせだけを作る
   - `ShopClosedEvent` は閉じた理由 (`BY_OWNER` / `OWNER_GONE`) を持つ。持ち主が死んだ (`PersonDiedEvent`)・世界から外れた (`PersonOutcomeDecidedEvent`) ことへの反応で、ハンドラ (`CloseShopOfGoneOwnerHandler`) が `close_for_gone_owner` を呼ぶ。店を閉じなくても死や結末は果たせるので、ユースケースの手順に入れない
 - 店は世界の snapshot に入れる。預けた品と受け取った品の `ItemInstanceId` も店の中身として残す
-- 場所に着いたこと (`OccupantEnteredSpotEvent`) は、来た場所 (`origin`) と着いた時刻 (`at`) を持つ。来た場所は最後に歩き切った区間の出発点。区間を歩き切る前に通路が閉じて引き返したときや移動をやめたときは、歩いていた区間の向こうの端になる。teleport では `Teleported`。arrival の文の `{origin}` を、確定したあとの世界から読まずに埋めるため (#2152)
+- 場所に着いたこと (`OccupantEnteredSpotEvent`) は、来た場所と通ってきた通路の組 (`origin: CameThrough(spot, passage) | Teleported`) と着いた時刻 (`at`) を持つ。来た場所は最後に歩き切った区間の出発点、通路はその区間。区間を歩き切る前に通路が閉じて引き返したときや移動をやめたときは、歩いていた区間の向こうの端と、その区間になる。次の通路が閉じていて止まったときは、歩き切った区間になる。teleport では `Teleported`。arrival の文の `{origin}`・`{passage}` を、確定したあとの世界から読まずに埋めるため (#2152、D2268-15)
 - 移動 (`Whereabouts.advance_travels`) は、着いたとき (`OccupantEnteredSpotEvent`) と止められたとき (`TravelBlockedEvent`) だけイベントにする。道の途中で残りの tick が減ること、途中の場所を通り過ぎることはイベントにしない。tick ごとに出すと、何も起きていない知らせがハンドラと観測に流れるため。見張りのテスト (`tests/architecture/test_world_aggregates_emit_events.py`) もこの例外を持つ

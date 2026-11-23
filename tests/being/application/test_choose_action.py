@@ -94,6 +94,7 @@ def _choices() -> ActionChoices:
     return ActionChoices(
         (
             ActionChoice(
+                description="説明。",
                 name="interact",
                 label="操作する",
                 outline=(
@@ -104,6 +105,7 @@ def _choices() -> ActionChoices:
                 values=(PickOne(name="target", label="相手", candidates=(safe,)),),
             ),
             ActionChoice(
+                description="説明。",
                 name="speak",
                 label="話す",
                 outline=(
@@ -116,6 +118,7 @@ def _choices() -> ActionChoices:
                 ),
             ),
             ActionChoice(
+                description="説明。",
                 name="pickup_item",
                 label="拾う",
                 outline=(ArgumentOutline(name="item", label="品物", required=True),),

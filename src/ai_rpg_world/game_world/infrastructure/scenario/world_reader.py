@@ -5,11 +5,13 @@ from enum import Enum
 from typing import TypeVar
 
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
+from ai_rpg_world.game_world.domain.action.offered_action import ActionChoiceKind
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
 from ai_rpg_world.game_world.domain.declaration.belongings_texts import BelongingsTexts
 from ai_rpg_world.game_world.domain.declaration.body_tiers import HitPointsTier, HitPointsTiers, NeedTier, NeedTiers
 from ai_rpg_world.game_world.domain.declaration.briefing_headings import BriefingHeadings
+from ai_rpg_world.game_world.domain.declaration.choice_descriptions import ChoiceDescriptions
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.refusal_texts import RefusalTexts
 from ai_rpg_world.game_world.domain.declaration.spot.temperature import Temperature
@@ -208,6 +210,23 @@ def clock_wording(node: YamlNode) -> ClockWording:
             day=fields.required("day").text(),
             late_night=fields.required("late_night").text(),
             late_night_before_hour=fields.required("late_night_before_hour").integer(),
+        )
+    )
+
+
+_DESCRIPTION_EXTRAS = ("tend_to_player_without_tending", "duration_hours", "duration_minutes", "duration_turns")
+
+
+def choice_descriptions(node: YamlNode) -> ChoiceDescriptions:
+    choices = tuple(kind.choice_name for kind in ActionChoiceKind)
+    fields = node.fields(*choices, *_DESCRIPTION_EXTRAS)
+    return node.build(
+        lambda: ChoiceDescriptions(
+            by_choice={name: fields.required(name).text() for name in choices},
+            tend_without_tending=fields.required("tend_to_player_without_tending").text(),
+            duration_hours=fields.required("duration_hours").text(),
+            duration_minutes=fields.required("duration_minutes").text(),
+            duration_turns=fields.required("duration_turns").text(),
         )
     )
 

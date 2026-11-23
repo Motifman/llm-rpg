@@ -121,7 +121,7 @@ class ActionAttemptForTests(ActionAttempt):
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark:
         return self
 
-    def witnessed_in(self, design: WorldDesign, item_specs: Mapping[ItemInstanceId, ItemSpecId]) -> WitnessedAct:
+    def witnessed_in(self, design: WorldDesign, situation: ActorSituation) -> WitnessedAct:
         raise NotImplementedError(f"{self!r} is not witnessed in tests that use it")
 
     def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
