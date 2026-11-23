@@ -19,6 +19,7 @@ from ai_rpg_world.game_world.domain.exception.time_and_weather_exception import 
 from ai_rpg_world.game_world.domain.value_object import Ticks, WorldTick
 
 if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.choice_descriptions import ChoiceDescriptions
     from ai_rpg_world.game_world.domain.declaration.world_map import WorldMapWording
 
 _MINUTES_PER_DAY = 24 * 60
@@ -42,6 +43,9 @@ class NoDayNight:
 
     def outdoor_lighting_text(self, lighting: str, wording: WorldMapWording) -> str:
         return lighting
+
+    def rough_duration_text(self, ticks: Ticks, descriptions: ChoiceDescriptions) -> str:
+        return descriptions.duration_turns.format(turns=ticks.value)
 
     def phase_names(self) -> frozenset[DayPhaseName]:
         return frozenset()
@@ -103,6 +107,12 @@ class DayNightDeclaration:
 
     def outdoor_lighting_text(self, lighting: str, wording: WorldMapWording) -> str:
         return wording.outdoor_lighting.format(lighting=lighting)
+
+    def rough_duration_text(self, ticks: Ticks, descriptions: ChoiceDescriptions) -> str:
+        minutes = ticks.value * _MINUTES_PER_DAY // self.ticks_per_day.value
+        if minutes < 60:
+            return descriptions.duration_minutes.format(minutes=minutes)
+        return descriptions.duration_hours.format(hours=(minutes + 30) // 60)
 
     def day_and_clock_time_at(self, now: WorldTick) -> DayAndClockTime:
         minutes_since_midnight = self.time_of_day_at(now).tick_of_day * _MINUTES_PER_DAY // self.ticks_per_day.value

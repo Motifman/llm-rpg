@@ -114,6 +114,7 @@ class TestCommonJaDefaultReads:
             "built_in_action_perceptions",
             "action_texts",
             "world_map",
+            "choice_descriptions",
             "world_words",
             "surroundings_texts",
             "clock",

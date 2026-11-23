@@ -161,6 +161,7 @@ class ActionChoice:
 
     name: str
     label: str
+    description: str
     outline: Sequence[ArgumentOutline] = field(default_factory=tuple)
     takes_details: bool = False
     values: Sequence[ChoiceValue] = field(default_factory=tuple)
@@ -169,6 +170,7 @@ class ActionChoice:
     def __post_init__(self) -> None:
         _require_name(self.name, "name")
         require_text(self.label, "label")
+        require_text(self.description, "description")
         outline = tuple(self.outline)
         if not all(isinstance(o, ArgumentOutline) for o in outline):
             raise ContractViolation("outline must be ArgumentOutline items")

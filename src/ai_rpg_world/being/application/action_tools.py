@@ -277,7 +277,7 @@ class ActionTools:
             properties[memo] = memo_field_property(episode_source_offered=self._being_tools.episode_index_shown)
         return _function(
             choice.name,
-            f"{choice.label}。候補のある引数には【{CANDIDATE_TABLE_HEADING}】の「{AVAILABLE_NOW}」の文字をそのまま書く。",
+            f"{choice.description}候補のある引数には【{CANDIDATE_TABLE_HEADING}】の「{AVAILABLE_NOW}」の文字をそのまま書く。",
             {"type": "object", "properties": properties, "required": required},
         )
 

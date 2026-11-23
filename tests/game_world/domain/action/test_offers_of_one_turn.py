@@ -42,7 +42,9 @@ class _SeenByGen:
 
 
 def _choices(*offers: tuple[OfferedAction, Doable | NotNow]) -> ActionChoices:
-    return OffersOfOneTurn(offers, _SeenByGen()).as_action_choices()
+    return OffersOfOneTurn(
+        offers, _SeenByGen(), {kind: f"{kind.label}。" for kind in ActionChoiceKind}
+    ).as_action_choices()
 
 
 def _choice(choices: ActionChoices, kind: ActionChoiceKind) -> ActionChoice:
