@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
+from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusal
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
@@ -48,4 +49,5 @@ class ActionRefusal:
         # 共通の規則で断られたときは、周りから見て何も起きていない (use_cases.md)。
         if not isinstance(self.reason, (PreconditionRefusal, WorldStateRefusal)):
             return ()
-        return self.attempt.witnessed_in(design, item_specs).failure_stimuli_at(where, actor, at)
+        situation = ActorSituation(at_spot=where, actor_as=actor, item_specs=item_specs)
+        return self.attempt.witnessed_in(design, situation).failure_stimuli_at(where, actor, at)

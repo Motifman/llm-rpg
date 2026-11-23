@@ -234,6 +234,13 @@ class DeclaredNouns:
     def all_spots(self) -> tuple[SpotDeclaration, ...]:
         return tuple(self._spots)
 
+    def first_passage_between(self, start: SpotId, end: SpotId) -> PassageDeclaration:
+        # 同じ相手へ道が何本あっても、どれを通るかは目撃の文を作るときに分からないので、宣言の順で最初のものを名前に使う
+        for passage in self.all_passages():
+            if passage.far_end_from(start) == end:
+                return passage
+        raise UndeclaredNounException(f"no passage leads from {start.value} to {end.value}")
+
     def all_passages(self) -> tuple[PassageDeclaration, ...]:
         return tuple(self._passages)
 
