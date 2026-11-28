@@ -71,7 +71,11 @@ from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldI
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
-from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsOneByOne
+from ai_rpg_world.play_session.application.beings_taking_turns import (
+    BeingsTakingTurnsAtOnce,
+    BeingsTakingTurnsOneByOne,
+    BeingTurnSteps,
+)
 from ai_rpg_world.play_session.application.end_play_session import EndPlaySession, EndPlaySessionCommand
 from ai_rpg_world.play_session.application.hand_observation_to_being import HandObservationToBeing
 from ai_rpg_world.play_session.application.handlers.pass_observation_to_being_handler import (
@@ -204,11 +208,22 @@ class MineVillageSession:
         *,
         closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
     ) -> BeingsTakingTurnsOneByOne:
+        return BeingsTakingTurnsOneByOne(self.turn_steps(completion, closing=closing))
+
+    def beings_taking_turns_at_once(
+        self,
+        completion: ActionChoosingCompletion,
+        *,
+        closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
+    ) -> BeingsTakingTurnsAtOnce:
+        return BeingsTakingTurnsAtOnce(self.turn_steps(completion, closing=closing), self.turn_rounds)
+
+    def turn_steps(self, completion: ActionChoosingCompletion, *, closing: str) -> BeingTurnSteps:
         design = _scenario().design
         day_night = design.day_night
         assert isinstance(day_night, DayNightDeclaration)
         settle = SettleWorldConditions(self.scope, design)
-        return BeingsTakingTurnsOneByOne(
+        return BeingTurnSteps(
             world=WORLD,
             casts=self.casts,
             being_tools=OfferedBeingTools(

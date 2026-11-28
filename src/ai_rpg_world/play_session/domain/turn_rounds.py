@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, Union, final
@@ -134,6 +135,16 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
     @property
     def world(self) -> WorldId:
         return self._world
+
+    def __deepcopy__(self, memo: dict[int, object]) -> TurnRounds:
+        # 観測は値の変わらない契約の型だが、写せない読み取り専用の対応表を持つ。写さずに共有する
+        for held in self._held_for.values():
+            for observation in held:
+                memo[id(observation)] = observation
+        clone = object.__new__(type(self))
+        memo[id(self)] = clone
+        clone.__dict__.update(deepcopy(self.__dict__, memo))
+        return clone
 
     def open_round(self, readiness: Mapping[PersonId, ReadinessToAct]) -> None:
         if self._due is not None:

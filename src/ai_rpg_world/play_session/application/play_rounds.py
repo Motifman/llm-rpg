@@ -4,6 +4,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Protocol, Union, final
 
+from ai_rpg_world.being.application.choose_action import LlmExchange
 from ai_rpg_world.game_world.application.accept_world_time_passage import (
     AcceptWorldTimePassage,
     AcceptWorldTimePassageCommand,
@@ -25,14 +26,31 @@ class FinishedTurn:
     outcome: TurnOutcome
 
 
+@final
+@dataclass(frozen=True)
+class DiscardedChoice:
+    """``exchange`` は返ってきた LLM とのやりとり。呼ぶ前に取り消したか、呼び出しが落ちたときは None。"""
+
+    person: PersonId
+    exchange: LlmExchange | None
+    failure: str | None
+
+
+class TurnsInProgress(Protocol):
+    def __iter__(self) -> Iterator[FinishedTurn]: ...
+
+    def let_go(self) -> tuple[DiscardedChoice, ...]:
+        """残りの人の行為は世界に送らず、まだ返っていない選択を捨てる。何度呼んでもよい。"""
+
+
 class TurnTakers(Protocol):
-    def take_turns(self, people: Sequence[PersonId]) -> Iterator[FinishedTurn]: ...
+    def take_turns(self, people: Sequence[PersonId]) -> TurnsInProgress: ...
 
 
 @final
 @dataclass(frozen=True)
 class WorldEnded:
-    pass
+    discarded: tuple[DiscardedChoice, ...] = ()
 
 
 @final
@@ -45,6 +63,7 @@ class RoundLimitReached:
 @dataclass(frozen=True)
 class ChoosingKeptFailing:
     reasons: tuple[str, ...]
+    discarded: tuple[DiscardedChoice, ...] = ()
 
 
 PlayStopped = Union[WorldEnded, RoundLimitReached, ChoosingKeptFailing]
@@ -93,15 +112,20 @@ class PlayRounds:
         rounds = self._turn_rounds.get(world)
         rounds.open_round(self._check_readiness(CheckReadinessToActCommand(people)))
         self._turn_rounds.save(rounds)
-        for finished in self._turn_takers.take_turns(rounds.due_turns()):
-            # ターンの最中に届いた呼びかけを保存で消さないよう、取り出した写しを持ち続けない
-            rounds = self._turn_rounds.get(world)
-            rounds.finish_turn(finished.person, finished.outcome)
-            self._turn_rounds.save(rounds)
-            if rounds.has_given_up_choosing():
-                return ChoosingKeptFailing(rounds.failures_given_up_on())
-            if self._world_has_ended(WorldHasEndedCommand()):
-                return WorldEnded()
+        turns = self._turn_takers.take_turns(rounds.due_turns())
+        try:
+            for finished in turns:
+                # ターンの最中に届いた呼びかけを保存で消さないよう、取り出した写しを持ち続けない
+                rounds = self._turn_rounds.get(world)
+                rounds.finish_turn(finished.person, finished.outcome)
+                self._turn_rounds.save(rounds)
+                if rounds.has_given_up_choosing():
+                    return ChoosingKeptFailing(rounds.failures_given_up_on(), turns.let_go())
+                if self._world_has_ended(WorldHasEndedCommand()):
+                    return WorldEnded(turns.let_go())
+        except BaseException:
+            turns.let_go()
+            raise
         rounds = self._turn_rounds.get(world)
         rounds.close_round()
         self._turn_rounds.save(rounds)
