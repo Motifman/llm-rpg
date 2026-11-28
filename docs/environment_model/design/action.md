@@ -178,7 +178,7 @@ GroupDecisionBallotAttempt(actor: PersonId, decision: GroupDecisionDeclaration, 
 Whisper(to: PersonId) | OrdinaryVoice() | Shout()
 SpeechContent(text: str)                # 空でない文
 WaitReason(text: str) | NoReason()      # 空でない文か、理由なし
-# 1 回で渡す相手は 1 人。相手が複数だと、見ていた人には 1 つの確定の範囲から最初に知覚した刺激しか届かないので、相手ごとに別の行為にする (#2152)
+# 1 回で渡す相手は 1 人。相手が複数だと、見ていた人には 1 つの確定の範囲から刺激が 1 つしか届かないので、相手ごとに別の行為にする (#2152)
 # 自分には渡せない。行う人自身を相手にすると、行為を作るときにドメイン例外で断る (形の誤り、#2147)
 # 倒れている人と死んだ人は受け取れない。渡す途中で集約が断る (PERSON_NOT_ALIVE、#2147)
 # 何も変わらない持ち替えは断る。もう手に持っている品物を手に持つと ITEM_ALREADY_HELD、荷にある品物をしまうと ITEM_NOT_HELD (#2147)

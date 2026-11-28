@@ -32,6 +32,7 @@ from ai_rpg_world.game_world.domain.perception.perceived_quality import (
     PerceivedQuality,
     Told,
 )
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
@@ -69,6 +70,7 @@ def _perceived(
         happened_at=WorldTick(at),
         calls_attention=calls_attention,
         addressed_to_perceiver=False,
+        conveys=WhatPerceivedConveys.WHAT_HAPPENED,
     )
 
 

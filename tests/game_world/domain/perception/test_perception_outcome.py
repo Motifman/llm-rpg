@@ -4,6 +4,7 @@ from ai_rpg_world.game_world.domain.lighting import SeesClearly
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 from tests.game_world.domain.perception._builders import ALICE, BOB, VIEW, about
 
@@ -34,6 +35,7 @@ class TestHandOver:
             happened_at=WorldTick(3),
             calls_attention=False,
             addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
         recipient = _Recipient()
 

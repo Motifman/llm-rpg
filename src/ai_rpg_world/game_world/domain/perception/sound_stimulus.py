@@ -18,6 +18,7 @@ from ai_rpg_world.game_world.domain.perception.perception_delivery_report import
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.sound.hearing_quality import (
     HearingQuality,
     HearsClearly,
@@ -61,6 +62,9 @@ class Voice:
     def clear_text(self, clear: TextAboutPeople, view: PeopleAsSeen) -> TextWithAssignedPeople:
         return clear.seen_by(view)
 
+    def conveys_when_clear(self) -> WhatPerceivedConveys:
+        return WhatPerceivedConveys.WHAT_WAS_SAID
+
 
 @final
 @dataclass(frozen=True)
@@ -77,6 +81,9 @@ class Noise:
 
     def clear_text(self, clear: TextAboutPeople, view: PeopleAsSeen) -> TextWithAssignedPeople:
         return clear.unidentified()
+
+    def conveys_when_clear(self) -> WhatPerceivedConveys:
+        return WhatPerceivedConveys.WHAT_HAPPENED
 
 
 SoundSource = Voice | Noise
@@ -108,6 +115,9 @@ class SoundStimulus:
 
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.SOUND, self.salience)
+
+    def most_it_can_convey(self) -> WhatPerceivedConveys:
+        return self.source.conveys_when_clear()
 
     def described(self) -> StimulusDescription:
         return StimulusDescription(
@@ -142,14 +152,27 @@ class _Hearing:
 
     def when_clear(self) -> PerceptionOutcome:
         return self._reached(
-            lambda: self.stimulus.source.clear_text(self.stimulus.clear, self.view), HearsClearly(), stands_out=True
+            lambda: self.stimulus.source.clear_text(self.stimulus.clear, self.view),
+            HearsClearly(),
+            stands_out=True,
+            conveys=self.stimulus.source.conveys_when_clear(),
         )
 
     def when_muffled(self) -> PerceptionOutcome:
-        return self._reached(self.stimulus.muffled.unidentified, HearsMuffled(), stands_out=True)
+        return self._reached(
+            self.stimulus.muffled.unidentified,
+            HearsMuffled(),
+            stands_out=True,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
+        )
 
     def when_faint(self) -> PerceptionOutcome:
-        return self._reached(self.stimulus.muffled.unidentified, HearsFaintly(), stands_out=False)
+        return self._reached(
+            self.stimulus.muffled.unidentified,
+            HearsFaintly(),
+            stands_out=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
+        )
 
     def when_nothing(self) -> PerceptionOutcome:
         stimulus = self.stimulus
@@ -160,6 +183,7 @@ class _Hearing:
         text: Callable[[], TextWithAssignedPeople],
         quality: HearsClearly | HearsMuffled | HearsFaintly,
         stands_out: bool,
+        conveys: WhatPerceivedConveys,
     ) -> PerceptionOutcome:
         stimulus, perceiver = self.stimulus, self.perceiver
         involved = perceiver.person in stimulus.involved
@@ -172,6 +196,7 @@ class _Hearing:
                 # かすかに聞こえただけのものは、関わっていても目立っても、考え直す目安にしない。
                 calls_attention=stands_out and (involved or stimulus.salience.stands_out()),
                 addressed_to_perceiver=stimulus.addressee == perceiver.person,
+                conveys=conveys,
             ),
             on_waking=lambda: MissedNotice.from_text(stimulus.noticed_later, self.view, stimulus.at),
         )

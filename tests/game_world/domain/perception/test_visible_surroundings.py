@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.people.text_with_assigned_people import Text
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
 from ai_rpg_world.game_world.domain.perception.surroundings import SeenObject, SeenPerson, Up, VisibleSurroundings
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, PersonId, SpotSectionId, WorldTick
 from tests.game_world.domain.perception._surroundings_builders import (
     conditions,
@@ -303,6 +304,7 @@ class TestSurroundingsPerceivedAsOneObservation:
                 happened_at=_NOW,
                 calls_attention=False,
                 addressed_to_perceiver=False,
+                conveys=WhatPerceivedConveys.WHAT_HAPPENED,
             ),
         )
 
