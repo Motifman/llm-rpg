@@ -537,16 +537,15 @@ _AKI = PersonId("aki")
 class TestPassWorldTimeDayPhase:
     """PassWorldTime で時間帯が変わると、その tick を進め終えた世界で起きている人にだけ、時間帯の知らせが届くことを保証する。"""
 
-    def _dawn(self, world: _World) -> _ObservationsReceived:
+    def _dawn(self, world: _World) -> tuple[_ObservationsReceived, PerceptionReportsReceived]:
         received = _ObservationsReceived()
+        reports = PerceptionReportsReceived()
         deliver = DeliverPerception(
-            world.scope,
-            ObservationExit(_WORLD, _DAWN_AT_TICK_1, clock_wording(), received),
-            PerceptionReportsReceived(),
+            world.scope, ObservationExit(_WORLD, _DAWN_AT_TICK_1, clock_wording(), received), reports
         )
         world.distributor.register_receiver(DeliverPerceptionOfCommittedEvents(world.scope, world.design, deliver))
         world.pass_ticks(1)
-        return received
+        return received, reports
 
     def test_morning_reaches_only_the_person_awake(self) -> None:
         """朝に入ると、広場で起きているハルに「空が白み、朝になった。」が届き、同じ広場で気を失っているアキには届かない。"""
@@ -555,7 +554,7 @@ class TestPassWorldTimeDayPhase:
             lambda session: session.aggregates().vitals(_AKI).take_damage(Damage(999), WorldTick(0), WorldHappening())
         )
 
-        received = self._dawn(world)
+        received, _ = self._dawn(world)
 
         assert received.people_told("空が白み、朝になった。") == [_HARU]
 
@@ -570,8 +569,8 @@ class TestPassWorldTimeDayPhase:
 
         assert world.read(lambda session: session.facts().missed_notices(_AKI).notices()) == ()
 
-    def test_person_fainting_in_the_tick_of_dawn_is_not_told_of_the_morning(self) -> None:
-        """朝に入る tick に飢えで倒れたハルには、tick を進め終えた時点で倒れているので、朝の知らせが届かず、起きてから知る知らせにもたまらない。"""
+    def test_person_fainting_in_the_tick_of_dawn_is_not_an_addressee_of_the_morning(self) -> None:
+        """朝に入る tick に飢えで倒れたハルは、tick を進め終えた時点で倒れているので、朝の知らせの相手に入らず、届かず、起きてから知る知らせにもたまらない。"""
         base = world_rules_for_tests()
         starving = replace(
             base,
@@ -581,9 +580,15 @@ class TestPassWorldTimeDayPhase:
         )
         world = _World(characters=(character("haru", "plaza"),), rules=starving, day_night=_DAWN_AT_TICK_1)
 
-        received = self._dawn(world)
+        received, reports = self._dawn(world)
 
         assert world.read(lambda session: session.facts().vitals(_HARU).is_down())
+        assert [
+            result.stimulus.addressed_to
+            for report in reports.reports
+            for result in report.stimuli
+            if result.stimulus.text == "空が白み、朝になった。"
+        ] == [frozenset()]
         assert received.people_told("空が白み、朝になった。") == []
         assert world.read(lambda session: session.facts().missed_notices(_HARU).notices()) == ()
 
