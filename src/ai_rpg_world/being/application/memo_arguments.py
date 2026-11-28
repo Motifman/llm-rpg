@@ -14,24 +14,30 @@ from typing import Any
 from ai_rpg_world.being.application.memo_argument import (
     MEMO_FIELD_NAME,
 )
-from ai_rpg_world.being.application.memo_writing import (
-    REJECTED_INVALID,
-    REJECTED_LIMIT_REACHED,
-    REJECTED_NO_SUCH_MEMO,
-    REJECTED_PROVENANCE_OUTSIDE_FACT,
-    REJECTED_UNKNOWN_EPISODE,
-    AddMemo,
-    EditMemo,
-    MemoOperation,
-    RemoveMemo,
-)
 from ai_rpg_world.being.domain.memo_book import (
     KIND_LIMITS,
     MEMO_TEXT_MAX_LENGTH,
+    MemoAddition,
     MemoCertainty,
     MemoKind,
+    MemoOperation,
     MemoProvenance,
+    MemoRemoval,
+    MemoRevision,
     MemoSource,
+)
+from ai_rpg_world.domain.being.exception.being_exceptions import (
+    MemoEpisodeSourceFromMissingException,
+    MemoHeardSourceFromMissingException,
+    MemoLimitReachedException,
+    MemoNotFoundException,
+    MemoProvenanceMissingException,
+    MemoProvenanceOutsideFactException,
+    MemoSourceEpisodeUnknownException,
+    MemoSourceFromNotNeededException,
+    MemoSourceNotEpisodeHandleException,
+    MemoTextTooLongException,
+    MemoValidationException,
 )
 
 REJECTED_NOT_A_LIST = "not_a_list"
@@ -43,7 +49,32 @@ REJECTED_TEXT_TOO_LONG = "text_too_long"
 REJECTED_MISSING_ID = "missing_id"
 REJECTED_MISSING_PROVENANCE = "missing_provenance"
 REJECTED_MISSING_FROM = "missing_from"
+REJECTED_MISSING_EPISODE_FROM = "missing_episode_from"
 REJECTED_FROM_NOT_NEEDED = "from_not_needed"
+REJECTED_LIMIT_REACHED = "limit_reached"
+REJECTED_NO_SUCH_MEMO = "no_such_memo"
+REJECTED_PROVENANCE_OUTSIDE_FACT = "provenance_outside_fact"
+REJECTED_UNKNOWN_EPISODE = "unknown_episode"
+REJECTED_INVALID = "invalid"
+
+_REASONS_BY_ERROR_CODE = {
+    MemoTextTooLongException.error_code: REJECTED_TEXT_TOO_LONG,
+    MemoProvenanceMissingException.error_code: REJECTED_MISSING_PROVENANCE,
+    MemoProvenanceOutsideFactException.error_code: REJECTED_PROVENANCE_OUTSIDE_FACT,
+    MemoHeardSourceFromMissingException.error_code: REJECTED_MISSING_FROM,
+    MemoEpisodeSourceFromMissingException.error_code: REJECTED_MISSING_EPISODE_FROM,
+    MemoSourceFromNotNeededException.error_code: REJECTED_FROM_NOT_NEEDED,
+    MemoSourceNotEpisodeHandleException.error_code: REJECTED_UNKNOWN_EPISODE,
+    MemoSourceEpisodeUnknownException.error_code: REJECTED_UNKNOWN_EPISODE,
+    MemoLimitReachedException.error_code: REJECTED_LIMIT_REACHED,
+    MemoNotFoundException.error_code: REJECTED_NO_SUCH_MEMO,
+}
+
+MemoRefusal = MemoValidationException | MemoLimitReachedException | MemoNotFoundException
+
+
+def refusal_reason(refusal: MemoRefusal) -> str:
+    return _REASONS_BY_ERROR_CODE.get(refusal.error_code, REJECTED_INVALID)
 
 
 @dataclass(frozen=True)
@@ -56,10 +87,20 @@ class RejectedMemoArgument:
 
 
 @dataclass(frozen=True)
+class ReadMemoOperation:
+    """``do`` は書かれていた操作の種類 (add / edit / remove)。"""
+
+    index: int
+    do: str
+    operation: MemoOperation
+    raw: Any
+
+
+@dataclass(frozen=True)
 class ReadMemoOperations:
     """``present`` は引数そのものがあったか。"""
 
-    operations: tuple[tuple[int, MemoOperation], ...] = ()
+    operations: tuple[ReadMemoOperation, ...] = ()
     rejected: tuple[RejectedMemoArgument, ...] = ()
     present: bool = False
 
@@ -72,14 +113,14 @@ def read_memo_operations(arguments: Mapping[str, Any], *, episode_source_offered
         return ReadMemoOperations(present=True)
     if not isinstance(raw, list):
         return ReadMemoOperations(rejected=(RejectedMemoArgument(None, REJECTED_NOT_A_LIST, raw),), present=True)
-    operations: list[tuple[int, MemoOperation]] = []
+    operations: list[ReadMemoOperation] = []
     rejected: list[RejectedMemoArgument] = []
     for index, item in enumerate(raw):
         read = _read_item(item, episode_source_offered=episode_source_offered)
         if isinstance(read, str):
             rejected.append(RejectedMemoArgument(index, read, item))
         else:
-            operations.append((index, read))
+            operations.append(ReadMemoOperation(index, item["do"], read, item))
     return ReadMemoOperations(operations=tuple(operations), rejected=tuple(rejected), present=True)
 
 
@@ -87,12 +128,14 @@ def _given(value: Any) -> bool:
     return value is not None and not (isinstance(value, str) and not value.strip())
 
 
-def _read_text(item: Mapping[str, Any]) -> str:
+def _stripped(value: Any) -> Any:
+    return value.strip() if isinstance(value, str) else value
+
+
+def _read_text(item: Mapping[str, Any]) -> str | None:
     text = item.get("text")
     if not isinstance(text, str) or not text.strip():
-        return REJECTED_MISSING_TEXT
-    if len(text.strip()) > MEMO_TEXT_MAX_LENGTH:
-        return REJECTED_TEXT_TOO_LONG
+        return None
     return text.strip()
 
 
@@ -104,7 +147,7 @@ def _read_handle(item: Mapping[str, Any]) -> str | None:
 
 
 def _read_provenance(item: Mapping[str, Any], *, episode_source_offered: bool) -> MemoProvenance | str | None:
-    """どれも書かれていなければ None。書かれていれば、揃っていないと理由を返す。"""
+    """どれも書かれていなければ None。書かれていて形が崩れているか、出どころの決まりに反していれば理由を返す。"""
     source_raw, certainty_raw, source_from = (
         item.get("source"),
         item.get("certainty"),
@@ -122,16 +165,14 @@ def _read_provenance(item: Mapping[str, Any], *, episode_source_offered: bool) -
         or certainty_raw not in {c.value for c in MemoCertainty}
     ):
         return REJECTED_MISSING_PROVENANCE
-    source = MemoSource(source_raw)
-    if source is MemoSource.SELF:
-        if _given(source_from):
-            return REJECTED_FROM_NOT_NEEDED
-        return MemoProvenance(source=source, certainty=MemoCertainty(certainty_raw))
-    if not isinstance(source_from, str) or not source_from.strip():
-        return REJECTED_MISSING_FROM
-    if source is MemoSource.EPISODE and not source_from.strip().startswith("ep_"):
-        return REJECTED_UNKNOWN_EPISODE
-    return MemoProvenance(source=source, certainty=MemoCertainty(certainty_raw), source_from=source_from.strip())
+    try:
+        return MemoProvenance(
+            source=MemoSource(source_raw),
+            certainty=MemoCertainty(certainty_raw),
+            source_from=_stripped(source_from) if _given(source_from) else None,
+        )
+    except MemoValidationException as refusal:
+        return refusal_reason(refusal)
 
 
 def _read_item(item: Any, *, episode_source_offered: bool) -> MemoOperation | str:
@@ -140,27 +181,23 @@ def _read_item(item: Any, *, episode_source_offered: bool) -> MemoOperation | st
     do = item.get("do")
     if do == "remove":
         handle = _read_handle(item)
-        return REJECTED_MISSING_ID if handle is None else RemoveMemo(handle)
+        return REJECTED_MISSING_ID if handle is None else MemoRemoval(handle)
     if do not in ("add", "edit"):
         return REJECTED_UNKNOWN_DO
     text = _read_text(item)
-    if text in (REJECTED_MISSING_TEXT, REJECTED_TEXT_TOO_LONG):
-        return text
+    if text is None:
+        return REJECTED_MISSING_TEXT
     provenance = _read_provenance(item, episode_source_offered=episode_source_offered)
     if isinstance(provenance, str):
         return provenance
     if do == "edit":
         handle = _read_handle(item)
-        return REJECTED_MISSING_ID if handle is None else EditMemo(handle, text, provenance)
+        return REJECTED_MISSING_ID if handle is None else MemoRevision(handle, text, provenance)
     try:
         kind = MemoKind(item.get("kind"))
     except ValueError:
         return REJECTED_UNKNOWN_KIND
-    if kind is MemoKind.FACT and provenance is None:
-        return REJECTED_MISSING_PROVENANCE
-    if kind is not MemoKind.FACT and provenance is not None:
-        return REJECTED_PROVENANCE_OUTSIDE_FACT
-    return AddMemo(kind, text, provenance)
+    return MemoAddition(kind, text, provenance)
 
 
 _KIND_LABELS = {MemoKind.TODO: "やること", MemoKind.FACT: "分かったこと", MemoKind.PERSON: "人について"}
@@ -177,6 +214,9 @@ _REASON_TEXTS = {
         "分かったこと (fact) には source (self / heard など) と certainty (sure / guess) を書いてください。"
     ),
     REJECTED_MISSING_FROM: "人から聞いたこと (heard) には、from に誰から聞いたかを書いてください。",
+    REJECTED_MISSING_EPISODE_FROM: (
+        "エピソードから分かったこと (episode) には、from にエピソードの呼び名 (ep_ で始まる) を書いてください。"
+    ),
     REJECTED_FROM_NOT_NEEDED: "自分で確かめたこと (self) には from を書きません。",
     REJECTED_PROVENANCE_OUTSIDE_FACT: "source と certainty は分かったこと (fact) にだけ書けます。",
     REJECTED_INVALID: "書けませんでした。",
@@ -204,17 +244,26 @@ def feedback_text(rejections: Iterable[tuple[int | None, str]]) -> str:
 
 __all__ = [
     "REJECTED_FROM_NOT_NEEDED",
+    "REJECTED_INVALID",
+    "REJECTED_LIMIT_REACHED",
+    "REJECTED_MISSING_EPISODE_FROM",
     "REJECTED_MISSING_FROM",
     "REJECTED_MISSING_ID",
     "REJECTED_MISSING_PROVENANCE",
     "REJECTED_MISSING_TEXT",
     "REJECTED_NOT_AN_OBJECT",
     "REJECTED_NOT_A_LIST",
+    "REJECTED_NO_SUCH_MEMO",
+    "REJECTED_PROVENANCE_OUTSIDE_FACT",
     "REJECTED_TEXT_TOO_LONG",
     "REJECTED_UNKNOWN_DO",
+    "REJECTED_UNKNOWN_EPISODE",
     "REJECTED_UNKNOWN_KIND",
+    "MemoRefusal",
+    "ReadMemoOperation",
     "ReadMemoOperations",
     "RejectedMemoArgument",
+    "refusal_reason",
     "feedback_text",
     "read_memo_operations",
     "rejection_text",

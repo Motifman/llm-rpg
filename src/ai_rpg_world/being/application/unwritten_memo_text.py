@@ -9,25 +9,21 @@ import json
 
 from ai_rpg_world.being.application.memo_arguments import (
     REJECTED_FROM_NOT_NEEDED,
+    REJECTED_INVALID,
+    REJECTED_LIMIT_REACHED,
+    REJECTED_MISSING_EPISODE_FROM,
     REJECTED_MISSING_FROM,
     REJECTED_MISSING_ID,
     REJECTED_MISSING_PROVENANCE,
     REJECTED_MISSING_TEXT,
+    REJECTED_NO_SUCH_MEMO,
     REJECTED_NOT_A_LIST,
     REJECTED_NOT_AN_OBJECT,
+    REJECTED_PROVENANCE_OUTSIDE_FACT,
     REJECTED_TEXT_TOO_LONG,
     REJECTED_UNKNOWN_DO,
-    REJECTED_UNKNOWN_KIND,
-)
-from ai_rpg_world.being.application.memo_writing import (
-    REJECTED_INVALID,
-    REJECTED_LIMIT_REACHED,
-    REJECTED_NO_SUCH_MEMO,
-    REJECTED_PROVENANCE_OUTSIDE_FACT,
     REJECTED_UNKNOWN_EPISODE,
-    AddMemo,
-    EditMemo,
-    MemoOperation,
+    REJECTED_UNKNOWN_KIND,
 )
 from ai_rpg_world.being.domain.memo_book import KIND_LIMITS, MEMO_TEXT_MAX_LENGTH, MemoKind
 
@@ -46,6 +42,7 @@ _SHORT_REASONS = {
     REJECTED_MISSING_ID: "id に m_ で始まる呼び名がない",
     REJECTED_MISSING_PROVENANCE: "分かったことには source と certainty が要る",
     REJECTED_MISSING_FROM: "人から聞いたことには from に誰から聞いたかが要る",
+    REJECTED_MISSING_EPISODE_FROM: "エピソードから分かったことには from にエピソードの呼び名が要る",
     REJECTED_FROM_NOT_NEEDED: "自分で確かめたことには from を書かない",
     REJECTED_PROVENANCE_OUTSIDE_FACT: "source と certainty は分かったことにだけ書ける",
     REJECTED_NO_SUCH_MEMO: "そのメモはない",
@@ -56,14 +53,6 @@ _SHORT_REASONS = {
 
 def unwritten_memo_line(attempted: str, reason: str) -> str:
     return f"「{attempted}」は書けなかった（理由: {reason}）"
-
-
-def attempted_operation(operation: MemoOperation) -> str:
-    if isinstance(operation, AddMemo):
-        return f"{_KIND_PLACES[operation.kind]}「{operation.text}」を書く"
-    if isinstance(operation, EditMemo):
-        return f"{operation.handle} を「{operation.text}」に書き換える"
-    return f"{operation.handle} を消す"
 
 
 def attempted_raw_operation(raw: object) -> str:

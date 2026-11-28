@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -14,15 +13,9 @@ from ai_rpg_world.being.application.memo_argument import (
 )
 from ai_rpg_world.being.application.memo_arguments import (
     feedback_text,
-    read_memo_operations,
     rejection_text,
 )
-from ai_rpg_world.being.application.memo_writing import (
-    AddMemo,
-    EditMemo,
-    MemoOperation,
-    apply_memo_operations,
-)
+from ai_rpg_world.being.application.write_memos import WriteMemos, WriteMemosCommand
 from ai_rpg_world.being.domain.memo_book import Memo
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -75,14 +68,8 @@ def apply_memo_from_call(
     feedback: list[tuple[int | None, str]] = []
     added: frozenset[str] = frozenset()
     try:
-        read = read_memo_operations(arguments, episode_source_offered=runtime.memo_episode_source_offered())
-        if not read.present:
+        if MEMO_FIELD_NAME not in arguments:
             return MemoCallOutcome()
-        for rejected in read.rejected:
-            trace["rejected"].append(
-                {"index": rejected.index, "reason": rejected.reason, "raw": rejected.raw, "detail": None}
-            )
-            feedback.append((rejected.index, rejection_text(rejected.reason)))
         acting = runtime._acting_being_for(player_id)
         if acting is None:
             trace["skipped_reason"] = "no_acting_being"
@@ -93,24 +80,20 @@ def apply_memo_from_call(
         trace["turn"] = turn
         environment_name = runtime.environment_name_for(player_id)
         trace["environment_name"] = environment_name
-        store = runtime._being_memo_store
-        book = store.get(being_id)
-        outcome = apply_memo_operations(
-            book,
-            read.operations,
-            turn=turn,
-            environment_name=environment_name,
-            new_memo_id=lambda: str(uuid.uuid4()),
-            known_episode_handles=_episode_handles(runtime, being_id),
-        )
-        store.save(book)
-        trace["applied"] = [_applied_payload(a.index, a.operation, a.memo) for a in outcome.applied]
-        added = frozenset(a.memo.memo_id for a in outcome.applied if isinstance(a.operation, AddMemo))
-        for r in outcome.rejected:
-            trace["rejected"].append(
-                {"index": r.index, "reason": r.reason, "raw": arguments[MEMO_FIELD_NAME][r.index], "detail": r.detail}
+        written = WriteMemos(memo_books=runtime._being_memo_store, episodes=runtime._being_episode_store).execute(
+            WriteMemosCommand(
+                being_id=being_id,
+                memo=arguments[MEMO_FIELD_NAME],
+                episode_source_offered=runtime.memo_episode_source_offered(),
+                turn=turn,
+                environment_name=environment_name,
             )
-            feedback.append((r.index, rejection_text(r.reason, kind=r.kind, detail=r.detail)))
+        )
+        trace["applied"] = [_applied_payload(w.index, w.do, w.memo) for w in written.written]
+        added = frozenset(w.memo.memo_id for w in written.written if w.do == "add")
+        for u in written.unwritten:
+            trace["rejected"].append({"index": u.index, "reason": u.reason, "raw": u.raw, "detail": u.detail})
+            feedback.append((u.index, rejection_text(u.reason, kind=u.kind, detail=u.detail)))
     except Exception as exc:
         logger.exception("memo writing failed for player=%s", player_id.value)
         trace["skipped_reason"] = "writing_failed"
@@ -122,14 +105,7 @@ def apply_memo_from_call(
     return MemoCallOutcome(feedback=feedback_text(feedback), added_memo_ids=added)
 
 
-def _episode_handles(runtime: Any, being_id: Any) -> frozenset[str]:
-    if not runtime.memo_episode_source_offered():
-        return frozenset()
-    return frozenset(e.handle for e in runtime._being_episode_store.list_by_being(being_id))
-
-
-def _applied_payload(index: int, operation: MemoOperation, memo: Memo) -> dict[str, Any]:
-    do = "add" if isinstance(operation, AddMemo) else "edit" if isinstance(operation, EditMemo) else "remove"
+def _applied_payload(index: int, do: str, memo: Memo) -> dict[str, Any]:
     provenance = memo.provenance
     return {
         "index": index,

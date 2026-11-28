@@ -114,6 +114,17 @@ class TestMemoArgumentInATurn:
         (event,) = recorder.payloads(TraceEventKind.BEING_MEMO)
         assert event["rejected"] == [{"index": 0, "reason": "limit_reached", "raw": operation, "detail": None}]
 
+    def test_missing_memo_is_returned_with_its_handle(self) -> None:
+        """メモ帳に無い呼び名を消そうとすると、その呼び名を添えた文を返し、呼び名を trace の detail に残す。"""
+        operation = {"do": "remove", "id": "m_000000"}
+        _, wiring, recorder = _game([operation])
+
+        result = _turn(wiring)
+
+        assert "1 件目: m_000000 というメモはありません。" in result.message
+        (event,) = recorder.payloads(TraceEventKind.BEING_MEMO)
+        assert event["rejected"] == [{"index": 0, "reason": "no_such_memo", "raw": operation, "detail": "m_000000"}]
+
     def test_removed_memo_is_traced(self) -> None:
         """消す操作は、消したメモの分類と文を trace に残す。"""
         runtime, wiring, recorder = _game([{"do": "remove", "id": "m_3f2a7b"}])

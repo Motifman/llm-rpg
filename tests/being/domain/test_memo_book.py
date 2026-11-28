@@ -9,17 +9,28 @@ from ai_rpg_world.being.domain.memo_book import (
     KIND_LIMITS,
     Memo,
     MemoAdded,
+    MemoAddition,
     MemoBook,
     MemoCertainty,
     MemoEdited,
     MemoKind,
     MemoProvenance,
+    MemoRemoval,
     MemoRemoved,
+    MemoRevision,
     MemoSource,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    MemoEpisodeSourceFromMissingException,
+    MemoHeardSourceFromMissingException,
     MemoLimitReachedException,
     MemoNotFoundException,
+    MemoProvenanceMissingException,
+    MemoProvenanceOutsideFactException,
+    MemoSourceEpisodeUnknownException,
+    MemoSourceFromNotNeededException,
+    MemoSourceNotEpisodeHandleException,
+    MemoTextTooLongException,
     MemoValidationException,
 )
 
@@ -55,10 +66,17 @@ def _add(book: MemoBook, **overrides: object) -> MemoBook:
 class TestMemoProvenance:
     """MemoProvenance が、出どころごとに「誰から」「どのエピソードから」の要る組み合わせを守ることを保証する。"""
 
-    def test_heard_requires_who(self) -> None:
-        """出どころが「人から聞いた」のに誰からが無ければ MemoValidationException を投げる。"""
-        with pytest.raises(MemoValidationException):
-            MemoProvenance(source=MemoSource.HEARD, certainty=MemoCertainty.GUESS)
+    @pytest.mark.parametrize("source_from", [None, "  "])
+    def test_heard_requires_who(self, source_from: str | None) -> None:
+        """出どころが「人から聞いた」のに誰からが無いか空なら MemoHeardSourceFromMissingException を投げる。"""
+        with pytest.raises(MemoHeardSourceFromMissingException):
+            MemoProvenance(source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from=source_from)
+
+    @pytest.mark.parametrize("source_from", [None, "  "])
+    def test_episode_requires_the_episode_handle(self, source_from: str | None) -> None:
+        """出どころが「エピソードから」なのに呼び名が無いか空なら、人から聞いたときとは別の MemoEpisodeSourceFromMissingException を投げる。"""
+        with pytest.raises(MemoEpisodeSourceFromMissingException):
+            MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from=source_from)
 
     def test_heard_keeps_who(self) -> None:
         """出どころが「人から聞いた」なら、誰からの文をそのまま持つ。"""
@@ -67,13 +85,13 @@ class TestMemoProvenance:
         assert provenance.source_from == "ミオ"
 
     def test_episode_requires_an_episode_handle(self) -> None:
-        """出どころが「エピソードから」なら、ep_ で始まる呼び名でないと MemoValidationException を投げる。"""
-        with pytest.raises(MemoValidationException):
+        """出どころが「エピソードから」なら、ep_ で始まる呼び名でないと MemoSourceNotEpisodeHandleException を投げる。"""
+        with pytest.raises(MemoSourceNotEpisodeHandleException):
             MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ミオ")
 
     def test_self_must_not_name_a_source(self) -> None:
-        """出どころが「自分で確かめた」なのに誰からを持たせると MemoValidationException を投げる。"""
-        with pytest.raises(MemoValidationException):
+        """出どころが「自分で確かめた」なのに誰からを持たせると MemoSourceFromNotNeededException を投げる。"""
+        with pytest.raises(MemoSourceFromNotNeededException):
             MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE, source_from="ミオ")
 
 
@@ -112,8 +130,8 @@ class TestAddingAMemo:
         assert book.memos[0].text == "あ" * 60
 
     def test_sixty_one_characters_are_rejected(self) -> None:
-        """文が 61 字あると MemoValidationException を投げる。"""
-        with pytest.raises(MemoValidationException):
+        """文が 61 字あると MemoTextTooLongException を投げる。"""
+        with pytest.raises(MemoTextTooLongException):
             _add(MemoBook.empty(ADA), text="あ" * 61)
 
     @pytest.mark.parametrize("blank", ["", "   ", "\n"])
@@ -123,14 +141,14 @@ class TestAddingAMemo:
             _add(MemoBook.empty(ADA), text=blank)
 
     def test_fact_without_provenance_is_rejected(self) -> None:
-        """分かったことに出どころと確かさが無ければ MemoValidationException を投げる。"""
-        with pytest.raises(MemoValidationException):
+        """分かったことに出どころと確かさが無ければ MemoProvenanceMissingException を投げる。"""
+        with pytest.raises(MemoProvenanceMissingException):
             _add(MemoBook.empty(ADA), kind=MemoKind.FACT, provenance=None)
 
     @pytest.mark.parametrize("kind", [MemoKind.TODO, MemoKind.PERSON])
     def test_provenance_outside_fact_is_rejected(self, kind: MemoKind) -> None:
-        """やること・人についてに出どころを持たせると MemoValidationException を投げる。"""
-        with pytest.raises(MemoValidationException):
+        """やること・人についてに出どころを持たせると MemoProvenanceOutsideFactException を投げる。"""
+        with pytest.raises(MemoProvenanceOutsideFactException):
             _add(MemoBook.empty(ADA), kind=kind, provenance=SURE_BY_SELF)
 
     def test_fact_keeps_provenance(self) -> None:
@@ -140,11 +158,27 @@ class TestAddingAMemo:
         assert book.memos[0].provenance == SURE_BY_SELF
 
     def test_episode_source_must_be_a_known_episode(self) -> None:
-        """出どころのエピソードの呼び名が、知っている呼び名に無ければ MemoValidationException を投げる。"""
-        provenance = MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33")
+        """出どころのエピソードの呼び名が、知っている呼び名に無ければ、その呼び名を持つ MemoSourceEpisodeUnknownException を投げる。"""
+        with pytest.raises(MemoSourceEpisodeUnknownException) as raised:
+            _add(MemoBook.empty(ADA), kind=MemoKind.FACT, provenance=FROM_UNKNOWN_EPISODE)
 
-        with pytest.raises(MemoValidationException):
-            _add(MemoBook.empty(ADA), kind=MemoKind.FACT, provenance=provenance)
+        assert raised.value.handle == "ep_a07c33"
+
+    def test_unknown_episode_is_refused_before_the_limit(self) -> None:
+        """分かったことが上限のときに知らないエピソードを出どころにすると、上限ではなく知らないエピソードとして断る。"""
+        book = MemoBook.empty(ADA)
+        for n in range(KIND_LIMITS[MemoKind.FACT]):
+            book = _add(book, memo_id=_id(n), kind=MemoKind.FACT, provenance=SURE_BY_SELF)
+
+        with pytest.raises(MemoSourceEpisodeUnknownException):
+            _add(book, memo_id=_id(99), kind=MemoKind.FACT, provenance=FROM_UNKNOWN_EPISODE)
+
+    def test_text_too_long_is_refused_before_the_limit(self) -> None:
+        """やることが上限のときに 61 字のやることを足すと、上限ではなく文の長さで断る。"""
+        book = _add_many(MemoKind.TODO, KIND_LIMITS[MemoKind.TODO])
+
+        with pytest.raises(MemoTextTooLongException):
+            _add(book, memo_id=_id(99), text="あ" * 61)
 
     def test_episode_source_is_accepted_when_known(self) -> None:
         """出どころのエピソードの呼び名が、知っている呼び名にあれば受け付ける。"""
@@ -193,8 +227,9 @@ class TestKindLimits:
         for n in range(KIND_LIMITS[kind]):
             book = _add(book, memo_id=_id(n), kind=kind, provenance=provenance)
 
-        with pytest.raises(MemoLimitReachedException):
+        with pytest.raises(MemoLimitReachedException) as raised:
             _add(book, memo_id=_id(99), kind=kind, provenance=provenance)
+        assert raised.value.kind is kind
         assert len(book.memos) == KIND_LIMITS[kind]
 
     def test_a_full_kind_does_not_block_another_kind(self) -> None:
@@ -257,16 +292,23 @@ class TestEditingAMemo:
         assert book.memos[0].provenance == SURE_BY_SELF
 
     def test_provenance_on_a_todo_edit_is_rejected(self) -> None:
-        """やることを書き換えるときに出どころを渡すと MemoValidationException を投げる。"""
+        """やることを書き換えるときに出どころを渡すと MemoProvenanceOutsideFactException を投げる。"""
         book = _add(MemoBook.empty(ADA))
 
-        with pytest.raises(MemoValidationException):
+        with pytest.raises(MemoProvenanceOutsideFactException):
             book.edit("m_3f2a7b", text="鍵を取る", provenance=SURE_BY_SELF, turn=8)
 
     def test_unknown_handle_is_rejected(self) -> None:
-        """メモ帳に無い呼び名を書き換えようとすると MemoNotFoundException を投げる。"""
-        with pytest.raises(MemoNotFoundException):
+        """メモ帳に無い呼び名を書き換えようとすると、その呼び名を持つ MemoNotFoundException を投げる。"""
+        with pytest.raises(MemoNotFoundException) as raised:
             _add(MemoBook.empty(ADA)).edit("m_000000", text="鍵を取る", turn=8)
+
+        assert raised.value.handle == "m_000000"
+
+    def test_unknown_episode_is_refused_before_the_missing_memo(self) -> None:
+        """無い呼び名のメモを、知らないエピソードを出どころにして書き換えると、知らないエピソードとして断る。"""
+        with pytest.raises(MemoSourceEpisodeUnknownException):
+            _add(MemoBook.empty(ADA)).edit("m_000000", text="鍵を取る", provenance=FROM_UNKNOWN_EPISODE, turn=8)
 
     def test_edit_before_written_turn_is_rejected(self) -> None:
         """書いた時より前のターンで書き換えると MemoValidationException を投げる。"""
@@ -454,3 +496,54 @@ class TestTheBookIsAnAggregate:
         book.clear_events()
 
         assert (book.get_events(), len(book.memos)) == ([], 1)
+
+
+class TestWritingAnOperation:
+    """MemoBook.write が、操作の種類に応じてメモ帳を書き換え、当たった操作 1 件につきイベントを 1 件ためることを保証する。"""
+
+    def _write(self, book: MemoBook, operation: object) -> None:
+        book.write(
+            operation,  # type: ignore[arg-type]
+            turn=8,
+            environment_name="水門の町",
+            new_memo_id=lambda: SECOND_ID,
+        )
+
+    def test_addition_adds_a_memo_with_one_event(self) -> None:
+        """足す操作を書くと、メモが 1 件増え、MemoAdded が 1 件たまる。"""
+        book = MemoBook.empty(ADA)
+
+        self._write(book, MemoAddition(MemoKind.TODO, "水門を見に行く", None))
+
+        assert [m.text for m in book.memos] == ["水門を見に行く"]
+        assert [type(e) for e in book.get_events()] == [MemoAdded]
+
+    def test_revision_edits_the_memo_with_one_event(self) -> None:
+        """書き換える操作を書くと、文が変わり、MemoEdited が 1 件たまる。"""
+        book = _add(MemoBook.empty(ADA))
+        book.clear_events()
+
+        self._write(book, MemoRevision("m_3f2a7b", "鍵を二つ取る", None))
+
+        assert [m.text for m in book.memos] == ["鍵を二つ取る"]
+        assert [type(e) for e in book.get_events()] == [MemoEdited]
+
+    def test_removal_removes_the_memo_with_one_event(self) -> None:
+        """消す操作を書くと、メモが無くなり、MemoRemoved が 1 件たまる。"""
+        book = _add(MemoBook.empty(ADA))
+        book.clear_events()
+
+        self._write(book, MemoRemoval("m_3f2a7b"))
+
+        assert book.memos == ()
+        assert [type(e) for e in book.get_events()] == [MemoRemoved]
+
+    def test_refused_operation_leaves_no_event(self) -> None:
+        """断られた操作は、メモ帳を変えず、イベントもためない。"""
+        book = _add(MemoBook.empty(ADA))
+        book.clear_events()
+
+        with pytest.raises(MemoNotFoundException):
+            self._write(book, MemoRemoval("m_000000"))
+
+        assert (len(book.memos), book.get_events()) == (1, [])
