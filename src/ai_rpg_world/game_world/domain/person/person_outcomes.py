@@ -158,5 +158,8 @@ class PersonOutcomes(AggregateRoot[PersonOutcomeDecidedEvent]):
     def all_decided(self) -> bool:
         return not self.undecided_people()
 
+    def is_undecided(self, person: PersonId) -> bool:
+        return isinstance(self.outcome_of(person), Undecided)
+
     def undecided_people(self) -> tuple[PersonId, ...]:
         return tuple(person for person, outcome in self._outcomes.items() if isinstance(outcome, Undecided))

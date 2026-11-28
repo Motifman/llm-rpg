@@ -129,7 +129,7 @@ class ActionPrerequisiteCheck:
 
 def _acting_occupant(attempt: ActionAttempt, facts: WorldFacts) -> Occupant | None:
     vitals = facts.vitals(attempt.actor)
-    if vitals.can_act() and attempt.actor in facts.outcomes().undecided_people():
+    if vitals.acts_in_living_body(facts.outcomes().is_undecided(attempt.actor)):
         return PersonBody(attempt.actor)
     occupant = vitals.occupant_in_world(facts.rules().departed_persons_act)
     if occupant == DepartedPerson(attempt.actor) and attempt.actor_requirement().admits_departed():

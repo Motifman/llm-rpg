@@ -77,6 +77,18 @@ class TestPeopleInWorld:
         assert outcomes.people_in_world() == (_BOB, _CAROL)
 
 
+class TestIsUndecided:
+    """is_undecided が、結末がまだ決まっていない人だけを真と答え、死んだ人も作者の結末に決まった人も偽と答えることを保証する。"""
+
+    def test_only_the_person_without_outcome_is_undecided(self) -> None:
+        """アリスが脱出に決まり、ボブが死に、キャロルが未決のとき、未決なのはキャロルだけ。"""
+        outcomes = _outcomes()
+        outcomes.decide(_ALICE, _ESCAPED, WorldTick(3))
+        outcomes.decide(_BOB, Died(), WorldTick(3))
+
+        assert [outcomes.is_undecided(person) for person in (_ALICE, _BOB, _CAROL)] == [False, False, True]
+
+
 class TestDecide:
     """decide が人ごとに結末を一度だけ決めることを保証する。"""
 
