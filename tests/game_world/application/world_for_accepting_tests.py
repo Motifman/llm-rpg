@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_rpg_world.being.contract import AgentMove
 from ai_rpg_world.eventing import DomainEvent
-from ai_rpg_world.game_world.application.accept_action import AcceptAction, AcceptActionCommand
 from ai_rpg_world.game_world.application.accept_world_time_passage import (
     AcceptWorldTimePassage,
     AcceptWorldTimePassageCommand,
@@ -16,13 +16,22 @@ from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime
-from ai_rpg_world.game_world.application.settle_world_conditions import SettleWorldConditions
+from ai_rpg_world.game_world.application.settle_world_conditions import (
+    SettleWorldConditions,
+    SettleWorldConditionsCommand,
+)
+from ai_rpg_world.game_world.application.take_chosen_action import (
+    TakeChosenAction,
+    TakeChosenActionCommand,
+    TurnGuidance,
+)
 from ai_rpg_world.game_world.domain.action.built_in_attempts import EnterSectionAttempt
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.chance_condition import ChanceCondition
 from ai_rpg_world.game_world.domain.condition.condition import Condition, NoText
 from ai_rpg_world.game_world.domain.condition.connectives import NotCondition
 from ai_rpg_world.game_world.domain.condition.person_conditions import IsInSectionCondition
+from ai_rpg_world.game_world.domain.condition.settling_occasion import SettlingOccasion
 from ai_rpg_world.game_world.domain.condition.subject import NamedPerson
 from ai_rpg_world.game_world.domain.declaration.progress import FlagDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.ending_declaration import EndingDeclaration
@@ -105,19 +114,23 @@ class WorldForAccepting:
         distributor.register_receiver(self)
         self.scope = CommandScope(self.store, distributor)
         settle = SettleWorldConditions(self.scope, self.design)
-        self.accept_action = AcceptAction(self.scope, self.design, settle)
+        self._settle = settle
+        self._take = TakeChosenAction(self.scope, self.design, settle)
         self.accept_time = AcceptWorldTimePassage(PassWorldTime(self.scope), settle)
         self._enter_section = EnterSection(CarryOutAction(self.scope, self.design), self.design)
 
     def receive(self, events: tuple[DomainEvent, ...]) -> None:
         self.events.extend(events)
 
-    def board_cage(self, actor: PersonId) -> ActionReply:
-        attempt = EnterSectionAttempt(actor, self.design.section_access(CAGE.section_id))
-        return self.accept_action(AcceptActionCommand(EnterSectionCommand(attempt), self._enter_section))
+    def board_cage(self, actor: PersonId) -> ActionReply | TurnGuidance:
+        move = AgentMove(call_id="call", tool_name="set_sub_location", arguments={"move": "乗り込む"})
+        return self._take(TakeChosenActionCommand(actor, move))
 
     def enter_section_without_settling(self, command: EnterSectionCommand) -> ActionReply:
         return self._enter_section(command)
+
+    def settle_after_command(self) -> None:
+        self._settle(SettleWorldConditionsCommand(SettlingOccasion.AFTER_COMMAND))
 
     def pass_time(self) -> WorldTimePassageReply:
         return self.accept_time(AcceptWorldTimePassageCommand())
