@@ -65,7 +65,7 @@ def test_counts_unknown_fields_per_route_and_pairs_action_results(report: Module
 
     report.tally_trace(trace, tally)
 
-    assert tally.converted == {"ToldOrWritten": 1, "OwnActionResult": 1}
+    assert tally.converted == {"ToldOrWritten": 1, "OwnAction": 1}
     assert dict(tally.unknown) == {("addressed_to_self", "ToldOrWritten"): 1}
     assert tally.seconds_available == 2
     assert not tally.skipped
@@ -131,7 +131,7 @@ def test_memo_tool_result_is_counted_as_not_representable(report: ModuleType, tm
     report.tally_trace(trace, tally)
 
     assert dict(tally.not_representable) == {"being_inner_record: memo_add": 1}
-    assert tally.converted["OwnActionResult"] == 1
+    assert tally.converted["OwnAction"] == 1
 
 
 def test_action_result_without_matching_action_is_skipped(report: ModuleType, tmp_path: Path) -> None:
@@ -182,14 +182,15 @@ def test_action_results_are_paired_with_oldest_action_of_same_tool(
             _event(7, "action_result", 1, 2, tool="travel_to", success=True, result_summary="着いた。"),
         ],
     )
-    call_ids: list[str] = []
-    original = report.observation_from_action_result
+    call_ids: list[str | None] = []
+    original = report._pair_call_id
 
-    def spy(entry: Any, *, call_id: str, observer: Any) -> Any:
+    def spy(queue: Any, tool: str) -> str | None:
+        call_id = original(queue, tool)
         call_ids.append(call_id)
-        return original(entry, call_id=call_id, observer=observer)
+        return call_id
 
-    monkeypatch.setattr(report, "observation_from_action_result", spy)
+    monkeypatch.setattr(report, "_pair_call_id", spy)
 
     report.tally_trace(trace, report.Tally())
 
@@ -210,7 +211,7 @@ def test_action_result_without_same_tick_observation_uses_placeholder_label(repo
 
     report.tally_trace(trace, tally)
 
-    assert tally.converted["OwnActionResult"] == 1
+    assert tally.converted["OwnAction"] == 1
     assert tally.placeholder_labels == 1
 
 

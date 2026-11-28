@@ -41,12 +41,12 @@ from ai_rpg_world.being.contract import (
     EnvironmentNotice,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionResult,
+    OwnAction,
     OwnBodyState,
     SeenOrHeard,
     ToldOrWritten,
 )
-from ai_rpg_world.being.domain.short_term_memory import MemoryOperationOutcome, ObservedOutcome
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _NOAH = Observer(
@@ -400,11 +400,11 @@ class TestActionResult:
         fields.update(overrides)
         return ActionResultEntry(**fields)
 
-    def test_failed_result_has_call_id_and_failure(self) -> None:
-        """失敗したツールの結果は、成否が失敗で、渡した呼び出しの ID が付いた観測になる。本文は失敗の行で、error_code と道具の名前を持つ。"""
-        observation = observation_from_action_result(self._entry(), call_id="call-9", observer=_NOAH)
+    def test_failed_result_is_an_own_action_observation_with_the_failure_line(self) -> None:
+        """失敗したツールの結果は、自分の行為について本人が知ったこと (OwnAction) の観測になる。本文は失敗の行で、error_code と道具の名前を持つ。"""
+        observation = observation_from_action_result(self._entry(), observer=_NOAH)
 
-        assert observation.route == OwnActionResult(call_id="call-9", succeeded=False)
+        assert observation.route == OwnAction()
         assert (
             observation.body
             == "[行動] 通信室へ移動しようとした → [失敗] | error_code=CONNECTION_BLOCKED | tool=travel_to | 通路が塞がっていて進めない。"
@@ -412,7 +412,7 @@ class TestActionResult:
 
     def test_result_is_about_self_and_addressed_to_self(self) -> None:
         """ツールの結果は、主体も情報源も本人で、自分宛てになる。"""
-        observation = observation_from_action_result(self._entry(success=True), call_id="call-9", observer=_NOAH)
+        observation = observation_from_action_result(self._entry(success=True), observer=_NOAH)
 
         assert observation.subject_is_self is True
         assert observation.subject_name == "ノア"
@@ -421,18 +421,10 @@ class TestActionResult:
         assert observation.place == "浜辺"
         assert observation.time == ObservedTime(display="一日目の朝 0:10", seconds=600)
 
-    def test_successful_result_has_success(self) -> None:
-        """成功したツールの結果は、成否が成功の観測になる。"""
-        observation = observation_from_action_result(self._entry(success=True), call_id="call-9", observer=_NOAH)
-
-        assert observation.route == OwnActionResult(call_id="call-9", succeeded=True)
-
     @pytest.mark.parametrize("flag", [True, False])
     def test_reschedule_flag_becomes_wants_wake(self, flag: bool) -> None:
         """should_reschedule の値が、そのまま起こしてほしいかになる。"""
-        observation = observation_from_action_result(
-            self._entry(should_reschedule=flag), call_id="call-9", observer=_NOAH
-        )
+        observation = observation_from_action_result(self._entry(should_reschedule=flag), observer=_NOAH)
 
         assert observation.wants_wake is flag
 
@@ -441,7 +433,6 @@ class TestActionResult:
         with pytest.raises(ObservationNotRepresentable) as raised:
             observation_from_action_result(
                 self._entry(result_summary="", action_summary=" "),
-                call_id="call-9",
                 observer=_NOAH,
             )
 
@@ -450,7 +441,7 @@ class TestActionResult:
     def test_result_without_time_label_is_not_representable(self) -> None:
         """時刻のラベルが無いツールの結果は、必須の時刻を埋められないので変換を拒む。"""
         with pytest.raises(ObservationNotRepresentable) as raised:
-            observation_from_action_result(self._entry(game_time_label=None), call_id="call-9", observer=_NOAH)
+            observation_from_action_result(self._entry(game_time_label=None), observer=_NOAH)
 
         assert raised.value.reason is NotRepresentableReason.MISSING_TIME_LABEL
 
@@ -459,7 +450,7 @@ class TestActionResult:
         """本文は、直近の出来事の行から時刻の前置きと心の声を除いた文 (format_action_result_body) になる。結果の文が空でも、行動の要約があれば写す (design_decisions D1824-7)。"""
         entry = self._entry(result_summary=result_summary)
 
-        observation = observation_from_action_result(entry, call_id="call-9", observer=_NOAH)
+        observation = observation_from_action_result(entry, observer=_NOAH)
 
         assert observation.body == format_action_result_body(entry)
         assert "通信室へ移動しようとした" in observation.body
@@ -537,11 +528,11 @@ class TestAgentSideToolResult:
         for name, category in definitions.items():
             entry = self._entry(name, result_summary="何かが起きた。")
             if category is ToolCategory.WORLD_ACTION:
-                observation = observation_from_action_result(entry, call_id="c", observer=_NOAH)
-                assert isinstance(observation.route, OwnActionResult), name
+                observation = observation_from_action_result(entry, observer=_NOAH)
+                assert isinstance(observation.route, OwnAction), name
             else:
                 with pytest.raises(ObservationNotRepresentable) as raised:
-                    observation_from_action_result(entry, call_id="c", observer=_NOAH)
+                    observation_from_action_result(entry, observer=_NOAH)
                 assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD, name
                 assert raised.value.kind == name
 
@@ -558,7 +549,7 @@ class TestAgentSideToolResult:
     def test_agent_side_check_comes_before_the_empty_body_check(self) -> None:
         """エージェント側の道具の結果は、本文が空でも、空だからではなく Being 自身の記録として拒む。"""
         with pytest.raises(ObservationNotRepresentable) as raised:
-            observation_from_action_result(self._entry("memo_done", result_summary=""), call_id="c", observer=_NOAH)
+            observation_from_action_result(self._entry("memo_done", result_summary=""), observer=_NOAH)
 
         assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD
 
@@ -566,23 +557,21 @@ class TestAgentSideToolResult:
     def test_environment_tool_result_is_still_representable(self, tool_name: str) -> None:
         """環境の道具の結果は、これまでどおり本文を持つ自分の行動の結果として写す。"""
         observation = observation_from_action_result(
-            self._entry(tool_name, result_summary="箱を開けた。"), call_id="c", observer=_NOAH
+            self._entry(tool_name, result_summary="箱を開けた。"), observer=_NOAH
         )
 
-        assert isinstance(observation.route, OwnActionResult)
+        assert isinstance(observation.route, OwnAction)
         assert "箱を開けた。" in observation.body
 
     def test_result_without_tool_name_is_still_representable(self) -> None:
         """道具の名前が無い結果 (古い snapshot から戻したものなど) は、見分けられないので写す。"""
-        observation = observation_from_action_result(
-            self._entry(None, result_summary="箱を開けた。"), call_id="c", observer=_NOAH
-        )
+        observation = observation_from_action_result(self._entry(None, result_summary="箱を開けた。"), observer=_NOAH)
 
-        assert isinstance(observation.route, OwnActionResult)
+        assert isinstance(observation.route, OwnAction)
 
 
 class TestResultFromActionResult:
-    """1 手の結果を、環境に働きかける道具なら自分の行動の結果の観測に、記憶の道具なら記憶の結果 (MemoryOperationOutcome) に写す規則を保証する (design_decisions D1824-9)。"""
+    """古い世界の 1 手の結果を、環境に働きかける道具でも記憶の道具でも、組み終えた行 (OldWorldPreformattedLine) に写す規則を保証する (design_decisions D1824-9)。"""
 
     def _entry(self, tool_name: str | None, **overrides: Any) -> ActionResultEntry:
         fields: dict[str, Any] = {
@@ -597,36 +586,26 @@ class TestResultFromActionResult:
         fields.update(overrides)
         return ActionResultEntry(**fields)
 
-    def test_every_catalogued_tool_becomes_an_observation_or_a_memory_operation_result(self) -> None:
-        """道具のカタログの全道具について、環境に働きかける道具 (world_action) は自分の行動の結果の観測に、それ以外 (メモ・記憶・状況評価) は記憶の結果になる。どちらも渡した呼び出しの ID と起きた順を持つ。"""
+    def test_every_catalogued_tool_becomes_a_preformatted_line(self) -> None:
+        """道具のカタログの全道具について、環境に働きかける道具 (world_action) も、それ以外 (メモ・記憶・状況評価) も、渡した呼び出しの ID と起きた順を持つ組み終えた行になる。"""
         order = OccurrenceOrder(environment="浜辺の村", value=1.5)
 
-        for name, category in _catalogued_tool_definitions().items():
-            result = result_from_action_result(self._entry(name), call_id="c", observer=_NOAH, order=order)
-            if category is ToolCategory.WORLD_ACTION:
-                assert isinstance(result, ObservedOutcome), name
-                assert result.observation.route == OwnActionResult(call_id="c", succeeded=True), name
-            else:
-                assert isinstance(result, MemoryOperationOutcome), name
-                assert (result.call_id, result.order) == ("c", order), name
+        for name in _catalogued_tool_definitions():
+            entry = self._entry(name)
+            result = result_from_action_result(entry, call_id="c", observer=_NOAH, order=order)
+            assert (result.call_id, result.order, result.body) == ("c", order, format_action_result_body(entry)), name
 
     def test_memory_operation_result_keeps_the_line_body_and_time(self) -> None:
-        """記憶の結果の本文は、直近の出来事の行から時刻と心の声を除いた文。時刻は表示と、記録した tick から求めた秒を持つ。"""
+        """記憶の道具の行の本文は、直近の出来事の行から時刻と心の声を除いた文。時刻は表示と、記録した tick から求めた秒を持つ。"""
         entry = self._entry("memo_add")
 
         result = result_from_action_result(entry, call_id="c", observer=_NOAH)
 
-        assert result == MemoryOperationOutcome(
+        assert result == OldWorldPreformattedLine(
             call_id="c",
             body=format_action_result_body(entry),
             time=ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick),  # type: ignore[operator]
         )
-
-    def test_failed_memory_operation_keeps_that_it_failed(self) -> None:
-        """記憶の道具が失敗した行は、記憶の結果でも失敗として写す。"""
-        result = result_from_action_result(self._entry("episode_recall", success=False), call_id="c", observer=_NOAH)
-
-        assert isinstance(result, MemoryOperationOutcome) and not result.succeeded
 
     @pytest.mark.parametrize(
         ("overrides", "reason"),
@@ -818,7 +797,7 @@ class TestOccurrenceOrderIsCarried:
                 observer=_NOAH,
                 order=order,
             ),
-            observation_from_action_result(result, call_id="c", observer=_NOAH, order=order),
+            observation_from_action_result(result, observer=_NOAH, order=order),
             observation_from_unprompted_result(result, observer=_NOAH, order=order),
         ]
 

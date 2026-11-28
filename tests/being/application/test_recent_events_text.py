@@ -1,22 +1,25 @@
-"""Being の短期記憶から、毎ターンのプロンプトの【直近の出来事】の本文を作る規則を保証する (#1824、design_decisions D1824-10)。"""
+"""Being の短期記憶から、毎ターンのプロンプトの【直近の出来事】の本文を作る規則を保証する (#1824、design_decisions D1824-10、#2345)。"""
 
 from __future__ import annotations
 
 from ai_rpg_world.being.application.recent_events_text import NO_RECENT_EVENTS, recent_events_text
 from ai_rpg_world.being.contract import (
     UNKNOWN,
+    ActionTaken,
     AgentMove,
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionCompleted,
-    OwnActionResult,
+    OwnAction,
     SeenOrHeard,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
-from ai_rpg_world.being.domain.short_term_memory import MemoryOperationOutcome, ObservedOutcome, ShortTermMemory
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
+from ai_rpg_world.being.domain.short_term_memory import AttemptTaken, ShortTermMemory
 
 ADA = BeingId("being_p1")
+_MORNING = ObservedTime(display="1日目 朝")
+_VILLAGE = "廃坑の山村"
 
 
 def _observation(
@@ -26,7 +29,7 @@ def _observation(
         body=body,
         route=route,
         time=ObservedTime(display=display),
-        subject_is_self=isinstance(route, OwnActionResult),
+        subject_is_self=isinstance(route, OwnAction),
         subject_name=UNKNOWN,
         source=UNKNOWN,
         place=UNKNOWN,
@@ -39,24 +42,41 @@ def _move(call_id: str, *, inner_thought: str | None = None) -> AgentMove:
     return AgentMove(call_id=call_id, tool_name="interact", arguments={}, inner_thought=inner_thought)
 
 
-def _answered(
+def _at(value: float) -> OccurrenceOrder:
+    return OccurrenceOrder(environment=_VILLAGE, value=value)
+
+
+def _take(
     memory: ShortTermMemory,
     call_id: str,
-    body: str,
+    summary: str | None,
     *,
     turn: int,
-    inner_thought: str | None = None,
+    accepted: bool = True,
+    noticed: str | None = None,
     order: OccurrenceOrder | None = None,
+    inner_thought: str | None = None,
+    call_text: str | None = None,
+    memo_rejections: tuple[str, ...] = (),
 ) -> None:
-    memory.act(_move(call_id, inner_thought=inner_thought), current_turn=turn)
-    memory.receive_result(
-        ObservedOutcome(_observation(body, route=OwnActionResult(call_id=call_id, succeeded=True), order=order)),
+    memory.act(
+        _move(call_id, inner_thought=inner_thought),
+        current_turn=turn,
+        call_text=call_text,
+        memo_rejections=memo_rejections,
+    )
+    memory.receive_response(
+        AttemptTaken(
+            ActionTaken(call_id=call_id, action_summary=summary, accepted=accepted, time=_MORNING, order=order)
+        ),
         current_turn=turn,
     )
+    if noticed is not None:
+        memory.perceive(_observation(noticed, route=OwnAction(), order=order), current_turn=turn)
 
 
 class TestRecentEventsText:
-    """recent_events_text が、出来事の種類ごとに今のプロンプトと同じ行を作ることを保証する。"""
+    """recent_events_text が、自分の行動を「[行動] 要約」の行で、ほかは観測の 1 行で出すことを保証する。"""
 
     def test_empty_memory_shows_the_placeholder(self) -> None:
         """出来事が 1 つも無ければ、今のプロンプトと同じ「（直近の出来事はありません）」になる。"""
@@ -69,142 +89,100 @@ class TestRecentEventsText:
 
         assert recent_events_text(memory) == "- [1日目 朝] ミオが坑道から戻ってきた"
 
-    def test_attempt_shows_its_result_and_the_inner_thought_of_the_move(self) -> None:
-        """結果のある試みは、結果の時刻と本文の行に、1 手の心の声の続き行が付く。心の声が無ければ続き行は無い。"""
+    def test_speaking_shows_only_the_action_line_when_nothing_is_noticed(self) -> None:
+        """話す 1 手に、本人が知った観測が無ければ、「[行動] 要約」と呼び出しの行だけが出て、[結果] は出ない。"""
         memory = ShortTermMemory.empty(ADA)
-        _answered(memory, "call-1", "[行動] 扉を調べた → [結果] 鍵がかかっていた", turn=1, inner_thought="鍵を探そう")
-        _answered(memory, "call-2", "[行動] 待った → [結果] 様子を見た", turn=2)
+
+        _take(
+            memory,
+            "call-1",
+            "あなたは言った: 「ふむ」",
+            turn=1,
+            call_text='speak(reach="ふつうの声で話す", content=本文)',
+        )
 
         assert recent_events_text(memory) == (
-            "- [1日目 朝] [行動] 扉を調べた → [結果] 鍵がかかっていた\n  心の声: 鍵を探そう\n"
-            "- [1日目 朝] [行動] 待った → [結果] 様子を見た"
+            '- [1日目 朝] [行動] あなたは言った: 「ふむ」\n  呼び出し: speak(reach="ふつうの声で話す", content=本文)'
         )
 
-    def test_memory_operation_shows_its_result_and_the_inner_thought(self) -> None:
-        """記憶の道具の試みも、記憶の結果の時刻と本文の行に、1 手の心の声の続き行が付く。"""
+    def test_accepted_move_lists_call_thought_and_memos_then_what_was_noticed(self) -> None:
+        """通った 1 手は「[行動] 要約」の行に、呼び出し・心の声・メモの順で続き行が付き、本人が知った観測が同じ時刻の次の行に出る。"""
         memory = ShortTermMemory.empty(ADA)
-        memory.act(_move("call-1", inner_thought="思い出そう"), current_turn=1)
-        memory.receive_result(
-            MemoryOperationOutcome(
-                call_id="call-1", body="[行動] 思い出した → [結果] 鍵は事務所", time=ObservedTime(display="1日目 昼")
-            ),
-            current_turn=1,
+
+        _take(
+            memory,
+            "call-1",
+            "「事務机」で引き出しを探る",
+            turn=1,
+            noticed="引き出しの奥に、黄ばんだ紙切れが挟まっていた。",
+            order=_at(2.0),
+            inner_thought="番号の手がかりを探す",
+            call_text='interact(target="事務机", how="引き出しを探る")',
+            memo_rejections=("「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",),
         )
 
-        assert recent_events_text(memory) == "- [1日目 昼] [行動] 思い出した → [結果] 鍵は事務所\n  心の声: 思い出そう"
+        assert recent_events_text(memory) == (
+            "- [1日目 朝] [行動] 「事務机」で引き出しを探る\n"
+            '  呼び出し: interact(target="事務机", how="引き出しを探る")\n'
+            "  心の声: 番号の手がかりを探す\n"
+            "  メモ: 「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）\n"
+            "- [1日目 朝] 引き出しの奥に、黄ばんだ紙切れが挟まっていた。"
+        )
 
-    def test_unwritten_memos_follow_the_inner_thought_one_line_each(self) -> None:
-        """書けなかったメモの操作は、試みの行の下に、心の声と同じ字下げで、心の声のあとに 1 つずつ「メモ:」の行で付く。"""
+    def test_refused_move_has_no_call_line_and_the_refusal_follows_as_an_observation(self) -> None:
+        """断られた 1 手は呼び出しの行が付かず、断られたことが観測として行動のすぐ後に出る。[失敗] は出ない。"""
+        memory = ShortTermMemory.empty(ADA)
+
+        _take(
+            memory,
+            "call-1",
+            "「金庫」で番号を合わせて金庫を開ける",
+            turn=1,
+            accepted=False,
+            noticed="ダイヤルを合わせて把手を引いたが、扉はびくともしない。",
+            order=_at(1.0),
+            call_text='interact(target="金庫", how="番号を合わせて金庫を開ける", details=本文)',
+        )
+
+        assert recent_events_text(memory) == (
+            "- [1日目 朝] [行動] 「金庫」で番号を合わせて金庫を開ける\n"
+            "- [1日目 朝] ダイヤルを合わせて把手を引いたが、扉はびくともしない。"
+        )
+
+    def test_move_without_a_summary_shows_only_the_action_marker(self) -> None:
+        """環境が要約を組み立てられなかった 1 手は「[行動]」だけの行に、呼び出しと心の声の続き行が付く。"""
+        memory = ShortTermMemory.empty(ADA)
+
+        _take(memory, "call-1", None, turn=1, inner_thought="渡す", call_text='give_item(item="鍵")')
+
+        assert recent_events_text(memory) == '- [1日目 朝] [行動]\n  呼び出し: give_item(item="鍵")\n  心の声: 渡す'
+
+    def test_arrival_is_a_single_observation_without_a_call_line(self) -> None:
+        """移動先に着いたこと (経路 OwnAction の観測) は 1 行の観測で出て、「呼び出し: travel_to()」は出ない。"""
+        memory = ShortTermMemory.empty(ADA)
+
+        memory.perceive(_observation("「鉱山会社の事務所」に着いた。", route=OwnAction()), current_turn=1)
+
+        assert recent_events_text(memory) == "- [1日目 朝] 「鉱山会社の事務所」に着いた。"
+
+    def test_old_world_line_keeps_its_preformatted_body_and_the_inner_thought(self) -> None:
+        """古い世界が組み終えた行は、本文をそのまま行にし、心の声とメモの続き行が付く。古い世界のプロンプトは変わらない。"""
         memory = ShortTermMemory.empty(ADA)
         memory.act(
             _move("call-1", inner_thought="灯りをつける"),
             current_turn=1,
-            memo_rejections=(
-                "「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",
-                "「text が空のメモを足す」は書けなかった（理由: text が空）",
-            ),
-        )
-        memory.receive_result(
-            ObservedOutcome(
-                _observation("カンテラに火を入れた。", route=OwnActionResult(call_id="call-1", succeeded=True))
-            ),
-            current_turn=1,
-        )
-
-        assert recent_events_text(memory) == (
-            "- [1日目 朝] カンテラに火を入れた。\n  心の声: 灯りをつける\n"
-            "  メモ: 「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）\n"
-            "  メモ: 「text が空のメモを足す」は書けなかった（理由: text が空）"
-        )
-
-    def test_succeeded_move_with_a_summary_reads_like_the_old_run(self) -> None:
-        """要約のある成功した 1 手は「[行動] 要約 → [結果] 結果の文」の行に、呼び出し・心の声・メモの順で続き行が付く。"""
-        memory = ShortTermMemory.empty(ADA)
-        memory.act(
-            _move("call-1", inner_thought="まず灯りだ"),
-            current_turn=1,
             memo_rejections=("「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",),
-            call_text='interact(target="カンテラ", how="火を入れる")',
         )
-        memory.receive_result(
-            ObservedOutcome(
-                _observation(
-                    "カンテラに火を入れた。",
-                    route=OwnActionResult(call_id="call-1", succeeded=True, action_summary="「カンテラ」に働きかけた"),
-                )
+        memory.receive_response(
+            OldWorldPreformattedLine(
+                call_id="call-1", body="[行動] 灯した → [結果] カンテラに火を入れた。", time=_MORNING
             ),
             current_turn=1,
         )
 
         assert recent_events_text(memory) == (
-            "- [1日目 朝] [行動] 「カンテラ」に働きかけた → [結果] カンテラに火を入れた。\n"
-            '  呼び出し: interact(target="カンテラ", how="火を入れる")\n'
-            "  心の声: まず灯りだ\n"
+            "- [1日目 朝] [行動] 灯した → [結果] カンテラに火を入れた。\n  心の声: 灯りをつける\n"
             "  メモ: 「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）"
-        )
-
-    def test_failed_move_with_a_summary_reads_failure_and_has_no_call_line(self) -> None:
-        """要約のある失敗した 1 手は「[行動] 要約 → [失敗] | 理由」の行になり、古い run と同じく呼び出しの行は付かない。"""
-        memory = ShortTermMemory.empty(ADA)
-        memory.act(_move("call-1"), current_turn=1, call_text='interact(target="金庫")')
-        memory.receive_result(
-            ObservedOutcome(
-                _observation(
-                    "番号が違った。",
-                    route=OwnActionResult(call_id="call-1", succeeded=False, action_summary="「金庫」に働きかけた"),
-                )
-            ),
-            current_turn=1,
-        )
-
-        assert recent_events_text(memory) == "- [1日目 朝] [行動] 「金庫」に働きかけた → [失敗] | 番号が違った。"
-
-    def test_memory_operation_with_a_summary_reads_by_whether_it_succeeded(self) -> None:
-        """要約のある記憶の道具の 1 手も、成功なら [結果] と呼び出しの行、失敗なら [失敗] の行になる。"""
-        memory = ShortTermMemory.empty(ADA)
-        for call_id, succeeded, body in (("call-1", True, "[ep_1] 金庫の話"), ("call-2", False, "減らしてください。")):
-            memory.act(_move(call_id), current_turn=1, call_text='episode_recall(handles=["ep_1"])')
-            memory.receive_result(
-                MemoryOperationOutcome(
-                    call_id=call_id,
-                    body=body,
-                    time=ObservedTime(display="1日目 昼"),
-                    succeeded=succeeded,
-                    action_summary='episode_recall({"handles": ["ep_1"]}) を実行しました。',
-                ),
-                current_turn=1,
-            )
-
-        assert recent_events_text(memory) == (
-            '- [1日目 昼] [行動] episode_recall({"handles": ["ep_1"]}) を実行しました。 → [結果] [ep_1] 金庫の話\n'
-            '  呼び出し: episode_recall(handles=["ep_1"])\n'
-            '- [1日目 昼] [行動] episode_recall({"handles": ["ep_1"]}) を実行しました。 → [失敗] | 減らしてください。'
-        )
-
-    def test_arrival_reads_as_an_own_move_with_an_empty_call(self) -> None:
-        """あとから届いた自分の行動の結果 (着いた) は、古い run と同じく「[行動] 要約 → [結果] 文」の下に「呼び出し: ツール名()」が付き、心の声は付かない。"""
-        memory = ShortTermMemory.empty(ADA)
-        route = OwnActionCompleted(action_summary="「南の横坑の奥」に着いた", tool="travel_to")
-
-        memory.perceive(
-            _observation("「南の横坑の奥」に到着した。ここから次の行動を選べる。", route=route), current_turn=1
-        )
-
-        assert recent_events_text(memory) == (
-            "- [1日目 朝] [行動] 「南の横坑の奥」に着いた → [結果] 「南の横坑の奥」に到着した。ここから次の行動を選べる。\n"
-            "  呼び出し: travel_to()"
-        )
-
-    def test_blocked_travel_reads_as_a_failed_own_move_without_a_call(self) -> None:
-        """着けなかったことは「[行動] 要約 → [失敗] | 理由」になり、呼び出しの行は付かない。"""
-        memory = ShortTermMemory.empty(ADA)
-        route = OwnActionCompleted(action_summary="「南の坑道」へ向かった", tool="travel_to", succeeded=False)
-
-        memory.perceive(_observation("道がふさがっていて進めない。", route=route), current_turn=1)
-
-        assert (
-            recent_events_text(memory)
-            == "- [1日目 朝] [行動] 「南の坑道」へ向かった → [失敗] | 道がふさがっていて進めない。"
         )
 
     def test_lapse_is_a_line_without_inner_thought(self) -> None:
@@ -216,8 +194,8 @@ class TestRecentEventsText:
 
         assert recent_events_text(memory) == "- [1日目 夜] [行動] 迷い → [失敗] | 決められなかった"
 
-    def test_attempt_without_result_is_not_shown(self) -> None:
-        """結果の分からない試みは行にしない。今のプロンプトには、結果の無い 1 手の行が無いため。"""
+    def test_attempt_without_response_is_not_shown(self) -> None:
+        """返事の無い試みは行にしない。今のプロンプトには、返事の無い 1 手の行が無いため。"""
         memory = ShortTermMemory.empty(ADA)
         memory.act(_move("call-1"), current_turn=1)
         memory.perceive(_observation("鐘が鳴った"), current_turn=1)
@@ -225,29 +203,24 @@ class TestRecentEventsText:
 
         assert recent_events_text(memory) == "- [1日目 朝] 鐘が鳴った"
 
-    def test_only_unknown_attempts_show_the_placeholder(self) -> None:
-        """出来事が結果の分からない試みだけなら、行が無いので「（直近の出来事はありません）」になる。"""
+    def test_only_unanswered_attempts_show_the_placeholder(self) -> None:
+        """出来事が返事の無い試みだけなら、行が無いので「（直近の出来事はありません）」になる。"""
         memory = ShortTermMemory.empty(ADA)
         memory.act(_move("call-1"), current_turn=1)
         memory.act(_move("call-2"), current_turn=2)
 
         assert recent_events_text(memory) == NO_RECENT_EVENTS
 
-    def test_lines_follow_the_occurrence_order(self) -> None:
-        """行は集約の recent() の順。同じ環境で先に起きた他人の行動は、自分の 1 手の結果より前の行になる。"""
+    def test_others_and_own_observations_follow_the_occurrence_order(self) -> None:
+        """同じ環境で先に起きた他人の行動は自分の行動より前に、後に起きた他人の行動は本人が知った観測より後に並ぶ。"""
         memory = ShortTermMemory.empty(ADA)
-        _answered(
-            memory,
-            "call-1",
-            "[行動] 奪おうとした → [失敗]",
-            turn=5,
-            order=OccurrenceOrder(environment="廃坑の山村", value=20.0),
-        )
-        memory.perceive(
-            _observation("ゲンが周囲を探索している", order=OccurrenceOrder(environment="廃坑の山村", value=10.0)),
-            current_turn=5,
-        )
+        memory.perceive(_observation("ゲンが周囲を探索している", order=_at(10.0)), current_turn=4)
+        _take(memory, "call-1", "「扉」を蹴った", turn=5, noticed="扉は開かなかった。", order=_at(20.0))
+        memory.perceive(_observation("サヨが「大丈夫？」と言った", order=_at(30.0)), current_turn=5)
 
         assert recent_events_text(memory) == (
-            "- [1日目 朝] ゲンが周囲を探索している\n- [1日目 朝] [行動] 奪おうとした → [失敗]"
+            "- [1日目 朝] ゲンが周囲を探索している\n"
+            "- [1日目 朝] [行動] 「扉」を蹴った\n"
+            "- [1日目 朝] 扉は開かなかった。\n"
+            "- [1日目 朝] サヨが「大丈夫？」と言った"
         )

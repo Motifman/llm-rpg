@@ -1,25 +1,19 @@
 """Being の短期記憶を、毎ターンのプロンプトの【直近の出来事】に出す本文にする (#1824、design_decisions D1824-10、D1824-22)。
 
-行の形は、今の短期記憶から作っていたころのプロンプトと同じ。行の順は集約の ``recent()`` に従う。
+行の順は集約の ``recent()`` に従う。自分の行動は「[行動] 要約」の行で、行為について本人が知ったことは、ほかの観測と
+同じ 1 行で出す (#2345)。
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ai_rpg_world.being.contract import (
-    ContractViolation,
-    Observation,
-    ObservedTime,
-    OwnActionCompleted,
-    OwnActionResult,
-    TextWithPeople,
-)
+from ai_rpg_world.being.contract import ActionTaken, ObservedTime
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Experience,
     Lapse,
-    MemoryOperationOutcome,
     Perception,
     ShortTermMemory,
 )
@@ -32,39 +26,8 @@ def _line(time: ObservedTime, body: str, inner_thought: str | None = None) -> st
     return f"[{time.display}] {body}" + (f"\n  心の声: {thought}" if thought else "")
 
 
-def _attempt_line(
-    attempt: Attempt, time: ObservedTime, result_body: str, *, summary: str | None, succeeded: bool
-) -> str:
-    # 要約の無い試み (古い run と、要約を足す前の snapshot) は、結果の文だけの行のまま出す。古い run の結果の文は、
-    # すでに古い run の行の形になっている。
-    body = (
-        result_body
-        if summary is None
-        else _own_move_body(summary, result_body, succeeded=succeeded, call_text=attempt.call_text)
-    )
-    return _line(time, body, attempt.move.inner_thought) + "".join(
-        f"\n  メモ: {line}" for line in attempt.memo_rejections
-    )
-
-
-def _own_move_body(summary: str, result_body: str, *, succeeded: bool, call_text: str | None) -> str:
-    """失敗には呼び出しの行を付けない。"""
-    if not succeeded:
-        return f"[行動] {summary} → [失敗] | {result_body}"
-    call = "" if call_text is None else f"\n  呼び出し: {call_text}"
-    return f"[行動] {summary} → [結果] {result_body}{call}"
-
-
-def _summary_of(route: object) -> str | None:
-    if not isinstance(route, OwnActionResult) or route.action_summary is None:
-        return None
-    return _summary_text(route.action_summary)
-
-
-def _summary_text(summary: str | TextWithPeople) -> str:
-    if isinstance(summary, TextWithPeople):
-        raise ContractViolation("an action summary with people placeholders cannot be read before they are filled in")
-    return summary
+def _with_memo_rejections(line: str, attempt: Attempt) -> str:
+    return line + "".join(f"\n  メモ: {rejection}" for rejection in attempt.memo_rejections)
 
 
 class _Line:
@@ -72,33 +35,21 @@ class _Line:
 
     def perceived(self, perception: Perception) -> str | None:
         observation = perception.observation
-        route = observation.route
-        if isinstance(route, OwnActionCompleted):
-            # あとから届く結果は呼び出しと 1 対 1 ではないので、古い run と同じく引数の無い呼び出しの行を付ける。
-            body = _own_move_body(
-                _summary_text(route.action_summary),
-                observation.body_without_people(),
-                succeeded=route.succeeded,
-                call_text=f"{route.tool}()",
-            )
-            return _line(observation.time, body)
         return _line(observation.time, observation.body_without_people())
 
-    def attempted(self, attempt: Attempt, result: Observation) -> str | None:
-        route = result.route
-        succeeded = isinstance(route, OwnActionResult) and route.succeeded
-        return _attempt_line(
-            attempt, result.time, result.body_without_people(), summary=_summary_of(route), succeeded=succeeded
-        )
+    def attempted(self, attempt: Attempt, taken: ActionTaken) -> str | None:
+        summary = taken.summary_text()
+        head = "[行動]" if summary is None else f"[行動] {summary}"
+        # 呼び出しの行は、通った呼び方を見せる。断られた行動には付けない (#2273)。
+        call = f"\n  呼び出し: {attempt.call_text}" if taken.accepted and attempt.call_text is not None else ""
+        return _with_memo_rejections(_line(taken.time, head + call, attempt.move.inner_thought), attempt)
 
-    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> str | None:
-        return _attempt_line(
-            attempt, result.time, result.body, summary=result.action_summary, succeeded=result.succeeded
-        )
-
-    def attempted_without_result(self, attempt: Attempt) -> str | None:
+    def attempted_without_response(self, attempt: Attempt) -> str | None:
         # 切り替える前のプロンプトに無かった行なので、切り替えでは出さないと決めた (design_decisions D1824-22)。
         return None
+
+    def attempted_in_old_world(self, attempt: Attempt, line: OldWorldPreformattedLine) -> str | None:
+        return _with_memo_rejections(_line(line.time, line.body, attempt.move.inner_thought), attempt)
 
     def lapsed(self, lapse: Lapse) -> str | None:
         return _line(lapse.time, lapse.body)

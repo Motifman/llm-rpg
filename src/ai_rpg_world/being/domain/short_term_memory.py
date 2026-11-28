@@ -10,16 +10,16 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from typing import Any, Final, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Final, Protocol, TypeVar
 
 from ai_rpg_world.being.contract import (
+    ActionTaken,
     AgentMove,
     ContractViolation,
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionCompleted,
-    OwnActionResult,
+    OwnAction,
     TextWithPeople,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -29,6 +29,9 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryValidationException,
 )
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
+
+if TYPE_CHECKING:
+    from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 
 RECENT_TURNS: Final = 20
 FOLD_TURNS: Final = 10
@@ -59,9 +62,6 @@ def _require_people_named(observation: Observation) -> None:
         observation.body_without_people()
     except ContractViolation as violation:
         raise ShortTermMemoryValidationException(str(violation)) from violation
-    route = observation.route
-    if isinstance(route, (OwnActionResult, OwnActionCompleted)) and isinstance(route.action_summary, TextWithPeople):
-        raise ShortTermMemoryValidationException("an action summary must have its people named before it is kept")
 
 
 def _require_order(value: object) -> None:
@@ -74,11 +74,11 @@ class ExperienceReader(Protocol[_T_co]):
 
     def perceived(self, perception: Perception) -> _T_co: ...
 
-    def attempted(self, attempt: Attempt, result: Observation) -> _T_co: ...
+    def attempted(self, attempt: Attempt, taken: ActionTaken) -> _T_co: ...
 
-    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> _T_co: ...
+    def attempted_without_response(self, attempt: Attempt) -> _T_co: ...
 
-    def attempted_without_result(self, attempt: Attempt) -> _T_co: ...
+    def attempted_in_old_world(self, attempt: Attempt, line: OldWorldPreformattedLine) -> _T_co: ...
 
     def lapsed(self, lapse: Lapse) -> _T_co: ...
 
@@ -98,7 +98,7 @@ class Experience(ABC):
 
 @dataclass(frozen=True, kw_only=True)
 class Perception(Experience):
-    """自分の行動の結果以外の経路で届いた観測。"""
+    """届いた観測。自分の行為について本人が知ったことも、観測としてここに入る。"""
 
     turn: int
     observation: Observation
@@ -107,8 +107,6 @@ class Perception(Experience):
         _require_turn(self.turn, "turn")
         if not isinstance(self.observation, Observation):
             raise ShortTermMemoryValidationException("observation must be Observation")
-        if isinstance(self.observation.route, OwnActionResult):
-            raise ShortTermMemoryValidationException("an own action result belongs to an attempt")
         _require_people_named(self.observation)
 
     @property
@@ -119,8 +117,8 @@ class Perception(Experience):
         return reader.perceived(self)
 
 
-class Outcome(ABC):
-    """Being が選んだ 1 手の結果。読む側には、結果の種類に合うメソッドで渡す。"""
+class AttemptResponse(ABC):
+    """Being が選んだ 1 手に、環境か Being の記憶が返した、その 1 手をどう行ったか。"""
 
     @property
     @abstractmethod
@@ -128,10 +126,10 @@ class Outcome(ABC):
 
     @abstractmethod
     def answers(self, call_id: str) -> bool:
-        """呼び出しの ID が ``call_id`` の 1 手に答えた結果か。"""
+        """呼び出しの ID が ``call_id`` の 1 手に答えたか。"""
 
     def fits(self, call_id: str) -> bool:
-        """呼び出しの ID が ``call_id`` の 1 手の結果として持てるか。"""
+        """呼び出しの ID が ``call_id`` の 1 手の返事として持てるか。"""
         return self.answers(call_id)
 
     @abstractmethod
@@ -139,59 +137,29 @@ class Outcome(ABC):
 
 
 @dataclass(frozen=True)
-class ObservedOutcome(Outcome):
-    """環境 (ゲーム) が返した、自分の行動の結果の観測。"""
-
-    observation: Observation
+class AttemptTaken(AttemptResponse):
+    taken: ActionTaken
 
     def __post_init__(self) -> None:
-        if not isinstance(self.observation, Observation) or not isinstance(self.observation.route, OwnActionResult):
-            raise ShortTermMemoryValidationException("an observed outcome must be an own action result")
-        _require_people_named(self.observation)
+        if not isinstance(self.taken, ActionTaken):
+            raise ShortTermMemoryValidationException("taken must be ActionTaken")
+        if isinstance(self.taken.action_summary, TextWithPeople):
+            raise ShortTermMemoryValidationException("an action summary must have its people named before it is kept")
 
     @property
     def order(self) -> OccurrenceOrder | None:
-        return self.observation.order
+        return self.taken.order
 
     def answers(self, call_id: str) -> bool:
-        return self.observation.route.call_id == call_id  # type: ignore[union-attr]
+        return self.taken.call_id == call_id
 
     def show_to(self, attempt: Attempt, reader: ExperienceReader[_T_co]) -> _T_co:
-        return reader.attempted(attempt, self.observation)
-
-
-@dataclass(frozen=True, kw_only=True)
-class MemoryOperationOutcome(Outcome):
-    """記憶の道具 (メモ、エピソード、状況の評価) の 1 手に、Being の記憶が返した結果。"""
-
-    call_id: str
-    body: str
-    time: ObservedTime
-    order: OccurrenceOrder | None = None
-    succeeded: bool = True
-    action_summary: str | None = None
-
-    def __post_init__(self) -> None:
-        _require_text(self.call_id, "call_id")
-        _require_text(self.body, "body")
-        if self.action_summary is not None:
-            _require_text(self.action_summary, "action_summary")
-        if not isinstance(self.time, ObservedTime):
-            raise ShortTermMemoryValidationException("time must be ObservedTime")
-        _require_order(self.order)
-        if not isinstance(self.succeeded, bool):
-            raise ShortTermMemoryValidationException("succeeded must be bool")
-
-    def answers(self, call_id: str) -> bool:
-        return self.call_id == call_id
-
-    def show_to(self, attempt: Attempt, reader: ExperienceReader[_T_co]) -> _T_co:
-        return reader.attempted_memory_operation(attempt, self)
+        return reader.attempted(attempt, self.taken)
 
 
 @dataclass(frozen=True)
-class UnknownOutcome(Outcome):
-    """結果が分からない。結果を待っている間と、来ないまま次の 1 手を選んだとき。どの 1 手にも答えていない。"""
+class AttemptNotAnsweredYet(AttemptResponse):
+    """返事を待っている間と、来ないまま次の 1 手を選んだとき。どの 1 手にも答えていない。"""
 
     @property
     def order(self) -> OccurrenceOrder | None:
@@ -204,20 +172,20 @@ class UnknownOutcome(Outcome):
         return True
 
     def show_to(self, attempt: Attempt, reader: ExperienceReader[_T_co]) -> _T_co:
-        return reader.attempted_without_result(attempt)
+        return reader.attempted_without_response(attempt)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Attempt(Experience):
-    """Being が選んだ 1 手と、その結果。
+    """Being が選んだ 1 手と、その返事。
 
     ``memo_rejections`` は、行動と一緒に書こうとして書けなかったメモの操作の理由。``call_text`` は、Being が選んだ
-    時点の呼び方で書いた呼び出しの文。どちらも Being が選んだときに決まり、結果を受け取っても変わらない。
+    時点の呼び方で書いた呼び出しの文。どちらも Being が選んだときに決まり、返事を受け取っても変わらない。
     """
 
     turn: int
     move: AgentMove
-    result: Outcome = UnknownOutcome()
+    response: AttemptResponse = AttemptNotAnsweredYet()
     memo_rejections: tuple[str, ...] = ()
     call_text: str | None = None
 
@@ -231,27 +199,27 @@ class Attempt(Experience):
             _require_text(rejection, "memo_rejections")
         if self.call_text is not None:
             _require_text(self.call_text, "call_text")
-        if not isinstance(self.result, Outcome):
-            raise ShortTermMemoryValidationException("result must be Outcome")
-        if not self.result.fits(self.move.call_id):
-            raise ShortTermMemoryValidationException(f"{self.result!r} does not answer move {self.move.call_id!r}")
+        if not isinstance(self.response, AttemptResponse):
+            raise ShortTermMemoryValidationException("response must be AttemptResponse")
+        if not self.response.fits(self.move.call_id):
+            raise ShortTermMemoryValidationException(f"{self.response!r} does not answer move {self.move.call_id!r}")
 
     @property
     def order(self) -> OccurrenceOrder | None:
-        return self.result.order
+        return self.response.order
 
     def is_answered(self) -> bool:
-        return self.result.answers(self.move.call_id)
+        return self.response.answers(self.move.call_id)
 
-    def answered_by(self, result: Outcome, *, turn: int) -> Attempt:
-        if not result.answers(self.move.call_id):
+    def answered_by(self, response: AttemptResponse, *, turn: int) -> Attempt:
+        if not response.answers(self.move.call_id):
             raise ShortTermMemoryUnpairedResultException(
-                f"{result!r} does not answer the awaiting move {self.move.call_id!r}"
+                f"{response!r} does not answer the awaiting move {self.move.call_id!r}"
             )
-        return replace(self, turn=turn, result=result)
+        return replace(self, turn=turn, response=response)
 
     def show_to(self, reader: ExperienceReader[_T_co]) -> _T_co:
-        return self.result.show_to(self, reader)
+        return self.response.show_to(self, reader)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -370,7 +338,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
     """Being ごとに 1 つある、直近の出来事といきさつを持つ集約 (design_decisions D1824-9)。
 
     操作は中身を書き換え、値を返さない。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。
-    ``recent_from`` は直近の範囲の始まりのターン。``awaiting`` は結果を待っている 1 手。
+    ``recent_from`` は直近の範囲の始まりのターン。``awaiting`` は返事を待っている 1 手。
     ``awaited_backstory`` は、届くのを待っているいきさつ。
     """
 
@@ -429,9 +397,14 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         )
 
     def perceive(self, observation: Observation, *, current_turn: int) -> None:
-        """観測は 1 手を選ぶ前に届き、次の 1 手がそれを見る。"""
-        turn = _require_turn(current_turn, "current_turn") + 1
-        experiences = self._with(Perception(turn=turn, observation=observation))
+        """観測は 1 手を選ぶ前に届き、次の 1 手がそれを見る。
+
+        自分の行為について本人が知ったことは、答えのあった 1 手と同じターンに入れる。いきさつに畳むとき、行動と
+        それについて知ったことが別々の範囲に分かれないようにするため。
+        """
+        current = _require_turn(current_turn, "current_turn")
+        own = isinstance(observation.route, OwnAction) and current >= self._recent_from
+        experiences = self._with(Perception(turn=current if own else current + 1, observation=observation))
         self._become(experiences, self._backstories, self._recent_from, self._awaiting, self._awaited)
 
     def act(
@@ -442,7 +415,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         memo_rejections: tuple[str, ...] = (),
         call_text: str | None = None,
     ) -> None:
-        """前の 1 手の結果がまだ来ていなければ、前の 1 手を結果の分からない試みとして残す。"""
+        """前の 1 手の返事がまだ来ていなければ、前の 1 手を返事の無い試みとして残す。"""
         attempt = Attempt(
             turn=_require_turn(current_turn, "current_turn"),
             move=move,
@@ -452,10 +425,10 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
         self._become(experiences, self._backstories, self._recent_from, attempt, self._awaited)
 
-    def receive_result(self, result: Outcome, *, current_turn: int) -> None:
+    def receive_response(self, response: AttemptResponse, *, current_turn: int) -> None:
         if self._awaiting is None:
-            raise ShortTermMemoryUnpairedResultException(f"no move is awaiting {result!r}")
-        attempt = self._awaiting.answered_by(result, turn=_require_turn(current_turn, "current_turn"))
+            raise ShortTermMemoryUnpairedResultException(f"no move is awaiting {response!r}")
+        attempt = self._awaiting.answered_by(response, turn=_require_turn(current_turn, "current_turn"))
         self._become(self._with(attempt), self._backstories, self._recent_from, None, self._awaited)
 
     def lapse(
@@ -476,7 +449,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
     def unsummarized(self) -> tuple[Experience, ...]:
         """範囲が埋まったときに、いきさつとエピソードの材料として渡していない出来事。``recent()`` と同じ順。
 
-        いきさつを待っていれば、待っている範囲より後の出来事。結果を待っている 1 手も、結果の分からない試みとして含める。
+        いきさつを待っていれば、待っている範囲より後の出来事。返事を待っている 1 手も、返事の無い試みとして含める。
         """
         experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
         until_turn = self._awaited.until_turn if self._awaited is not None else self._recent_from - 1
@@ -546,7 +519,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         return {"experiences": _in_recent_order(self._up_to(until_turn)), "backstories": self._backstories}
 
     def _up_to(self, until_turn: int) -> tuple[Experience, ...]:
-        """``until_turn`` までの出来事。そのターンまでに選んだまま結果の来ない 1 手も含む。"""
+        """``until_turn`` までの出来事。そのターンまでに選んだまま返事の来ない 1 手も含む。"""
         awaiting = self._awaiting
         experiences = self._experiences if awaiting is None or awaiting.turn > until_turn else self._with(awaiting)
         return tuple(e for e in experiences if e.turn <= until_turn)
@@ -562,7 +535,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         return dropped
 
     def _after_forgetting(self, until_turn: int) -> tuple[tuple[Experience, ...], int, Attempt | None]:
-        """``until_turn`` までを外したあとの出来事、範囲の始まり、待っている 1 手。外すターンに選んだまま結果の来ない 1 手も外す。"""
+        """``until_turn`` までを外したあとの出来事、範囲の始まり、待っている 1 手。外すターンに選んだまま返事の来ない 1 手も外す。"""
         recent_from = max(self._recent_from, until_turn + 1)
         experiences, awaiting = self._experiences, self._awaiting
         if awaiting is not None and awaiting.turn < recent_from:
@@ -604,7 +577,7 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
         if turns and turns[0] < recent_from:
             raise ShortTermMemoryValidationException("experiences must be within the recent range")
         if awaiting is not None and (not isinstance(awaiting, Attempt) or awaiting.is_answered()):
-            raise ShortTermMemoryValidationException("awaiting must be an Attempt without result")
+            raise ShortTermMemoryValidationException("awaiting must be an Attempt without response")
         if awaiting is not None and awaiting.turn < recent_from:
             raise ShortTermMemoryValidationException("awaiting must be within the recent range")
         if len(backstories) > BACKSTORY_GENERATIONS:
@@ -666,14 +639,14 @@ __all__ = [
     "FORCED_FOLD_TURNS",
     "RECENT_TURNS",
     "Attempt",
+    "AttemptNotAnsweredYet",
+    "AttemptResponse",
+    "AttemptTaken",
     "AwaitedBackstory",
     "Backstory",
     "Experience",
     "ExperienceReader",
     "Lapse",
-    "MemoryOperationOutcome",
-    "ObservedOutcome",
-    "Outcome",
     "Perception",
     "ShortTermMemory",
     "ShortTermMemoryBackstoryAddedEvent",
@@ -682,5 +655,4 @@ __all__ = [
     "ShortTermMemoryOldestTurnsDroppedEvent",
     "ShortTermMemoryRangeFilledEvent",
     "ShortTermMemoryRepository",
-    "UnknownOutcome",
 ]

@@ -14,13 +14,13 @@ from ai_rpg_world.being.application.choose_action import (
     TurnSpentRevisingIndex,
 )
 from ai_rpg_world.being.application.end_being_turn import EndBeingTurn, EndBeingTurnCommand
-from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
+from ai_rpg_world.being.application.receive_action_taken import ReceiveActionTaken, ReceiveActionTakenCommand
 from ai_rpg_world.being.contract import OfferedBeingTools
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.working_memory import Closing
-from ai_rpg_world.game_world.application.describe_action_result import (
-    DescribeActionResult,
-    DescribeActionResultCommand,
+from ai_rpg_world.game_world.application.describe_action_taken import (
+    DescribeActionTaken,
+    DescribeActionTakenCommand,
 )
 from ai_rpg_world.game_world.application.describe_scene import DescribeScene, DescribeSceneCommand
 from ai_rpg_world.game_world.application.mark_body_as_shown import MarkBodyAsShown, MarkBodyAsShownCommand
@@ -67,8 +67,8 @@ class BeingTurnSteps:
         tell_time: TellCurrentTime,
         choose_action: ChoosingAction,
         take_chosen_action: TakeChosenAction,
-        describe_result: DescribeActionResult,
-        receive_result: ReceiveActionResult,
+        describe_taken: DescribeActionTaken,
+        receive_taken: ReceiveActionTaken,
         end_being_turn: EndBeingTurn,
         turn_rounds: TurnRoundsRepository,
     ) -> None:
@@ -82,8 +82,8 @@ class BeingTurnSteps:
         self._tell_time = tell_time
         self.choose_action = choose_action
         self._take_chosen_action = take_chosen_action
-        self._describe_result = describe_result
-        self._receive_result = receive_result
+        self._describe_taken = describe_taken
+        self._receive_taken = receive_taken
         self._end_being_turn = end_being_turn
         self._turn_rounds = turn_rounds
 
@@ -110,8 +110,11 @@ class BeingTurnSteps:
         if not isinstance(chosen, ActionChosen):
             return ChoseNoAction()
         reply = self._take_chosen_action(TakeChosenActionCommand(person, chosen.move))
-        result = self._describe_result(DescribeActionResultCommand(reply=reply, call_id=chosen.move.call_id))
-        self._receive_result.execute(ReceiveActionResultCommand(being_id=self.being_of(person), result=result))
+        described = self._describe_taken(DescribeActionTakenCommand(reply=reply, call_id=chosen.move.call_id))
+        # 本人が知ったことは巡りに預けずに渡す。自分の行為に返ってきた知らせで、ターンを回させないため
+        self._receive_taken.execute(
+            ReceiveActionTakenCommand(being_id=self.being_of(person), taken=described.taken, noticed=described.noticed)
+        )
         return Waited() if reply.was_waiting() else Acted()
 
     def begin_choosing(self, people: Sequence[PersonId]) -> None:

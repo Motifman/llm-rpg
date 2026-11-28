@@ -4,12 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.being.contract import AgentMove, JsonValue, Observation, OwnActionResult, TextWithPeople
+from ai_rpg_world.being.contract import AgentMove, JsonValue, OccurrenceOrder, OwnAction, TextWithPeople
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
-from ai_rpg_world.game_world.application.describe_action_result import (
-    DescribeActionResult,
-    DescribeActionResultCommand,
+from ai_rpg_world.game_world.application.describe_action_taken import (
+    ActionTakenForActor,
+    DescribeActionTaken,
+    DescribeActionTakenCommand,
 )
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime, PassWorldTimeCommand
@@ -52,7 +53,7 @@ class _GenInTheOffice:
         self.scope = CommandScope(store, CommittedEventsDistributor())
         self.scope.run(lambda session: self._move_to_office(session, design))
         self._take = TakeChosenAction(self.scope, design, SettleWorldConditions(self.scope, design))
-        self.describe = DescribeActionResult(self.scope, design, design.day_night_declaration())
+        self.describe = DescribeActionTaken(_WORLD, self.scope, design, design.day_night_declaration())
         self.tell_time = TellCurrentTime(self.scope, design.day_night, design.clock_wording)
         self._pass_time = PassWorldTime(self.scope)
 
@@ -60,10 +61,10 @@ class _GenInTheOffice:
         session.people_register().name(_GEN, DisplayName("ゲン"))
         session.aggregates().whereabouts().teleport(PersonBody(_GEN), design.nouns.spot_of(_OFFICE), WorldTick(0))
 
-    def result_of(self, tool_name: str, **arguments: JsonValue) -> Observation:
+    def result_of(self, tool_name: str, **arguments: JsonValue) -> ActionTakenForActor:
         move = AgentMove(call_id="call_1", tool_name=tool_name, arguments=arguments)
         reply = self._take(TakeChosenActionCommand(_GEN, move))
-        return self.describe(DescribeActionResultCommand(reply=reply, call_id="call_1"))
+        return self.describe(DescribeActionTakenCommand(reply=reply, call_id="call_1"))
 
     def pass_ticks(self, count: int) -> None:
         for _ in range(count):
@@ -74,26 +75,31 @@ def _template(body: str | TextWithPeople) -> str:
     return body.template if isinstance(body, TextWithPeople) else body
 
 
-def _succeeded_and_summary(result: Observation) -> tuple[bool, str | None]:
-    route = result.route
-    assert isinstance(route, OwnActionResult) and route.call_id == "call_1"
-    summary = route.action_summary
-    return route.succeeded, summary if summary is None or isinstance(summary, str) else summary.template
+def _noticed(described: ActionTakenForActor) -> str:
+    assert described.noticed is not None and described.noticed.route == OwnAction()
+    return _template(described.noticed.body)
 
 
-class TestDescribeActionResult:
-    """DescribeActionResult が、世界の返事を、本人の行動の結果 (OwnActionResult) の観測にすることを保証する。"""
+def _succeeded_and_summary(described: ActionTakenForActor) -> tuple[bool, str | None]:
+    taken = described.taken
+    assert taken.call_id == "call_1"
+    summary = taken.action_summary
+    return taken.accepted, summary if summary is None or isinstance(summary, str) else summary.template
+
+
+class TestDescribeActionTaken:
+    """DescribeActionTaken が、世界の返事を、行動の返事 (ActionTaken) と、本人が知った観測 (経路 OwnAction) にすることを保証する。"""
 
     def test_done_interaction_becomes_a_successful_result_with_the_authors_text(
         self, mine_village: WorldDesign
     ) -> None:
-        """ゲンが金庫を「1907」で開けると、結果は成功で、本文は作者が操作に書いた成功の文 (起動鍵だ…) になる。"""
+        """ゲンが金庫を「1907」で開けると、返事は通ったで、本人が知った観測は作者が操作に書いた成功の文 (起動鍵だ…) になる。"""
         gen = _GenInTheOffice(mine_village)
 
         result = gen.result_of("interact", target="金庫", how=_OPEN_SAFE, code="1907")
 
         assert _succeeded_and_summary(result) == (True, f"「金庫」で{_OPEN_SAFE}")
-        assert "昇降機の起動鍵だ" in _template(result.body)
+        assert "昇降機の起動鍵だ" in _noticed(result)
 
     def test_lighting_the_lamp_carried_gives_the_authors_text_for_the_lamp(self, mine_village: WorldDesign) -> None:
         """ゲンが持っているカンテラを灯すと、本文は、持ち物のカンテラの操作に作者が書いた成功の文になる。"""
@@ -102,7 +108,7 @@ class TestDescribeActionResult:
         result = gen.result_of("interact", target="カンテラ", how="油を足して灯す")
 
         assert _succeeded_and_summary(result) == (True, "「カンテラ」で油を足して灯す")
-        assert _template(result.body).startswith("カンテラに油を足して火を入れた。")
+        assert _noticed(result).startswith("カンテラに油を足して火を入れた。")
 
     def test_done_built_in_action_becomes_a_successful_result_with_the_text_of_the_kind(
         self, mine_village: WorldDesign
@@ -113,7 +119,7 @@ class TestDescribeActionResult:
         result = gen.result_of("wait")
 
         assert _succeeded_and_summary(result) == (True, "その場で待機した")
-        assert _template(result.body) == "しばらく行動を控えて、様子を見た"
+        assert _noticed(result) == "しばらく行動を控えて、様子を見た"
 
     def test_names_of_things_are_filled_into_the_summary_and_the_text(self, mine_village: WorldDesign) -> None:
         """ゲンが事務所から井戸へ移動を始めると、要約は古い run と同じ「「鉱山会社の事務所」から「井戸」へ向かって出発した」になり、本文の行き先に「井戸」が入る。"""
@@ -122,7 +128,7 @@ class TestDescribeActionResult:
         result = gen.result_of("travel_to", destination="井戸")
 
         assert _succeeded_and_summary(result) == (True, "「鉱山会社の事務所」から「井戸」へ向かって出発した")
-        assert _template(result.body) == "「井戸」へ移動中。到着までは他の行動はできない。"
+        assert _noticed(result) == "「井戸」へ移動中。到着までは他の行動はできない。"
 
     def test_spoken_words_are_filled_into_the_summary_and_the_text(self, mine_village: WorldDesign) -> None:
         """ゲンがふつうの声で「誰かいるか」と話すと、要約は「あなたは言った: 「誰かいるか」」、本文は「「誰かいるか」と言った。」になる。"""
@@ -131,7 +137,7 @@ class TestDescribeActionResult:
         result = gen.result_of("speak", reach="ふつうの声で話す", content="誰かいるか")
 
         assert _succeeded_and_summary(result) == (True, "あなたは言った: 「誰かいるか」")
-        assert _template(result.body) == "「誰かいるか」と言った。"
+        assert _noticed(result) == "「誰かいるか」と言った。"
 
     def test_shouting_uses_the_text_for_shouting(self, mine_village: WorldDesign) -> None:
         """ゲンが「助けて」と叫ぶと、要約は「あなたは叫んだ: 「助けて」」、本文は「「助けて」と叫んだ。」になり、話すときの文と分かれる。"""
@@ -140,36 +146,38 @@ class TestDescribeActionResult:
         result = gen.result_of("speak", reach="叫ぶ", content="助けて")
 
         assert _succeeded_and_summary(result) == (True, "あなたは叫んだ: 「助けて」")
-        assert _template(result.body) == "「助けて」と叫んだ。"
+        assert _noticed(result) == "「助けて」と叫んだ。"
 
     def test_refused_action_becomes_a_failed_result_with_the_reason(self, mine_village: WorldDesign) -> None:
-        """ゲンが金庫を「0000」で開けようとすると、結果は失敗で、本文は作者の書いた断りの理由 (扉はびくともしない) になる。"""
+        """ゲンが金庫を「0000」で開けようとすると、返事は断られたで、本人が知った観測は作者の書いた断りの理由 (扉はびくともしない) になる。"""
         gen = _GenInTheOffice(mine_village)
 
         result = gen.result_of("interact", target="金庫", how=_OPEN_SAFE, code="0000")
 
         assert _succeeded_and_summary(result) == (False, f"「金庫」で{_OPEN_SAFE}")
-        assert "扉はびくともしない" in _template(result.body)
+        assert "扉はびくともしない" in _noticed(result)
 
     def test_guidance_becomes_a_failed_result_with_the_guidance_text(self, mine_village: WorldDesign) -> None:
-        """ゲンが無いツール名を選ぶと、結果は失敗で、要約は無く (行為にならなかったため)、本文は世界の案内の文になる。"""
+        """ゲンが無いツール名を選ぶと、返事は断られたで、要約は無く (行為にならなかったため)、本人が知った観測は世界の案内の文になる。"""
         gen = _GenInTheOffice(mine_village)
 
         result = gen.result_of("fly")
 
         assert _succeeded_and_summary(result) == (False, None)
-        assert isinstance(result.body, str)
-        assert "fly" in result.body
+        assert "fly" in _noticed(result)
 
-    def test_result_is_about_the_actor_at_the_current_time(self, mine_village: WorldDesign) -> None:
-        """1 日 48 tick で 0 時に始まる山村で 3 tick 経ってからゲンが待つと、結果は本人に向けた本人についての観測で、時刻は「Day 1 深夜 1:30」になる。"""
+    def test_taken_and_noticed_carry_the_current_time_and_tick(self, mine_village: WorldDesign) -> None:
+        """1 日 48 tick で 0 時に始まる山村で 3 tick 経ってからゲンが待つと、返事と観測の時刻は「Day 1 深夜 1:30」、起きた順は tick 3 で、観測は本人に向けた本人についてのものになる。"""
         gen = _GenInTheOffice(mine_village)
         gen.pass_ticks(3)
 
         result = gen.result_of("wait")
 
-        assert (result.subject_is_self, result.addressed_to_self) == (True, True)
-        assert result.time.display == "Day 1 深夜 1:30"
+        noticed = result.noticed
+        assert noticed is not None
+        assert (noticed.subject_is_self, noticed.addressed_to_self) == (True, True)
+        assert result.taken.time.display == noticed.time.display == "Day 1 深夜 1:30"
+        assert result.taken.order == noticed.order == OccurrenceOrder(environment=_WORLD.value, value=3)
 
 
 class TestTellCurrentTime:

@@ -7,8 +7,7 @@
   を渡す。空と「不明」を区別するため、空文字は拒む
 - 任意の助言: ``T | None = None``
 
-経路ごとに必須の欄が変わるのは、経路を種類ごとの型にして表す。呼び出しの ID と
-成否は「自分の行動の結果」の型だけが持つ。
+経路ごとに必須の欄が変わるのは、経路を種類ごとの型にして表す。
 """
 
 from __future__ import annotations
@@ -51,52 +50,8 @@ class OwnBodyState:
 
 
 @dataclass(frozen=True)
-class OwnActionResult:
-    """自分の行動の結果。
-
-    呼び出しと 1 対 1 で必ず 1 件届く結果だけがこの経路になる。移動の到着や相手の
-    返事のように後から届く結果は、呼び出しの ID を持たない他の経路で届く。
-    """
-
-    call_id: str
-    succeeded: bool
-    action_summary: str | TextWithPeople | None = None
-
-    def __post_init__(self) -> None:
-        require_text(self.call_id, "call_id")
-        require_bool(self.succeeded, "succeeded")
-        # 世界の外で作る結果 (Being 自身の失敗、要約を足す前の snapshot) は要約を持たない
-        if self.action_summary is not None and not isinstance(self.action_summary, TextWithPeople):
-            require_text(self.action_summary, "action_summary")
-
-    def with_people_named(self, name: Callable[[TextWithPeople], str]) -> OwnActionResult:
-        if not isinstance(self.action_summary, TextWithPeople):
-            return self
-        return replace(self, action_summary=name(self.action_summary))
-
-
-@dataclass(frozen=True)
-class OwnActionCompleted:
-    """呼び出しと 1 対 1 ではなく、あとから届く自分の行動の結果 (移動先に着いた、道がふさがって着けなかった、など)。
-
-    呼び出しの ID は持たない。``tool`` は、結果のもとになった行動のツールの名前。
-    """
-
-    action_summary: str | TextWithPeople
-    tool: str
-    succeeded: bool = True
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.action_summary, TextWithPeople):
-            require_text(self.action_summary, "action_summary")
-        if not isinstance(self.tool, str) or not self.tool.isascii() or not self.tool.isidentifier():
-            raise ContractViolation("tool must be an ASCII identifier")
-        require_bool(self.succeeded, "succeeded")
-
-    def with_people_named(self, name: Callable[[TextWithPeople], str]) -> OwnActionCompleted:
-        if not isinstance(self.action_summary, TextWithPeople):
-            return self
-        return replace(self, action_summary=name(self.action_summary))
+class OwnAction:
+    """自分の行為について、本人が知ったこと (作者が書いた行為の文、断られたこと、移動先に着いたこと、など)。"""
 
 
 @dataclass(frozen=True)
@@ -104,7 +59,7 @@ class EnvironmentNotice:
     """環境からの知らせ。"""
 
 
-Route = Union[SeenOrHeard, ToldOrWritten, OwnBodyState, OwnActionResult, OwnActionCompleted, EnvironmentNotice]
+Route = Union[SeenOrHeard, ToldOrWritten, OwnBodyState, OwnAction, EnvironmentNotice]
 _ROUTE_TYPES: Final = get_args(Route)
 
 
@@ -231,13 +186,9 @@ class Observation:
                 raise ContractViolation("withheld_if_subject_unknown and body_if_subject_unknown are exclusive")
 
     def with_people_named(self, name: Callable[[TextWithPeople], str]) -> Observation:
-        route = (
-            self.route.with_people_named(name)
-            if isinstance(self.route, (OwnActionResult, OwnActionCompleted))
-            else self.route
-        )
-        body = name(self.body) if isinstance(self.body, TextWithPeople) else self.body
-        return replace(self, body=body, route=route)
+        if not isinstance(self.body, TextWithPeople):
+            return self
+        return replace(self, body=name(self.body))
 
     def body_without_people(self) -> str:
         if isinstance(self.body, TextWithPeople):

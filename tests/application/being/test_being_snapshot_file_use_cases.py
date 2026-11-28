@@ -191,6 +191,33 @@ class TestRestoreUseCaseDropsRemovedMemoryKeys:
         assert result.removed_memory_key_counts == {"memo": 3, "pending_predictions": 1, "afterglow_entries": 1}
         assert [a.name for a in dst["acquaintances"].get(BeingId("being_w1_p1")).acquaintances] == ["カイト"]
 
+    def test_short_term_memory_with_action_results_is_rewritten_and_counted(self, tmp_path: Path) -> None:
+        """行動の結果を持っていたころの短期記憶は、止まらずに今の形で読み込まれ、書き換えた件数が報告される。"""
+        route = {"kind": "own_action_result", "call_id": "c1", "succeeded": True, "action_summary": "その場で待機した"}
+        observation = {
+            "body": "様子を見た。",
+            "route": route,
+            "time": {"display": "1日目 朝", "seconds": None},
+            "subject_is_self": True,
+            "subject_name": None,
+            "source": None,
+            "place": None,
+            "addressed_to_self": True,
+            "wants_wake": None,
+            "body_if_subject_unknown": None,
+            "withheld_if_subject_unknown": False,
+        }
+        move = {"call_id": "c1", "tool_name": "wait", "arguments": {}, "expectation": None, "inner_thought": None}
+        attempt = {"kind": "attempt", "turn": 1, "move": move, "result": {"observation": observation}}
+        legacy = {"experiences": [attempt], "recent_from": 1, "awaiting": None, "backstories": []}
+        path = _capture_old_snapshot(tmp_path, {"being_short_term_memory": [legacy]})
+        dst = _make_environment()
+
+        result = dst["restore"].execute(path)
+
+        assert result.removed_memory_key_counts == {"being_short_term_memory.own_action_result": 1}
+        assert result.memory_restored
+
     def test_snapshot_without_removed_keys_reports_nothing(self, tmp_path: Path) -> None:
         """消した部品の欄を持たない snapshot は、捨てた件数を空で報告する。"""
         path = _capture_old_snapshot(tmp_path, {})

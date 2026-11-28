@@ -27,18 +27,14 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionResult,
+    OwnAction,
     OwnBodyState,
     Route,
     SeenOrHeard,
     ToldOrWritten,
     UnknownValue,
 )
-from ai_rpg_world.being.domain.short_term_memory import (
-    MemoryOperationOutcome,
-    ObservedOutcome,
-    Outcome,
-)
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -191,17 +187,13 @@ def observation_from_game(
 def observation_from_action_result(
     entry: ActionResultEntry,
     *,
-    call_id: str,
     observer: Observer,
     order: OccurrenceOrder | None = None,
 ) -> Observation:
-    """``call_id`` は、この結果を生んだエージェントの 1 手が発行した ID。
-
-    本文は直近の出来事の行から時刻と心の声を除いた文 (design_decisions D1824-7)。
-    """
+    """本文は直近の出来事の行から時刻と心の声を除いた文 (design_decisions D1824-7)。"""
     return _observation_from_result(
         entry,
-        route=OwnActionResult(call_id=call_id, succeeded=entry.success),
+        route=OwnAction(),
         observer=observer,
         order=order,
     )
@@ -213,15 +205,18 @@ def result_from_action_result(
     call_id: str,
     observer: Observer,
     order: OccurrenceOrder | None = None,
-) -> Outcome:
-    """1 手の結果。記憶の道具 (メモ、エピソード、状況の評価) なら Being の記憶が返した結果、それ以外は自分の行動の結果の観測 (design_decisions D1824-9)。
+) -> OldWorldPreformattedLine:
+    """1 手への返事。古い世界は、記憶の道具 (メモ、エピソード、状況の評価) の 1 手も、それ以外の 1 手も、組み終えた行で返す (design_decisions D1824-9)。"""
+    body, time = (
+        _body_and_time(entry, observer=observer)
+        if _is_agent_side_tool(entry.tool_name)
+        else _body_and_time_of(observation_from_action_result(entry, observer=observer))
+    )
+    return OldWorldPreformattedLine(call_id=call_id, body=body, time=time, order=order)
 
-    記憶の道具は手書きの一覧で見分ける。道具のカタログの分類 (world_action でないもの) と一致することは試験が見張る。
-    """
-    if not _is_agent_side_tool(entry.tool_name):
-        return ObservedOutcome(observation_from_action_result(entry, call_id=call_id, observer=observer, order=order))
-    body, time = _body_and_time(entry, observer=observer)
-    return MemoryOperationOutcome(call_id=call_id, body=body, time=time, order=order, succeeded=entry.success)
+
+def _body_and_time_of(observation: Observation) -> tuple[str, ObservedTime]:
+    return observation.body_without_people(), observation.time
 
 
 def lapse_body_and_time(entry: ActionResultEntry, *, observer: Observer) -> tuple[str, ObservedTime]:

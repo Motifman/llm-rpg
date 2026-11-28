@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ai_rpg_world.being.application.closest_tool_name import unsupported_tool_failure
-from ai_rpg_world.being.contract import UNKNOWN, ObservedTime, OwnActionResult
+from ai_rpg_world.being.contract import UNKNOWN, ActionTaken, ObservedTime, OwnAction
 
 NOW = ObservedTime(display="1日目 9:00")
 
@@ -20,17 +20,18 @@ class TestUnsupportedToolFailure:
         )
 
         assert failure.suggestion == "speech_speak"
-        assert failure.observation.body == (
+        assert failure.taken == ActionTaken(
+            call_id="call_1", action_summary="speech_speech を実行しました。", accepted=False, time=NOW
+        )
+        assert failure.noticed.body == (
             "未対応のツールです: speech_speech。もしかして 'speech_speak' ですか? 現在使える tool: [speech_speak, travel_to]"
         )
-        assert failure.observation.route == OwnActionResult(
-            call_id="call_1", succeeded=False, action_summary="speech_speech を実行しました。"
-        )
-        assert (failure.observation.time, failure.observation.subject_is_self, failure.observation.place) == (
-            NOW,
-            True,
-            UNKNOWN,
-        )
+        assert (
+            failure.noticed.route,
+            failure.noticed.time,
+            failure.noticed.subject_is_self,
+            failure.noticed.place,
+        ) == (OwnAction(), NOW, True, UNKNOWN)
 
     def test_no_close_name_gives_no_suggestion(self) -> None:
         """先頭の語が共通する名前が無ければ、勧めずに使えるツールだけを並べる。"""
@@ -39,4 +40,4 @@ class TestUnsupportedToolFailure:
         )
 
         assert failure.suggestion is None
-        assert failure.observation.body == "未対応のツールです: harvest。 現在使える tool: [travel_to]"
+        assert failure.noticed.body == "未対応のツールです: harvest。 現在使える tool: [travel_to]"

@@ -6,13 +6,13 @@ import pytest
 
 from ai_rpg_world.being.contract import (
     UNKNOWN,
+    ActionTaken,
     AgentMove,
     EnvironmentNotice,
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionCompleted,
-    OwnActionResult,
+    OwnAction,
     OwnBodyState,
     PersonInText,
     SeenOrHeard,
@@ -20,6 +20,7 @@ from ai_rpg_world.being.contract import (
     ToldOrWritten,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 from ai_rpg_world.being.domain.short_term_memory import (
     BACKSTORY_GENERATIONS,
     BACKSTORY_OVERDUE_TURNS,
@@ -27,18 +28,17 @@ from ai_rpg_world.being.domain.short_term_memory import (
     FORCED_FOLD_TURNS,
     RECENT_TURNS,
     Attempt,
+    AttemptNotAnsweredYet,
+    AttemptTaken,
     AwaitedBackstory,
     Backstory,
     Lapse,
-    MemoryOperationOutcome,
-    ObservedOutcome,
     Perception,
     ShortTermMemory,
     ShortTermMemoryBackstoryAddedEvent,
     ShortTermMemoryBackstoryOverdueEvent,
     ShortTermMemoryOldestTurnsDroppedEvent,
     ShortTermMemoryRangeFilledEvent,
-    UnknownOutcome,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryStaleBackstoryException,
@@ -65,7 +65,7 @@ def _observation(
         body=body,
         route=route,
         time=_TIME,
-        subject_is_self=isinstance(route, OwnActionResult),
+        subject_is_self=isinstance(route, OwnAction),
         subject_name=UNKNOWN,
         source=UNKNOWN,
         place=UNKNOWN,
@@ -74,24 +74,30 @@ def _observation(
     )
 
 
-def _own_observation(
-    call_id: str = "call-1", body: str | TextWithPeople = "扉は開かなかった", order: OccurrenceOrder | None = None
-) -> Observation:
-    return _observation(OwnActionResult(call_id=call_id, succeeded=False), body=body, order=order)
+def _noticed(body: str | TextWithPeople = "扉は開かなかった", order: OccurrenceOrder | None = None) -> Observation:
+    return _observation(OwnAction(), body=body, order=order)
+
+
+def _taken(
+    call_id: str = "call-1",
+    summary: str | TextWithPeople | None = "「扉」を開けようとした",
+    order: OccurrenceOrder | None = None,
+) -> ActionTaken:
+    return ActionTaken(call_id=call_id, action_summary=summary, accepted=False, time=_TIME, order=order)
 
 
 def _result(
-    call_id: str = "call-1", body: str = "扉は開かなかった", order: OccurrenceOrder | None = None
-) -> ObservedOutcome:
-    return ObservedOutcome(_own_observation(call_id, body, order))
+    call_id: str = "call-1", summary: str = "「扉」を開けようとした", order: OccurrenceOrder | None = None
+) -> AttemptTaken:
+    return AttemptTaken(_taken(call_id, summary, order))
 
 
 def _move(call_id: str = "call-1") -> AgentMove:
     return AgentMove(call_id=call_id, tool_name="interact", arguments={"target": "扉"})
 
 
-def _memory_result(call_id: str = "call-1") -> MemoryOperationOutcome:
-    return MemoryOperationOutcome(call_id=call_id, body="[行動] メモを書いた → [結果] メモを追加しました", time=_TIME)
+def _old_world_line(call_id: str = "call-1") -> OldWorldPreformattedLine:
+    return OldWorldPreformattedLine(call_id=call_id, body="[行動] メモを書いた → [結果] メモを追加しました", time=_TIME)
 
 
 def _at(value: float, environment: str = "廃坑の山村") -> OccurrenceOrder:
@@ -108,14 +114,14 @@ class _BodyReader:
     def perceived(self, perception: Perception) -> str:
         return f"見た:{perception.observation.body}"
 
-    def attempted(self, attempt: Attempt, result: Observation) -> str:
-        return f"試みた:{attempt.move.call_id}:{result.body}"
+    def attempted(self, attempt: Attempt, taken: ActionTaken) -> str:
+        return f"試みた:{attempt.move.call_id}:{taken.action_summary}"
 
-    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> str:
-        return f"記憶を扱った:{attempt.move.call_id}:{result.body}"
+    def attempted_without_response(self, attempt: Attempt) -> str:
+        return f"返事の無い試み:{attempt.move.call_id}"
 
-    def attempted_without_result(self, attempt: Attempt) -> str:
-        return f"結果の分からない試み:{attempt.move.call_id}"
+    def attempted_in_old_world(self, attempt: Attempt, line: OldWorldPreformattedLine) -> str:
+        return f"古い世界の行:{attempt.move.call_id}:{line.body}"
 
     def lapsed(self, lapse: Lapse) -> str:
         return f"出せなかった:{lapse.body}"
@@ -127,7 +133,7 @@ def _empty() -> ShortTermMemory:
 
 def _act_and_answer(memory: ShortTermMemory, call_id: str, turn: int) -> None:
     memory.act(_move(call_id), current_turn=turn)
-    memory.receive_result(_result(call_id), current_turn=turn)
+    memory.receive_response(_result(call_id), current_turn=turn)
 
 
 def _state(memory: ShortTermMemory) -> tuple[object, ...]:
@@ -151,7 +157,6 @@ class TestPerceive:
             ToldOrWritten(),
             OwnBodyState(),
             EnvironmentNotice(),
-            OwnActionCompleted(action_summary="「南の坑道」に着いた", tool="travel_to"),
         ],
     )
     def test_observation_is_kept_with_the_next_turn(self, route: object) -> None:
@@ -163,25 +168,38 @@ class TestPerceive:
 
         assert memory.recent() == (Perception(turn=6, observation=observation),)
 
-    def test_completion_with_an_unnamed_summary_is_rejected(self) -> None:
-        """あとから届いた自分の行動の結果の要約に人の穴が残っていると ShortTermMemoryValidationException を投げ、短期記憶は変わらない。"""
+    def test_noticed_own_action_is_kept_in_the_turn_of_the_answered_move(self) -> None:
+        """自分の行為について知った観測 (経路 OwnAction) は、今のターンが 5 なら、答えのあった 1 手と同じ番号 5 で残る。"""
         memory = _empty()
-        summary = TextWithPeople(
-            template="「{target}」のところに着いた",
-            people={"target": PersonInText(handle=2, appearance="髪を結った娘", visible_name="サヨ")},
-        )
+        noticed = _noticed()
 
-        with pytest.raises(ShortTermMemoryValidationException, match="action summary"):
-            memory.perceive(_observation(OwnActionCompleted(action_summary=summary, tool="travel_to")), current_turn=5)
-        assert memory.recent() == ()
+        memory.perceive(noticed, current_turn=5)
 
-    def test_own_action_result_cannot_be_perceived(self) -> None:
-        """自分の行動の結果を観測として渡すと、1 手と組にできないので ShortTermMemoryValidationException を投げ、短期記憶は変わらない。"""
+        assert memory.recent() == (Perception(turn=5, observation=noticed),)
+
+    def test_noticed_own_action_before_any_move_is_kept_with_the_next_turn(self) -> None:
+        """まだ 1 手も選んでいない (今のターンが 0) ときに届いた OwnAction の観測は、直近の範囲に入る番号 1 で残る。"""
         memory = _empty()
+        noticed = _noticed()
 
-        with pytest.raises(ShortTermMemoryValidationException):
-            memory.perceive(_own_observation(), current_turn=5)
-        assert memory.is_empty()
+        memory.perceive(noticed, current_turn=0)
+
+        assert memory.recent() == (Perception(turn=1, observation=noticed),)
+
+    def test_noticed_own_action_goes_right_after_its_move_before_what_the_next_move_sees(self) -> None:
+        """次の 1 手が見る同じ時の観測 (番号 6) が先に届いていても、自分の行動と、それについて知った観測がその前に並ぶ。"""
+        memory = _empty()
+        memory.act(_move(), current_turn=5)
+        memory.perceive(_observation(body="サヨが「ふむ」と言った", order=_at(3.0)), current_turn=5)
+
+        memory.receive_response(_result(order=_at(3.0)), current_turn=5)
+        memory.perceive(_noticed(order=_at(3.0)), current_turn=5)
+
+        assert _bodies(memory) == [
+            "試みた:call-1:「扉」を開けようとした",
+            "見た:扉は開かなかった",
+            "見た:サヨが「ふむ」と言った",
+        ]
 
     def test_observation_with_people_placeholders_cannot_be_perceived(self) -> None:
         """本文が人のプレースホルダーを持つ観測を渡すと、ShortTermMemoryValidationException を投げ、短期記憶は変わらない。"""
@@ -191,14 +209,14 @@ class TestPerceive:
             memory.perceive(_observation(body=_KICKED), current_turn=5)
         assert memory.is_empty()
 
-    def test_result_with_people_placeholders_cannot_be_received(self) -> None:
-        """本文が人のプレースホルダーを持つ自分の行動の結果は、ObservedOutcome にできず ShortTermMemoryValidationException を投げる。"""
-        with pytest.raises(ShortTermMemoryValidationException):
-            ObservedOutcome(_own_observation(body=_KICKED))
+    def test_taken_with_an_unnamed_summary_cannot_be_kept(self) -> None:
+        """要約に人のプレースホルダーが残った行動の返事は、AttemptTaken にできず ShortTermMemoryValidationException を投げる。"""
+        with pytest.raises(ShortTermMemoryValidationException, match="action summary"):
+            AttemptTaken(_taken(summary=_KICKED))
 
 
-class TestActAndReceiveResult:
-    """ShortTermMemory.act と receive_result が、選んだ 1 手と、その結果を組にして残すことを保証する。"""
+class TestActAndReceiveResponse:
+    """ShortTermMemory.act と receive_response が、選んだ 1 手と、その返事を組にして残すことを保証する。"""
 
     def test_result_is_kept_with_the_move_as_an_attempt(self) -> None:
         """今のターン 5 で 1 手を選び、その結果を受け取ると、番号 5 の Attempt として 1 手と結果の組で残り、待っている 1 手は無くなる。"""
@@ -206,9 +224,9 @@ class TestActAndReceiveResult:
         result = _result()
 
         memory.act(_move(), current_turn=5)
-        memory.receive_result(result, current_turn=5)
+        memory.receive_response(result, current_turn=5)
 
-        assert memory.recent() == (Attempt(turn=5, move=_move(), result=result),)
+        assert memory.recent() == (Attempt(turn=5, move=_move(), response=result),)
         assert memory.awaiting is None
 
     def test_chosen_move_waits_for_its_result(self) -> None:
@@ -231,7 +249,7 @@ class TestActAndReceiveResult:
             memo_rejections=("2 件目: m_3f2a7b というメモはありません。",),
             call_text='interact(target="金庫")',
         )
-        memory.receive_result(result, current_turn=5)
+        memory.receive_response(result, current_turn=5)
 
         [attempt] = memory.recent()
         assert isinstance(attempt, Attempt)
@@ -250,7 +268,7 @@ class TestActAndReceiveResult:
         before = _state(memory)
 
         with pytest.raises(ShortTermMemoryUnpairedResultException):
-            memory.receive_result(_result(), current_turn=5)
+            memory.receive_response(_result(), current_turn=5)
         assert _state(memory) == before
 
     def test_result_with_another_call_id_is_rejected(self) -> None:
@@ -260,7 +278,7 @@ class TestActAndReceiveResult:
         before = _state(memory)
 
         with pytest.raises(ShortTermMemoryUnpairedResultException):
-            memory.receive_result(_result("call-2"), current_turn=5)
+            memory.receive_response(_result("call-2"), current_turn=5)
         assert _state(memory) == before
 
     def test_second_result_for_the_same_move_is_rejected(self) -> None:
@@ -269,7 +287,7 @@ class TestActAndReceiveResult:
         _act_and_answer(memory, "call-1", 5)
 
         with pytest.raises(ShortTermMemoryUnpairedResultException):
-            memory.receive_result(_result("call-1"), current_turn=5)
+            memory.receive_response(_result("call-1"), current_turn=5)
 
     def test_next_move_keeps_the_unanswered_move_as_an_attempt_without_result(self) -> None:
         """結果が来ないまま次の 1 手を選ぶと、前の 1 手は選んだターンの番号で結果の分からない試みとして残り、新しい 1 手が結果を待つ。"""
@@ -289,16 +307,16 @@ class TestActAndReceiveResult:
         memory.perceive(_observation(body="鐘が鳴った"), current_turn=5)
         memory.act(_move("call-2"), current_turn=6)
 
-        assert _bodies(memory) == ["結果の分からない試み:call-1", "見た:鐘が鳴った"]
+        assert _bodies(memory) == ["返事の無い試み:call-1", "見た:鐘が鳴った"]
 
     def test_memory_operation_result_is_kept_as_an_attempt(self) -> None:
-        """記憶の道具の 1 手と、その結果 (MemoryOperationOutcome) も Attempt として組で残る。"""
+        """古い世界が組み終えた行 (OldWorldPreformattedLine) も、1 手への返事として Attempt に組で残る。"""
         memory = _empty()
 
         memory.act(_move(), current_turn=5)
-        memory.receive_result(_memory_result(), current_turn=5)
+        memory.receive_response(_old_world_line(), current_turn=5)
 
-        assert memory.recent() == (Attempt(turn=5, move=_move(), result=_memory_result()),)
+        assert memory.recent() == (Attempt(turn=5, move=_move(), response=_old_world_line()),)
 
     def test_memory_operation_result_with_another_call_id_is_rejected(self) -> None:
         """記憶の道具の結果でも、呼び出しの ID が待っている 1 手と違えば ShortTermMemoryUnpairedResultException を投げる。"""
@@ -306,47 +324,50 @@ class TestActAndReceiveResult:
         memory.act(_move("call-1"), current_turn=5)
 
         with pytest.raises(ShortTermMemoryUnpairedResultException):
-            memory.receive_result(_memory_result("call-2"), current_turn=5)
+            memory.receive_response(_old_world_line("call-2"), current_turn=5)
 
     def test_unknown_outcome_answers_no_move(self) -> None:
-        """結果の分からない結果 (UnknownOutcome) は、どの 1 手にも答えないので、受け取ると ShortTermMemoryUnpairedResultException を投げる。"""
+        """返事の無い印 (AttemptNotAnsweredYet) は、どの 1 手にも答えないので、受け取ると ShortTermMemoryUnpairedResultException を投げる。"""
         memory = _empty()
         memory.act(_move(), current_turn=5)
 
         with pytest.raises(ShortTermMemoryUnpairedResultException):
-            memory.receive_result(UnknownOutcome(), current_turn=5)
+            memory.receive_response(AttemptNotAnsweredYet(), current_turn=5)
 
 
-class TestOutcome:
-    """1 手の結果の型 (Outcome) が、呼び出しの ID に答えるか、起きた順、読む側への渡し方を、種類ごとに自分で持つことを保証する。"""
+class TestAttemptResponse:
+    """1 手への返事の型 (AttemptResponse) が、呼び出しの ID に答えるか、起きた順、読む側への渡し方を、種類ごとに自分で持つことを保証する。"""
 
-    def test_observed_outcome_must_be_an_own_action_result(self) -> None:
-        """自分の行動の結果ではない観測は、ゲームが返した結果 (ObservedOutcome) として作れない。"""
+    def test_attempt_taken_holds_only_an_action_taken(self) -> None:
+        """行動の返事 (AttemptTaken) に観測を渡すと ShortTermMemoryValidationException を投げる。"""
         with pytest.raises(ShortTermMemoryValidationException):
-            ObservedOutcome(_observation(SeenOrHeard()))
+            AttemptTaken(_noticed())  # type: ignore[arg-type]
 
     def test_each_outcome_answers_only_its_own_call(self) -> None:
         """ゲームが返した結果と記憶が返した結果は、自分の呼び出しの ID の 1 手にだけ答える。結果の分からない結果は、どの 1 手にも答えない。"""
         assert (_result("call-1").answers("call-1"), _result("call-1").answers("call-2")) == (True, False)
-        assert (_memory_result("call-1").answers("call-1"), _memory_result("call-1").answers("call-2")) == (True, False)
-        assert UnknownOutcome().answers("call-1") is False
+        assert (_old_world_line("call-1").answers("call-1"), _old_world_line("call-1").answers("call-2")) == (
+            True,
+            False,
+        )
+        assert AttemptNotAnsweredYet().answers("call-1") is False
 
     def test_attempt_without_result_holds_an_unknown_outcome(self) -> None:
         """結果を渡さずに作った試みは、結果の分からない結果を持ち、答えられていない。結果のある試みは答えられている。"""
-        assert Attempt(turn=5, move=_move()).result == UnknownOutcome()
+        assert Attempt(turn=5, move=_move()).response == AttemptNotAnsweredYet()
         assert Attempt(turn=5, move=_move()).is_answered() is False
-        assert Attempt(turn=5, move=_move(), result=_result()).is_answered() is True
+        assert Attempt(turn=5, move=_move(), response=_result()).is_answered() is True
 
     def test_attempt_result_must_be_an_outcome(self) -> None:
-        """結果に Outcome でない値 (観測そのものなど) を渡すと ShortTermMemoryValidationException を投げる。"""
+        """返事に AttemptResponse でない値 (観測そのものなど) を渡すと ShortTermMemoryValidationException を投げる。"""
         with pytest.raises(ShortTermMemoryValidationException):
-            Attempt(turn=5, move=_move(), result=_own_observation())  # type: ignore[arg-type]
+            Attempt(turn=5, move=_move(), response=_noticed())  # type: ignore[arg-type]
 
 
 class TestFirstMove:
     """1 手の番号は 1 から付くことを、1 手・結果・出せなかったことの受け取りで保証する (design_decisions D1824-5)。"""
 
-    @pytest.mark.parametrize("call", ["act", "receive_result", "lapse"])
+    @pytest.mark.parametrize("call", ["act", "receive_response", "lapse"])
     def test_turn_zero_is_rejected(self, call: str) -> None:
         """時計が 0 のまま 1 手、結果、1 手を出せなかったことを受け取ると、範囲の始まり (1) より前の番号になるので ShortTermMemoryValidationException を投げ、短期記憶は変わらない。最初の 1 手で時計は 1 に進むため。"""
         memory = _empty()
@@ -356,8 +377,8 @@ class TestFirstMove:
         with pytest.raises(ShortTermMemoryValidationException):
             if call == "act":
                 memory.act(_move("call-2"), current_turn=0)
-            elif call == "receive_result":
-                memory.receive_result(_result(), current_turn=0)
+            elif call == "receive_response":
+                memory.receive_response(_result(), current_turn=0)
             else:
                 memory.lapse(body="迷った", time=_TIME, current_turn=0)
         assert _state(memory) == before
@@ -381,21 +402,21 @@ class TestShowTo:
     """Experience.show_to が、出来事の種類ごとに読み手の対応するメソッドを呼ぶことを保証する。"""
 
     def test_each_kind_calls_its_own_method(self) -> None:
-        """見たこと、結果のある試み、記憶の道具の試み、結果の分からない試み、出せなかったことは、それぞれ別のメソッドで読まれる。"""
+        """見たこと、返事のある試み、古い世界の行の試み、返事の無い試み、出せなかったことは、それぞれ別のメソッドで読まれる。"""
         memory = _empty()
         memory.perceive(_observation(body="鐘が鳴った"), current_turn=0)
         _act_and_answer(memory, "call-1", 1)
         memory.act(_move("call-2"), current_turn=2)
-        memory.receive_result(_memory_result("call-2"), current_turn=2)
+        memory.receive_response(_old_world_line("call-2"), current_turn=2)
         memory.act(_move("call-3"), current_turn=3)
         memory.lapse(body="迷った", time=_TIME, current_turn=4)
         memory.act(_move("call-5"), current_turn=5)
 
         assert _bodies(memory) == [
             "見た:鐘が鳴った",
-            "試みた:call-1:扉は開かなかった",
-            "記憶を扱った:call-2:[行動] メモを書いた → [結果] メモを追加しました",
-            "結果の分からない試み:call-3",
+            "試みた:call-1:「扉」を開けようとした",
+            "古い世界の行:call-2:[行動] メモを書いた → [結果] メモを追加しました",
+            "返事の無い試み:call-3",
             "出せなかった:迷った",
         ]
 
@@ -407,7 +428,7 @@ class TestRecent:
         """自分の 1 手の結果 (番号 5) より前に起きた他人の行動を次のターンで見たとき (番号 6)、起きた順の値で他人の行動が先に並ぶ。"""
         memory = _empty()
         memory.act(_move(), current_turn=5)
-        memory.receive_result(_result(body="奪えなかった", order=_at(20.0)), current_turn=5)
+        memory.receive_response(_result(summary="奪えなかった", order=_at(20.0)), current_turn=5)
         memory.perceive(_observation(body="ゲンが周囲を探索している", order=_at(10.0)), current_turn=5)
 
         assert _bodies(memory) == ["見た:ゲンが周囲を探索している", "試みた:call-1:奪えなかった"]
@@ -432,7 +453,7 @@ class TestRecent:
     def test_attempt_without_result_has_no_order(self) -> None:
         """結果の分からない試みは起きた順を持たない。結果のある試みは結果の起きた順を持つ。"""
         assert Attempt(turn=5, move=_move()).order is None
-        assert Attempt(turn=5, move=_move(), result=_result(order=_at(1.0))).order == _at(1.0)
+        assert Attempt(turn=5, move=_move(), response=_result(order=_at(1.0))).order == _at(1.0)
 
 
 def _backstory(until_turn: int, *, written_turn: int | None = None, flow: str = "坑道で鍵を探していた") -> Backstory:
@@ -511,7 +532,7 @@ class TestEndTurn:
 
         (event,) = memory.get_events()
         assert event.experiences == (
-            Attempt(turn=1, move=_move("call-1"), result=_result("call-1")),
+            Attempt(turn=1, move=_move("call-1"), response=_result("call-1")),
             Attempt(turn=5, move=_move("call-5")),
         )
 
@@ -519,7 +540,7 @@ class TestEndTurn:
         """範囲が埋まったイベントの出来事は recent() と同じ順。同じ環境で先に起きた他人の行動 (ターン 6) は、自分の 1 手の結果 (ターン 5) より前に並ぶ。"""
         memory = _empty()
         memory.act(_move(), current_turn=5)
-        memory.receive_result(_result(body="奪えなかった", order=_at(20.0)), current_turn=5)
+        memory.receive_response(_result(summary="奪えなかった", order=_at(20.0)), current_turn=5)
         memory.perceive(_observation(body="ゲンが周囲を探索している", order=_at(10.0)), current_turn=5)
 
         memory.end_turn(turn=20)
@@ -721,6 +742,20 @@ class TestBackstoryAdded:
             list(range(1, 11)),
         )
 
+    def test_action_and_what_was_noticed_about_it_are_dropped_together(self) -> None:
+        """ターン 10 の行動と、それについて本人が知った観測は、ターン 10 までのいきさつが入ると一緒に外れ、知った観測だけが直近に残ることは無い。"""
+        memory = _empty()
+        for turn in range(1, 21):
+            memory.act(_move(f"call-{turn}"), current_turn=turn)
+            memory.receive_response(_result(f"call-{turn}"), current_turn=turn)
+            memory.perceive(_noticed(f"ターン {turn} の行動で知ったこと"), current_turn=turn)
+        memory.end_turn(turn=20)
+
+        memory.add_backstory(_backstory(10, written_turn=21))
+
+        assert "見た:ターン 10 の行動で知ったこと" not in _bodies(memory)
+        assert _bodies(memory)[:2] == ["試みた:call-11:「扉」を開けようとした", "見た:ターン 11 の行動で知ったこと"]
+
     def test_truncation_given_with_the_backstory_is_reported(self) -> None:
         """いきさつと一緒に渡した切り詰めた項目と元の長さを、いきさつが入ったイベントに載せる。渡さなければ空。いきさつ自体は持たない。"""
         memory = _empty()
@@ -846,12 +881,7 @@ class TestExperienceRules:
     def test_attempt_result_with_another_call_id_is_rejected(self) -> None:
         """1 手と呼び出しの ID が違う結果を持つ Attempt は作れない。"""
         with pytest.raises(ShortTermMemoryValidationException):
-            Attempt(turn=5, move=_move("call-1"), result=_result("call-2"))
-
-    def test_perception_of_an_own_action_result_is_rejected(self) -> None:
-        """自分の行動の結果を Perception として作ることはできない。"""
-        with pytest.raises(ShortTermMemoryValidationException):
-            Perception(turn=5, observation=_own_observation())
+            Attempt(turn=5, move=_move("call-1"), response=_result("call-2"))
 
     @pytest.mark.parametrize("turn", [-1, True, "3"])
     def test_invalid_turn_is_rejected(self, turn: object) -> None:
@@ -870,7 +900,7 @@ class TestExperienceRules:
             },
             {"experiences": (Perception(turn=3, observation=_observation()),), "recent_from": 4},
             {"recent_from": 0},
-            {"awaiting": Attempt(turn=3, move=_move(), result=_result())},
+            {"awaiting": Attempt(turn=3, move=_move(), response=_result())},
             {"awaiting": Attempt(turn=3, move=_move()), "recent_from": 4},
             {"backstories": tuple(_backstory(t) for t in (10, 20, 30, 40))},
             {"backstories": (_backstory(20), _backstory(10))},
@@ -909,7 +939,7 @@ class TestDroppedOrder:
     def _other_before_own_result() -> ShortTermMemory:
         memory = _empty()
         memory.act(_move(), current_turn=5)
-        memory.receive_result(_result(body="奪えなかった", order=_at(20.0)), current_turn=5)
+        memory.receive_response(_result(summary="奪えなかった", order=_at(20.0)), current_turn=5)
         memory.perceive(_observation(body="ゲンが周囲を探索している", order=_at(10.0)), current_turn=5)
         return memory
 

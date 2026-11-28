@@ -28,6 +28,9 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
 )
+from ai_rpg_world.application.being.legacy_action_results import (
+    rewrite_legacy_action_results,
+)
 from ai_rpg_world.application.being.removed_memory_payload_keys import (
     drop_removed_memory_payload_keys,
 )
@@ -130,6 +133,8 @@ class RestoreBeingSnapshotFromFileUseCase:
                     f"being_id={being_id.value!r} (BeingSnapshot 不変条件違反)"
                 )
             payload, removed_memory_key_counts = drop_removed_memory_payload_keys(payload)
+            payload, rewritten_action_result_counts = rewrite_legacy_action_results(payload)
+            removed_memory_key_counts = {**removed_memory_key_counts, **rewritten_action_result_counts}
 
         # 順序: snapshot を repo に書く先に、memory restore を行うと「Being が
         # まだ repo に居ない状態で memory が復元される」逆転が起きる。逆に

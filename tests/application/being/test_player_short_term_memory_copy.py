@@ -28,13 +28,12 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
-from ai_rpg_world.being.contract import AgentMove, ObservedTime, OccurrenceOrder, OwnActionResult, SeenOrHeard
+from ai_rpg_world.being.contract import AgentMove, ObservedTime, OccurrenceOrder, SeenOrHeard
 from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Lapse,
-    MemoryOperationOutcome,
-    ObservedOutcome,
     Perception,
     ShortTermMemory,
 )
@@ -168,10 +167,9 @@ class TestCopyOneTurn:
         world.copy.on_appended(ADA, result)
 
         (event,) = world.events()
-        assert isinstance(event, Attempt) and isinstance(event.result, ObservedOutcome)
-        assert (event.turn, event.move.call_id) == (1, "execution-1")
-        assert event.result.observation.route == OwnActionResult(call_id="execution-1", succeeded=True)
-        assert event.result.observation.body == format_action_result_body(result.payload)
+        assert isinstance(event, Attempt) and isinstance(event.response, OldWorldPreformattedLine)
+        assert (event.turn, event.move.call_id, event.response.call_id) == (1, "execution-1", "execution-1")
+        assert event.response.body == format_action_result_body(result.payload)
         assert world.memory().awaiting is None
 
     def test_result_that_arrives_without_a_move_is_seen_at_the_next_move(self) -> None:
@@ -319,7 +317,7 @@ class TestMemoryOperationsAndLapses:
     """記憶の道具の 1 手の結果と、1 手を出せなかったことを、Being 側の短期記憶に写すことを保証する (design_decisions D1824-9)。"""
 
     def test_memory_tool_result_pairs_with_its_move(self) -> None:
-        """記憶の道具の 1 手の結果は、その 1 手と組の Attempt として、記憶の結果 (MemoryOperationOutcome) を持って残り、trace は増えない。"""
+        """記憶の道具の 1 手の結果は、その 1 手と組の Attempt として、古い世界が組み終えた行 (OldWorldPreformattedLine) を持って残り、trace は増えない。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
         provenance = _provenance()
@@ -332,9 +330,9 @@ class TestMemoryOperationsAndLapses:
         world.copy.on_appended(ADA, result)
 
         (event,) = world.events()
-        assert isinstance(event, Attempt) and isinstance(event.result, MemoryOperationOutcome)
-        assert (event.turn, event.move.tool_name, event.result.call_id) == (1, "memo_add", "execution-1")
-        assert event.result.body == format_action_result_body(result.payload)
+        assert isinstance(event, Attempt) and isinstance(event.response, OldWorldPreformattedLine)
+        assert (event.turn, event.move.tool_name, event.response.call_id) == (1, "memo_add", "execution-1")
+        assert event.response.body == format_action_result_body(result.payload)
         assert world.memory().awaiting is None
         assert world.recorder.not_copied() == []
 

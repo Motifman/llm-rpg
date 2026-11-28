@@ -20,12 +20,13 @@ from ai_rpg_world.being.application.episode_index_revision_tool import (
     IndexRevisionRejectReason,
 )
 from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
-from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
+from ai_rpg_world.being.application.receive_action_taken import ReceiveActionTaken, ReceiveActionTakenCommand
 from ai_rpg_world.being.application.rechoose_name import NameChoiceAnswer, RechooseName
 from ai_rpg_world.being.contract import (
     UNKNOWN,
     ActionChoice,
     ActionChoices,
+    ActionTaken,
     ArgumentOutline,
     Candidate,
     Description,
@@ -35,7 +36,7 @@ from ai_rpg_world.being.contract import (
     ObservedTime,
     OfferedBeingTools,
     Orientation,
-    OwnActionResult,
+    OwnAction,
     PersonInText,
     PickOne,
     Scene,
@@ -49,8 +50,8 @@ from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository, Me
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
-    MemoryOperationOutcome,
-    ObservedOutcome,
+    AttemptTaken,
+    Perception,
     ShortTermMemory,
     ShortTermMemoryRepository,
 )
@@ -429,15 +430,15 @@ class TestChooseAction:
 
         _choose(_reply("pickup", {"item": "ランプ"}, call_id="call_9"), memories=memories)
 
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, ObservedOutcome)
+        attempt, noticed = _attempt_and_noticed(memories)
+        assert isinstance(attempt.response, AttemptTaken)
         assert attempt.move.tool_name == "pickup" and attempt.is_answered()
-        assert attempt.result.observation.body == (
+        assert noticed.body == (
             "未対応のツールです: pickup。もしかして 'pickup_item' ですか? 現在使える tool: [interact, pickup_item, speak]"
         )
-        assert attempt.result.observation.time == NOW
-        assert attempt.result.observation.route == OwnActionResult(
-            call_id="call_9", succeeded=False, action_summary='pickup({"item": "ランプ"}) を実行しました。'
+        assert noticed.time == NOW
+        assert attempt.response.taken == ActionTaken(
+            call_id="call_9", action_summary='pickup({"item": "ランプ"}) を実行しました。', accepted=False, time=NOW
         )
 
     def test_unknown_tool_without_a_close_name_is_remembered_without_suggestion(self) -> None:
@@ -446,13 +447,10 @@ class TestChooseAction:
 
         outcome, _ = _choose(_reply("gather", {}), memories=memories)
 
-        [attempt] = memories.get(GEN).unsummarized()
+        attempt, noticed = _attempt_and_noticed(memories)
         assert isinstance(outcome, ActionNotChosen) and outcome.suggestion is None
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, ObservedOutcome)
-        assert (
-            attempt.result.observation.body
-            == "未対応のツールです: gather。 現在使える tool: [interact, pickup_item, speak]"
-        )
+        assert isinstance(attempt.response, AttemptTaken)
+        assert noticed.body == "未対応のツールです: gather。 現在使える tool: [interact, pickup_item, speak]"
 
 
 class TestChoosingInThreeSteps:
@@ -625,15 +623,12 @@ class TestRecallingEpisodes:
             memories=memories,
         )
 
-        [attempt] = memories.get(GEN).unsummarized()
+        attempt, noticed = _attempt_and_noticed(memories)
         assert isinstance(outcome, TurnSpentRecalling) and outcome.move.tool_name == "episode_recall"
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert (
-            attempt.result.body
-            == f"[{handle}] 親方が金庫の番号を口にした\n  親方は酔って、金庫は 1907 で開くと言った。"
-        )
-        assert (attempt.result.call_id, attempt.result.time) == ("call_r", NOW)
-        assert attempt.result.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
+        assert isinstance(attempt.response, AttemptTaken)
+        assert noticed.body == f"[{handle}] 親方が金庫の番号を口にした\n  親方は酔って、金庫は 1907 で開くと言った。"
+        assert (attempt.response.taken.call_id, attempt.response.taken.time) == ("call_r", NOW)
+        assert attempt.response.taken.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
         assert attempt.call_text == f'episode_recall(handles=["{handle}"])'
 
     def test_summary_of_the_recall_leaves_out_the_thought_and_the_memo(self) -> None:
@@ -651,9 +646,9 @@ class TestRecallingEpisodes:
             memories=memories,
         )
 
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and attempt.result is not None
-        assert attempt.result.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
+        attempt, noticed = _attempt_and_noticed(memories)
+        assert isinstance(attempt.response, AttemptTaken)
+        assert attempt.response.taken.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
 
     def test_recall_wins_when_both_memory_tools_share_a_name(self) -> None:
         """思い出すツールと目次を直すツールに同じ名前が出ていると、思い出すとして扱う。"""
@@ -685,9 +680,9 @@ class TestRecallingEpisodes:
 
         _choose(_reply("episode_recall", {"handles": ["ep_ffffff"]}), being_tools=WITH_MEMORY, memories=memories)
 
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert attempt.result.body == "[ep_ffffff] そのような記憶は思い出せない。" and attempt.result.succeeded
+        attempt, noticed = _attempt_and_noticed(memories)
+        assert isinstance(attempt.response, AttemptTaken)
+        assert noticed.body == "[ep_ffffff] そのような記憶は思い出せない。" and attempt.response.taken.accepted
 
     def test_more_handles_than_the_limit_recall_nothing(self) -> None:
         """一度に思い出せる件数 (2) を超えて渡すと、どれも思い出さず、件数を減らすよう失敗の結果に残る。"""
@@ -701,11 +696,11 @@ class TestRecallingEpisodes:
             memories=memories,
         )
 
-        [attempt] = memories.get(GEN).unsummarized()
+        attempt, noticed = _attempt_and_noticed(memories)
         recalled = episodes.find_by_handle(GEN, handle)
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert attempt.result.body == "一度に思い出せるのは 2 件までです。呼び名を減らしてください。"
-        assert not attempt.result.succeeded
+        assert isinstance(attempt.response, AttemptTaken)
+        assert noticed.body == "一度に思い出せるのは 2 件までです。呼び名を減らしてください。"
+        assert not attempt.response.taken.accepted
         assert recalled is not None and recalled.recall_count == 0
 
     def test_same_handle_written_twice_counts_as_one_within_the_limit(self) -> None:
@@ -720,10 +715,10 @@ class TestRecallingEpisodes:
             memories=memories,
         )
 
-        [attempt] = memories.get(GEN).unsummarized()
+        attempt, noticed = _attempt_and_noticed(memories)
         recalled = episodes.find_by_handle(GEN, handle)
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert attempt.result.succeeded
+        assert isinstance(attempt.response, AttemptTaken)
+        assert attempt.response.taken.accepted
         assert recalled is not None and recalled.recall_count == 1
 
     def test_handles_not_written_as_a_list_are_answered_with_how_to_write_them(self) -> None:
@@ -732,10 +727,10 @@ class TestRecallingEpisodes:
 
         _choose(_reply("episode_recall", {"handles": "ep_1"}), being_tools=WITH_MEMORY, memories=memories)
 
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert attempt.result.body.startswith("handles には、【思い出せる出来事】に並ぶ")
-        assert not attempt.result.succeeded
+        attempt, noticed = _attempt_and_noticed(memories)
+        assert isinstance(attempt.response, AttemptTaken)
+        assert noticed.body.startswith("handles には、【思い出せる出来事】に並ぶ")
+        assert not attempt.response.taken.accepted
 
     def test_recall_tool_not_offered_is_an_unknown_tool(self) -> None:
         """思い出すツールを出していなければ、episode_recall は無いツールとして選べなかったを返す。"""
@@ -744,11 +739,11 @@ class TestRecallingEpisodes:
         assert isinstance(outcome, ActionNotChosen) and outcome.requested_tool == "episode_recall"
 
 
-class TestReceiveActionResult:
-    """ReceiveActionResult が、世界の返した結果を、結果を待っている試みに結び付けて短期記憶に残すことを保証する。"""
+class TestReceiveActionTaken:
+    """ReceiveActionTaken が、世界の返した行動の返事を、返事を待っている試みに結び付けて短期記憶に残すことを保証する。"""
 
-    def test_result_answers_the_awaiting_attempt(self) -> None:
-        """選んだ行動の呼び出しの ID を持つ結果を渡すと、その試みが結果つきになる。"""
+    def test_taken_answers_the_awaiting_attempt_and_the_noticed_follows_it(self) -> None:
+        """選んだ行動の呼び出しの ID を持つ返事を渡すと、その試みが返事つきになり、本人が知った観測がそのすぐ後に残る。"""
         memories = InMemoryShortTermMemoryRepository()
         clock = InMemoryMemoryTurnClock()
         _choose(
@@ -756,9 +751,10 @@ class TestReceiveActionResult:
             memories=memories,
             clock=clock,
         )
-        result = Observation(
+        taken = ActionTaken(call_id="call_3", action_summary="「金庫」で番号を合わせて開ける", accepted=True, time=NOW)
+        noticed = Observation(
             body="金庫の扉が開いた。",
-            route=OwnActionResult(call_id="call_3", succeeded=True),
+            route=OwnAction(),
             time=NOW,
             subject_is_self=True,
             subject_name=UNKNOWN,
@@ -767,11 +763,19 @@ class TestReceiveActionResult:
             addressed_to_self=True,
         )
 
-        ReceiveActionResult(memories, clock).execute(ReceiveActionResultCommand(GEN, result))
+        ReceiveActionTaken(memories, clock).execute(ReceiveActionTakenCommand(GEN, taken, noticed))
 
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and attempt.is_answered()
-        assert isinstance(attempt.result, ObservedOutcome) and attempt.result.observation.body == "金庫の扉が開いた。"
+        attempt, kept = _attempt_and_noticed(memories)
+        assert attempt.is_answered() and attempt.response == AttemptTaken(taken)
+        assert kept == noticed
+
+
+def _attempt_and_noticed(memories: InMemoryShortTermMemoryRepository) -> tuple[Attempt, Observation]:
+    """1 手と、そのすぐ後に残った、その行為について本人が知った観測。"""
+    attempt, noticed = memories.get(GEN).unsummarized()
+    assert isinstance(attempt, Attempt) and isinstance(noticed, Perception)
+    assert isinstance(noticed.observation.route, OwnAction) and noticed.turn == attempt.turn
+    return attempt, noticed.observation
 
 
 def _confident(name: str) -> NameChoiceAnswer:
@@ -927,12 +931,10 @@ class TestRevisingTheEpisodeIndex:
         assert outcome.revision.before == EpisodeIndex(
             summary="親方が金庫の番号を口にした", recall_when="金庫の話が出たとき"
         )
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert attempt.result.succeeded
-        assert (
-            attempt.result.body == f"[{handle}] の目次を直した: 井戸でサヨと話した — 思い出すとき: 井戸の話が出たとき"
-        )
+        attempt, noticed = _attempt_and_noticed(memories)
+        assert isinstance(attempt.response, AttemptTaken)
+        assert attempt.response.taken.accepted
+        assert noticed.body == f"[{handle}] の目次を直した: 井戸でサヨと話した — 思い出すとき: 井戸の話が出たとき"
         assert attempt.call_text == f'episode_revise_index(handle="{handle}", about=話題, recall_when=本文)'
 
     def test_unknown_handle_is_refused_and_changes_nothing(self) -> None:
@@ -954,10 +956,10 @@ class TestRevisingTheEpisodeIndex:
             EpisodeIndexRevisionResult.REJECTED,
             IndexRevisionRejectReason.UNKNOWN_HANDLE,
         )
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
-        assert not attempt.result.succeeded
-        assert attempt.result.body == "ep_ffffff という記憶は無い。【思い出せる出来事】の呼び名を使ってください。"
+        attempt, noticed = _attempt_and_noticed(memories)
+        assert isinstance(attempt.response, AttemptTaken)
+        assert not attempt.response.taken.accepted
+        assert noticed.body == "ep_ffffff という記憶は無い。【思い出せる出来事】の呼び名を使ってください。"
 
     def test_blank_text_is_refused_as_malformed(self) -> None:
         """どんな記憶か (about) が空白だけなら、書き方を説明して断る。"""
@@ -1016,8 +1018,8 @@ class TestRevisingTheEpisodeIndex:
             isinstance(outcome, TurnSpentRevisingIndex)
             and outcome.revision.outcome is EpisodeIndexRevisionResult.FAILED
         )
-        [attempt] = memories.get(GEN).unsummarized()
-        assert isinstance(attempt.result, MemoryOperationOutcome) and attempt.result.body == "目次を直せなかった。"
+        attempt, noticed = _attempt_and_noticed(memories)
+        assert isinstance(attempt.response, AttemptTaken) and noticed.body == "目次を直せなかった。"
 
     def test_revising_is_not_offered_when_the_environment_does_not_offer_it(self) -> None:
         """環境が目次を直すツールを出していなければ、その名前は出していないツールとして断る。"""
