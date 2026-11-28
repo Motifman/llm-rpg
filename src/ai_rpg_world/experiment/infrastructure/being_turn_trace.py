@@ -56,6 +56,7 @@ class TracedChooseAction:
         self._player_number_of = player_number_of
         self._lock = threading.Lock()
         self._thinking_ms: dict[int, int] = {}
+        self._turns: dict[PersonId, int] = {}
 
     def execute(self, command: ChooseActionCommand) -> ChoiceOutcome:
         return self.settle(self.think(self.prompt(command)))
@@ -71,14 +72,19 @@ class TracedChooseAction:
         return thought
 
     def settle(self, thought: ActionThought) -> ChoiceOutcome:
-        outcome = self._inner.settle(thought)
-        with self._lock:
-            thinking_ms = self._thinking_ms.pop(id(thought), None)
-        self._record(thought, outcome, thinking_ms)
+        try:
+            outcome = self._inner.settle(thought)
+        finally:
+            with self._lock:
+                thinking_ms = self._thinking_ms.pop(id(thought), None)
+        # 選んだ行動はもう記憶に書いてある。記録を組む途中で落ちても、選べなかったターンにしない
+        trace = self._trace()
+        trace.guarded(lambda: self._record(trace, thought, outcome, thinking_ms))
         return outcome
 
-    def _record(self, thought: ActionThought, outcome: ChoiceOutcome, thinking_ms: int | None) -> None:
-        trace = self._trace()
+    def _record(
+        self, trace: GameWorldTrace, thought: ActionThought, outcome: ChoiceOutcome, thinking_ms: int | None
+    ) -> None:
         command = thought.prompt.command
         person = self._person_of(command.being_id)
         llm_call_id = f"llm_{uuid4().hex}"
@@ -92,6 +98,9 @@ class TracedChooseAction:
             for reply in thought.exchange.replies
         ]
         candidate_table = thought.prompt.tools.candidate_table()
+        tick = trace.now()
+        with self._lock:
+            self._turns[person] = turn = self._turns.get(person, 0) + 1
         trace.record_being_turn(
             GameWorldTraceKind.CHOICE,
             person,
@@ -116,7 +125,8 @@ class TracedChooseAction:
                     player_id=self._player_number_of(person),
                     persona_id=command.being_id.value,
                     character_name=trace.name_of(person),
-                    turn_index=0,
+                    turn_index=turn,
+                    world_tick=tick,
                     provenance={"world": "game_world", "person_id": person.value, "prompt_sha256": sha},
                 ),
                 request_kwargs={
@@ -146,11 +156,14 @@ class TracedReceiveActionResult:
     def execute(self, command: ReceiveActionResultCommand) -> None:
         self._inner.execute(command)
         trace = self._trace()
-        trace.record_being_turn(
-            GameWorldTraceKind.ACTION_RESULT,
-            self._person_of(command.being_id),
-            route=trace.jsonable(command.result.route),
-            body=trace.jsonable(command.result.body),
+        # 結果はもう記憶に入り、行為も世界で確定している。記録が落ちても、遊びは変えない
+        trace.guarded(
+            lambda: trace.record_being_turn(
+                GameWorldTraceKind.ACTION_RESULT,
+                self._person_of(command.being_id),
+                route=trace.jsonable(command.result.route),
+                body=trace.jsonable(command.result.body),
+            )
         )
 
 

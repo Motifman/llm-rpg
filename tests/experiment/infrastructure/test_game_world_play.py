@@ -110,3 +110,19 @@ class TestBeingTurnsInTheTrace:
         assert gens["scene"]["here"]["place"] == "南の横坑口"
         assert "travel_to.destination" in gens["candidate_table"]
         assert len(gens["prompt_sha256"]) == 64
+
+    def test_failing_to_write_the_choice_keeps_the_turn(self) -> None:
+        """選んだ行動の行を書けなくても、そのターンは選べなかったターンにならず、書けなかった数が残る。"""
+
+        class _BrokenForChoices(_Kept):
+            def record(
+                self, kind: str, *, tick: int | None = None, player_id: int | None = None, **payload: Any
+            ) -> None:
+                if kind == "game_world.choice":
+                    raise OSError("disk is full")
+                super().record(kind, tick=tick, player_id=player_id, **payload)
+
+        result = _play(MurmuringActionChoosing(), round_limit=1).play(_BrokenForChoices())
+
+        assert result.failed_choices == ()
+        assert (result.finished_turns, result.trace_failures) == (4, 4)

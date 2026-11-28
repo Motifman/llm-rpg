@@ -77,6 +77,9 @@ class GameWorldTrace:
     def jsonable(self, value: object) -> Any:
         return self._jsonable(value)
 
+    def guarded(self, write: Callable[[], None]) -> None:
+        self._guarded(write)
+
     def _guarded(self, write: Callable[[], None]) -> None:
         # 記録は見るためのもので、書けなくても遊びは変えない。書けなかった数は run の結果に残す
         try:
@@ -104,6 +107,9 @@ class GameWorldTrace:
 
     def record_being_turn(self, kind: str, person: PersonId, **payload: Any) -> None:
         self._guarded(lambda: self._log.record(kind, tick=self._now(), person=self._person(person), **payload))
+
+    def now(self) -> int:
+        return self._now()
 
     def name_of(self, person: PersonId) -> str:
         return self._names.get(person, person.value)
