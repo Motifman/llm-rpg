@@ -18,11 +18,13 @@ docs/environment_model/design/world_state.md の決まり:
 from __future__ import annotations
 
 import copy
+import copyreg
 import importlib
 import inspect
 import pkgutil
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -205,6 +207,10 @@ def _methods_without_return_annotation(cls: type) -> list[str]:
 
 def _discovered_operations() -> set[str]:
     return {f"{cls.__name__}.{name}" for cls in _world_aggregates() for name in _state_changing_operations(cls)}
+
+
+# 値オブジェクトは人の対応などを MappingProxyType で持つ。copy は MappingProxyType を複製できないので、中身の dict ごと複製する
+copyreg.pickle(MappingProxyType, lambda proxy: (MappingProxyType, (dict(proxy),)))
 
 
 def _state_of(aggregate: AggregateRoot[Any]) -> dict[str, Any]:

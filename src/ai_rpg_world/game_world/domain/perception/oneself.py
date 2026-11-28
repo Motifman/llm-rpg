@@ -146,9 +146,18 @@ class Oneself:
         """人の穴の名前を場面のほかの人と重ならないものに変え、``holes`` に足した行を、format の書き方で返す。"""
         if isinstance(self.doing, NotDoingAnything):
             return []
-        doing = _rekeyed(self.doing.text, "doing_", holes)
-        until = "" if self.doing.until is None else wording.doing_until.format(time=clock.display(self.doing.until))
-        return [_escaped(wording.doing).replace("{{doing}}", doing).replace("{{until}}", _escaped(until))]
+        filled = {
+            "doing": _rekeyed(self.doing.text, "doing_", holes),
+            "until": _escaped(
+                "" if self.doing.until is None else wording.doing_until.format(time=clock.display(self.doing.until))
+            ),
+        }
+        return [
+            "".join(
+                _escaped(literal) + ("" if name is None else filled[name])
+                for literal, name, _, _ in Formatter().parse(wording.doing)
+            )
+        ]
 
 
 def _doing_now(person: PersonId, facts: WorldFacts) -> DoingNow | NotDoingAnything:
