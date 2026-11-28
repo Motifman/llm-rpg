@@ -20,9 +20,12 @@ from ai_rpg_world.play_session.domain.play_session_exception import (
 from ai_rpg_world.play_session.domain.turn_rounds import (
     Acted,
     ChoiceFailed,
+    ChoosingKeptFailing,
+    ChoseNoAction,
     ObservationPassedOnEvent,
     RoundClosedEvent,
     RoundCount,
+    RoundLimitReached,
     RoundOpenedEvent,
     SkippedTurn,
     TurnFinishedEvent,
@@ -255,6 +258,21 @@ class TestObservationsWhileChoosing:
         kinds = [type(e) for e in rounds.get_events()][-2:]
         assert kinds == [TurnFinishedEvent, ObservationPassedOnEvent]
 
+    def test_held_observation_is_not_passed_on_again_in_a_later_turn(self) -> None:
+        """巡り 1 で預かってターンの終わりに回した観測は、巡り 2 でゲンがまた選んでターンを終えても、もう一度は回らない。"""
+        rounds = _rounds()
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.begin_choosing((_GEN,))
+        rounds.notice_observation(_GEN, _observation(False))
+        rounds.finish_turn(_GEN, Acted())
+        rounds.close_round()
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.begin_choosing((_GEN,))
+
+        rounds.finish_turn(_GEN, Acted())
+
+        assert _passed_on(rounds) == [(_GEN, "扉が壊れた")]
+
     def test_observation_after_the_choice_came_back_is_passed_on_at_once(self) -> None:
         """選び終えて行為を確定させているあいだのゲンに届いた観測 (自分の行為の結果など) は、預からずに回る。"""
         rounds = _rounds()
@@ -395,12 +413,12 @@ class TestRoundLimit:
         """上限 2 のとき、1 巡り閉じた時点では届かず、2 巡り閉じると届く。"""
         rounds = _rounds(round_limit=2)
         _play_round(rounds, _ALL_FREE)
-        after_one = rounds.has_reached_round_limit()
+        after_one = rounds.reason_to_stop()
 
         _play_round(rounds, _ALL_FREE)
 
-        assert after_one is False
-        assert rounds.has_reached_round_limit() is True
+        assert after_one is None
+        assert rounds.reason_to_stop() == RoundLimitReached()
 
     def test_closed_rounds_are_numbered_from_one(self) -> None:
         """2 巡り閉じると、RoundClosedEvent の巡りの番号は 1・2 になる。"""
@@ -464,12 +482,12 @@ class TestChoiceFailures:
         rounds.open_round(_ALL_FREE)
         for person in (_HARU, _SAYO, _GEN):
             rounds.finish_turn(person, _FAILED)
-        after_seven = rounds.has_given_up_choosing()
+        after_seven = rounds.reason_to_stop()
 
         rounds.finish_turn(_MIO, _FAILED)
 
-        assert after_seven is False
-        assert rounds.has_given_up_choosing() is True
+        assert after_seven is None
+        assert isinstance(rounds.reason_to_stop(), ChoosingKeptFailing)
 
     def test_eight_failures_within_one_round_do_not_give_up(self) -> None:
         """8 人が同じ巡りで全員選べなくても、1 巡りに収まっているので諦めない。provider が一瞬遅れただけのことがあるため。"""
@@ -480,7 +498,7 @@ class TestChoiceFailures:
         for person in eight:
             rounds.finish_turn(person, _FAILED)
 
-        assert rounds.has_given_up_choosing() is False
+        assert rounds.reason_to_stop() is None
 
     def test_a_choice_breaks_the_streak_of_failures(self) -> None:
         """7 件続けて選べなかったあとに 1 人が選べると、続きが切れ、そのあと 2 巡りにまたがって 2 件選べなくても諦めない。"""
@@ -495,7 +513,7 @@ class TestChoiceFailures:
         _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
         _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
 
-        assert rounds.has_given_up_choosing() is False
+        assert rounds.reason_to_stop() is None
 
     def test_a_choice_forgets_the_rounds_of_earlier_failures(self) -> None:
         """2 巡りにまたがる 7 件のあとに選べたターンが入ると、そのあと 1 つの巡りで 8 人が選べなくても、巡りが 1 つなので諦めない。"""
@@ -512,7 +530,7 @@ class TestChoiceFailures:
         for person in eight:
             rounds.finish_turn(person, _FAILED)
 
-        assert rounds.has_given_up_choosing() is False
+        assert rounds.reason_to_stop() is None
 
     def test_giving_up_keeps_the_reasons_of_the_failures(self) -> None:
         """8 件続けて選べずに諦めると、その 8 件の理由を起きた順に残し、そのあとにまた選べなくても理由は変わらない。"""
@@ -529,9 +547,11 @@ class TestChoiceFailures:
         rounds.open_round({_HARU: FreeToAct()})
         rounds.finish_turn(_HARU, ChoiceFailed("Timeout: once more"))
 
-        assert rounds.failures_given_up_on() == (
-            *(f"Timeout: {p.value}" for p in _ALL_FREE),
-            *(f"RateLimit: {p.value}" for p in _ALL_FREE),
+        assert rounds.reason_to_stop() == ChoosingKeptFailing(
+            (
+                *(f"Timeout: {p.value}" for p in _ALL_FREE),
+                *(f"RateLimit: {p.value}" for p in _ALL_FREE),
+            )
         )
 
     def test_giving_up_is_kept_even_if_a_choice_comes_later(self) -> None:
@@ -543,4 +563,101 @@ class TestChoiceFailures:
 
         rounds.finish_turn(_HARU, Acted())
 
-        assert rounds.has_given_up_choosing() is True
+        assert isinstance(rounds.reason_to_stop(), ChoosingKeptFailing)
+
+
+class TestTurnsWithoutAnAction:
+    """世界に渡す行動を選ばなかったターン (ChoseNoAction) が、失敗の続きを切り、待つ扱いにもしないことを保証する。"""
+
+    def test_turn_without_an_action_starts_the_count_of_that_person_over(self) -> None:
+        """ミオが 2 回続けて選べず、次に思い出すだけのターンを終え、また 1 回選べなくても、次の巡りでミオにターンが回る。"""
+        rounds = _rounds(wake_waiting_after=3)
+        for outcome in (_FAILED, _FAILED, ChoseNoAction(), _FAILED):
+            _play_round(rounds, {_MIO: FreeToAct()}, mio=outcome)
+
+        rounds.open_round({_MIO: FreeToAct()})
+
+        assert rounds.due_turns() == (_MIO,)
+
+    def test_turn_without_an_action_breaks_the_streak_of_failures(self) -> None:
+        """7 件続けて選べなかったあとに思い出すだけのターンが入ると、続きが切れ、そのあと 2 巡りにまたがって 2 件選べなくても止めない。"""
+        rounds = _rounds()
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+        rounds.open_round(_ALL_FREE)
+        for person in (_HARU, _SAYO, _GEN):
+            rounds.finish_turn(person, _FAILED)
+        rounds.finish_turn(_MIO, ChoseNoAction())
+        rounds.close_round()
+
+        _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+        _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+
+        assert rounds.reason_to_stop() is None
+
+    def test_turn_without_an_action_is_not_waiting(self) -> None:
+        """思い出すだけのターンを終えたゲンには、次の巡りでもターンが回る。"""
+        rounds = _rounds()
+        _play_round(rounds, {_GEN: FreeToAct()}, gen=ChoseNoAction())
+
+        rounds.open_round({_GEN: FreeToAct()})
+
+        assert rounds.due_turns() == (_GEN,)
+
+
+class TestWaitingAfterChoicesKeptFailing:
+    """3 回続けて選べずに待ちに入った人を、自分から待った人と見分けられる理由で飛ばし、同じ規則で起こすことを保証する。"""
+
+    def test_person_waiting_after_failures_is_skipped_for_a_reason_of_its_own(self) -> None:
+        """ミオが 3 回続けて選べず、ゲンが待つを選んだあとの巡りでは、ミオは WAITING_AFTER_CHOICES_KEPT_FAILING、ゲンは WAITING で飛ばされる。"""
+        rounds = _rounds()
+        _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+        _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+        _play_round(rounds, {_MIO: FreeToAct(), _GEN: FreeToAct()}, mio=_FAILED, gen=Waited())
+
+        rounds.open_round({_MIO: FreeToAct(), _GEN: FreeToAct()})
+
+        [opened] = [e for e in rounds.get_events() if isinstance(e, RoundOpenedEvent)][-1:]
+        assert opened.skipped == (
+            SkippedTurn(_MIO, TurnSkipReason.WAITING_AFTER_CHOICES_KEPT_FAILING),
+            SkippedTurn(_GEN, TurnSkipReason.WAITING),
+        )
+
+    def test_person_waiting_after_failures_is_woken_by_a_call(self) -> None:
+        """3 回続けて選べずに待っているミオも、目立つ知らせ (wants_wake=True) を受けると、次の巡りでターンが戻る。"""
+        rounds = _rounds(wake_waiting_after=10)
+        for _ in range(3):
+            _play_round(rounds, {_MIO: FreeToAct()}, mio=_FAILED)
+        rounds.notice_observation(_MIO, _observation(wants_wake=True, addressed_to_self=False))
+
+        rounds.open_round({_MIO: FreeToAct()})
+
+        assert rounds.due_turns() == (_MIO,)
+
+    def test_choosing_to_wait_after_failures_is_plain_waiting(self) -> None:
+        """2 回続けて選べなかったゲンが次に待つを選ぶと、次の巡りでは WAITING で飛ばされる。"""
+        rounds = _rounds()
+        _play_round(rounds, {_GEN: FreeToAct()}, gen=_FAILED)
+        _play_round(rounds, {_GEN: FreeToAct()}, gen=_FAILED)
+        _play_round(rounds, {_GEN: FreeToAct()}, gen=Waited())
+
+        rounds.open_round({_GEN: FreeToAct()})
+
+        [opened] = [e for e in rounds.get_events() if isinstance(e, RoundOpenedEvent)][-1:]
+        assert opened.skipped == (SkippedTurn(_GEN, TurnSkipReason.WAITING),)
+
+
+class TestReasonToStop:
+    """TurnRounds.reason_to_stop が、巡りの上限と選び続けた失敗のどちらで止めるかを決めることを保証する。"""
+
+    def test_there_is_no_reason_to_stop_before_any_round(self) -> None:
+        """巡りを 1 つも回していないときは、止める理由は無い。"""
+        assert _rounds().reason_to_stop() is None
+
+    def test_choosing_kept_failing_wins_over_the_round_limit(self) -> None:
+        """上限 2 で、4 人とも 2 巡り続けて選べずに上限まで閉じると、止める理由は RoundLimitReached ではなく ChoosingKeptFailing になる。
+        上限で覆うと、壊れた run が正常に終わったように記録されるため。"""
+        rounds = _rounds(round_limit=2)
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+        _play_round(rounds, _ALL_FREE, haru=_FAILED, sayo=_FAILED, gen=_FAILED, mio=_FAILED)
+
+        assert rounds.reason_to_stop() == ChoosingKeptFailing((_FAILED.reason,) * 8)

@@ -26,6 +26,7 @@ from ai_rpg_world.game_world.domain.whereabouts import AtSpot, Occupant, PersonB
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
+    from ai_rpg_world.game_world.domain.action.action_fixed_before_effect import ActionFixedBeforeEffect
     from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
     from ai_rpg_world.game_world.domain.action.offered_action import OfferedAction
@@ -176,6 +177,8 @@ class ActionAttempt(Protocol):
     def done_text_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople: ...
 
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople: ...
+
+    def fixed_before_effect(self, design: WorldDesign, facts: WorldFacts) -> ActionFixedBeforeEffect: ...
 
     def aimed_in(self, facts: WorldFacts) -> Self | NoOneFoundInTheDark: ...
 

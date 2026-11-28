@@ -35,10 +35,12 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsAtOnce
-from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
+from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, PlayStopped, WorldEnded
 from ai_rpg_world.play_session.domain.turn_rounds import (
     ChoiceFailed,
+    ChoseNoAction,
     ObservationPassedOnEvent,
+    RoundLimitReached,
     RoundOpenedEvent,
     SkippedTurn,
     TurnFinishedEvent,
@@ -132,7 +134,7 @@ class TestBeingsTakingTurnsOneByOne:
 
         stopped = session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
-        assert stopped == RoundLimitReached()
+        assert stopped == PlayStopped(RoundLimitReached())
         assert len(completion.calls) == 8
         for round_calls in (completion.calls[:4], completion.calls[4:]):
             assert len({call.messages[0]["content"] for call in round_calls}) == 4
@@ -182,7 +184,7 @@ class TestBeingsTakingTurnsOneByOne:
         assert len(completion.calls) == 7
 
     def test_turn_without_a_tool_call_is_used_up_and_comes_back_next_round(self) -> None:
-        """ゲンの LLM がツールを 1 つも呼ばなかったら、世界には何も送らず、次の巡りでまたゲンに頼む。"""
+        """ゲンの LLM がツールを 1 つも呼ばなかったら、世界には何も送らず、そのターンは ChoseNoAction で終わり、次の巡りでまたゲンに頼む。"""
         session = MineVillageSession(round_limit=2).started()
         order = _turn_order(session)
         first_round = [
@@ -194,6 +196,7 @@ class TestBeingsTakingTurnsOneByOne:
         session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
         assert len(completion.calls) == 8
+        assert [e.outcome for e in _finished_turns(session) if e.person == _GEN][0] == ChoseNoAction()
         assert [a.move.call_id for a in _answered_attempts(session, _GEN)] != []
         assert all(a.move.tool_name == "speak" for a in _answered_attempts(session, _GEN))
 
@@ -232,7 +235,7 @@ class TestBeingsTakingTurnsOneByOne:
 
         stopped = session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
 
-        assert stopped == WorldEnded()
+        assert stopped == PlayStopped(WorldEnded())
         assert completion.asked[-1] == _GEN
         [lit, held, started] = _answered_attempts(session, _GEN)
         assert isinstance(started.result, ObservedOutcome)
@@ -552,7 +555,7 @@ class TestRevisingTheIndexWhileTakingTurns:
     """新しい世界で、Being が目次を直すツールを選ぶと、世界に行為を渡さずに目次が直ることを保証する (#2261 の完了条件)。"""
 
     def test_gen_revises_the_index_of_an_episode_and_the_world_sees_no_action(self) -> None:
-        """ゲンが目次の「金庫の番号を聞いた」を「井戸でサヨと話した」に直すと、目次が直り、ゲンの行為は世界に渡らない。"""
+        """ゲンが目次の「金庫の番号を聞いた」を「井戸でサヨと話した」に直すと、目次が直り、ゲンの行為は世界に渡らず、そのターンは ChoseNoAction で終わる。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
         gen = BeingId(_GEN.value)
         episode = Episode.write(
@@ -581,6 +584,7 @@ class TestRevisingTheIndexWhileTakingTurns:
         [attempt] = _answered_attempts(session, _GEN)
         assert attempt.move.tool_name == "episode_revise_index"
         assert isinstance(attempt.result, MemoryOperationOutcome) and attempt.result.succeeded
+        assert [e.outcome for e in _finished_turns(session) if e.person == _GEN] == [ChoseNoAction()]
 
 
 _PEOPLE_BY_NAME = {"ハル": PersonId("haru"), "ミオ": PersonId("mio"), "ゲン": _GEN, "サヨ": PersonId("sayo")}
@@ -756,7 +760,7 @@ class TestBeingsTakingTurnsAtOnce:
         """ゲンが昇降機を動かして世界が終わったあとに返ったミオの選択は、世界に送られず、LLM とのやりとりごと WorldEnded に残る。"""
         _, stopped = self._world_ending_while_mio_thinks()
 
-        assert isinstance(stopped, WorldEnded)
+        assert isinstance(stopped.reason, WorldEnded)
         [mios] = [d for d in stopped.discarded if d.person == _MIO]
         assert mios.exchange is not None and mios.failure is None
         call = mios.exchange.replies[-1].tool_call
@@ -851,7 +855,7 @@ class TestLettingGoUnderTheCap:
 
         stopped = session.play_rounds(takers, world_has_ended=ended_after_the_first)(PlayRoundsCommand(WORLD))
 
-        assert isinstance(stopped, WorldEnded)
+        assert isinstance(stopped.reason, WorldEnded)
         assert len(stopped.discarded) == 3
         assert any(d.exchange is None and d.failure is None for d in stopped.discarded)
 

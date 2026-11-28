@@ -12,7 +12,8 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
     OfferedValue,
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
-from ai_rpg_world.game_world.domain.people import PeopleAsSeen, PersonRef
+from ai_rpg_world.game_world.domain.people import PeopleAsSeen, PeopleSeenBy, PersonRef
+from ai_rpg_world.game_world.domain.perception.names_in_world import NamesInWorld
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.surroundings import VisibleSurroundings
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId
@@ -40,6 +41,11 @@ class ChoiceWording:
         self.facts = facts
         self.people = people
         self._items_seen_on = items_seen_on
+
+    @classmethod
+    def for_person(cls, actor: PersonId, facts: WorldFacts, design: WorldDesign) -> ChoiceWording:
+        seen = VisibleSurroundings.seen_by_person(actor, facts, design)
+        return cls.seeing(actor, design, facts, PeopleSeenBy.in_world(actor, facts), seen)
 
     @classmethod
     def seeing(
@@ -71,7 +77,7 @@ class ChoiceWording:
         return _ABSTAIN
 
     def item(self, value: OfferedValue, item: ItemInstanceId) -> OfferedStep:
-        return OfferedStep(value, self.design.nouns.item_spec_of(self.facts.item(item).spec_id).name, item)
+        return OfferedStep(value, NamesInWorld(self.facts).item_name(item), item)
 
     # 品物の引数がどの品物を指すかは、まだ宣言に書かれていない (#2247)。人への操作は相手の見えている持ち物、
     # 暗がりの相手は持ち物が見えないので無し、ほかは自分の持ち物から出す。決め方を変えるときはこの 3 つだけを直す。

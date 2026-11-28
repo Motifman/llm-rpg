@@ -8,17 +8,18 @@ from ai_rpg_world.game_world.application.deliver_perception import DeliverPercep
 from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
 from ai_rpg_world.play_session.application.play_rounds import (
-    ChoosingKeptFailing,
     DiscardedChoice,
     FinishedTurn,
     PlayRoundsCommand,
-    RoundLimitReached,
+    PlayStopped,
     WorldEnded,
 )
 from ai_rpg_world.play_session.domain.turn_rounds import (
     Acted,
     ChoiceFailed,
+    ChoosingKeptFailing,
     RoundClosedEvent,
+    RoundLimitReached,
     TurnFinishedEvent,
     TurnOutcome,
     Waited,
@@ -97,7 +98,7 @@ class TestPlayRoundsStops:
 
         stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
-        assert stopped == RoundLimitReached()
+        assert stopped == PlayStopped(RoundLimitReached())
         assert takers.asked == [_EVERYONE] * 3
         assert _now(session).value - before.value == 3
 
@@ -109,19 +110,19 @@ class TestPlayRoundsStops:
 
         stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
-        assert stopped == WorldEnded()
+        assert stopped == PlayStopped(WorldEnded())
         assert len(takers.finished) == 1
         assert _now(session) == before
 
     def test_world_ending_during_a_turn_lets_the_rest_go_and_keeps_what_was_discarded(self) -> None:
-        """最初の人の行為で世界が終わると、頼む先に残りを手放させ、捨てた選択を WorldEnded に載せる。"""
+        """最初の人の行為で世界が終わると、頼む先に残りを手放させ、捨てた選択を WorldEnded の止まった結果に載せる。"""
         session = MineVillageSession().started()
         mios = DiscardedChoice(person=PersonId("mio"), exchange=None, failure=None)
         takers = _TurnTakersForTests(during=lambda person: _end_world(session), discarded=(mios,))
 
         stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
-        assert stopped == WorldEnded((mios,))
+        assert stopped == PlayStopped(WorldEnded(), (mios,))
         assert takers.turns.let_go_count == 1
 
     def test_failure_in_a_turn_lets_the_rest_go_before_it_propagates(self) -> None:
@@ -157,7 +158,7 @@ class TestPlayRoundsStops:
 
         stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
-        assert stopped == WorldEnded()
+        assert stopped == PlayStopped(WorldEnded())
         assert takers.asked == []
 
     def test_choosing_that_keeps_failing_stops_the_play(self) -> None:
@@ -169,7 +170,7 @@ class TestPlayRoundsStops:
 
         stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
-        assert stopped == ChoosingKeptFailing(("Timeout: no reply",) * 8)
+        assert stopped == PlayStopped(ChoosingKeptFailing(("Timeout: no reply",) * 8))
         assert len(takers.finished) == 8
         assert _now(session).value - before.value == 1
 
@@ -184,8 +185,20 @@ class TestPlayRoundsStops:
 
         stopped = session.play_rounds(again)(PlayRoundsCommand(WORLD))
 
-        assert isinstance(stopped, ChoosingKeptFailing)
+        assert isinstance(stopped.reason, ChoosingKeptFailing)
         assert again.asked == []
+
+    def test_choosing_that_keeps_failing_lets_the_rest_go_and_keeps_what_was_discarded(self) -> None:
+        """選び続けた失敗で巡りの途中で止まると、頼む先に残りを手放させ、捨てた選択を止まった結果に載せる。"""
+        session = MineVillageSession().started()
+        mios = DiscardedChoice(person=_MIO, exchange=None, failure=None)
+        failed = ChoiceFailed("Timeout: no reply")
+        takers = _TurnTakersForTests(outcomes={person: failed for person in _EVERYONE}, discarded=(mios,))
+
+        stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
+
+        assert stopped == PlayStopped(ChoosingKeptFailing(("Timeout: no reply",) * 8), (mios,))
+        assert takers.turns.let_go_count == 1
 
 
 class TestPlayRoundsTurns:

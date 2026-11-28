@@ -17,7 +17,7 @@ from ai_rpg_world.play_session.domain.play_session_exception import (
     PersonNotCastException,
     TurnRoundsNotFoundException,
 )
-from ai_rpg_world.play_session.domain.turn_rounds import Acted, Waited
+from ai_rpg_world.play_session.domain.turn_rounds import Acted, RoundLimitReached, Waited
 from tests.play_session.mine_village_session import ENVIRONMENT_NAME, WORLD, MineVillageSession
 
 _GEN = PersonId("gen")
@@ -149,7 +149,7 @@ class TestStartPlaySessionPreparesTurnRounds:
         rounds.finish_turn(_GEN, Acted())
         rounds.close_round()
 
-        assert rounds.has_reached_round_limit() is True
+        assert rounds.reason_to_stop() == RoundLimitReached()
 
     def test_rounds_wake_the_waiting_person_after_the_length_given_in_the_command(self) -> None:
         """起こすまでの長さ 1 で始めると、巡り 1 で待つを選んだゲンは巡り 2 を飛ばし、巡り 3 でターンが戻る。"""

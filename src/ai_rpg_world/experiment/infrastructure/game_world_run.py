@@ -28,7 +28,8 @@ from ai_rpg_world.experiment.infrastructure.llm_call_capture import (
 from ai_rpg_world.experiment.infrastructure.murmuring_action_choosing import MurmuringActionChoosing
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-from ai_rpg_world.play_session.application.play_rounds import ChoosingKeptFailing, RoundLimitReached, WorldEnded
+from ai_rpg_world.play_session.application.play_rounds import WorldEnded
+from ai_rpg_world.play_session.domain.turn_rounds import ChoosingKeptFailing, RoundLimitReached
 
 GAME_WORLD = "game_world"
 WORLD_SQLITE = "world.sqlite"
@@ -59,19 +60,18 @@ def prepare_game_world_play(
 
 def run_summary(result: GameWorldPlayResult) -> dict[str, Any]:
     reasons: list[str] | None = None
-    discarded = 0
-    match result.stopped:
+    reason = result.stopped.reason
+    match reason:
         case WorldEnded():
             outcome = "WORLD_ENDED"
-            discarded = len(result.stopped.discarded)
         case RoundLimitReached():
             outcome = "ROUND_LIMIT_REACHED"
         case ChoosingKeptFailing():
             outcome = "CHOOSING_KEPT_FAILING"
-            reasons = list(result.stopped.reasons)
-            discarded = len(result.stopped.discarded)
+            reasons = list(reason.reasons)
         case _:
-            assert_never(result.stopped)
+            assert_never(reason)
+    discarded = len(result.stopped.discarded)
     return {
         "world": GAME_WORLD,
         "outcome": outcome,
