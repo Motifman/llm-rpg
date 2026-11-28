@@ -33,6 +33,8 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
     InMemoryShortTermMemoryRepository,
 )
 from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
+from tests.event_handoff_helpers import discard_events
+from tests.support.acquaintance_roster import introduce
 
 HAL = BeingId("being_hal")
 VILLAGE = BeingAttachment(environment_id="mine_village_v1#1", environment_name="廃坑の山村")
@@ -61,9 +63,9 @@ def _observation(body: str) -> Observation:
 
 @pytest.fixture
 def stores() -> dict[str, object]:
-    acquaintances = InMemoryAcquaintanceRepository()
-    acquaintances.record_introduction(HAL, environment_name="廃坑の山村", name="ミオ", turn=0, relation_note=None)
-    acquaintances.record_introduction(HAL, environment_name="遭難の島", name="リオ", turn=0, relation_note=None)
+    acquaintances = InMemoryAcquaintanceRepository(handoff=discard_events)
+    introduce(acquaintances, HAL, environment_name="廃坑の山村", name="ミオ", turn=0, relation_note=None)
+    introduce(acquaintances, HAL, environment_name="遭難の島", name="リオ", turn=0, relation_note=None)
     return {
         "beings": _Beings(Being(being_id=HAL, persona=Persona(name="ハル"), attachment=VILLAGE)),
         "short_term_memories": InMemoryShortTermMemoryRepository(),
@@ -194,9 +196,7 @@ class TestAcrossTurns:
     def test_new_acquaintance_keeps_everything_up_to_the_known_people(self, stores: dict[str, object]) -> None:
         """知っている人が 1 人増えても、システムプロンプトは同じで、メッセージは前のターンの【知っている人】までの文で始まる。"""
         before = _of(stores)
-        stores["acquaintances"].record_introduction(  # type: ignore[attr-defined]
-            HAL, environment_name="廃坑の山村", name="ハギ", turn=1, relation_note=None
-        )
+        introduce(stores["acquaintances"], HAL, environment_name="廃坑の山村", name="ハギ", turn=1, relation_note=None)
 
         after = _of(stores)
 

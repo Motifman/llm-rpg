@@ -68,7 +68,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_visited_place,
     visited_place_to_dict,
 )
-from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository, AcquaintanceRoster
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository
@@ -79,6 +79,7 @@ from ai_rpg_world.being.domain.short_term_memory import (
 )
 from ai_rpg_world.being.domain.visited_places import VisitedPlaces, VisitedPlacesRepository
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    AcquaintanceValidationException,
     MemoValidationException,
     VisitedPlacesValidationException,
 )
@@ -224,7 +225,7 @@ class BeingMemorySnapshotService:
         }
         memory_turn = self._memory_turn_clock.current_turn(being_id)
         payload["memory_turn"] = [memory_turn] if memory_turn else []
-        payload["acquaintances"] = [acquaintance_to_dict(a) for a in self._acquaintance.list_by_being(being_id)]
+        payload["acquaintances"] = [acquaintance_to_dict(a) for a in self._acquaintance.get(being_id).acquaintances]
         payload["being_episodes"] = [being_episode_to_dict(e) for e in self._being_episode.list_by_being(being_id)]
         payload["being_memo_book"] = [being_memo_to_dict(m) for m in self._being_memo.get(being_id).memos]
         short_term_memory = self._being_short_term_memory.get(being_id)
@@ -302,10 +303,14 @@ class BeingMemorySnapshotService:
                 f"payload['memory_turn'] must be [] or [positive int], got {memory_turn_raw!r}"
             )
         memory_turn = memory_turn_raw[0] if memory_turn_raw else 0
-        acquaintances = _decode_list(payload["acquaintances"], dict_to_acquaintance, "acquaintances")
+        try:
+            acquaintances = _decode_list(payload["acquaintances"], dict_to_acquaintance, "acquaintances")
+        except AcquaintanceValidationException as exc:
+            raise BeingMemoryPayloadFormatError(f"payload['acquaintances'] has an invalid record: {exc}") from exc
         acquaintance_keys = [(a.environment_name, a.name) for a in acquaintances]
         if len(set(acquaintance_keys)) != len(acquaintance_keys):
             raise BeingMemoryPayloadFormatError("payload['acquaintances'] has the same person twice")
+        acquaintance_roster = AcquaintanceRoster(being_id, acquaintances=tuple(acquaintances))
         being_episodes = _decode_list(
             payload["being_episodes"],
             lambda data: dict_to_being_episode(data, being_id=being_id),
@@ -339,7 +344,7 @@ class BeingMemorySnapshotService:
                 f"payload['being_visited_places'] is not a valid record of visits: {exc}"
             ) from exc
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
-        self._acquaintance.replace_all_by_being(being_id, acquaintances)
+        self._acquaintance.replace_all_by_being(acquaintance_roster)
         self._being_episode.replace_all_by_being(being_id, being_episodes)
         self._being_memo.replace_all_by_being(being_memo_book)
         self._being_short_term_memory.replace_all_by_being(short_term_memory)

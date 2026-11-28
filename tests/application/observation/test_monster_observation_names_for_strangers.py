@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from tests.event_handoff_helpers import discard_events
+
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -64,7 +66,7 @@ def _formatter() -> SpotGraphObservationFormatter:
 def _acquaintances() -> PlayerAcquaintances:
     """ハルはサヨに会ったが、まだ名前を知らない。"""
     acquaintances = PlayerAcquaintances(
-        store=InMemoryAcquaintanceRepository(),
+        store=InMemoryAcquaintanceRepository(handoff=discard_events),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
         turn_reader=InMemoryMemoryTurnClock(),
         environment_name="山村",

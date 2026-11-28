@@ -192,6 +192,18 @@ class MemoSourceEpisodeUnknownException(MemoValidationException):
         super().__init__(message or f"no episode {handle!r}")
 
 
+class AcquaintanceValidationException(BeingDomainException, ValidationException):
+    """知り合いの記録が決まり (空でない名前、会った回数とターンの食い違いが無い、ターンを戻さない) を満たさない。"""
+
+    error_code = "BEING.ACQUAINTANCE_VALIDATION"
+
+
+class AcquaintanceDuplicatedException(BeingDomainException, ValidationException):
+    """名簿に、環境の名前と相手の名前が同じ相手が 2 人いる。"""
+
+    error_code = "BEING.ACQUAINTANCE_DUPLICATED"
+
+
 class VisitedPlacesValidationException(BeingDomainException, ValidationException):
     """訪れた場所の記録が決まり (空でない名前、同じ場所を重ねない) を満たさない。"""
 

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from tests.event_handoff_helpers import discard_events
+
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 
 # observation.contracts.interfaces と prompt_builder_config の循環 import を避ける。
@@ -71,7 +73,7 @@ def _formatter(
 def _acquaintances() -> PlayerAcquaintances:
     """ハルとサヨはゲンに会ったが、まだ名前を知らない。"""
     acquaintances = PlayerAcquaintances(
-        store=InMemoryAcquaintanceRepository(),
+        store=InMemoryAcquaintanceRepository(handoff=discard_events),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
         turn_reader=InMemoryMemoryTurnClock(),
         environment_name="山村",
@@ -128,7 +130,7 @@ class TestKillerSeenByABystander:
     def test_killer_is_written_by_appearance_when_the_victim_is_unknown(self) -> None:
         """会ったことのない人が倒されると被害者は「誰か」と書かれ、名前を知らない倒した人は見た目で書かれる。"""
         acquaintances = PlayerAcquaintances(
-            store=InMemoryAcquaintanceRepository(),
+            store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
             turn_reader=InMemoryMemoryTurnClock(),
             environment_name="山村",
