@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from ai_rpg_world.application.llm.services.prompt_dataset_capture import PromptDatasetCaptureSink
 from ai_rpg_world.being.application.choose_action import ActionChoosingReply, ToolCallReply
 from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
 from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
@@ -111,18 +112,16 @@ class TestBeingTurnsInTheTrace:
         assert "travel_to.destination" in gens["candidate_table"]
         assert len(gens["prompt_sha256"]) == 64
 
-    def test_failing_to_write_the_choice_keeps_the_turn(self) -> None:
-        """選んだ行動の行を書けなくても、そのターンは選べなかったターンにならず、書けなかった数が残る。"""
+    def test_failing_to_write_the_prompt_keeps_the_turn(self) -> None:
+        """プロンプトの全文を書き出せなくても、そのターンは選べなかったターンにならず、書けなかった数が残る。"""
 
-        class _BrokenForChoices(_Kept):
-            def record(
-                self, kind: str, *, tick: int | None = None, player_id: int | None = None, **payload: Any
-            ) -> None:
-                if kind == "game_world.choice":
-                    raise OSError("disk is full")
-                super().record(kind, tick=tick, player_id=player_id, **payload)
+        class _BrokenPrompts:
+            def record_call(self, **_: object) -> None:
+                raise OSError("disk is full")
 
-        result = _play(MurmuringActionChoosing(), round_limit=1).play(_BrokenForChoices())
+        result = _play(MurmuringActionChoosing(), round_limit=1).play(
+            _Kept(), prompts=cast(PromptDatasetCaptureSink, _BrokenPrompts())
+        )
 
         assert result.failed_choices == ()
         assert (result.finished_turns, result.trace_failures) == (4, 4)
