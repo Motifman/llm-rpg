@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import final
 
+from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCall
 from ai_rpg_world.being.application.choose_action import ActionChoosingCompletion, ChooseAction
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
@@ -35,6 +36,7 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
 from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 from ai_rpg_world.being.infrastructure.memory_writing_on_threads import MemoryWritingOnThreads
 from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, DomainEvent, EventDispatcher
+from ai_rpg_world.experiment.infrastructure.being_memory_files import BeingMemoryFiles, WrittenMemoryFiles
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
 from ai_rpg_world.experiment.infrastructure.llm_call_capture import (
     CapturedActionChoosing,
@@ -134,6 +136,8 @@ class GameWorldPlayResult:
     writing_failures: dict[str, int]
     llm_calls_recorded: int = 0
     llm_calls_not_recorded: int = 0
+    being_memory_files: tuple[Path, ...] = ()
+    being_memory_files_not_written: int = 0
 
 
 class _PerceptionReportsCounted:
@@ -163,6 +167,8 @@ class GameWorldPlay:
         round_limit: int,
         capture: LlmCallCapture | None = None,
         turns_at_once: bool = True,
+        world_path: Path | None = None,
+        beings_directory: Path | None = None,
     ) -> None:
         design = scenario.design
         self._writers = writers
@@ -173,8 +179,11 @@ class GameWorldPlay:
         # 時刻の札を作る部品は昼夜を前提にするので、昼夜を宣言しない世界は組み立てる前に断る (D2222)
         day_night = design.day_night_declaration()
         self.world = world = WorldId(f"{scenario_path.stem}#1")
+        if world_path is not None:
+            # 入口の点検 (昼夜の宣言など) を通ってから、出力の場所を作る
+            world_path.parent.mkdir(parents=True, exist_ok=True)
         self._store = SqliteWorldStore.create(
-            ":memory:",
+            ":memory:" if world_path is None else world_path,
             world_id=world,
             scenario=scenario_path.stem,
             scenario_hash=scenario_hash,
@@ -197,6 +206,23 @@ class GameWorldPlay:
         episodes = InMemoryEpisodeRepository(handoff=_discard)
         memo_books = InMemoryMemoBookRepository(handoff=_discard)
         visited_places = InMemoryVisitedPlacesRepository()
+        self._memory_files = (
+            None
+            if beings_directory is None
+            else BeingMemoryFiles(
+                beings_directory,
+                beings=beings,
+                memories=BeingMemorySnapshotService(
+                    acquaintance_store=acquaintances,
+                    being_episode_store=episodes,
+                    being_memo_store=memo_books,
+                    memory_turn_clock=clock,
+                    being_short_term_memory_store=short_term_memories,
+                    being_visited_places_store=visited_places,
+                ),
+            )
+        )
+        self._written_memory = WrittenMemoryFiles((), 0)
         circumstances = CircumstancesOfBeings(beings)
         self.memory_writing.write_with(
             backstory_writer=LabeledBackstoryWriter(writers.backstory_writer, label_for=self._label_for_persona),
@@ -327,9 +353,18 @@ class GameWorldPlay:
             self._end_play(EndPlaySessionCommand(self.world))
             last_tick = self._scope.run(lambda session: session.facts().now())
         finally:
-            # 書き終わった書き起こしを捨てないよう、例外で抜けても止める
-            self.memory_writing.shutdown()
-            self._store.close()
+            try:
+                # 書き終わった書き起こしを捨てないよう、例外で抜けても止める
+                self.memory_writing.shutdown()
+            finally:
+                try:
+                    # 止まった遊びも分析できるよう、書き起こしを入れたあとの記憶を残す
+                    if self._memory_files is not None:
+                        self._written_memory = self._memory_files.write(
+                            (person, name, being_id) for name, (person, being_id, _) in self._people_by_name.items()
+                        )
+                finally:
+                    self._store.close()
         return GameWorldPlayResult(
             stopped=stopped,
             last_tick=last_tick,
@@ -338,6 +373,8 @@ class GameWorldPlay:
             writing_failures=self.memory_writing.failures(),
             llm_calls_recorded=0 if self._capture.sink is None else self._capture.sink.recorded,
             llm_calls_not_recorded=0 if self._capture.sink is None else self._capture.sink.failed,
+            being_memory_files=self._written_memory.paths,
+            being_memory_files_not_written=self._written_memory.failures,
         )
 
     def forward_aux_calls(self, forward: Callable[[AuxLlmCall], None]) -> None:

@@ -247,3 +247,55 @@ class TestGameWorldRunResult:
 
         end = _run_end(out)
         assert end["outcome"] == "ERROR" and "store broke" in str(end["error"])
+
+
+class TestGameWorldEndStateThroughTheRun:
+    """run の入口が、終わりの世界と Being の記憶を OUT の下に残し、残した場所を run_end に書くことを保証する。"""
+
+    def test_end_state_files_are_named_in_run_end(self, tmp_path: Path) -> None:
+        """smoke を回すと、OUT/world.sqlite と OUT/beings の 4 人ぶんのファイルができ、run_end にその場所が載る。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        end = _run_end(out)
+        assert (out / "world.sqlite").exists()
+        assert sorted(Path(p).name for p in end["being_memory_files"]) == [
+            "gen.json",
+            "haru.json",
+            "mio.json",
+            "sayo.json",
+        ]  # type: ignore[union-attr]
+        assert end["being_memory_files_not_written"] == 0
+
+    def test_out_that_already_holds_a_world_is_refused(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """前の run の world.sqlite が残った OUT を渡すと、どちらの終わりか分からなくなるので断る。"""
+        out = tmp_path / "run"
+        out.mkdir()
+        (out / "world.sqlite").write_bytes(b"")
+
+        with pytest.raises(SystemExit) as stopped:
+            main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        assert stopped.value.code == 2
+        assert "already exists" in capsys.readouterr().err
+
+    def test_world_file_left_by_a_failed_preparation_is_removed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """組み立ての途中で断られても、作りかけの world.sqlite を残さず、同じ OUT でやり直せる。"""
+        out = tmp_path / "run"
+
+        def fails_after_making_the_world(**kwargs: object) -> object:
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "world.sqlite").write_bytes(b"half made")
+            raise ValueError("the scenario needs fixing")
+
+        monkeypatch.setattr(game_world_run, "prepare_game_world_play", fails_after_making_the_world)
+
+        with pytest.raises(SystemExit):
+            main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        assert not (out / "world.sqlite").exists()

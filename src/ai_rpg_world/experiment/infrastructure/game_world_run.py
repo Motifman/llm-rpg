@@ -31,10 +31,17 @@ from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 from ai_rpg_world.play_session.application.play_rounds import ChoosingKeptFailing, RoundLimitReached, WorldEnded
 
 GAME_WORLD = "game_world"
+WORLD_SQLITE = "world.sqlite"
+BEINGS_DIRECTORY = "beings"
 
 
 def prepare_game_world_play(
-    *, scenario_path: Path, scenario_hash: str, settings: GameWorldPlaySettings, round_limit: int
+    *,
+    scenario_path: Path,
+    scenario_hash: str,
+    settings: GameWorldPlaySettings,
+    round_limit: int,
+    out_dir: Path | None = None,
 ) -> GameWorldPlay:
     capture = LlmCallCapture()
     return GameWorldPlay(
@@ -45,6 +52,8 @@ def prepare_game_world_play(
         writers=game_world_writers(settings, capture),
         round_limit=round_limit,
         capture=capture,
+        world_path=None if out_dir is None else out_dir / WORLD_SQLITE,
+        beings_directory=None if out_dir is None else out_dir / BEINGS_DIRECTORY,
     )
 
 
@@ -74,6 +83,8 @@ def run_summary(result: GameWorldPlayResult) -> dict[str, Any]:
         "memory_writing_failures": dict(sorted(result.writing_failures.items())),
         "llm_calls_recorded": result.llm_calls_recorded,
         "llm_calls_not_recorded": result.llm_calls_not_recorded,
+        "being_memory_files": [str(path) for path in result.being_memory_files],
+        "being_memory_files_not_written": result.being_memory_files_not_written,
     }
 
 
