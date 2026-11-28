@@ -270,7 +270,7 @@ class TestArguments:
             InteractionId("write"),
             arguments=(
                 ArgumentDeclaration(WORDS, TextArgument(writes=DisplayName("書く言葉"))),
-                ArgumentDeclaration(ArgumentName("pen"), ItemArgument()),
+                ArgumentDeclaration(ArgumentName("pen"), ItemArgument(writes=DisplayName("品物の名前"))),
             ),
         )
         pen = ItemInstanceId("pen_1")
@@ -327,7 +327,8 @@ class TestArguments:
     def test_text_given_for_item_argument_raises(self) -> None:
         """品物の引数 (ItemArgument) に文を渡すと ArgumentsDoNotMatchDeclarationException を投げる。"""
         interaction = InteractionForTests(
-            InteractionId("give"), arguments=(ArgumentDeclaration(ArgumentName("gift"), ItemArgument()),)
+            InteractionId("give"),
+            arguments=(ArgumentDeclaration(ArgumentName("gift"), ItemArgument(writes=DisplayName("品物の名前"))),),
         )
 
         with pytest.raises(ArgumentsDoNotMatchDeclarationException):
@@ -344,8 +345,8 @@ class TestItemsHandled:
         interaction = InteractionForTests(
             InteractionId("trade"),
             arguments=(
-                ArgumentDeclaration(ArgumentName("gift"), ItemArgument()),
-                ArgumentDeclaration(ArgumentName("price"), ItemArgument()),
+                ArgumentDeclaration(ArgumentName("gift"), ItemArgument(writes=DisplayName("品物の名前"))),
+                ArgumentDeclaration(ArgumentName("price"), ItemArgument(writes=DisplayName("品物の名前"))),
                 ArgumentDeclaration(WORDS, TextArgument(writes=DisplayName("書く言葉"))),
             ),
         )
@@ -366,7 +367,8 @@ class TestItemsHandled:
         """持っている品物への操作は、操作する品物と品物の引数の両方を items_handled に答える。"""
         pen = ItemInstanceId("pen_1")
         interaction = InteractionForTests(
-            InteractionId("write"), arguments=(ArgumentDeclaration(ArgumentName("pen"), ItemArgument()),)
+            InteractionId("write"),
+            arguments=(ArgumentDeclaration(ArgumentName("pen"), ItemArgument(writes=DisplayName("品物の名前"))),),
         )
         attempt = CarriedItemInteractionAttempt(
             ALICE, NOTEBOOK, interaction, ChosenArguments({ArgumentName("pen"): pen}), Openly()

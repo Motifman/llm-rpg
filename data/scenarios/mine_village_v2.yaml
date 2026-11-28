@@ -1085,7 +1085,7 @@ person_interactions:
       sound: { loudness: whisper, clear: 荷を探るような物音がした。, muffled: かすかな物音がした。 }
   loot_from_downed:
     display_label: 倒れている相手の持ち物を奪う
-    arguments: { item: item }
+    arguments: { item: { item: 奪う品の名前 } }
     precondition:
       all_of:
         - is_down: target

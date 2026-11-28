@@ -693,7 +693,7 @@ class TestListAvailableActions:
 
 
 _GRAB = replace(
-    pull_lever((ArgumentDeclaration(ArgumentName("loot"), ItemArgument()),)),
+    pull_lever((ArgumentDeclaration(ArgumentName("loot"), ItemArgument(writes=DisplayName("品物の名前"))),)),
     interaction_id=InteractionId("grab"),
     display_label=DisplayName("持ち物をつかむ"),
 )
@@ -755,7 +755,9 @@ class TestOfferedActions:
 
         assert offered.inputs == (
             OfferedItemPick(
-                loot, (OfferedStep(loot, DisplayName("lamp"), lamp), OfferedStep(loot, DisplayName("rock"), rock))
+                loot,
+                (OfferedStep(loot, DisplayName("lamp"), lamp), OfferedStep(loot, DisplayName("rock"), rock)),
+                DisplayName("品物の名前"),
             ),
         )
 
@@ -769,7 +771,9 @@ class TestOfferedActions:
             PersonInteractionAttempt(_ALICE, _CAROL, _GRAB, ArgumentsNotChosen(), Openly()), {_CAROL: (rock,)}
         )
 
-        assert offered.inputs == (OfferedItemPick(loot, (OfferedStep(loot, DisplayName("rock"), rock),)),)
+        assert offered.inputs == (
+            OfferedItemPick(loot, (OfferedStep(loot, DisplayName("rock"), rock),), DisplayName("品物の名前")),
+        )
 
     def test_someone_in_the_dark_is_offered_by_a_fixed_label(self) -> None:
         """暗がりの誰かへの操作は、相手の候補が「暗がりの誰か」になる。"""
@@ -789,7 +793,7 @@ class TestOfferedActions:
             PersonInteractionAttempt(_ALICE, SomeoneInTheDark(), grab, ArgumentsNotChosen(), Openly())
         )
 
-        assert offered.inputs == (OfferedItemPick(loot, ()),)
+        assert offered.inputs == (OfferedItemPick(loot, (), DisplayName("品物の名前")),)
 
     def test_hand_over_of_several_items_is_not_offered(self) -> None:
         """2 つの品物を一度に渡す試みは、行動の選択肢に当たらないので SeveralItemsNotOfferedException を投げる。"""
@@ -875,15 +879,15 @@ class TestOfferedActions:
         )
 
     def test_section_entry_and_exit_offer_the_authors_labels(self) -> None:
-        """トロッコに乗る・降りるは、作者が書いた「乗り込む」「降りる」を出入りの候補にする。"""
+        """トロッコに乗る・降りるは、作者が書いた「乗り込む」「降りる」を出入りの候補にし、並べるときの頭に区画の名前を添える。"""
         mine = _Mine()
         cart = mine.design.section_access(_CART.section_id)
 
         entry = mine.offered(EnterSectionAttempt(_ALICE, cart))
         exit_ = mine.offered(LeaveSectionAttempt(_ALICE, cart))
 
-        assert entry.steps == (OfferedStep(SECTION_MOVE, DisplayName("乗り込む")),)
-        assert exit_.steps == (OfferedStep(SECTION_MOVE, DisplayName("降りる")),)
+        assert entry.steps == (OfferedStep(SECTION_MOVE, DisplayName("乗り込む"), shown_under=_CART.name),)
+        assert exit_.steps == (OfferedStep(SECTION_MOVE, DisplayName("降りる"), shown_under=_CART.name),)
 
     def test_ordinary_voice_and_shout_have_no_listener(self) -> None:
         """ふつうの声と叫ぶは、届け方の段だけで相手を持たず、中身を自由に書く。"""

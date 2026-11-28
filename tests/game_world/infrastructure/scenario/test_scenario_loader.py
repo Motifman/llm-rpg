@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.game_world.domain.action.argument_declaration import TextArgument
+from ai_rpg_world.game_world.domain.action.argument_declaration import ItemArgument, TextArgument
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusalKind
 from ai_rpg_world.game_world.domain.action.speech import OrdinaryVoice
 from ai_rpg_world.game_world.domain.condition.condition import NoText
@@ -1262,7 +1262,7 @@ def test_fatigue_level_reads_what_the_person_feels(tmp_path: Path) -> None:
 
 
 class TestArgumentsToWrite:
-    """操作の引数の宣言で、自分で書く値は何を書くかを添えて書かせ、品物は種類だけで書けることを保証する。"""
+    """操作の引数の宣言で、自分で書く値も品物も、何を書くかを添えて書かせることを保証する。"""
 
     def test_text_argument_carries_what_to_write(self, tmp_path: Path) -> None:
         """引数を { text: 合図の言葉 } と書くと、何を書くか「合図の言葉」を持つ自分で書く値として読まれる。"""
@@ -1286,3 +1286,27 @@ class TestArgumentsToWrite:
         )
 
         assert [flaw.location.field for flaw in _flaws(tmp_path, text)] == ["interactions.start_lift.arguments.word"]
+
+    def test_item_argument_carries_what_to_write(self, tmp_path: Path) -> None:
+        """引数を { item: 差す鍵の名前 } と書くと、何を書くか「差す鍵の名前」を持つ品物の引数として読まれる。"""
+        text = _LIFT_LANDING.replace(
+            "            display_label: 鍵を差して昇降機を動かす\n",
+            "            display_label: 鍵を差して昇降機を動かす\n            arguments: { key: { item: 差す鍵の名前 } }\n",
+        )
+
+        interaction = _load(tmp_path, text).design.interaction_on_object(
+            ObjectId("lift_panel"), InteractionId("start_lift")
+        )
+
+        [argument] = interaction.arguments
+        assert argument.kind == ItemArgument(writes=DisplayName("差す鍵の名前"))
+
+    @pytest.mark.parametrize("written", ["item", "{ item: 鍵, text: 合図 }", "{}"])
+    def test_item_argument_without_exactly_one_kind_and_words_is_refused(self, tmp_path: Path, written: str) -> None:
+        """item とだけ書いた引数、item と text を両方書いた引数、何も書かない引数は、その引数の場所を指す誤りになる。"""
+        text = _LIFT_LANDING.replace(
+            "            display_label: 鍵を差して昇降機を動かす\n",
+            f"            display_label: 鍵を差して昇降機を動かす\n            arguments: {{ key: {written} }}\n",
+        )
+
+        assert [flaw.location.field for flaw in _flaws(tmp_path, text)] == ["interactions.start_lift.arguments.key"]

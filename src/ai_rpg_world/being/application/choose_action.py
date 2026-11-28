@@ -38,7 +38,9 @@ from ai_rpg_world.being.contract import (
     OfferedBeingTools,
     Orientation,
     OwnActionResult,
+    PersonInText,
     Scene,
+    TextWithPeople,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeRepository
@@ -180,11 +182,20 @@ class ChooseAction:
     def prompt(self, command: ChooseActionCommand) -> ActionPrompt:
         if self._writing_in_background is not None:
             self._writing_in_background.take_in_finished(command.being_id)
-        tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
+        tools = ActionTools(
+            command.choices,
+            command.being_tools,
+            name_for,
+            recall_limit=self._recall_limit,
+            seen_in_scene=_people_in(command.scene),
+        )
         scene = Scene(
-            descriptions=(*command.scene.descriptions, *_present(tools.candidate_table())),
-            notices=command.scene.notices,
-            here=command.scene.here,
+            descriptions=(
+                *(_named_by(tools, d) for d in command.scene.descriptions),
+                *_present(tools.candidate_table()),
+            ),
+            notices=tuple(_named_by(tools, d) for d in command.scene.notices),
+            here=None if command.scene.here is None else _here_named_by(tools, command.scene.here),
         )
         memory = self._working_memory.of(
             command.being_id,
@@ -397,6 +408,32 @@ class _Turn:
         name = self.command.being_tools.inner_thought
         thought = self.call.arguments.get(name) if name else None
         return thought if isinstance(thought, str) else None
+
+
+def _people_in(scene: Scene) -> tuple[PersonInText, ...]:
+    texts = (
+        *(d.text for d in scene.descriptions),
+        *(() if scene.here is None else (scene.here.text,)),
+    )
+    return tuple(
+        person
+        for text in texts
+        if isinstance(text, TextWithPeople)
+        for person in text.people.values()
+        if isinstance(person, PersonInText)
+    )
+
+
+def _named_by(tools: ActionTools, description: Description) -> Description:
+    text = description.text
+    if not isinstance(text, TextWithPeople):
+        return description
+    return Description(heading=description.heading, text=tools.text_naming_people(text))
+
+
+def _here_named_by(tools: ActionTools, here: Here) -> Here:
+    text = here.text if not isinstance(here.text, TextWithPeople) else tools.text_naming_people(here.text)
+    return Here(place=here.place, heading=here.heading, text=text)
 
 
 __all__ = [

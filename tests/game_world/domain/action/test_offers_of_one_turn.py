@@ -3,6 +3,7 @@ from __future__ import annotations
 from ai_rpg_world.being.contract import (
     ActionChoice,
     ActionChoices,
+    FreeText,
     PersonInText,
     PickOne,
     TextWithPeople,
@@ -16,6 +17,7 @@ from ai_rpg_world.game_world.domain.action.offered_action import (
     ITEM,
     LISTENER,
     REACH,
+    SECTION_MOVE,
     TARGET,
     ActionChoiceKind,
     OfferedAction,
@@ -43,7 +45,7 @@ class _SeenByGen:
 
 def _choices(*offers: tuple[OfferedAction, Doable | NotNow]) -> ActionChoices:
     return OffersOfOneTurn(
-        offers, _SeenByGen(), {kind: f"{kind.label}。" for kind in ActionChoiceKind}
+        offers, _SeenByGen(), {kind: f"{kind.label}。" for kind in ActionChoiceKind}, "※ 注記。"
     ).as_action_choices()
 
 
@@ -116,6 +118,60 @@ class TestOffersOfOneTurn:
         assert [choice.name for choice in choices.choices if choice.takes_details] == ["interact"]
         assert [o.name for o in _choice(choices, ActionChoiceKind.SPEAK).outline] == ["reach", "to", "content"]
 
+    def test_only_operation_section_and_vote_arguments_are_listed(self) -> None:
+        """場面に出ていない引数として並べるのは、操作 (how)・区画の出入り (move)・決めごと (decision)・選び先 (choice) だけ。"""
+        listed = [(c.name, o.name) for c in _choices().choices for o in c.outline if o.listed]
+
+        assert listed == [
+            ("set_sub_location", "move"),
+            ("interact", "how"),
+            ("vote", "decision"),
+            ("vote", "choice"),
+        ]
+
+    def test_speech_reach_has_the_same_three_values_every_turn(self) -> None:
+        """話し方は、ささやく相手がいないターンも、ふつうの声で話す・叫ぶ・ささやくの 3 つを固定の値に持つ。"""
+        [reach] = [o for o in _choice(_choices(), ActionChoiceKind.SPEAK).outline if o.name == "reach"]
+
+        assert reach.fixed_values == ("ふつうの声で話す", "叫ぶ", "ささやく")
+
+    def test_listing_note_is_passed_with_the_choices(self) -> None:
+        """場面から書き写す引数の書き方を伝える注記は、選択肢の並びと一緒に渡る。"""
+        assert _choices().note == "※ 注記。"
+
+    def test_not_now_operation_still_says_what_it_asks_for(self) -> None:
+        """いまできない「奪う」も、選べたなら求めたはずの品物の引数を、何を書くかの言葉つきで asks に持つ。"""
+        loot = OfferedAction(
+            ActionChoiceKind.INTERACT,
+            (OfferedStep(TARGET, _STRANGER), OfferedStep(HOW, DisplayName("奪う"))),
+            (OfferedItemPick(OfferedValue("item", "item"), (), DisplayName("奪う品の名前")),),
+        )
+
+        interact = _choice(_choices((loot, _not_now("相手は動いている"))), ActionChoiceKind.INTERACT)
+
+        assert [u.asks for u in interact.unavailable] == [(FreeText(name="item", label="item", writes="奪う品の名前"),)]
+
+    def test_section_move_is_shown_under_the_section_name_whether_doable_or_not(self) -> None:
+        """籠に乗り込む (いまできる) と籠から降りる (いまできない) は、どちらも並べるときの頭に区画の名前を持つ。"""
+        cage = DisplayName("昇降機の籠")
+        board = OfferedAction(
+            ActionChoiceKind.SET_SUB_LOCATION,
+            (OfferedStep(SECTION_MOVE, DisplayName("籠に乗り込む"), shown_under=cage),),
+        )
+        leave = OfferedAction(
+            ActionChoiceKind.SET_SUB_LOCATION,
+            (OfferedStep(SECTION_MOVE, DisplayName("籠から降りる"), shown_under=cage),),
+        )
+
+        move = _choice(
+            _choices((board, Doable()), (leave, _not_now("籠に乗っていない"))), ActionChoiceKind.SET_SUB_LOCATION
+        )
+
+        [pick] = move.values
+        assert isinstance(pick, PickOne)
+        assert [c.shown_under for c in pick.candidates] == ["昇降機の籠"]
+        assert [u.shown_under for u in move.unavailable] == ["昇降機の籠"]
+
     def test_items_with_the_same_name_become_one_candidate_with_a_count(self) -> None:
         """同じ名前の油 3 つを置く試みは、数 3 の 1 つの候補になる。"""
         drop = _choice(_choices(*((_drop(f"oil_{n}"), Doable()) for n in range(3))), ActionChoiceKind.DROP_ITEM)
@@ -184,7 +240,7 @@ class TestOffersOfOneTurn:
                 OfferedStep(TARGET, DisplayName("暗がりの誰か")),
                 OfferedStep(OfferedValue("how", "操作"), DisplayName("奪う")),
             ),
-            (OfferedItemPick(OfferedValue("item", "item"), ()),),
+            (OfferedItemPick(OfferedValue("item", "item"), (), DisplayName("品物の名前")),),
         )
 
         interact = _choice(_choices((loot, Doable())), ActionChoiceKind.INTERACT)

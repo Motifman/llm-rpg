@@ -8,13 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, final
 
-from ai_rpg_world.being.application.action_tools import (
-    AVAILABLE_NOW,
-    CANDIDATE_TABLE_HEADING,
-    DETAILS,
-    NOTHING_AVAILABLE,
-    UNAVAILABLE_NOW,
-)
+from ai_rpg_world.being.application.action_tools import CANDIDATE_TABLE_HEADING, DETAILS, NOTHING_LISTED
 from ai_rpg_world.being.application.choose_action import (
     ActionChoosingCompletion,
     ActionChoosingReply,
@@ -24,17 +18,27 @@ from ai_rpg_world.being.application.choose_action import (
 RANDOM_TEXT = "でたらめに選んだ行動"
 _TABLE_HEADING = f"【{CANDIDATE_TABLE_HEADING}】"
 _LEFT_UNWRITTEN = frozenset({"memo", "say_inline"})
-_ROW_HEADING = re.compile(r"^- (?P<tool>[a-z_]+)\.(?P<argument>[a-z_.]+)(?: \((?P<parent>\".*\")\))?:(?P<rest>.*)$")
-_WHOLE_CHOICE_UNAVAILABLE = re.compile(rf"^- (?P<tool>[a-z_]+): {UNAVAILABLE_NOW}（.*）$")
-_QUOTED = re.compile(r'^(?P<value>"(?:[^"\\]|\\.)*")(?:（.*）)?$')
+_QUOTED_STRING = r'"(?:[^"\\]|\\.)*"'
+_UNDER_A_NAME = re.compile(rf"^(?P<parent>{_QUOTED_STRING}): (?P<rest>.+)$")
+_UNDER_A_TOOL = re.compile(rf"^(?P<tool>[a-z_]+)(?: (?P<parent>{_QUOTED_STRING}))?: (?P<rest>.+)$")
+_TOOL_AT_THE_END = re.compile(r"^(?P<rest>.+) \((?P<tool>[a-z_]+)\)$")
+_LISTED = re.compile(rf"(?P<value>{_QUOTED_STRING})(?: \((?P<asked>[^()]*)\))?(?:, |$)")
+_ASKED_KEY = re.compile(rf"{DETAILS}\.(?P<key>[a-z_][a-z0-9_]*) に")
+_QUOTED_ANYWHERE = re.compile(_QUOTED_STRING)
+_PARENT_PROBABILITY = 0.7
 _OPTIONAL_PROBABILITY = 0.5
 _PICKING_TOOL_WEIGHT = 4
 
 
 @dataclass
+class _Listed:
+    value: str
+    asked_keys: tuple[str, ...] = ()
+
+
+@dataclass
 class _Row:
-    available: list[str] = field(default_factory=list)
-    writes: bool = False
+    listed: list[_Listed] = field(default_factory=list)
 
 
 class _Unreadable(Exception):
@@ -42,7 +46,7 @@ class _Unreadable(Exception):
 
 
 def _unquoted(quoted: str) -> str:
-    # 候補表は候補を JSON の文字列で書くので、引用符と \ の書き戻しも JSON で読む
+    # 表は名前を JSON の文字列で書くので、引用符と \ の書き戻しも JSON で読む
     try:
         value = json.loads(quoted)
     except json.JSONDecodeError as error:
@@ -52,77 +56,87 @@ def _unquoted(quoted: str) -> str:
     return value
 
 
+def _listed(rest: str) -> list[_Listed]:
+    found: list[_Listed] = []
+    position = 0
+    while position < len(rest):
+        match = _LISTED.match(rest, position)
+        if match is None or match.end() == position:
+            raise _Unreadable
+        keys = tuple(_ASKED_KEY.findall(match.group("asked") or ""))
+        found.append(_Listed(_unquoted(match.group("value")), keys))
+        position = match.end()
+    return found
+
+
 @dataclass(frozen=True)
 class CandidateTable:
-    rows: Mapping[tuple[str, str, str | None], _Row]
-    unavailable_tools: frozenset[str]
+    """``under_names`` は「"カンテラ": …」の行、``under_tools`` は「vote "決めごと": …」「"籠": … (set_sub_location)」の行。"""
+
+    under_names: Mapping[str, _Row]
+    under_tools: Mapping[tuple[str, str | None], _Row]
+    scene_names: tuple[str, ...]
     unreadable_lines: tuple[str, ...]
 
     @classmethod
     def read(cls, text: str) -> CandidateTable:
         start = text.find(_TABLE_HEADING)
-        rows: dict[tuple[str, str, str | None], _Row] = {}
-        unavailable: set[str] = set()
+        scene_names = tuple(
+            dict.fromkeys(
+                name
+                for quoted in _QUOTED_ANYWHERE.findall(text if start < 0 else text[:start])
+                for name in _names_in(quoted)
+            )
+        )
+        under_names: dict[str, _Row] = {}
+        under_tools: dict[tuple[str, str | None], _Row] = {}
         unreadable: list[str] = []
         if start < 0:
-            return cls(rows, frozenset(), ())
-        current: _Row | None = None
-        section: str | None = None
+            return cls(under_names, under_tools, scene_names, ())
         for line in text[start + len(_TABLE_HEADING) :].splitlines()[1:]:
             if not line.strip() or line.startswith("※"):
                 break
+            if line == NOTHING_LISTED:
+                continue
             try:
-                current, section = cls._read_line(line, rows, unavailable, current, section)
+                cls._read_line(line, under_names, under_tools)
             except _Unreadable:
                 if line not in unreadable:
                     unreadable.append(line)
-        return cls(rows, frozenset(unavailable), tuple(unreadable))
+        return cls(under_names, under_tools, scene_names, tuple(unreadable))
 
     @staticmethod
-    def _read_line(
-        line: str,
-        rows: dict[tuple[str, str, str | None], _Row],
-        unavailable: set[str],
-        current: _Row | None,
-        section: str | None,
-    ) -> tuple[_Row | None, str | None]:
-        stripped = line.strip()
-        if whole := _WHOLE_CHOICE_UNAVAILABLE.match(line):
-            unavailable.add(whole.group("tool"))
-            return None, None
-        if heading := _ROW_HEADING.match(line):
-            parent = None if heading.group("parent") is None else _unquoted(heading.group("parent"))
-            row = rows.setdefault((heading.group("tool"), heading.group("argument"), parent), _Row())
-            row.writes = bool(heading.group("rest").strip())
-            return row, None
-        if stripped in (f"{AVAILABLE_NOW}:", f"{UNAVAILABLE_NOW}:"):
-            return current, stripped
-        if current is None or section is None:
-            raise _Unreadable
-        if stripped == NOTHING_AVAILABLE:
-            return current, section
-        quoted = _QUOTED.match(stripped)
-        if quoted is None:
-            raise _Unreadable
-        value = _unquoted(quoted.group("value"))
-        if section == f"{AVAILABLE_NOW}:":
-            current.available.append(value)
-        return current, section
+    def _read_line(line: str, under_names: dict[str, _Row], under_tools: dict[tuple[str, str | None], _Row]) -> None:
+        if named := _UNDER_A_NAME.match(line):
+            # 区画の行は、頭の名前が引数ではなく、後ろのツールの名前の最初の引数の候補を並べる
+            if tagged := _TOOL_AT_THE_END.match(named.group("rest")):
+                under_tools.setdefault((tagged.group("tool"), None), _Row()).listed += _listed(tagged.group("rest"))
+                return
+            under_names.setdefault(_unquoted(named.group("parent")), _Row()).listed += _listed(named.group("rest"))
+            return
+        if tool := _UNDER_A_TOOL.match(line):
+            parent = None if tool.group("parent") is None else _unquoted(tool.group("parent"))
+            under_tools.setdefault((tool.group("tool"), parent), _Row()).listed += _listed(tool.group("rest"))
+            return
+        raise _Unreadable
 
-    def row(self, tool: str, argument: str, chosen: Sequence[str]) -> _Row | None:
-        for parent in (*reversed(chosen), None):
-            found = self.rows.get((tool, argument, parent))
-            if found is not None:
-                return found
-        return None
+    def tool_values(self, tool: str) -> list[str]:
+        return [
+            parent if parent is not None else listed.value
+            for (row_tool, parent), row in self.under_tools.items()
+            if row_tool == tool
+            for listed in (row.listed[:1] if parent is not None else row.listed)
+        ]
 
-    def details_of(self, tool: str, chosen: Sequence[str]) -> list[str]:
-        names = {
-            argument[len(DETAILS) + 1 :]
-            for (row_tool, argument, parent) in self.rows
-            if row_tool == tool and argument.startswith(f"{DETAILS}.") and (parent is None or parent in chosen)
-        }
-        return sorted(names)
+    def below(self, tool: str, chosen: str) -> _Row | None:
+        return self.under_tools.get((tool, chosen)) or self.under_names.get(chosen)
+
+
+def _names_in(quoted: str) -> tuple[str, ...]:
+    try:
+        return (_unquoted(quoted),)
+    except _Unreadable:
+        return ()
 
 
 class _Infeasible(Exception):
@@ -136,8 +150,6 @@ def choose_random_call(rng: random.Random, user_text: str, tools: Sequence[Mappi
     for tool in tools:
         function = tool.get("function") or {}
         name = str(function.get("name") or "")
-        if name in table.unavailable_tools:
-            continue
         parameters = function.get("parameters") or {}
         try:
             arguments, picked = _arguments(rng, table, name, parameters)
@@ -155,53 +167,53 @@ def _arguments(
 ) -> tuple[dict[str, Any], bool]:
     properties: Mapping[str, Any] = parameters.get("properties") or {}
     required = set(parameters.get("required") or ())
+    written = [name for name in properties if name not in _LEFT_UNWRITTEN and name != DETAILS]
     arguments: dict[str, Any] = {}
     chosen: list[str] = []
+    asked: tuple[str, ...] = ()
     picked = False
-    for name, schema in properties.items():
-        if name in _LEFT_UNWRITTEN or name == DETAILS:
-            continue
+    for index, name in enumerate(written):
+        schema = properties[name]
         if schema.get("type") == "array":
             arguments[name] = [RANDOM_TEXT]
             continue
-        row = table.row(tool, name, chosen)
-        if row is not None and not row.writes:
-            if not row.available:
-                if name in required:
-                    raise _Infeasible
-                continue
-            value = rng.choice(row.available)
-            arguments[name] = value
-            chosen.append(value)
+        value, asked_here = _value(rng, table, tool, schema, chosen, has_next=index + 1 < len(written))
+        if value is None and name not in required and rng.random() >= _OPTIONAL_PROBABILITY:
+            continue
+        if value is None:
+            value = rng.choice(table.scene_names) if table.scene_names else RANDOM_TEXT
+        else:
             picked = True
-        # 候補の無い値の引数は表に行が出ず、書く値の引数と見分けられない。決まった文を書き、世界が断る道も試す
-        elif name in required or row is not None or rng.random() < _OPTIONAL_PROBABILITY:
-            arguments[name] = RANDOM_TEXT
-    if DETAILS in properties:
-        details = _details(rng, table, tool, chosen)
-        if details:
-            arguments[DETAILS] = details
+        arguments[name] = value
+        chosen.append(value)
+        asked = asked_here or asked
+    if DETAILS in properties and asked:
+        arguments[DETAILS] = {key: rng.choice((RANDOM_TEXT, *table.scene_names)) for key in asked}
     return arguments, picked
 
 
-def _details(rng: random.Random, table: CandidateTable, tool: str, chosen: list[str]) -> dict[str, str]:
-    details: dict[str, str] = {}
-    looked_at: set[str] = set()
-    # 値の下にさらに引数が続くことがあるので、選んだ値を親に加えながら、新しい引数が見つからなくなるまで探す
-    while pending := [name for name in table.details_of(tool, chosen) if name not in looked_at]:
-        for name in pending:
-            looked_at.add(name)
-            row = table.row(tool, f"{DETAILS}.{name}", chosen)
-            if row is None:
-                continue
-            if row.writes:
-                details[name] = RANDOM_TEXT
-            elif row.available:
-                details[name] = rng.choice(row.available)
-                chosen.append(details[name])
-            else:
-                raise _Infeasible
-    return details
+def _value(
+    rng: random.Random,
+    table: CandidateTable,
+    tool: str,
+    schema: Mapping[str, Any],
+    chosen: list[str],
+    *,
+    has_next: bool,
+) -> tuple[str | None, tuple[str, ...]]:
+    if schema.get("enum"):
+        return rng.choice(list(schema["enum"])), ()
+    if not chosen and (from_tool := table.tool_values(tool)):
+        return rng.choice(from_tool), ()
+    row = table.below(tool, chosen[-1]) if chosen else None
+    if row is not None and row.listed:
+        listed = rng.choice(row.listed)
+        return listed.value, listed.asked_keys
+    # 候補を並べない引数 (行き先・相手) は、操作の並ぶ対象か場面の名前から選ぶ。どちらも世界が断る道も試す
+    parents = list(table.under_names)
+    if has_next and parents and rng.random() < _PARENT_PROBABILITY:
+        return rng.choice(parents), ()
+    return None, ()
 
 
 @final

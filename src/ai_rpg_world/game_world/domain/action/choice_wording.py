@@ -99,4 +99,4 @@ class ChoiceWording:
         value = OfferedValue(argument.name.value, argument.name.value)
         if isinstance(argument.kind, TextArgument):
             return OfferedFreeText(value, writes=argument.kind.writes)
-        return OfferedItemPick(value, tuple(self.item(value, item) for item in items))
+        return OfferedItemPick(value, tuple(self.item(value, item) for item in items), argument.kind.writes)

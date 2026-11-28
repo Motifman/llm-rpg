@@ -40,10 +40,12 @@ class OffersOfOneTurn:
         offers: tuple[tuple[OfferedAction, Doable | NotNow], ...],
         people: PeopleAsSeen,
         descriptions: Mapping[ActionChoiceKind, str],
+        listing_note: str,
     ) -> None:
         self._offers = offers
         self._people = people
         self._descriptions = descriptions
+        self._listing_note = listing_note
 
     @classmethod
     def of(cls, available: AvailableActions, wording: ChoiceWording) -> OffersOfOneTurn:
@@ -56,10 +58,11 @@ class OffersOfOneTurn:
                 )
                 for kind in ActionChoiceKind
             },
+            wording.design.choice_descriptions.listing_note,
         )
 
     def as_action_choices(self) -> ActionChoices:
-        return ActionChoices(tuple(self._choice(kind) for kind in ActionChoiceKind))
+        return ActionChoices(tuple(self._choice(kind) for kind in ActionChoiceKind), note=self._listing_note)
 
     def _choice(self, kind: ActionChoiceKind) -> ActionChoice:
         root = _Node()
@@ -76,6 +79,12 @@ class OffersOfOneTurn:
                 picked=tuple(_label(step.candidate) for step in offered.steps),
                 reason=standing.reason.seen_by(self._people).for_being(),
                 argument=offered.steps[-1].value.name if offered.steps else None,
+                asks=tuple(
+                    _asked(offered_input)
+                    for offered_input in offered.inputs
+                    if offered.steps and offered_input.writes is not None
+                ),
+                shown_under=_shown_under(offered.steps),
             )
             for offered, standing in not_now
             if not root.reaches(tuple(_key(step.candidate) for step in offered.steps))
@@ -94,6 +103,8 @@ class OffersOfOneTurn:
                     required=value is kind.first_value,
                     hidden_as=value.hidden_as,
                     max_length=value.max_length,
+                    listed=value.listed,
+                    fixed_values=value.fixed_values,
                 )
                 for value in kind.outline
             ),
@@ -106,6 +117,7 @@ class OffersOfOneTurn:
 @dataclass
 class _Child:
     label: _Label
+    shown_under: DisplayName | None
     items: set[ItemInstanceId] = field(default_factory=set)
     node: _Node = field(default_factory=lambda: _Node())
 
@@ -126,7 +138,7 @@ class _Node:
         for step in steps:
             node.values[step.value.name] = step.value
             child = node.children.setdefault(step.value.name, {}).setdefault(
-                _key(step.candidate), _Child(step.candidate)
+                _key(step.candidate), _Child(step.candidate, step.shown_under)
             )
             child.items.update(() if not isinstance(step.item, ItemInstanceId) else (step.item,))
             node.is_reached = True
@@ -143,19 +155,36 @@ class _Node:
             node = found[0].node
         return node.is_reached
 
-    def pick(self, value: OfferedValue) -> PickOne:
+    def pick(self, value: OfferedValue, writes: str | None = None) -> PickOne:
         children = self.children.get(value.name, {})
         return PickOne(
             name=value.name,
             label=value.label,
+            writes=writes,
             candidates=tuple(
-                Candidate(label=_label(child.label), values=child.node.choice_values(), count=max(len(child.items), 1))
+                Candidate(
+                    label=_label(child.label),
+                    values=child.node.choice_values(),
+                    count=max(len(child.items), 1),
+                    shown_under=None if child.shown_under is None else child.shown_under.text,
+                )
                 for child in children.values()
             ),
         )
 
     def choice_values(self) -> tuple[ChoiceValue, ...]:
         return (*(self.pick(value) for value in self.values.values()), *self.inputs.values())
+
+
+def _shown_under(steps: tuple[OfferedStep, ...]) -> str | None:
+    if len(steps) != 1 or steps[0].shown_under is None:
+        return None
+    return steps[0].shown_under.text
+
+
+def _asked(offered: OfferedInput) -> FreeText:
+    writes = offered.writes
+    return FreeText(name=offered.value.name, label=offered.value.label, writes=None if writes is None else writes.text)
 
 
 def _input(offered: OfferedInput) -> ChoiceValue:
@@ -168,7 +197,7 @@ def _input(offered: OfferedInput) -> ChoiceValue:
     pick = _Node()
     for step in offered.items:
         pick.add((step,), ())
-    return pick.pick(offered.value)
+    return pick.pick(offered.value, writes=offered.writes.text)
 
 
 def _key(label: _Label) -> object:

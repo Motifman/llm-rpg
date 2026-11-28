@@ -220,6 +220,7 @@ _DESCRIPTION_EXTRAS = (
     "duration_minutes",
     "duration_turns",
     "closing",
+    "listing_note",
 )
 
 
@@ -234,6 +235,7 @@ def choice_descriptions(node: YamlNode) -> ChoiceDescriptions:
             duration_minutes=fields.required("duration_minutes").text(),
             duration_turns=fields.required("duration_turns").text(),
             closing=fields.required("closing").text(),
+            listing_note=fields.required("listing_note").text(),
         )
     )
 
