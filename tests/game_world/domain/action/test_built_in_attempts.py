@@ -182,6 +182,11 @@ class TestPropertiesOfBuiltInAttempts:
         assert row.attempt.can_start_while_busy() is row.startable_while_busy
 
     @pytest.mark.parametrize("row", _TABLE, ids=str)
+    def test_only_waiting_answers_that_it_is_waiting(self, row: _Row) -> None:
+        """表のすべての組み込みの行為のうち、is_waiting() が真なのは待つことだけで、残りはすべて偽を答える。"""
+        assert row.attempt.is_waiting() is (row.kind is ActionKind.WAIT)
+
+    @pytest.mark.parametrize("row", _TABLE, ids=str)
     def test_answers_whom_or_what_it_must_be_near(self, row: _Row) -> None:
         """行為の型は、表の「近くにいる必要」の列を copresence_requirements() で答える。"""
         assert row.attempt.copresence_requirements() == row.copresence

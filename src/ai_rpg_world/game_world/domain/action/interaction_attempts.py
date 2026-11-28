@@ -117,6 +117,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
     def can_start_while_busy(self) -> bool:
         return False
 
+    def is_waiting(self) -> bool:
+        return False
+
     def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool:
         return stage.allows_interaction(self.interaction.interaction_id)
 

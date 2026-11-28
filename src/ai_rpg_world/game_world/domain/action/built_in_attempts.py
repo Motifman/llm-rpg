@@ -138,6 +138,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
     def can_start_while_busy(self) -> bool:
         return False
 
+    def is_waiting(self) -> bool:
+        return False
+
     def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool:
         return stage.allows(self._KIND)
 
@@ -379,6 +382,9 @@ class WaitAttempt(_BuiltInAttempt):
 
     def take_effect(self) -> Ticks:
         return Ticks(0)
+
+    def is_waiting(self) -> bool:
+        return True
 
     def exertion(self) -> Exertion:
         return DoesNotUseBody()
