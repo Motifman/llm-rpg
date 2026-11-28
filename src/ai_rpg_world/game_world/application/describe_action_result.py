@@ -25,7 +25,6 @@ class DescribeActionResultCommand:
 class DescribeActionResult:
     def __init__(self, scope: CommandScope, design: WorldDesign, day_night: DayNightDeclaration) -> None:
         self._scope = scope
-        self._design = design
         self._day_night = day_night
         self._clock = design.clock_wording
 
