@@ -11,7 +11,7 @@ from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import 
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.world_design_for_tests import character, compose_world, item_spec, nouns, spot
 
-_WORLD = WorldId("surroundings_world")
+_WORLD = WorldId("names_world")
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
 _ROPE = item_spec("rope")
@@ -26,9 +26,7 @@ def _opened_world() -> tuple[WorldDesign, WorldSession]:
         ":memory:", world_id=_WORLD, scenario="s", scenario_hash="h", design=design, random=SeedableRandomSource(0)
     )
     OpenWorld(store)(OpenWorldCommand(world_id=_WORLD, design=design))
-    session = store.session()
-    session.people_register().name(_BOB, DisplayName("ボブ"))
-    return design, session
+    return design, store.session()
 
 
 class TestNamesInWorld:
