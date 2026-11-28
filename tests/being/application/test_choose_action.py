@@ -602,6 +602,25 @@ class TestRecallingEpisodes:
         assert attempt.result.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
         assert attempt.call_text == f'episode_recall(handles=["{handle}"])'
 
+    def test_summary_of_the_recall_leaves_out_the_thought_and_the_memo(self) -> None:
+        """思い出す呼び出しに心の声とメモを添えても、結果の要約には呼び名だけを出す。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(
+            _reply(
+                "episode_recall",
+                {"handles": [handle], "inner_thought": "番号を思い出す", "memo": [{"do": "remove", "id": "m_1"}]},
+            ),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+            memories=memories,
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(attempt, Attempt) and attempt.result is not None
+        assert attempt.result.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
+
     def test_recalling_counts_the_recall_at_the_new_turn(self) -> None:
         """思い出すと、そのエピソードの思い出した回数が 1 増え、記憶のターンが 1 進む。"""
         episodes, handle = _episodes_with_the_safe_story()
@@ -729,6 +748,17 @@ class TestNamesRechosenBeforeTheMove:
         assert isinstance(outcome, ActionChosen)
         assert dict(outcome.move.arguments) == {"target": "金庫", "how": "番号を合わせて開ける"}
         assert [(r.original, r.replaced_with, r.accepted) for r in outcome.name_rechoices] == [("safe", "金庫", True)]
+
+    def test_thought_that_is_not_text_is_not_passed_to_the_rechoice(self) -> None:
+        """心の声に文字列でない値が書かれていても、選び直しには心の声を渡さず、名前は選び直す。"""
+        name_choosing = ScriptedNameChoosing([_confident("金庫")])
+
+        outcome, _ = _choose(
+            _reply("interact", {"target": "safe", "how": "番号を合わせて開ける", "inner_thought": 123}),
+            name_choosing=name_choosing,
+        )
+
+        assert isinstance(outcome, ActionChosen) and dict(outcome.move.arguments)["target"] == "金庫"
 
     def test_rechosen_name_is_what_the_attempt_remembers_as_called(self) -> None:
         """選び直したとき、短期記憶の試みに残る呼び出しの文は、選び直したあとの名前で書かれる。"""
