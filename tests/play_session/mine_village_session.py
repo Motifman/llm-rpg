@@ -161,8 +161,7 @@ class MineVillageSession:
 
         self.memory_writing = MemoryWritingOnThreads(wait_limit_seconds=2.0)
         self.short_term_memories = InMemoryShortTermMemoryRepository(handoff=self.memory_writing.handoff)
-        day_night = scenario.design.day_night
-        assert isinstance(day_night, DayNightDeclaration)
+        day_night = scenario.design.day_night_declaration()
         self._turn_round_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_ignore_failure)
         self._turn_round_dispatcher.register_after_commit(
             ObservationPassedOnEvent,
@@ -220,8 +219,7 @@ class MineVillageSession:
 
     def turn_steps(self, completion: ActionChoosingCompletion, *, closing: str) -> BeingTurnSteps:
         design = _scenario().design
-        day_night = design.day_night
-        assert isinstance(day_night, DayNightDeclaration)
+        day_night = design.day_night_declaration()
         settle = SettleWorldConditions(self.scope, design)
         return BeingTurnSteps(
             world=WORLD,

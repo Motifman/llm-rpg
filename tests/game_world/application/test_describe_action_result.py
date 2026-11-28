@@ -52,9 +52,8 @@ class _GenInTheOffice:
         OpenWorld(store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self.scope = CommandScope(store, CommittedEventsDistributor())
         self.scope.run(lambda session: self._move_to_office(session, design))
-        assert isinstance(design.day_night, DayNightDeclaration)
         self._take = TakeChosenAction(self.scope, design, SettleWorldConditions(self.scope, design))
-        self.describe = DescribeActionResult(self.scope, design, design.day_night)
+        self.describe = DescribeActionResult(self.scope, design, design.day_night_declaration())
         self.tell_time = TellCurrentTime(self.scope, design.day_night, design.clock_wording)
         self._pass_time = PassWorldTime(self.scope)
 

@@ -180,8 +180,7 @@ class TestObservationExitInMineVillageV2:
 
     def test_safe_opened_at_tick_61_is_seen_at_day_two_six_thirty(self) -> None:
         """1 日 48 tick、始まり 00:00 の廃坑の山村 v2 で 61 tick に起きたことの観測は、時刻の札「Day 2 6:30」を持つ。"""
-        day_night = load_scenario(_MINE_VILLAGE_V2).design.day_night
-        assert isinstance(day_night, DayNightDeclaration)
+        day_night = load_scenario(_MINE_VILLAGE_V2).design.day_night_declaration()
         received = _Received()
 
         ObservationExit(_WORLD, day_night, clock_wording(), received).hand_over(_perceived(at=61))
