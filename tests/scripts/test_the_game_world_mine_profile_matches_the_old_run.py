@@ -44,7 +44,7 @@ class TestTheGameWorldMineProfile:
         assert {key: new[key] for key in _SHARED_KEYS} == {key: old[key] for key in _SHARED_KEYS}
 
     def test_the_game_world_reads_every_key_with_a_real_llm(self) -> None:
-        """新しい世界の設定が知らない鍵を 1 つも含まず、LiteLLM で 2 人ずつ考える設定として読まれる。"""
+        """新しい世界の設定が知らない鍵を 1 つも含まず、LiteLLM で 2 人ずつ考え、メモ帳と目次つきのエピソードを使う設定として読まれる。"""
         source = _load(_NEW)
 
         settings = GameWorldPlaySettings.from_runtime_config(_runtime_config_mapping_from_source(source))
@@ -52,4 +52,6 @@ class TestTheGameWorldMineProfile:
         assert source["world"] == "game_world"
         assert settings.llm_client == "litellm"
         assert settings.turn_parallel_workers == 2
+        assert settings.memo_tools_enabled
+        assert settings.episode_index_enabled
         assert settings.llm_values["LLM_MODEL"] == "openrouter/deepseek/deepseek-v4.1-flash"
