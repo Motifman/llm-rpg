@@ -66,6 +66,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     Ticks,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.value_object.readiness_to_act import FreeToAct, InTheMiddleOfAction, UnableToAct
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, DepartedPerson, OpenArea, PersonBody
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
@@ -1029,3 +1030,50 @@ class TestPerceiverAt:
         perceiver = vitals.perceiver_at(_IN_THE_SQUARE, departed_persons_act=False, attentive=False)
 
         assert perceiver == DeadPerceiver(person=_ALICE)
+
+
+class TestActsInLivingBody:
+    """acts_in_living_body が、生きていて結末が未決の人だけを、生きた体で動ける人と答えることを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("vitals", "outcome_undecided", "acts"),
+        [
+            (_vitals, True, True),
+            (_vitals, False, False),
+            (_fallen, True, False),
+            (_dead, True, False),
+        ],
+        ids=["alive_and_undecided", "alive_but_outcome_decided", "fallen", "dead"],
+    )
+    def test_only_the_living_with_undecided_outcome_act_in_their_body(
+        self, vitals: Callable[[], PersonVitals], outcome_undecided: bool, acts: bool
+    ) -> None:
+        """生きていて結末が未決なら真。結末が決まった人・気を失った人・死んだ人は偽。"""
+        assert vitals().acts_in_living_body(outcome_undecided) is acts
+
+
+class TestReadinessToAct:
+    """readiness_to_act が、生きた体で動けるか・行為の最中かから、ターンを回せるかを答えることを保証する。"""
+
+    def test_person_with_nothing_going_on_is_free_to_act(self) -> None:
+        """生きていて結末が未決で、何もしていない人は FreeToAct。"""
+        assert _vitals().readiness_to_act(WorldTick(0), outcome_undecided=True) == FreeToAct()
+
+    def test_person_busy_until_later_is_in_the_middle_of_action(self) -> None:
+        """tick 3 まで行為を続ける人は、tick 1 に InTheMiddleOfAction。"""
+        vitals = _vitals()
+        vitals.start_action(WorldTick(3))
+
+        assert vitals.readiness_to_act(WorldTick(1), outcome_undecided=True) == InTheMiddleOfAction()
+
+    def test_person_whose_outcome_is_decided_is_unable_even_when_busy(self) -> None:
+        """結末が決まった人は、行為の最中でも UnableToAct。"""
+        vitals = _vitals()
+        vitals.start_action(WorldTick(3))
+
+        assert vitals.readiness_to_act(WorldTick(1), outcome_undecided=False) == UnableToAct()
+
+    @pytest.mark.parametrize("vitals", [_fallen, _dead], ids=["fallen", "dead"])
+    def test_person_not_in_living_body_is_unable_to_act(self, vitals: Callable[[], PersonVitals]) -> None:
+        """気を失った人と死んだ人は UnableToAct。"""
+        assert vitals().readiness_to_act(WorldTick(9), outcome_undecided=True) == UnableToAct()

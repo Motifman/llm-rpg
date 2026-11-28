@@ -49,6 +49,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.value_object.happening_id import HappeningId
+from ai_rpg_world.game_world.domain.value_object.readiness_to_act import ReadinessToAct
 from ai_rpg_world.game_world.domain.whereabouts import Location, NotAtSpot, Occupant, OpenArea, PassageInState
 
 if TYPE_CHECKING:
@@ -118,7 +119,7 @@ class PersonOutcomesReading(Protocol):
 
     def all_decided(self) -> bool: ...
 
-    def undecided_people(self) -> tuple[PersonId, ...]: ...
+    def is_undecided(self, person: PersonId) -> bool: ...
 
 
 class GroupMembershipReading(Protocol):
@@ -159,6 +160,10 @@ class PersonVitalsReading(Protocol):
     def fatigue(self) -> FatigueAmount: ...
 
     def can_act(self) -> bool: ...
+
+    def acts_in_living_body(self, outcome_undecided: bool) -> bool: ...
+
+    def readiness_to_act(self, now: WorldTick, outcome_undecided: bool) -> ReadinessToAct: ...
 
     def is_dead(self) -> bool: ...
 
