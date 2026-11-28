@@ -140,7 +140,6 @@ class Oneself:
             *([] if self.fatigue_felt is None else [wording.fatigue_felt.format(feel=self.fatigue_felt.text)]),
         ]
 
-
     def doing_lines(
         self, wording: SceneTexts, clock: ClockWording, holes: dict[str, PersonRef | Unidentified]
     ) -> list[str]:

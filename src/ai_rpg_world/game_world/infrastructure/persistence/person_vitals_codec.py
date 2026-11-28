@@ -63,6 +63,7 @@ _LIFE_STATE: JsonUnion[LifeState] = JsonUnion(
     JsonUnionMember("dead", Dead, lambda dead: {"died_at": dead.died_at.value}, _dead_from_json),
 )
 
+
 def _busy_to_json(busy: Busy) -> object:
     return {
         "until": busy.until.value,
