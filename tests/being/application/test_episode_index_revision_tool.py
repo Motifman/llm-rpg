@@ -21,6 +21,15 @@ class TestReadIndexRevision:
         assert (request.handle, request.index) == ("ep_3f2a7b", EpisodeIndex(summary="あ" * 40, recall_when="井戸の話"))
         assert request.truncated == {"about": 41}
 
+    def test_spaces_are_stripped_before_the_text_is_cut(self) -> None:
+        """前後の空白を外すと 40 字に収まる文は、切らずにそのまま目次にし、切った項目は無い。"""
+        request = read_index_revision(
+            {"handle": "ep_3f2a7b", "about": "  " + "あ" * 40 + " ", "recall_when": "井戸の話"}
+        )
+
+        assert request is not None
+        assert (request.index.summary, request.truncated) == ("あ" * 40, {})
+
     @pytest.mark.parametrize(
         "arguments",
         [
