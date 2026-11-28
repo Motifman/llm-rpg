@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import get_args
 
@@ -31,6 +32,7 @@ from ai_rpg_world.game_world.domain.perception.perceived_quality import (
     PerceivedQuality,
     Told,
 )
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DescriptionText, DisplayName, PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
@@ -67,6 +69,8 @@ def _perceived(
         quality=quality,
         happened_at=WorldTick(at),
         calls_attention=calls_attention,
+        addressed_to_perceiver=False,
+        conveys=WhatPerceivedConveys.WHAT_HAPPENED,
     )
 
 
@@ -156,12 +160,19 @@ class TestObservationExit:
         assert observation.wants_wake is calls_attention
 
     def test_what_the_perception_does_not_know_is_unknown(self) -> None:
-        """主体が本人かは偽、主体の名前・出どころ・場所・自分宛てかは「不明」になる。"""
+        """主体が本人かは偽、主体の名前・出どころ・場所は「不明」になる。"""
         _, observation = _handed_over(_perceived())
 
         assert observation.subject_is_self is False
-        assert observation.unknown_fields() == ("subject_name", "source", "place", "addressed_to_self")
+        assert observation.unknown_fields() == ("subject_name", "source", "place")
         assert observation.subject_name is UNKNOWN
+
+    @pytest.mark.parametrize("addressed", [True, False])
+    def test_addressed_to_self_is_whether_the_act_was_directed_at_the_perceiver(self, addressed: bool) -> None:
+        """知覚した人に向けた行為か (Perceived.addressed_to_perceiver) が、そのまま観測の addressed_to_self になる。"""
+        _, observation = _handed_over(replace(_perceived(), addressed_to_perceiver=addressed))
+
+        assert observation.addressed_to_self is addressed
 
 
 class TestObservationExitInMineVillageV2:

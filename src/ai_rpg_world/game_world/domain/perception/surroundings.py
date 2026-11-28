@@ -25,6 +25,7 @@ from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInV
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
 from ai_rpg_world.game_world.domain.perception.scene_conditions import SceneConditions
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
     DisplayName,
@@ -328,6 +329,8 @@ class VisibleSurroundings:
                 quality=self.sight,
                 happened_at=at,
                 calls_attention=False,
+                addressed_to_perceiver=False,
+                conveys=WhatPerceivedConveys.WHAT_HAPPENED,
             ),
         )
 

@@ -326,7 +326,7 @@ class TestPeopleWhoWereThere:
 
 
 class TestOnePerPerson:
-    """1 つの確定から出た刺激は、決まった順に聞き、1 人には最初に知覚したもの 1 つだけを渡すことを保証する。"""
+    """1 つの確定から出た刺激は、決まった順に聞き、1 人には知覚できたもののうちいちばん多くを伝えるもの 1 つだけを渡すことを保証する。"""
 
     def test_own_body_wins_over_sight(self) -> None:
         """見える刺激を先に渡しても、足の痛む alice には体の刺激だけが届き、bob には見えた観測が届く。"""

@@ -62,7 +62,7 @@ class DeliverPerception:
         # 刺激ごとに知覚しうる人を選ぶ (見える: その場所にいる人。その場所にいる去った人を含む。聞こえる: SoundReach が届く場所の人)
         # 作者の場所の知らせと行為の知らせの刺激は、知覚する人を効果の前の居場所 (PeopleWhoWereThere) に置き直してから聞く (D2207、D2216)
         # → Perceiver と LightingConditions / SoundReach を作り、刺激の perceived_by に聞く
-        # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、本人の体・見える・聞こえるは 1 人に最初に知覚したものだけ。世界の知らせは数えずに届ける (D2203)
+        # → 1 つの出来事の刺激は 本人の体 → 見える → 聞こえる → 世界の知らせ の順に聞き、本人の体・見える・聞こえるは 1 人にいちばん多くを伝えるものだけ (D2268-20)。世界の知らせは数えずに届ける (D2203)
         # → Perceived は観測の出口へ
         # → NoticedLater は MissedNotices.keep
         # → 音の刺激は、計算した SoundReach を SoundsThisTick.note にも書く (モンスターが次の tick に聞く)

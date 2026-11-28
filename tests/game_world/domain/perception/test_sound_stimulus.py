@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.game_world.domain.perception import Notable, NotNoticedLater
@@ -7,6 +9,7 @@ from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
 from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NoticedLater, NotPerceived, Perceived
 from ai_rpg_world.game_world.domain.perception.sound_stimulus import Noise, NotWhispered, SoundStimulus, Voice
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.sound import (
     HearingValues,
     HearsClearly,
@@ -78,6 +81,8 @@ class TestSoundStimulusHearingQuality:
             quality=HearsClearly(),
             happened_at=WorldTick(9),
             calls_attention=True,
+            addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_WAS_SAID,
         )
 
     def test_a_muffled_voice_arrives_with_nobody_identified(self) -> None:
@@ -90,6 +95,8 @@ class TestSoundStimulusHearingQuality:
             quality=HearsMuffled(),
             happened_at=WorldTick(9),
             calls_attention=True,
+            addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
     def test_a_sound_below_faint_is_not_heard(self) -> None:
@@ -121,6 +128,8 @@ class TestSoundStimulusHearingQuality:
             quality=HearsFaintly(),
             happened_at=WorldTick(9),
             calls_attention=False,
+            addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
 
@@ -137,6 +146,8 @@ class TestSoundStimulusNoise:
             quality=HearsClearly(),
             happened_at=WorldTick(9),
             calls_attention=True,
+            addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )
 
 
@@ -159,6 +170,8 @@ class TestSoundStimulusWhisper:
             quality=HearsClearly(),
             happened_at=WorldTick(9),
             calls_attention=True,
+            addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_WAS_SAID,
         )
 
     def test_someone_else_at_the_spot_hears_it_faintly(self) -> None:
@@ -188,6 +201,23 @@ class TestSoundStimulusWhisper:
         outcome = self._whisper().perceived_by(awake(BOB, HALL, attentive=True), self._reach(), _VALUES, VIEW)
 
         assert outcome == NotPerceived(NotPerceivedReason.OUT_OF_EARSHOT)
+
+
+class TestSoundStimulusAddressee:
+    """SoundStimulus.perceived_by が、声を向けた相手 (addressee) にだけ、自分に向けたものとして届けることを保証する。"""
+
+    @pytest.mark.parametrize(("listener", "addressed"), [(BOB, True), (CAROL, False)], ids=["addressee", "bystander"])
+    def test_only_the_addressee_hears_it_as_directed_at_them(self, listener, addressed: bool) -> None:
+        """アリスがボブにささやくと、ボブには addressed_to_perceiver=True、同じ場所のキャロルには False で届く。"""
+        whisper = replace(
+            _speech(Loudness.WHISPER, source=Voice(whispered_to=BOB), involved=(ALICE, BOB)), addressee=BOB
+        )
+        reach = SoundReach(levels={SQUARE: SoundLevel(30)})
+
+        outcome = whisper.perceived_by(awake(listener), reach, _VALUES, VIEW)
+
+        assert isinstance(outcome, Perceived)
+        assert outcome.addressed_to_perceiver is addressed
 
 
 class TestSoundStimulusTraveller:
@@ -273,6 +303,8 @@ class TestSoundStimulusDepartedListener:
             quality=HearsClearly(),
             happened_at=WorldTick(9),
             calls_attention=True,
+            addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_WAS_SAID,
         )
 
     def test_a_departed_listener_hears_a_noise_without_identifying_anyone(self) -> None:

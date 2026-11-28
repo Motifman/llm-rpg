@@ -61,8 +61,7 @@ def _perceive(
     perceivers = perceivers_in_world(facts)
     handed_over = _PerceptionsHandedOver(session.aggregates())
     reached = PeopleReachedByStimuli(handed_over)
-    for stimulus in command.in_delivery_order():
-        reached.deliver(stimulus, perceivers, senses)
+    reached.deliver_all(command.in_delivery_order(), perceivers, senses)
     return handed_over.perceived_so_far(), reached.report(command.cause, facts.now())
 
 

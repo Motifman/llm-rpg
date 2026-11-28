@@ -13,6 +13,7 @@ from ai_rpg_world.game_world.domain.perception.perception_delivery_report import
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Notable
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts.location import NotAtSpot
 
@@ -38,6 +39,9 @@ class OwnActionCompletion:
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.OWN_BODY, Notable())
 
+    def most_it_can_convey(self) -> WhatPerceivedConveys:
+        return WhatPerceivedConveys.WHAT_HAPPENED
+
     def described(self) -> StimulusDescription:
         return StimulusDescription(
             sense=Sense.OWN_BODY,
@@ -58,4 +62,6 @@ class OwnActionCompletion:
             quality=Completed(summary=self.summary.seen_by(view), tool=self.tool),
             happened_at=self.at,
             calls_attention=False,
+            addressed_to_perceiver=False,
+            conveys=WhatPerceivedConveys.WHAT_HAPPENED,
         )

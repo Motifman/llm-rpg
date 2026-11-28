@@ -35,6 +35,7 @@ from ai_rpg_world.game_world.domain.perception.surroundings_awareness import (
     SurroundingsAwareness,
     Unaware,
 )
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 
 __all__ = [
     "AnnouncementStimulus",
@@ -68,6 +69,7 @@ __all__ = [
     "SoundSource",
     "SoundStimulus",
     "Stimulus",
+    "WhatPerceivedConveys",
     "SurroundingsAwareness",
     "Told",
     "Unaware",

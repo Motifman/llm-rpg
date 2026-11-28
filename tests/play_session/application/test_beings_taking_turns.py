@@ -11,7 +11,7 @@ from ai_rpg_world.being.application.choose_action import (
 from ai_rpg_world.being.contract import OwnActionResult
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
-from ai_rpg_world.being.domain.short_term_memory import Attempt, MemoryOperationOutcome, ObservedOutcome
+from ai_rpg_world.being.domain.short_term_memory import Attempt, MemoryOperationOutcome, ObservedOutcome, Perception
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldConditionsSettling
@@ -28,7 +28,13 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
-from ai_rpg_world.play_session.domain.turn_rounds import ChoiceFailed, TurnFinishedEvent
+from ai_rpg_world.play_session.domain.turn_rounds import (
+    ChoiceFailed,
+    RoundOpenedEvent,
+    SkippedTurn,
+    TurnFinishedEvent,
+    TurnSkipReason,
+)
 from tests.play_session.mine_village_session import WORLD, MineVillageSession
 
 _GEN = PersonId("gen")
@@ -257,6 +263,144 @@ class TestArrivalComesBackAsOwnAction:
         )
         assert "  呼び出し: travel_to()" in recent
         assert "やって来た" not in recent
+
+
+class TestWhoIsAskedWhileOthersAct:
+    """行為の最中の人は自分に向けたものがあったときだけ、待っている人は目立つ出来事で、次の巡りに頼まれることを保証する。"""
+
+    _SAYO = PersonId("sayo")
+
+    def _asked_in_round_two(self, gen_does: ActionChoosingReply, sayo_does: ActionChoosingReply) -> bool:
+        session = MineVillageSession(delivers_world_events=True, round_limit=2).started()
+        answers = _AnswersByPerson(session, {_GEN: [gen_does], self._SAYO: [sayo_does]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        asked = answers.asked.count(_GEN)
+        assert asked in (1, 2), f"gen must act in round one, asked {asked} times"
+        return asked == 2
+
+    def test_gen_searching_is_not_asked_when_sayo_searches_beside_him(self) -> None:
+        """探している最中 (3 tick かかる) のゲンは、同じ場所でサヨが探すのを見ても、次の巡りに頼まれない。"""
+        assert not self._asked_in_round_two(_reply("explore", "e1"), _reply("explore", "e2"))
+
+    def test_gen_searching_is_asked_when_sayo_whispers_to_him(self) -> None:
+        """探している最中のゲンも、サヨにささやかれれば (to=ゲン)、次の巡りに頼まれる。"""
+        whisper = _reply("speak", "s1", reach="ささやく", to="ゲン", content="そっちはどう？")
+
+        assert self._asked_in_round_two(_reply("explore", "e1"), whisper)
+
+    def test_gen_waiting_is_woken_when_sayo_searches_beside_him(self) -> None:
+        """待つを選んだゲンは、同じ場所でサヨが探すのを見ると (目立つ出来事)、次の巡りに頼まれる。"""
+        assert self._asked_in_round_two(_reply("wait", "w1"), _reply("explore", "e2"))
+
+    def test_gen_searching_is_skipped_with_the_reason_in_the_round_opened_event(self) -> None:
+        """サヨが探すのを見ただけの探している最中のゲンは、2 巡り目の RoundOpenedEvent に「行為の最中で、自分に向けたものが無い」と飛ばした理由が残る。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=2).started()
+        answers = _AnswersByPerson(session, {_GEN: [_reply("explore", "e1")], self._SAYO: [_reply("explore", "e2")]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        second = [e for e in session.turn_round_events if isinstance(e, RoundOpenedEvent) and e.round == 2]
+        assert [s for s in second[0].skipped if s.person == _GEN] == [
+            SkippedTurn(_GEN, TurnSkipReason.IN_THE_MIDDLE_OF_ACTION_AND_NOT_ADDRESSED)
+        ]
+
+
+def _bring_haru_to_the_south_adit_mouth(session: WorldSession) -> None:
+    facts, world = session.facts(), session.aggregates()
+    world.whereabouts().teleport(
+        PersonBody(PersonId("haru")), facts.nouns().spot_of(SpotId("south_adit_mouth")), facts.now()
+    )
+
+
+class TestWordsReachThoseNearby:
+    """同じ場所で話した言葉が、見える文に押しのけられず、声をはっきり聞いた人に届くことを保証する。"""
+
+    _SAYO = PersonId("sayo")
+
+    def _perceived_by(self, person: PersonId, session: MineVillageSession) -> list[str]:
+        return [
+            e.observation.body
+            for e in session.short_term_memories.get(BeingId(person.value)).unsummarized()
+            if isinstance(e, Perception)
+        ]
+
+    def test_gen_hears_what_sayo_says_beside_him(self) -> None:
+        """同じ場所でサヨがふつうの声で「灯りを点けよう」と言うと、ゲンには「サヨが「灯りを点けよう」と言った。」が届き、「サヨが何か話している。」は届かない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        answers = _AnswersByPerson(
+            session, {self._SAYO: [_reply("speak", "s1", reach="ふつうの声で話す", content="灯りを点けよう")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        heard = self._perceived_by(_GEN, session)
+        assert "サヨが「灯りを点けよう」と言った。" in heard
+        assert "サヨが何か話している。" not in heard
+
+    def test_gen_hears_what_sayo_whispers_to_him(self) -> None:
+        """サヨがゲンに「秘密だ」とささやくと、ゲンには「サヨが「秘密だ」とささやいた。」が届き、「サヨがあなたに顔を寄せた。」は届かない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        answers = _AnswersByPerson(
+            session, {self._SAYO: [_reply("speak", "w1", reach="ささやく", to="ゲン", content="秘密だ")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        heard = self._perceived_by(_GEN, session)
+        assert "サヨが「秘密だ」とささやいた。" in heard
+        assert "サヨがあなたに顔を寄せた。" not in heard
+
+    def test_haru_beside_them_sees_only_that_sayo_whispered(self) -> None:
+        """同じ場所にいるハルには、サヨがゲンにささやいた言葉は届かず、いまどおり「…が…に何かささやいた。」の見える文が届く。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        session.scope.run(_bring_haru_to_the_south_adit_mouth)
+        answers = _AnswersByPerson(
+            session, {self._SAYO: [_reply("speak", "w1", reach="ささやく", to="ゲン", content="秘密だ")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        heard = self._perceived_by(PersonId("haru"), session)
+        assert any(body.endswith("に何かささやいた。") for body in heard)
+        assert not any("秘密だ" in body for body in heard)
+
+
+class TestChoicesWhileInTheMiddleOfAnAction:
+    """行為の最中に呼ばれた人の【現在選べる対象引数】に、いまは選べない引数の無い行動が理由つきで出ることを保証する。"""
+
+    _BUSY = "いまできない（手が離せない。今していることが済むまで待つしかない）"
+
+    def test_gen_called_while_searching_sees_explore_and_wait_unavailable(self) -> None:
+        """探している最中 (3 tick かかる) のゲンがサヨにささやかれて呼ばれると、ゲンの候補表に「- explore: いまできない（…）」と「- wait: いまできない（…）」が出る。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=2).started()
+        answers = _AnswersByPerson(
+            session,
+            {
+                _GEN: [_reply("explore", "e1")],
+                PersonId("sayo"): [_reply("speak", "s1", reach="ささやく", to="ゲン", content="そっちはどう？")],
+            },
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        gen = [prompt for person, prompt in answers.prompts if person == _GEN]
+        assert len(gen) == 2
+        table = gen[1][gen[1].index("【現在選べる対象引数】") :]
+        assert f"- explore: {self._BUSY}" in table
+        assert f"- wait: {self._BUSY}" in table
+
+    def test_gen_before_searching_sees_no_unavailable_line_for_explore_or_wait(self) -> None:
+        """何もしていない 1 巡り目のゲンの候補表には、探すと待つの「いまできない」の行が出ない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        answers = _AnswersByPerson(session, {})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        [gen] = [prompt for person, prompt in answers.prompts if person == _GEN]
+        table = gen[gen.index("【現在選べる対象引数】") :]
+        assert "- explore:" not in table and "- wait:" not in table
 
 
 class TestBelongingsComingAndGoing:

@@ -78,11 +78,12 @@ class PerceptionDeclaration:
             at=at,
             present=present,
             withheld_from=withheld_from,
+            addressee=target,
         )
         if isinstance(self.sound, Silent):
             return (sight,)
         heard = self.sound.heard_at(where, people, names, source, self.salience, at)
-        return (sight, replace(heard, present=present, withheld_from=withheld_from))
+        return (sight, replace(heard, present=present, withheld_from=withheld_from, addressee=target))
 
     def failure_seen_at(
         self,
@@ -111,6 +112,7 @@ class PerceptionDeclaration:
                 always_delivered=False,
                 at=at,
                 withheld_from=frozenset({actor.person}),
+                addressee=target,
             ),
         )
 

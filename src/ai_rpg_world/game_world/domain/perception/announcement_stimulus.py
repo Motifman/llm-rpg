@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.perception.perception_delivery_report import
 from ai_rpg_world.game_world.domain.perception.perception_outcome import NotPerceived, Perceived, PerceptionOutcome
 from ai_rpg_world.game_world.domain.perception.perception_senses import PerceptionSenses
 from ai_rpg_world.game_world.domain.perception.salience import Salience
+from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts.location import NotAtSpot
 
@@ -40,6 +41,9 @@ class AnnouncementStimulus:
     def delivery_rank(self) -> DeliveryRank:
         return DeliveryRank.of(Sense.ANNOUNCEMENT, self.salience)
 
+    def most_it_can_convey(self) -> WhatPerceivedConveys:
+        return WhatPerceivedConveys.WHAT_HAPPENED
+
     def described(self) -> StimulusDescription:
         return StimulusDescription(
             sense=Sense.ANNOUNCEMENT, text=self.text.template.template, where=NotAtSpot(), addressed_to=self.audience
@@ -62,6 +66,8 @@ class AnnouncementStimulus:
                 quality=Told(),
                 happened_at=self.at,
                 calls_attention=self.salience.stands_out(),
+                addressed_to_perceiver=False,
+                conveys=WhatPerceivedConveys.WHAT_HAPPENED,
             ),
             on_waking=lambda: MissedNotice(text=self.text.seen_by(view), happened_at=self.at),
         )
