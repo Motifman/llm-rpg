@@ -22,6 +22,7 @@ from ai_rpg_world.being.application.choose_action import (
     TurnSpentRecalling,
     TurnSpentRevisingIndex,
 )
+from ai_rpg_world.being.application.names_for_people import text_naming_people
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.experiment.infrastructure.game_world_trace import GameWorldTrace, GameWorldTraceKind
@@ -156,13 +157,15 @@ class TracedReceiveActionResult:
     def execute(self, command: ReceiveActionResultCommand) -> None:
         self._inner.execute(command)
         trace = self._trace()
+        named = command.result.with_people_named(text_naming_people)
         # 結果はもう記憶に入り、行為も世界で確定している。記録が落ちても、遊びは変えない
         trace.guarded(
             lambda: trace.record_being_turn(
                 GameWorldTraceKind.ACTION_RESULT,
                 self._person_of(command.being_id),
-                route=trace.jsonable(command.result.route),
-                body=trace.jsonable(command.result.body),
+                # Being が覚えたのと同じく、人の穴を名前で埋めて書く。埋めないと相手の違う断りが同じ文になる
+                route=trace.jsonable(named.route),
+                body=named.body,
             )
         )
 

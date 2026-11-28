@@ -59,3 +59,38 @@ class TestGameWorldReport:
         report = game_world_report(title="mine", trace_path=_trace(tmp_path), summary=_SUMMARY, elapsed="00:01")
 
         assert "## refused actions" not in report and "## skipped turns" not in report
+
+    def test_routine_misses_are_kept_out_of_the_missed_list(self, tmp_path: Path) -> None:
+        """自分の行為 (own_act) で届かなかった知らせは別の行にまとめ、暗くて見えなかったサヨだけが届かなかった知らせの節に出る。"""
+        stimulus = {
+            "missed_by": [{**_GEN, "reason": "own_act"}, {"person_id": "sayo", "name": "サヨ", "reason": "too_dark"}]
+        }
+        trace = _trace(tmp_path, ("game_world.perception_delivered", {"stimuli": [stimulus]}))
+
+        report = game_world_report(title="mine", trace_path=trace, summary=_SUMMARY, elapsed="00:01")
+
+        assert "- サヨ: too_dark x1" in report
+        assert "own_act" not in report.split("## missed perceptions")[1].split("(routine")[0]
+        assert "(routine misses not listed above: own_act x1)" in report
+
+    def test_writing_calls_are_split_by_component(self, tmp_path: Path) -> None:
+        """書き起こしの呼び出しは部品ごとに、呼んだ数・落ちた数・費用を出し、費用の分からない呼び出しは数を添える。"""
+        trace = _trace(
+            tmp_path,
+            ("game_world.aux_llm_call", {"call": {"component": "episode_writing", "success": True, "cost_usd": 0.002}}),
+            ("game_world.aux_llm_call", {"call": {"component": "episode_writing", "success": False, "cost_usd": None}}),
+        )
+
+        report = game_world_report(title="mine", trace_path=trace, summary=_SUMMARY, elapsed="00:01")
+
+        assert "| episode_writing | 2 | 1 | $0.0020 (1 unknown) |" in report
+
+    def test_unreadable_trace_still_leaves_the_header(self, tmp_path: Path) -> None:
+        """trace の行が壊れていても、止まった理由などの見出しは残し、まとめられなかったことを書く。"""
+        trace = tmp_path / "trace.jsonl"
+        trace.write_text("{broken\n", encoding="utf-8")
+
+        report = game_world_report(title="mine", trace_path=trace, summary=_SUMMARY, elapsed="00:01")
+
+        assert "- outcome: ROUND_LIMIT_REACHED" in report
+        assert "could not summarize the trace" in report
