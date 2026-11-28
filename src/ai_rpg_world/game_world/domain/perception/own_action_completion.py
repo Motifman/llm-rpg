@@ -58,4 +58,5 @@ class OwnActionCompletion:
             quality=Completed(summary=self.summary.seen_by(view), tool=self.tool),
             happened_at=self.at,
             calls_attention=False,
+            addressed_to_perceiver=False,
         )

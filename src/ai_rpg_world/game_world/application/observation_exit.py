@@ -57,7 +57,7 @@ class ObservationExit:
                 subject_name=UNKNOWN,
                 source=UNKNOWN,
                 place=UNKNOWN,
-                addressed_to_self=UNKNOWN,
+                addressed_to_self=perceived.addressed_to_perceiver,
                 wants_wake=perceived.calls_attention,
                 order=OccurrenceOrder(environment=self._world.value, value=perceived.happened_at.value),
             ),

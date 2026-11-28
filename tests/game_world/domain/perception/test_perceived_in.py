@@ -118,6 +118,7 @@ class TestSightStimulusPerceivedIn:
             quality=SeesShapes(),
             happened_at=_AT,
             calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
     def test_bright_spot_gives_the_clear_text_seen_by_the_perceiver(self) -> None:
@@ -132,6 +133,7 @@ class TestSightStimulusPerceivedIn:
             quality=SeesClearly(),
             happened_at=_AT,
             calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
 
@@ -166,6 +168,7 @@ class TestSoundStimulusPerceivedIn:
             quality=HearsClearly(),
             happened_at=_AT,
             calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
     def test_reach_of_another_loudness_is_not_used(self) -> None:
@@ -188,7 +191,12 @@ class TestBodilyAndAnnouncementPerceivedIn:
         outcome = stimulus.perceived_in(awake(ALICE), _Senses(views={ALICE: _ALICE_KNOWS_BOB}))
 
         assert outcome == Perceived(
-            perceiver=ALICE, text=text.seen_by(_ALICE_KNOWS_BOB), quality=Felt(), happened_at=_AT, calls_attention=True
+            perceiver=ALICE,
+            text=text.seen_by(_ALICE_KNOWS_BOB),
+            quality=Felt(),
+            happened_at=_AT,
+            calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
     def test_announcement_text_is_seen_by_the_person_told(self) -> None:
@@ -199,5 +207,10 @@ class TestBodilyAndAnnouncementPerceivedIn:
         outcome = stimulus.perceived_in(awake(ALICE), _Senses(views={ALICE: _ALICE_KNOWS_BOB}))
 
         assert outcome == Perceived(
-            perceiver=ALICE, text=text.seen_by(_ALICE_KNOWS_BOB), quality=Told(), happened_at=_AT, calls_attention=True
+            perceiver=ALICE,
+            text=text.seen_by(_ALICE_KNOWS_BOB),
+            quality=Told(),
+            happened_at=_AT,
+            calls_attention=True,
+            addressed_to_perceiver=False,
         )

@@ -55,6 +55,7 @@ class MissedNotices:
                 quality=NoticedOnWaking(),
                 happened_at=woke_at,
                 calls_attention=False,
+                addressed_to_perceiver=False,
             )
             for notice in self._notices
         )

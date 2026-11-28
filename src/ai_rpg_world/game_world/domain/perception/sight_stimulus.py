@@ -82,6 +82,7 @@ class SightStimulus:
     at: WorldTick
     present: PeoplePresent = field(default_factory=WhoeverIsThere)
     withheld_from: frozenset[PersonId] = frozenset()
+    addressee: PersonId | NoTarget = field(default_factory=NoTarget)
 
     def __post_init__(self) -> None:
         self.target.require_among(self.involved)
@@ -190,4 +191,5 @@ class _Sighting:
             quality=sight,
             happened_at=self.stimulus.at,
             calls_attention=self.calls_attention,
+            addressed_to_perceiver=self.stimulus.addressee == self.perceiver.person,
         )

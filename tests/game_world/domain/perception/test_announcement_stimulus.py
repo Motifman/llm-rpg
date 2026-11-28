@@ -24,7 +24,12 @@ class TestAnnouncementStimulusPerceivedBy:
         outcome = _call_to(ALICE).perceived_by(awake(ALICE, HALL), VIEW)
 
         assert outcome == Perceived(
-            perceiver=ALICE, text=_TEXT.seen_by(VIEW), quality=Told(), happened_at=WorldTick(7), calls_attention=True
+            perceiver=ALICE,
+            text=_TEXT.seen_by(VIEW),
+            quality=Told(),
+            happened_at=WorldTick(7),
+            calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
     def test_someone_outside_the_audience_is_not_told(self) -> None:

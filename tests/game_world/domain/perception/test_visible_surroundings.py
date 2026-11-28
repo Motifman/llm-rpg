@@ -302,6 +302,7 @@ class TestSurroundingsPerceivedAsOneObservation:
                 quality=SeesClearly(),
                 happened_at=_NOW,
                 calls_attention=False,
+                addressed_to_perceiver=False,
             ),
         )
 

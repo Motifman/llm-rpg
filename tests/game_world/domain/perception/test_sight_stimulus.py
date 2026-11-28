@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.game_world.domain.action.manner import Openly, Stealthily
@@ -104,6 +106,7 @@ class TestSightStimulusLighting:
             quality=SeesClearly(),
             happened_at=WorldTick(5),
             calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
     def test_in_the_dark_the_dim_text_is_seen_with_nobody_identified(self) -> None:
@@ -244,6 +247,27 @@ class TestSightStimulusTarget:
         assert outcome == NotPerceived(NotPerceivedReason.STEALTH_UNNOTICED)
 
 
+class TestSightStimulusAddressee:
+    """SightStimulus.perceived_by が、行為を向けた相手 (addressee) にだけ、自分に向けた行為として届けることを保証する。"""
+
+    @pytest.mark.parametrize(("viewer", "addressed"), [(BOB, True), (CAROL, False)], ids=["addressee", "bystander"])
+    def test_only_the_addressee_perceives_it_as_directed_at_them(self, viewer, addressed: bool) -> None:
+        """アリスがボブに向けた行為を見ると、ボブには addressed_to_perceiver=True、見ていたキャロルには False で届く。"""
+        stimulus = replace(_opening(), involved=(ALICE, BOB), addressee=BOB)
+
+        outcome = stimulus.perceived_by(awake(viewer), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)
+
+        assert isinstance(outcome, Perceived)
+        assert outcome.addressed_to_perceiver is addressed
+
+    def test_act_directed_at_nobody_is_not_directed_at_the_viewer(self) -> None:
+        """誰にも向けていない行為 (addressee が NoTarget) は、見たボブに addressed_to_perceiver=False で届く。"""
+        outcome = _opening().perceived_by(awake(BOB), Lighting.BRIGHT, VIEW, _NO_DRAWS, _STEALTH)
+
+        assert isinstance(outcome, Perceived)
+        assert outcome.addressed_to_perceiver is False
+
+
 class TestSightStimulusConstruction:
     """SightStimulus を作るときに、相手が関わった人に入っているかを確かめることを保証する。"""
 
@@ -291,6 +315,7 @@ class TestSightStimulusDepartedActor:
             quality=SeesShapes(),
             happened_at=WorldTick(5),
             calls_attention=True,
+            addressed_to_perceiver=False,
         )
 
     def test_a_living_viewer_sees_nothing_without_an_unseen_actor_text(self) -> None:

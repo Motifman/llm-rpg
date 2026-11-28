@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 from typing import Protocol, Union, final
 
 from typing_extensions import assert_never
@@ -62,12 +63,26 @@ _FAILURES_TO_GIVE_UP = 8
 _ROUNDS_TO_GIVE_UP = 2
 
 
+class TurnSkipReason(Enum):
+    WAITING = "waiting"
+    IN_THE_MIDDLE_OF_ACTION_AND_NOT_ADDRESSED = "in_the_middle_of_action_and_not_addressed"
+    UNABLE_TO_ACT = "unable_to_act"
+
+
+@final
+@dataclass(frozen=True)
+class SkippedTurn:
+    person: PersonId
+    reason: TurnSkipReason
+
+
 @final
 @dataclass(frozen=True)
 class RoundOpenedEvent(DomainEvent):
     world: WorldId
     round: int
     due: tuple[PersonId, ...]
+    skipped: tuple[SkippedTurn, ...]
 
 
 @final
@@ -100,7 +115,7 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         self._due: tuple[PersonId, ...] | None = None
         self._finished: list[PersonId] = []
         self._waiting_since: dict[PersonId, int] = {}
-        self._called: set[PersonId] = set()
+        self._addressed: set[PersonId] = set()
         self._failures_by_person: dict[PersonId, int] = {}
         self._failures_in_a_row: list[str] = []
         self._rounds_of_failures: set[int] = set()
@@ -114,12 +129,19 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         if self._due is not None:
             raise RoundAlreadyOpenException(f"round {self._current_round} of {self._world.value} is already open")
         self._wake_those_waited_long_enough()
-        self._due = tuple(person for person, ready in readiness.items() if self._takes_turn(person, ready))
-        # 気を失っていたあいだの呼びかけで、気がついたあとの移動中にターンが回らないよう、持ち越さない
-        self._called &= set(self._due)
+        skips = {person: self._skip_reason(person, ready) for person, ready in readiness.items()}
+        self._due = tuple(person for person, reason in skips.items() if reason is None)
+        # 気を失っていたあいだに向けられたもので、気がついたあとの移動中にターンが回らないよう、持ち越さない
+        self._addressed &= set(self._due)
         self._finished = []
         self.add_event(
-            RoundOpenedEvent(**new_event_stamp(), world=self._world, round=self._current_round, due=self._due)
+            RoundOpenedEvent(
+                **new_event_stamp(),
+                world=self._world,
+                round=self._current_round,
+                due=self._due,
+                skipped=tuple(SkippedTurn(person, reason) for person, reason in skips.items() if reason is not None),
+            )
         )
 
     def due_turns(self) -> tuple[PersonId, ...]:
@@ -128,18 +150,16 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
 
     def notice_observation(self, person: PersonId, observation: Observation) -> None:
         if observation.wants_wake is True:
-            self.hear_call(person)
-
-    def hear_call(self, person: PersonId) -> None:
-        self._waiting_since.pop(person, None)
-        self._called.add(person)
+            self._waiting_since.pop(person, None)
+        if observation.addressed_to_self is True:
+            self._addressed.add(person)
 
     def finish_turn(self, person: PersonId, outcome: TurnOutcome) -> None:
         if person not in self.due_turns():
             raise TurnNotDueException(f"{person.value} has no turn left in round {self._current_round}")
         self._finished.append(person)
-        # 自分の行為が呼んだ観測で、すぐまたターンが回らないよう、行為の確定のあとで呼びかけを消す
-        self._called.discard(person)
+        # 自分の行為に返ってきた観測で、すぐまたターンが回らないよう、行為の確定のあとで消す
+        self._addressed.discard(person)
         match outcome:
             case Waited():
                 self._waiting_since[person] = self._current_round
@@ -214,15 +234,18 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
             if self._current_round - since > self._wake_waiting_after.value:
                 del self._waiting_since[person]
 
-    def _takes_turn(self, person: PersonId, readiness: ReadinessToAct) -> bool:
+    def _skip_reason(self, person: PersonId, readiness: ReadinessToAct) -> TurnSkipReason | None:
         match readiness:
             case FreeToAct():
-                return person not in self._waiting_since
+                return TurnSkipReason.WAITING if person in self._waiting_since else None
             case InTheMiddleOfAction():
-                # 行っているあいだは話すことしかできないので、呼びかけられたときだけ回す
-                return person in self._called
+                # 行っているあいだは話すことしかできないので、自分に向けたものがあったときだけ回す。
+                # 目立つ出来事で回すと、話す気の無い人に頼んで、断られる行動を選ばせる
+                if person in self._addressed:
+                    return None
+                return TurnSkipReason.IN_THE_MIDDLE_OF_ACTION_AND_NOT_ADDRESSED
             case UnableToAct():
-                return False
+                return TurnSkipReason.UNABLE_TO_ACT
             case _:
                 assert_never(readiness)
 
