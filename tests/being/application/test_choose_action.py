@@ -186,7 +186,7 @@ def _choose(
     working_memory = CurrentWorkingMemory(
         beings=_Beings(),
         short_term_memories=short_term_memories,
-        acquaintances=InMemoryAcquaintanceRepository(),
+        acquaintances=InMemoryAcquaintanceRepository(handoff=discard_events),
         episodes=episodes,
         memo_books=memo_books,
         visited_places=visited_places,
@@ -217,7 +217,7 @@ def _chooser(
         working_memory=CurrentWorkingMemory(
             beings=_Beings(),
             short_term_memories=memories,
-            acquaintances=InMemoryAcquaintanceRepository(),
+            acquaintances=InMemoryAcquaintanceRepository(handoff=discard_events),
             episodes=episodes,
             memo_books=memo_books,
             visited_places=visited_places,

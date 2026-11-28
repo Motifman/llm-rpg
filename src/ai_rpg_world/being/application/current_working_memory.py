@@ -75,7 +75,7 @@ class CurrentWorkingMemory:
         shown_episodes = self.episodes_in_index(being_id)
         memory = MemoryTexts(
             known_people=render_known_people(
-                self._acquaintances.list_by_being(being_id), environment_name=environment_name
+                self._acquaintances.get(being_id).acquaintances, environment_name=environment_name
             ),
             backstory=backstory_text(short_term),
             recent_events=recent_events_text(short_term),

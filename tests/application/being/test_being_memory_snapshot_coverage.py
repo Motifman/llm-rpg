@@ -7,6 +7,7 @@ PR-G で Recall Slot / Afterglow / Habituation を snapshot に追加すると�
 """
 
 import pytest
+from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     SnapshotCoverageError,
@@ -67,7 +68,7 @@ def _make_service(memory_turn_clock=None):
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 
     return BeingMemorySnapshotService(
-        acquaintance_store=InMemoryAcquaintanceRepository(),
+        acquaintance_store=InMemoryAcquaintanceRepository(handoff=discard_events),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
         memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock(),
@@ -169,7 +170,7 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
             being_attachment_resolver=resolver,
             player_beings=player_beings,
             being_environment=_ENVIRONMENT,
-            acquaintance_store=InMemoryAcquaintanceRepository(),
+            acquaintance_store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_episode_store=InMemoryEpisodeRepository(),
             being_memo_store=InMemoryMemoBookRepository(),
             memory_turn_clock=InMemoryMemoryTurnClock(),

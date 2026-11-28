@@ -48,6 +48,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.aggregate.player_beings import PlayerBeings
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+from tests.event_handoff_helpers import discard_events
+from tests.support.acquaintance_roster import meet
 
 _ENVIRONMENT = _BeingAttachment(environment_id="demo#1", environment_name="試験の世界")
 
@@ -65,7 +67,7 @@ def _make_stack():
         being_attachment_resolver=resolver,
         player_beings=player_beings,
         being_environment=_ENVIRONMENT,
-        acquaintance_store=InMemoryAcquaintanceRepository(),
+        acquaintance_store=InMemoryAcquaintanceRepository(handoff=discard_events),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
         memory_turn_clock=InMemoryMemoryTurnClock(),
@@ -81,7 +83,7 @@ def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     決定論性のため、すべての datetime は ``_FIXED_TIME`` 固定。これにより
     capture → restore → recapture で payload が bit-identical になる。
     """
-    wiring.acquaintance_store.record_meeting(being_id, environment_name="island", name="kaito", turn=3)
+    meet(wiring.acquaintance_store, being_id, environment_name="island", name="kaito", turn=3)
 
 
 def _strip_volatile_metadata(payload_dict: dict) -> dict:

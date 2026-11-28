@@ -49,12 +49,13 @@ class TestRestoreOverSpawnRecords:
         from ai_rpg_world.application.being.experiment_snapshot_session import (
             ExperimentSnapshotSession,
         )
+        from ai_rpg_world.being.domain.acquaintance import AcquaintanceRoster
 
         island = _SCENARIOS / "survival_island_v4_coop.json"
         source = create_world_runtime(island)
         ada = source.get_player_ids()[0]
         being_id = source.aux_being_resolver.resolve_being_id(source.aux_being_default_world_id, ada)
-        source._acquaintance_store.replace_all_by_being(being_id, [])
+        source._acquaintance_store.replace_all_by_being(AcquaintanceRoster.empty(being_id))
         source._player_acquaintances.record_meeting(ada, "ノア")
         source._player_acquaintances.record_meeting(ada, "ノア")
         ExperimentSnapshotSession(
@@ -68,7 +69,7 @@ class TestRestoreOverSpawnRecords:
             snapshot_dir=tmp_path,
         ).restore_all_from_dir(tmp_path)
 
-        met = restored._acquaintance_store.list_by_being(being_id)
+        met = restored._acquaintance_store.get(being_id).acquaintances
         assert [(m.name, m.met_count) for m in met] == [("ノア", 2)]
 
 

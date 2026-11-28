@@ -4,8 +4,16 @@ import pytest
 
 from ai_rpg_world.being.domain.acquaintance import (
     Acquaintance,
-    AcquaintanceInvalid,
+    AcquaintanceIntroducedEvent,
+    AcquaintanceMetEvent,
+    AcquaintanceNameLearnedEvent,
+    AcquaintanceRoster,
     HowKnown,
+)
+from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.domain.being.exception.being_exceptions import (
+    AcquaintanceDuplicatedException,
+    AcquaintanceValidationException,
 )
 
 
@@ -49,13 +57,13 @@ class TestAcquaintance:
         assert not again.is_first_meeting
 
     def test_meeting_in_an_earlier_turn_is_rejected(self) -> None:
-        """最後に会ったターン、または知ったターンより前のターンで会おうとすると AcquaintanceInvalid を投げる。"""
+        """最後に会ったターン、または知ったターンより前のターンで会おうとすると AcquaintanceValidationException を投げる。"""
         met = Acquaintance.first_meeting(environment_name="島", name="ノア", turn=7)
         known = Acquaintance.introduced(environment_name="島", name="カイ", turn=5)
 
-        with pytest.raises(AcquaintanceInvalid):
+        with pytest.raises(AcquaintanceValidationException):
             met.met_at(turn=6)
-        with pytest.raises(AcquaintanceInvalid):
+        with pytest.raises(AcquaintanceValidationException):
             known.met_at(turn=4)
 
     @pytest.mark.parametrize(
@@ -68,8 +76,8 @@ class TestAcquaintance:
         ],
     )
     def test_blank_names_or_invalid_turn_are_rejected(self, kwargs: dict) -> None:
-        """環境の名前や相手の名前が空、またはターンが負か整数でないとき AcquaintanceInvalid を投げる。"""
-        with pytest.raises(AcquaintanceInvalid):
+        """環境の名前や相手の名前が空、またはターンが負か整数でないとき AcquaintanceValidationException を投げる。"""
+        with pytest.raises(AcquaintanceValidationException):
             Acquaintance.first_meeting(**kwargs)
 
     @pytest.mark.parametrize(
@@ -103,7 +111,7 @@ class TestAcquaintance:
     )
     def test_inconsistent_records_are_rejected(self, fields: dict) -> None:
         """回数と会ったターンが食い違う、知る前に会っている、会って知ったのに知ったターンと初めて会ったターンが違う、注記が空、のどれでも作れない。"""
-        with pytest.raises(AcquaintanceInvalid):
+        with pytest.raises(AcquaintanceValidationException):
             Acquaintance(
                 environment_name="島",
                 name="ノア",
@@ -176,10 +184,169 @@ class TestKnowingTheName:
     )
     def test_inconsistent_name_turns_are_rejected(self, fields: dict) -> None:
         """紹介なのに名前を知らない・紹介と違うターンに知った、会う前に名前を知った、ターンが整数でない、のどれでも作れない。"""
-        with pytest.raises(AcquaintanceInvalid):
+        with pytest.raises(AcquaintanceValidationException):
             Acquaintance(
                 environment_name="島",
                 name="ノア",
                 known_since_turn=2,
                 **{"name_learned_turn": 2, **fields},
             )
+
+
+ADA = BeingId("being_ada")
+
+
+def _events(roster: AcquaintanceRoster) -> list[tuple[type, str, int]]:
+    return [(type(e), e.acquaintance.name, e.acquaintance.met_count) for e in roster.get_events()]
+
+
+class TestIntroducingToTheRoster:
+    """AcquaintanceRoster.introduce が、知らない相手だけを紹介で載せ、知っている相手は名前を知らないときだけ名前を覚えることを保証する。"""
+
+    def test_stranger_is_added_with_the_note_and_an_introduced_event(self) -> None:
+        """知らないノアを紹介されると、名簿の末尾に紹介で知った記録 (注記つき) が載り、AcquaintanceIntroducedEvent が 1 件たまる。"""
+        roster = AcquaintanceRoster.empty(ADA)
+
+        roster.introduce(environment_name="山村", name="ノア", turn=2, relation_note="仲間")
+
+        assert roster.acquaintances == (
+            Acquaintance.introduced(environment_name="山村", name="ノア", turn=2, relation_note="仲間"),
+        )
+        assert _events(roster) == [(AcquaintanceIntroducedEvent, "ノア", 0)]
+
+    def test_someone_met_without_the_name_learns_it_without_the_note(self) -> None:
+        """名前を知らずに会ったノアを紹介されると、会った記録のまま名前を知ったターンが付き、注記は付かず、AcquaintanceNameLearnedEvent がたまる。"""
+        roster = AcquaintanceRoster.empty(ADA)
+        roster.meet(environment_name="山村", name="ノア", turn=1, knows_name=False)
+        roster.clear_events()
+
+        roster.introduce(environment_name="山村", name="ノア", turn=3, relation_note="仲間")
+
+        [noa] = roster.acquaintances
+        assert (noa.how_known, noa.name_learned_turn, noa.relation_note, noa.met_count) == (HowKnown.MET, 3, None, 1)
+        assert _events(roster) == [(AcquaintanceNameLearnedEvent, "ノア", 1)]
+
+    def test_someone_whose_name_is_known_is_left_as_is(self) -> None:
+        """名前を知っているノアをもう一度紹介されても、記録は変わらず、イベントもたまらない。"""
+        roster = AcquaintanceRoster.empty(ADA)
+        roster.meet(environment_name="山村", name="ノア", turn=1)
+        before = roster.acquaintances
+        roster.clear_events()
+
+        roster.introduce(environment_name="山村", name="ノア", turn=3, relation_note="仲間")
+
+        assert roster.acquaintances == before
+        assert roster.get_events() == []
+
+
+class TestMeetingInTheRoster:
+    """AcquaintanceRoster.meet が、知らない相手は会って知った記録を作り、知っている相手は会った回数を進めることを保証する。"""
+
+    def test_meeting_a_stranger_adds_a_met_record(self) -> None:
+        """知らないノアに会うと、会って知った記録 (回数 1) が載り、AcquaintanceMetEvent がたまる。"""
+        roster = AcquaintanceRoster.empty(ADA)
+
+        roster.meet(environment_name="島", name="ノア", turn=4)
+
+        assert roster.acquaintances == (Acquaintance.first_meeting(environment_name="島", name="ノア", turn=4),)
+        assert _events(roster) == [(AcquaintanceMetEvent, "ノア", 1)]
+
+    def test_meeting_again_advances_the_same_record_in_place(self) -> None:
+        """リオ、ノアの順に知ったあとでノアにもう一度会うと、並びは変わらずノアの回数が 2 になり、会うたびにイベントがたまる。"""
+        roster = AcquaintanceRoster.empty(ADA)
+        roster.meet(environment_name="島", name="リオ", turn=1)
+        roster.meet(environment_name="島", name="ノア", turn=2)
+
+        roster.meet(environment_name="島", name="ノア", turn=5)
+
+        assert [(a.name, a.met_count, a.last_met_turn) for a in roster.acquaintances] == [
+            ("リオ", 1, 1),
+            ("ノア", 2, 5),
+        ]
+        assert _events(roster) == [
+            (AcquaintanceMetEvent, "リオ", 1),
+            (AcquaintanceMetEvent, "ノア", 1),
+            (AcquaintanceMetEvent, "ノア", 2),
+        ]
+
+    def test_meeting_again_does_not_forget_the_name(self) -> None:
+        """名前を知ったノアに、名前を知らない扱いでもう一度会っても、名前は知ったまま。"""
+        roster = AcquaintanceRoster.empty(ADA)
+        roster.meet(environment_name="島", name="ノア", turn=1, knows_name=False)
+        roster.learn_name(environment_name="島", name="ノア", turn=2)
+
+        roster.meet(environment_name="島", name="ノア", turn=4, knows_name=False)
+
+        assert roster.find(environment_name="島", name="ノア").knows_name  # type: ignore[union-attr]
+
+    def test_same_name_in_another_environment_is_another_person(self) -> None:
+        """同じノアでも環境の名前が違えば別の記録になり、find はそれぞれを返す。"""
+        roster = AcquaintanceRoster.empty(ADA)
+
+        roster.meet(environment_name="島", name="ノア", turn=1)
+        roster.meet(environment_name="山村", name="ノア", turn=9)
+
+        assert roster.find(environment_name="島", name="ノア").first_met_turn == 1  # type: ignore[union-attr]
+        assert roster.find(environment_name="山村", name="ノア").first_met_turn == 9  # type: ignore[union-attr]
+
+    def test_meeting_in_an_earlier_turn_changes_nothing(self) -> None:
+        """最後に会ったターンより前に会おうとすると AcquaintanceValidationException を投げ、記録もイベントも変わらない。"""
+        roster = AcquaintanceRoster.empty(ADA)
+        roster.meet(environment_name="島", name="ノア", turn=7)
+        before = roster.acquaintances
+        roster.clear_events()
+
+        with pytest.raises(AcquaintanceValidationException):
+            roster.meet(environment_name="島", name="ノア", turn=6)
+
+        assert (roster.acquaintances, roster.get_events()) == (before, [])
+
+
+class TestLearningNamesInTheRoster:
+    """AcquaintanceRoster.learn_name が、会ったことがあり名前を知らない相手の名前だけを覚えることを保証する (#1581)。"""
+
+    def test_name_of_someone_met_is_learned(self) -> None:
+        """名前を知らずに会ったノアの名前を覚えると、名前を知ったターンが付き、AcquaintanceNameLearnedEvent がたまる。"""
+        roster = AcquaintanceRoster.empty(ADA)
+        roster.meet(environment_name="島", name="ノア", turn=1, knows_name=False)
+        roster.clear_events()
+
+        roster.learn_name(environment_name="島", name="ノア", turn=3)
+
+        assert roster.find(environment_name="島", name="ノア").name_learned_turn == 3  # type: ignore[union-attr]
+        assert _events(roster) == [(AcquaintanceNameLearnedEvent, "ノア", 1)]
+
+    def test_name_of_someone_never_met_is_not_learned(self) -> None:
+        """会ったことの無いノアの名前を覚えようとしても、名簿は空のままで、イベントもたまらない。"""
+        roster = AcquaintanceRoster.empty(ADA)
+
+        roster.learn_name(environment_name="島", name="ノア", turn=3)
+
+        assert (roster.acquaintances, roster.get_events()) == ((), [])
+
+    def test_known_name_keeps_the_first_turn(self) -> None:
+        """すでに名前を知っているノアの名前をもう一度覚えても、知ったターンは変わらず、イベントもたまらない。"""
+        roster = AcquaintanceRoster.empty(ADA)
+        roster.meet(environment_name="島", name="ノア", turn=1)
+        roster.clear_events()
+
+        roster.learn_name(environment_name="島", name="ノア", turn=5)
+
+        assert roster.find(environment_name="島", name="ノア").name_learned_turn == 1  # type: ignore[union-attr]
+        assert roster.get_events() == []
+
+
+class TestBuildingTheRoster:
+    """AcquaintanceRoster を作るときに、名簿全体の決まりを守ることを保証する。"""
+
+    def test_same_person_twice_is_rejected(self) -> None:
+        """同じ環境の同じ名前の記録を 2 件渡すと AcquaintanceDuplicatedException を投げる。"""
+        noa = Acquaintance.first_meeting(environment_name="島", name="ノア", turn=1)
+
+        with pytest.raises(AcquaintanceDuplicatedException):
+            AcquaintanceRoster(ADA, acquaintances=(noa, noa))
+
+    def test_being_id_must_be_a_being_id(self) -> None:
+        """BeingId でない値を持ち主に渡すと AcquaintanceValidationException を投げる。"""
+        with pytest.raises(AcquaintanceValidationException):
+            AcquaintanceRoster("being_ada")  # type: ignore[arg-type]

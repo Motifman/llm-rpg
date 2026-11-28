@@ -21,6 +21,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.event_handoff_helpers import discard_events
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
@@ -106,7 +108,7 @@ class TestExpectedPayloadKeysCoverage:
             _being_environment=BeingAttachment(environment_id="demo#1", environment_name="試験の世界"),
             aux_being_resolver=BeingAttachmentResolver(repo, player_beings),
             _memory_turn_clock=InMemoryMemoryTurnClock(),
-            _acquaintance_store=InMemoryAcquaintanceRepository(),
+            _acquaintance_store=InMemoryAcquaintanceRepository(handoff=discard_events),
             _being_episode_store=InMemoryEpisodeRepository(),
             _being_memo_store=InMemoryMemoBookRepository(),
             _being_short_term_memory_store=InMemoryShortTermMemoryRepository(),

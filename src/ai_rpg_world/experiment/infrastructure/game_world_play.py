@@ -195,7 +195,7 @@ class GameWorldPlay:
         self._scope = scope
 
         beings = InMemoryBeingRepository()
-        acquaintances = InMemoryAcquaintanceRepository()
+        acquaintances = InMemoryAcquaintanceRepository(handoff=_discard)
         clock = InMemoryMemoryTurnClock()
         self.memory_writing = MemoryWritingOnThreads(
             wait_limit_seconds=settings.writing_wait_limit_seconds,

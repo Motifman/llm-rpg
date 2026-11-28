@@ -5636,7 +5636,7 @@ def create_world_runtime(
     )
 
     memory_turn_clock = InMemoryMemoryTurnClock()
-    acquaintance_store = InMemoryAcquaintanceRepository()
+    acquaintance_store = InMemoryAcquaintanceRepository(handoff=lambda events: being_dispatcher.handoff(events))
 
     def _being_id_of(player_id: PlayerId) -> BeingId | None:
         resolver: BeingAttachmentResolver | None = runtime.aux_being_resolver

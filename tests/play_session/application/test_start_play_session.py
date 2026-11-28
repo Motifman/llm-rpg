@@ -89,7 +89,7 @@ class TestStartPlaySession:
         session = MineVillageSession().started()
 
         entry = session.casts.get(WORLD).entry_of(_GEN)
-        known = [a.name for a in session.acquaintances.list_by_being(BeingId("gen"))]
+        known = [a.name for a in session.acquaintances.get(BeingId("gen")).acquaintances]
 
         assert tuple(entry.introductions) == (Introduction(name="サヨ"),)
         assert known == ["サヨ"]

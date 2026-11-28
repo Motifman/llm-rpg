@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from tests.event_handoff_helpers import discard_events
+
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
@@ -40,7 +42,7 @@ def _make(
     recorder = _Recorder()
     pairs = together if together is not None else set()
     acquaintances = PlayerAcquaintances(
-        store=InMemoryAcquaintanceRepository(),
+        store=InMemoryAcquaintanceRepository(handoff=discard_events),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}") if pid.value in NAMES else None,
         turn_reader=InMemoryMemoryTurnClock(),
         environment_name="山村",
@@ -331,7 +333,7 @@ class TestFallingBackToAppearance:
         """名前を知った trace には、そのときの世界の tick を付ける。同じ tick の発言と突き合わせるため。"""
         recorder = _Recorder()
         acquaintances = PlayerAcquaintances(
-            store=InMemoryAcquaintanceRepository(),
+            store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
             turn_reader=InMemoryMemoryTurnClock(),
             environment_name="山村",

@@ -130,7 +130,7 @@ class MineVillageSession:
             random=SeedableRandomSource(0),
         )
         self.beings = InMemoryBeingRepository()
-        self.acquaintances = InMemoryAcquaintanceRepository()
+        self.acquaintances = InMemoryAcquaintanceRepository(handoff=discard_events)
         self.clock = InMemoryMemoryTurnClock()
         self.cast_events: list[BeingCastInWorldEvent] = []
         self.casts = InMemoryCastRepository(handoff=self.cast_events.extend)
