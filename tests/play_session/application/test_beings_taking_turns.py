@@ -610,6 +610,7 @@ class _ThinkingAtOnce(ActionChoosingCompletion):
         self._late = late
         self._lock = threading.Lock()
         self.asked: list[PersonId] = []
+        self.timed_out: list[PersonId] = []
 
     def choose_action(
         self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
@@ -627,6 +628,7 @@ class _ThinkingAtOnce(ActionChoosingCompletion):
             deadline = time.monotonic() + 5.0
             while not plan.returns_after():
                 if time.monotonic() > deadline:
+                    self.timed_out.append(person)
                     raise AssertionError(f"{person.value} was not asked at the same time as the others")
                 time.sleep(0.005)
         if isinstance(plan.reply, Exception):
@@ -643,6 +645,7 @@ class TestBeingsTakingTurnsAtOnce:
         completion = _ThinkingAtOnce({_GEN: [_Planned(_murmur("gen"), returns_after=_has_finished(session, _MIO))]})
 
         session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
 
         order = {e.person: e.order for e in _finished_turns(session)}
         assert order[_MIO] < order[_GEN]
@@ -660,6 +663,7 @@ class TestBeingsTakingTurnsAtOnce:
         )
 
         session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
 
         gens = session.short_term_memories.get(BeingId("gen")).unsummarized()
         kinds = [
@@ -682,6 +686,7 @@ class TestBeingsTakingTurnsAtOnce:
         )
 
         session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
 
         assert completion.asked.count(_GEN) == 2
 
@@ -691,6 +696,7 @@ class TestBeingsTakingTurnsAtOnce:
         completion = _ThinkingAtOnce({_GEN: [_Planned(TimeoutError("no reply in 95 seconds"))]})
 
         session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
 
         outcomes = {e.person: e.outcome for e in _finished_turns(session)}
         assert outcomes.pop(_GEN) == ChoiceFailed("TimeoutError: no reply in 95 seconds")
@@ -705,6 +711,7 @@ class TestBeingsTakingTurnsAtOnce:
         )
 
         session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
 
         gens = [
             "finished" if isinstance(e, TurnFinishedEvent) else e.observation.body.template
@@ -738,6 +745,7 @@ class TestBeingsTakingTurnsAtOnce:
             late=mio_waits_in_the_round_gen_starts_the_lift,
         )
         stopped = session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
         return session, stopped
 
     def test_choice_returned_after_the_world_ended_is_discarded_with_its_exchange(self) -> None:

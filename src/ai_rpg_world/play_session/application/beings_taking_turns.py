@@ -152,8 +152,6 @@ class BeingsTakingTurnsAtOnce:
 
 @final
 class _TurnsAtOnce:
-    """考える段だけを worker で並べ、記憶と世界に触る段は呼んだスレッドで、返事が返った順に進める。"""
-
     def __init__(self, steps: BeingTurnSteps, turn_rounds: TurnRoundsRepository, people: Sequence[PersonId]) -> None:
         self._steps = steps
         self._turn_rounds = turn_rounds
@@ -172,15 +170,18 @@ class _TurnsAtOnce:
                 prompts.append((person, self._steps.choose_action.prompt(command)))
             except Exception as error:
                 failed_to_prompt.append((person, _failed(error)))
+        if prompts:
+            rounds = self._turn_rounds.get(self._steps.world)
+            rounds.begin_choosing(tuple(person for person, _ in prompts))
+            self._turn_rounds.save(rounds)
+            self._executor = ThreadPoolExecutor(max_workers=len(prompts), thread_name_prefix="being_thinking")
+            self._thinking = {
+                self._executor.submit(self._steps.choose_action.think, prompt): p for p, prompt in prompts
+            }
         for person, failure in failed_to_prompt:
             yield self._finished(person, failure)
-        if not prompts:
+        if self._executor is None:
             return
-        rounds = self._turn_rounds.get(self._steps.world)
-        rounds.begin_choosing(tuple(person for person, _ in prompts))
-        self._turn_rounds.save(rounds)
-        self._executor = ThreadPoolExecutor(max_workers=len(prompts), thread_name_prefix="being_thinking")
-        self._thinking = {self._executor.submit(self._steps.choose_action.think, prompt): p for p, prompt in prompts}
         try:
             for future in as_completed(tuple(self._thinking)):
                 person = self._thinking.pop(future)

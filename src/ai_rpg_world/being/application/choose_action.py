@@ -226,7 +226,7 @@ class ChooseAction:
         return ActionPrompt(command=command, tools=tools, messages=tuple(messages), definitions=tools.definitions())
 
     def think(self, prompt: ActionPrompt) -> ActionThought:
-        """LLM を呼ぶだけで、記憶には読みも書きもしない。ほかの人の ``prompt`` / ``settle`` と並べて呼べる。"""
+        """LLM を呼ぶだけで、記憶には読みも書きもしない。"""
         replies = self._replies(list(prompt.messages), list(prompt.definitions))
         return ActionThought(
             prompt=prompt,

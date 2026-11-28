@@ -38,7 +38,9 @@ class _TurnTakersForTests:
         outcomes: dict[PersonId, TurnOutcome] | None = None,
         during: Callable[[PersonId], None] = lambda person: None,
         discarded: tuple[DiscardedChoice, ...] = (),
+        fails_to_let_go: bool = False,
     ) -> None:
+        self.fails_to_let_go = fails_to_let_go
         self._outcomes = outcomes or {}
         self._during = during
         self._discarded = discarded
@@ -71,6 +73,8 @@ class _TurnsForTests:
 
     def let_go(self) -> tuple[DiscardedChoice, ...]:
         self.let_go_count += 1
+        if self._takers.fails_to_let_go:
+            raise OSError("executor is gone")
         return self._discarded
 
 
@@ -132,6 +136,18 @@ class TestPlayRoundsStops:
         with pytest.raises(RuntimeError, match="world store is broken"):
             session.play_rounds(takers)(PlayRoundsCommand(WORLD))
         assert takers.turns.let_go_count == 1
+
+    def test_failure_while_letting_go_does_not_replace_the_original_error(self) -> None:
+        """ターンの最中の例外のあと、残りを手放すときにも例外が出たら、上に出るのはターンの最中の例外のほう。"""
+        session = MineVillageSession().started()
+
+        def broken(person: PersonId) -> None:
+            raise RuntimeError("world store is broken")
+
+        takers = _TurnTakersForTests(during=broken, fails_to_let_go=True)
+
+        with pytest.raises(RuntimeError, match="world store is broken"):
+            session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
     def test_world_already_ended_asks_nobody(self) -> None:
         """始める前に世界が終わっていれば、誰にもターンを頼まずに WorldEnded で止まる。"""

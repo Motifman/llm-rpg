@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Protocol, Union, final
@@ -17,6 +18,8 @@ from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded, W
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.play_session.domain.cast import CastRepository
 from ai_rpg_world.play_session.domain.turn_rounds import TurnOutcome, TurnRoundsRepository
+
+_logger = logging.getLogger(__name__)
 
 
 @final
@@ -124,7 +127,11 @@ class PlayRounds:
                 if self._world_has_ended(WorldHasEndedCommand()):
                     return WorldEnded(turns.let_go())
         except BaseException:
-            turns.let_go()
+            # 手放すときの失敗で、止まった本当の理由を上書きしない
+            try:
+                turns.let_go()
+            except Exception:
+                _logger.exception("letting go of the remaining turns failed while stopping on an error")
             raise
         rounds = self._turn_rounds.get(world)
         rounds.close_round()

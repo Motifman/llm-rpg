@@ -197,6 +197,10 @@ class Observation:
     withheld_if_subject_unknown: bool = False
     order: OccurrenceOrder | None = None
 
+    def __deepcopy__(self, memo: dict[int, object]) -> Observation:
+        # 値の変わらない型だが、写せない読み取り専用の対応表を持つ。写す保存先には同じものを渡す
+        return self
+
     def __post_init__(self) -> None:
         if not isinstance(self.body, TextWithPeople):
             require_text(self.body, "body")
