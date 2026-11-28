@@ -153,8 +153,7 @@ class MineVillageSession:
 
         self.memory_writing = MemoryWritingOnThreads(wait_limit_seconds=2.0)
         self.short_term_memories = InMemoryShortTermMemoryRepository(handoff=self.memory_writing.handoff)
-        day_night = scenario.design.day_night
-        assert isinstance(day_night, DayNightDeclaration)
+        day_night = scenario.design.day_night_declaration()
         receiver = HandObservationToBeing(
             WORLD, self.casts, self.turn_rounds, PerceiveObservation(self.short_term_memories, self.clock)
         )
@@ -196,8 +195,7 @@ class MineVillageSession:
         closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
     ) -> BeingsTakingTurnsOneByOne:
         design = _scenario().design
-        day_night = design.day_night
-        assert isinstance(day_night, DayNightDeclaration)
+        day_night = design.day_night_declaration()
         settle = SettleWorldConditions(self.scope, design)
         return BeingsTakingTurnsOneByOne(
             world=WORLD,
