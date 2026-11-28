@@ -106,6 +106,9 @@ class ActionAttemptForTests(ActionAttempt):
     def can_start_while_busy(self) -> bool:
         return self.startable_while_busy
 
+    def is_waiting(self) -> bool:
+        return self.action_kind is ActionKind.WAIT
+
     def is_allowed_in(self, stage: WorldStageDeclaration | NoWorldStages) -> bool:
         return stage.allows(self.action_kind)
 
