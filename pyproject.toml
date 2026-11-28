@@ -132,6 +132,7 @@ files = [
     "src/ai_rpg_world/being",
     "src/ai_rpg_world/game_world",
     "src/ai_rpg_world/play_session",
+    "src/ai_rpg_world/experiment",
     "src/ai_rpg_world/application/being",
     "src/ai_rpg_world/application/common",
     "src/ai_rpg_world/application/encounter",

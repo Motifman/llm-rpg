@@ -1,0 +1,20 @@
+{
+  "profile": "smoke_stub_game_world",
+  "description": "新しい世界 (game_world) を実 LLM を呼ばずに回し、profile の読み込み・入口の止め方・組み立ての配線を確かめる低コスト smoke run。スタブは毎ターンふつうの声で一言つぶやく。",
+  "world": "game_world",
+  "scenario": "data/scenarios/mine_village_v2.yaml",
+  "max_world_ticks": 3,
+  "snapshot_save": false,
+  "runtime_config": {
+    "LLM_CLIENT": "stub",
+    "MEMO_TOOLS_ENABLED": true,
+    "BEING_EPISODE_INDEX_ENABLED": true,
+    "BEING_EPISODE_INDEX_LIMIT": 10,
+    "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
+    "PLAY_WAKE_WAITING_AFTER_ROUNDS": 3,
+    "SCENARIO_RANDOM_SEED": 42,
+    "ASYNC_EVENT_WORKERS": 2,
+    "ASYNC_EVENT_MAX_PENDING": 100,
+    "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS": 10
+  }
+}

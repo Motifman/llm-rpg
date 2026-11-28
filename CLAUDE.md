@@ -25,7 +25,7 @@
 
 - run id: `var/runs/...` に使う名前
 - run の型: 探索 / 観察 / 比較
-- profile: `memory_jev_mine_v1_v41_thinking_capped_being_memory` / `smoke_stub`
+- profile: `memory_jev_mine_v1_v41_thinking_capped_being_memory` / `smoke_stub`。新しい世界 (`game_world`) は profile に `"world": "game_world"` を書き、スタブで確かめるときは `smoke_stub_game_world` を使う (D2234)
 - モデルと provider: 新しい profile を作るときや前回の run から日が空いたときは、[docs/llm_provider_selection.md](docs/llm_provider_selection.md) の手順で `tool_choice=required` が通るかなどを使う直前に確かめる。provider の対応状況は予告なく変わる
 - scenario: profile 既定を使うか、`SCENARIO=...` で一時上書きするか
 - tick 数: profile 既定を使うか、`MAX_WORLD_TICKS=...` で短くするか
