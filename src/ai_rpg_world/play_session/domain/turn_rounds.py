@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, Union, final
@@ -102,7 +102,15 @@ class RoundClosedEvent(DomainEvent):
     round: int
 
 
-TurnRoundsEvent = Union[RoundOpenedEvent, TurnFinishedEvent, RoundClosedEvent]
+@final
+@dataclass(frozen=True)
+class ObservationPassedOnEvent(DomainEvent):
+    world: WorldId
+    person: PersonId
+    observation: Observation
+
+
+TurnRoundsEvent = Union[RoundOpenedEvent, TurnFinishedEvent, RoundClosedEvent, ObservationPassedOnEvent]
 
 
 class TurnRounds(AggregateRoot[TurnRoundsEvent]):
@@ -114,6 +122,8 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         self._closed_rounds = 0
         self._due: tuple[PersonId, ...] | None = None
         self._finished: list[PersonId] = []
+        self._choosing: set[PersonId] = set()
+        self._held_for: dict[PersonId, list[Observation]] = {}
         self._waiting_since: dict[PersonId, int] = {}
         self._addressed: set[PersonId] = set()
         self._failures_by_person: dict[PersonId, int] = {}
@@ -134,6 +144,7 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         # 気を失っていたあいだに向けられたもので、気がついたあとの移動中にターンが回らないよう、持ち越さない
         self._addressed &= set(self._due)
         self._finished = []
+        self._choosing = set()
         self.add_event(
             RoundOpenedEvent(
                 **new_event_stamp(),
@@ -148,16 +159,28 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         due = self._open_due()
         return tuple(person for person in due if person not in self._finished)
 
+    def begin_choosing(self, people: Sequence[PersonId]) -> None:
+        due = self.due_turns()
+        for person in people:
+            if person not in due:
+                raise TurnNotDueException(f"{person.value} has no turn left in round {self._current_round}")
+        self._choosing.update(people)
+
+    def finish_choosing(self, person: PersonId) -> None:
+        self._choosing.discard(person)
+
     def notice_observation(self, person: PersonId, observation: Observation) -> None:
-        if observation.wants_wake is True:
-            self._waiting_since.pop(person, None)
-        if observation.addressed_to_self is True:
-            self._addressed.add(person)
+        # 選んでいるあいだに書き込むと、選び終えて書く試みと競り合う。本人は見ずに選んだので、ターンを終えてから渡す
+        if person in self._choosing:
+            self._held_for.setdefault(person, []).append(observation)
+            return
+        self._pass_on(person, observation)
 
     def finish_turn(self, person: PersonId, outcome: TurnOutcome) -> None:
         if person not in self.due_turns():
             raise TurnNotDueException(f"{person.value} has no turn left in round {self._current_round}")
         self._finished.append(person)
+        self._choosing.discard(person)
         # 自分の行為に返ってきた観測で、すぐまたターンが回らないよう、行為の確定のあとで消す
         self._addressed.discard(person)
         match outcome:
@@ -180,6 +203,9 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
                 outcome=outcome,
             )
         )
+        # 消したあとで数えるので、選んでいるあいだに届いた呼びかけは次の巡りに残る
+        for held in self._held_for.pop(person, []):
+            self._pass_on(person, held)
 
     def close_round(self) -> None:
         remaining = self.due_turns()
@@ -209,6 +235,15 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         if self._due is None:
             raise RoundNotOpenException(f"no round of {self._world.value} is open")
         return self._due
+
+    def _pass_on(self, person: PersonId, observation: Observation) -> None:
+        if observation.wants_wake is True:
+            self._waiting_since.pop(person, None)
+        if observation.addressed_to_self is True:
+            self._addressed.add(person)
+        self.add_event(
+            ObservationPassedOnEvent(**new_event_stamp(), world=self._world, person=person, observation=observation)
+        )
 
     def _count_choice_made(self, person: PersonId) -> None:
         self._failures_by_person.pop(person, None)

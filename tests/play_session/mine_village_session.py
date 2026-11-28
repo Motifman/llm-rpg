@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import cache
 from pathlib import Path
 from typing import cast
@@ -33,6 +33,7 @@ from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository impor
 from ai_rpg_world.being.infrastructure.memory_writing_on_threads import MemoryWritingOnThreads
 from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
 from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
+from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, EventDispatcher
 from ai_rpg_world.game_world.application.accept_world_time_passage import AcceptWorldTimePassage
 from ai_rpg_world.game_world.application.brief_entering_person import BriefEnteringPerson
 from ai_rpg_world.game_world.application.check_readiness_to_act import CheckReadinessToAct
@@ -69,13 +70,20 @@ from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldI
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario, load_scenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
-from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsOneByOne
+from ai_rpg_world.play_session.application.beings_taking_turns import (
+    BeingsTakingTurnsAtOnce,
+    BeingsTakingTurnsOneByOne,
+    BeingTurnSteps,
+)
 from ai_rpg_world.play_session.application.end_play_session import EndPlaySession, EndPlaySessionCommand
 from ai_rpg_world.play_session.application.hand_observation_to_being import HandObservationToBeing
+from ai_rpg_world.play_session.application.handlers.pass_observation_to_being_handler import (
+    PassObservationToBeingHandler,
+)
 from ai_rpg_world.play_session.application.play_rounds import PlayRounds, TurnTakers
 from ai_rpg_world.play_session.application.start_play_session import StartPlaySession, StartPlaySessionCommand
 from ai_rpg_world.play_session.domain.cast import BeingCastInWorldEvent
-from ai_rpg_world.play_session.domain.turn_rounds import RoundCount, TurnRoundsEvent
+from ai_rpg_world.play_session.domain.turn_rounds import ObservationPassedOnEvent, RoundCount, TurnRoundsEvent
 from ai_rpg_world.play_session.infrastructure.in_memory_cast_repository import InMemoryCastRepository
 from ai_rpg_world.play_session.infrastructure.in_memory_turn_rounds_repository import InMemoryTurnRoundsRepository
 from ai_rpg_world.play_session.infrastructure.roles_from_scenario import casting_by_person_name, roles_from_scenario
@@ -129,7 +137,7 @@ class MineVillageSession:
         self.cast_events: list[BeingCastInWorldEvent] = []
         self.casts = InMemoryCastRepository(handoff=self.cast_events.extend)
         self.turn_round_events: list[TurnRoundsEvent] = []
-        self.turn_rounds = InMemoryTurnRoundsRepository(handoff=self.turn_round_events.extend)
+        self.turn_rounds = InMemoryTurnRoundsRepository(handoff=self._hand_off_turn_round_events)
         distributor = CommittedEventsDistributor()
         self.scope = scope = CommandScope(self.store, distributor)
         self.start = StartPlaySession(
@@ -153,9 +161,14 @@ class MineVillageSession:
         self.memory_writing = MemoryWritingOnThreads(wait_limit_seconds=2.0)
         self.short_term_memories = InMemoryShortTermMemoryRepository(handoff=self.memory_writing.handoff)
         day_night = scenario.design.day_night_declaration()
-        receiver = HandObservationToBeing(
-            WORLD, self.casts, self.turn_rounds, PerceiveObservation(self.short_term_memories, self.clock)
+        self._turn_round_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_ignore_failure)
+        self._turn_round_dispatcher.register_after_commit(
+            ObservationPassedOnEvent,
+            PassObservationToBeingHandler(self.casts, PerceiveObservation(self.short_term_memories, self.clock)).handle,
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
+        receiver = HandObservationToBeing(WORLD, self.turn_rounds)
         self.deliver_perception = DeliverPerception(
             scope,
             ObservationExit(WORLD, day_night, scenario.design.clock_wording, receiver),
@@ -193,10 +206,21 @@ class MineVillageSession:
         *,
         closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
     ) -> BeingsTakingTurnsOneByOne:
+        return BeingsTakingTurnsOneByOne(self.turn_steps(completion, closing=closing))
+
+    def beings_taking_turns_at_once(
+        self,
+        completion: ActionChoosingCompletion,
+        *,
+        closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
+    ) -> BeingsTakingTurnsAtOnce:
+        return BeingsTakingTurnsAtOnce(self.turn_steps(completion, closing=closing), self.turn_rounds)
+
+    def turn_steps(self, completion: ActionChoosingCompletion, *, closing: str) -> BeingTurnSteps:
         design = _scenario().design
         day_night = design.day_night_declaration()
         settle = SettleWorldConditions(self.scope, design)
-        return BeingsTakingTurnsOneByOne(
+        return BeingTurnSteps(
             world=WORLD,
             casts=self.casts,
             being_tools=OfferedBeingTools(
@@ -249,6 +273,10 @@ class MineVillageSession:
             ),
         )
 
+    def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
+        self.turn_round_events.extend(events)
+        self._turn_round_dispatcher.handoff(events)
+
     def ended(self) -> None:
         """Being を世界から離し、裏の書き起こしを止める。"""
         try:
@@ -259,6 +287,10 @@ class MineVillageSession:
     def started(self) -> MineVillageSession:
         self.start(self.command)
         return self
+
+
+def _ignore_failure(*_: object) -> None:
+    pass
 
 
 def door_breaks_at(spot: SpotId, *, by: PersonId | None = None) -> SightStimulus:
