@@ -412,7 +412,7 @@ class _Turn:
 
 def _people_in(scene: Scene) -> tuple[PersonInText, ...]:
     texts = (
-        *(d.text for d in (*scene.descriptions, *scene.notices)),
+        *(d.text for d in scene.descriptions),
         *(() if scene.here is None else (scene.here.text,)),
     )
     return tuple(

@@ -56,7 +56,7 @@ class ActionTools:
     ) -> None:
         self._choices = choices
         self._being_tools = being_tools
-        # 番号は候補と場面に出る人だけで数える。理由にだけ出る人を数えると、1 人しか見えないのに番号が付く。
+        # 番号は候補と場面に出る人だけで数える。理由や知らせにだけ出る人を数えると、1 人しか見えないのに番号が付く。
         # 場面と候補で同じ番号を使うのは、場面から書き写した名前を同じ人に戻すため。
         self._people = PeopleCalledApart(
             name_for,
@@ -249,7 +249,6 @@ class ActionTools:
                 else rows.setdefault(labels[-2] if len(labels) > 1 else None, {})
             )
             row.setdefault(labels[-1], _asks_text(unavailable.asks, outlined))
-        # いちばん上の段の候補 (決めごと) の下にも並べる候補 (選び先) があれば、行動の名前を添えて 1 行にまとめる
         top = rows.pop(None, {})
         unfolded = {label: asked for label, asked in top.items() if label not in rows}
         lines = [f"{choice.name}: {_quoted_row(unfolded)}"] if unfolded else []

@@ -184,8 +184,6 @@ def _arguments(
             value = rng.choice(table.scene_names) if table.scene_names else RANDOM_TEXT
         else:
             picked = True
-        if not isinstance(value, str):
-            raise _Infeasible
         arguments[name] = value
         chosen.append(value)
         asked = asked_here or asked
