@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
+from ai_rpg_world.game_world.domain.action.action_outcome_for_actor import ActionOutcomeForActor, UnsummarizedAction
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusal
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
@@ -37,6 +38,15 @@ class ActionRefusal:
     attempt: ActionAttempt
     reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal
     text: TextAboutPeople
+
+    def outcome_for_actor(self, design: WorldDesign, situation: ActorSituation) -> ActionOutcomeForActor:
+        # 断られる前に使い切られた品物は名前を引けないので、要約を出さない
+        summary = (
+            self.attempt.summary_in(design, situation)
+            if situation.knows_every_item_of(self.attempt)
+            else UnsummarizedAction()
+        )
+        return ActionOutcomeForActor(result=self.text, summary=summary)
 
     def stimuli_at(
         self,

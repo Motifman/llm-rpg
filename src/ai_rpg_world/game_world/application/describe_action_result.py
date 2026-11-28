@@ -46,7 +46,6 @@ class DescribeActionResult:
     def _read(
         self, session: WorldSession, reply: ActionReply | TurnGuidance
     ) -> tuple[str | TextWithPeople, TextWithPeople | None, ObservedTime]:
-        facts = session.facts()
-        view = WorldPerceptionSenses(facts).view_for(reply.actor())
+        view = WorldPerceptionSenses(session.facts()).view_for(reply.actor())
         time = observed_time_of(self._day_night.day_and_clock_time_at(session.clock().now()), self._clock)
-        return reply.result_for_actor(view), reply.summary_for_actor(self._design, facts, view), time
+        return reply.result_for_actor(view), reply.summary_for_actor(view), time

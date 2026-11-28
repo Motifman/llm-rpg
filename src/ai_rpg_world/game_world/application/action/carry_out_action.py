@@ -59,26 +59,19 @@ class CarryOutAction:
         self, attempt: _Attempt, steps: ActionSteps[_Attempt], session: WorldSession, facts: WorldFacts
     ) -> ActionDone:
         now = facts.now()
-        situation = ActorSituation.of(attempt, facts)
-        # 使い切った品物は効果のあとで種類を引けないので、文は効果の前に引く
-        done = ActionDone(
-            attempt,
-            done_text=attempt.done_text_in(self._design, situation),
-            summary=attempt.summary_in(self._design, situation),
-        )
-        present = PeopleWhoWereThere.before_the_effect(facts)
+        fixed = attempt.fixed_before_effect(self._design, facts)
         world = session.aggregates()
         busy_for = steps.change_world(attempt, facts, world)
         world.vitals(attempt.actor).start_acting(attempt.exertion(), now + busy_for, facts.rules().fatigue)
-        session.latest_actions().note(attempt, situation, present, now)
+        session.latest_actions().note(attempt, fixed.situation, fixed.present, now)
         session.scenario_progress().note_joint_action_part_done(attempt, self._joint_actions, now)
-        return done
+        return ActionDone(attempt, fixed.outcome)
 
     def _note_refusal(self, refusal: ActionRefusal) -> ActionRefused:
-        self._scope.run(lambda session: self._note_failed_attempt(refusal, session))
-        return ActionRefused(refusal)
+        return self._scope.run(lambda session: self._note_failed_attempt(refusal, session))
 
-    def _note_failed_attempt(self, refusal: ActionRefusal, session: WorldSession) -> None:
+    def _note_failed_attempt(self, refusal: ActionRefusal, session: WorldSession) -> ActionRefused:
         facts = session.facts()
         situation = ActorSituation.of(refusal.attempt, facts)
         session.latest_actions().note_failed_attempt(refusal, situation, facts.now())
+        return ActionRefused(refusal, refusal.outcome_for_actor(self._design, situation))

@@ -40,7 +40,9 @@ class TestCastBallot:
         reply = world.vote(HARU, VoteFor(NATSU))
 
         assert isinstance(reply, ActionDone)
-        assert reply.summary == TextAboutPeople(TextWithUnassignedPeople("vote_forした {target}"), {"target": NATSU})
+        assert reply.outcome.summary == TextAboutPeople(
+            TextWithUnassignedPeople("vote_forした {target}"), {"target": NATSU}
+        )
 
     def test_ballot_in_vote_not_open_is_refused(self) -> None:
         """開いていない投票に投じると GROUP_DECISION_NOT_OPEN で断られ、失敗の記録だけが残る。"""
