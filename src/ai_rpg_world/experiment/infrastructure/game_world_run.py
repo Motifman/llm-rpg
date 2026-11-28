@@ -5,7 +5,6 @@ from typing import Any
 
 from typing_extensions import assert_never
 
-from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
 from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldPlayResult, GameWorldWriters
@@ -15,7 +14,6 @@ from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load
 from ai_rpg_world.play_session.application.play_rounds import ChoosingKeptFailing, RoundLimitReached, WorldEnded
 
 GAME_WORLD = "game_world"
-CLOSING = Closing(instruction="利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。")
 
 
 def prepare_game_world_play(
@@ -28,7 +26,6 @@ def prepare_game_world_play(
         settings=settings,
         writers=_stub_writers(),
         round_limit=round_limit,
-        closing=CLOSING,
     )
 
 
