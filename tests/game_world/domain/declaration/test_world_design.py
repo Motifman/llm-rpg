@@ -79,7 +79,10 @@ from ai_rpg_world.game_world.domain.effect.combined_effects import ConditionalEf
 from ai_rpg_world.game_world.domain.effect.effect import Effect
 from ai_rpg_world.game_world.domain.effect.flag_effects import RaiseFlagEffect
 from ai_rpg_world.game_world.domain.effect.world_progress_effects import CloseGroupDecisionEffect
-from ai_rpg_world.game_world.domain.exception.condition_exception import UnknownPersonPlaceholderException
+from ai_rpg_world.game_world.domain.exception.condition_exception import (
+    NotDeclaredInThisWorldException,
+    UnknownPersonPlaceholderException,
+)
 from ai_rpg_world.game_world.domain.exception.world_design_exception import UndeclaredVerbException
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import Notable
@@ -806,6 +809,19 @@ class TestUndeclaredWorldTime:
 
         assert [flaw.location for flaw in flaws] == [DesignLocation("happening", "dusk_bell", "condition")]
         assert "dusk" in flaws[0].reason
+
+    def test_day_night_declaration_of_a_world_without_day_night_is_refused(self) -> None:
+        """昼夜を宣言していない世界に昼夜の宣言を求めると、NotDeclaredInThisWorldException で断る。"""
+        design = compose_world()
+
+        with pytest.raises(NotDeclaredInThisWorldException):
+            design.day_night_declaration()
+
+    def test_day_night_declaration_is_what_the_world_declared(self) -> None:
+        """朝と夜を宣言した世界に昼夜の宣言を求めると、宣言した昼夜がそのまま返る。"""
+        design = compose_world(day_night=_DAY_NIGHT)
+
+        assert design.day_night_declaration() == _DAY_NIGHT
 
     def test_world_stage_without_stages_is_a_flaw(self) -> None:
         """段階を宣言していない世界で、操作の前提が WorldStageIs を見ると DesignFlaw になる。"""

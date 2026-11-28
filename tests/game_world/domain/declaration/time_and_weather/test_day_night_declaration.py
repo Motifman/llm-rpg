@@ -236,6 +236,11 @@ class TestDayNightDeclarationDayAndClockTimeAt:
 class TestNoDayNight:
     """昼夜を宣言しない世界の NoDayNight が、昼夜の宣言と同じ問いに「昼夜は無い」と答えることを保証する。"""
 
+    def test_declared_raises_not_declared(self) -> None:
+        """昼夜の宣言そのものを求められると、「昼夜を宣言していない」という文面の NotDeclaredInThisWorldException を投げる。"""
+        with pytest.raises(NotDeclaredInThisWorldException, match="^this world declares no day and night$"):
+            NoDayNight().declared()
+
     def test_time_of_day_at_raises_not_declared(self) -> None:
         """1 日の中の位置を問われると、「昼夜を宣言していない」という文面の NotDeclaredInThisWorldException を投げる。"""
         with pytest.raises(NotDeclaredInThisWorldException, match="^this world declares no day and night$"):

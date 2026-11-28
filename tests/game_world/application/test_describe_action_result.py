@@ -17,7 +17,6 @@ from ai_rpg_world.game_world.application.settle_world_conditions import SettleWo
 from ai_rpg_world.game_world.application.take_chosen_action import TakeChosenAction, TakeChosenActionCommand
 from ai_rpg_world.game_world.application.tell_current_time import TellCurrentTime, TellCurrentTimeCommand
 from ai_rpg_world.game_world.application.world_store import WorldSession
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
@@ -52,9 +51,8 @@ class _GenInTheOffice:
         OpenWorld(store)(OpenWorldCommand(world_id=_WORLD, design=design))
         self.scope = CommandScope(store, CommittedEventsDistributor())
         self.scope.run(lambda session: self._move_to_office(session, design))
-        assert isinstance(design.day_night, DayNightDeclaration)
         self._take = TakeChosenAction(self.scope, design, SettleWorldConditions(self.scope, design))
-        self.describe = DescribeActionResult(self.scope, design, design.day_night)
+        self.describe = DescribeActionResult(self.scope, design, design.day_night_declaration())
         self.tell_time = TellCurrentTime(self.scope, design.day_night, design.clock_wording)
         self._pass_time = PassWorldTime(self.scope)
 

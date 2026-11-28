@@ -554,6 +554,9 @@ class WorldDesign:
     def day_night(self) -> DayNightDeclaration | NoDayNight:
         return self._day_night
 
+    def day_night_declaration(self) -> DayNightDeclaration:
+        return self._day_night.declared()
+
     def interaction_on_object(self, obj: ObjectId, interaction: InteractionId) -> InteractionDeclaration:
         if (obj, interaction) not in self._object_interactions:
             raise UndeclaredVerbException(f"object {obj.value!r} has no interaction {interaction.value!r}")

@@ -38,6 +38,9 @@ class NoDayNight:
     def is_declared(self) -> bool:
         return False
 
+    def declared(self) -> DayNightDeclaration:
+        raise NotDeclaredInThisWorldException("this world declares no day and night")
+
     def travel_time_text(self, ticks: int, wording: WorldMapWording) -> str:
         return wording.turns.format(turns=ticks)
 
@@ -75,6 +78,9 @@ class DayNightDeclaration:
     ticks_per_day: Ticks
     starts_at: TimeOfDay
     phases: tuple[DayPhaseDeclaration, ...]
+
+    def declared(self) -> DayNightDeclaration:
+        return self
 
     def __post_init__(self) -> None:
         if self.ticks_per_day.value < 1:
