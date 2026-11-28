@@ -28,6 +28,11 @@ def _run_end(out: Path) -> dict[str, object]:
     return end["payload"]
 
 
+def _run_start(out: Path) -> dict[str, object]:
+    [start] = [e for e in map(json.loads, (out / "trace.jsonl").read_text().splitlines()) if e["kind"] == "run_start"]
+    return start["payload"]
+
+
 def _without_day_night(tmp_path: Path) -> Path:
     shutil.copytree(_SCENARIOS / "common", tmp_path / "common")
     text = _MINE_VILLAGE_V2.read_text(encoding="utf-8")
@@ -71,6 +76,32 @@ class TestGameWorldSmokeRun:
         assert resolved["world"] == "game_world"
         assert resolved["scenario_sha256"] == hashlib.sha256(_MINE_VILLAGE_V2.read_bytes()).hexdigest()
         assert resolved["runtime_config"]["wake_waiting_after_rounds"] == 3
+
+
+class TestGameWorldThroughMake:
+    """make experiment が付ける引数のまま、新しい世界の smoke が回ることを保証する。"""
+
+    def test_save_dir_that_make_adds_does_not_stop_the_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """make experiment は OUT を渡すといつも --snapshot-save-dir OUT/snapshots を付ける。新しい世界はそれで止まらず、保存しないと表示し、run_start に保存を飛ばした印を残す。"""
+        out = tmp_path / "run"
+
+        code = main(
+            ["--profile", "smoke_stub_game_world", "--out", str(out), "--snapshot-save-dir", str(out / "snapshots")]
+        )
+
+        assert code == 0
+        assert "does not save snapshots yet" in capsys.readouterr().out
+        assert _run_start(out)["snapshot_save_skipped"] is True
+
+    def test_run_without_a_save_dir_is_not_marked_as_skipping(self, tmp_path: Path) -> None:
+        """保存先を渡さなければ、run_start の保存を飛ばした印は偽。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out), "--max-world-ticks", "1"])
+
+        assert _run_start(out)["snapshot_save_skipped"] is False
 
 
 class TestGameWorldStopsAtTheEntrance:
@@ -118,6 +149,25 @@ class TestGameWorldStopsAtTheEntrance:
 
         with pytest.raises(SystemExit) as stopped:
             main(["--experiment-config", str(profile), "--out", str(tmp_path / "run")])
+
+        assert stopped.value.code == 2
+        assert "cannot save or load snapshots" in capsys.readouterr().err
+
+    def test_loading_a_snapshot_is_refused(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """新しい世界で --snapshot-load-dir を渡すと、まだ読み込めないと断る。"""
+        (tmp_path / "snapshots").mkdir()
+
+        with pytest.raises(SystemExit) as stopped:
+            main(
+                [
+                    "--profile",
+                    "smoke_stub_game_world",
+                    "--out",
+                    str(tmp_path / "run"),
+                    "--snapshot-load-dir",
+                    str(tmp_path / "snapshots"),
+                ]
+            )
 
         assert stopped.value.code == 2
         assert "cannot save or load snapshots" in capsys.readouterr().err
