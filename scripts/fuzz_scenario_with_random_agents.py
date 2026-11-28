@@ -650,7 +650,6 @@ def run_random_agents_in_game_world(
     from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
     from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldWriters
     from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
-    from ai_rpg_world.experiment.infrastructure.game_world_run import CLOSING
     from ai_rpg_world.experiment.infrastructure.random_action_choosing import CandidateTable, RandomActionChoosing
     from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 
@@ -707,7 +706,6 @@ def run_random_agents_in_game_world(
                     backstory_writer=ScriptedBackstoryWriter(),
                 ),
                 round_limit=max_world_ticks,
-                closing=CLOSING,
                 turns_at_once=False,
             )
             holder["play"] = play

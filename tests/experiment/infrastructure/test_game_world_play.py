@@ -10,7 +10,6 @@ from ai_rpg_world.being.infrastructure.scripted_backstory_writer import Scripted
 from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldWriters
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
-from ai_rpg_world.experiment.infrastructure.game_world_run import CLOSING
 from ai_rpg_world.experiment.infrastructure.murmuring_action_choosing import MurmuringActionChoosing
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 from ai_rpg_world.play_session.application.play_rounds import RoundLimitReached
@@ -44,7 +43,6 @@ def _play(completion: MurmuringActionChoosing, *, round_limit: int) -> GameWorld
             backstory_writer=ScriptedBackstoryWriter(),
         ),
         round_limit=round_limit,
-        closing=CLOSING,
     )
 
 

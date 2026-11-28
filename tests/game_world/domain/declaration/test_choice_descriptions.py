@@ -105,11 +105,13 @@ class TestRefusedDescriptions:
         ("field", "text"),
         [
             ("tend_without_tending", "介抱はできない"),
+            ("closing", "行動を 1 つ選んでください"),
+            ("closing", "{tool} を 1 つ選んでください。"),
             ("duration_hours", "{minutes} 分ほど"),
             ("duration_turns", "ほど"),
         ],
     )
     def test_extra_text_writing_the_wrong_names_is_refused(self, field: str, text: str) -> None:
-        """介抱の無い世界の説明が「。」で終わらない・時間の言い回しに別の名前を書く・名前を書かないと、ValueOutOfRangeException を投げる。"""
+        """介抱の無い世界の説明や締めの一文が「。」で終わらない・締めの一文に名前を書く・時間の言い回しに別の名前を書く・名前を書かないと、ValueOutOfRangeException を投げる。"""
         with pytest.raises(ValueOutOfRangeException):
             dataclasses.replace(choice_descriptions(), **{field: text})  # type: ignore[arg-type]
