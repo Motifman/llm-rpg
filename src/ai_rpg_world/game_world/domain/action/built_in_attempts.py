@@ -605,7 +605,7 @@ class EnterSectionAttempt(_BuiltInAttempt):
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         label = wording.design.section_access(self.access.section.section_id).enter_label
-        return OfferedAction(self._CHOICE, (OfferedStep(SECTION_MOVE, label),))
+        return OfferedAction(self._CHOICE, (OfferedStep(SECTION_MOVE, label, shown_under=self.access.section.name),))
 
 
 @final
@@ -635,7 +635,7 @@ class LeaveSectionAttempt(_BuiltInAttempt):
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         label = wording.design.section_access(self.access.section.section_id).leave_label
-        return OfferedAction(self._CHOICE, (OfferedStep(SECTION_MOVE, label),))
+        return OfferedAction(self._CHOICE, (OfferedStep(SECTION_MOVE, label, shown_under=self.access.section.name),))
 
 
 @final

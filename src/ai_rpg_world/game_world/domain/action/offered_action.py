@@ -16,19 +16,24 @@ class OfferedValue:
     label: str
     hidden_as: str | None = None
     max_length: int | None = None
+    listed: bool = False
+    fixed_values: tuple[str, ...] = ()
 
 
+WHISPER = "ささやく"
+ORDINARY_VOICE = "ふつうの声で話す"
+SHOUT = "叫ぶ"
 DESTINATION = OfferedValue("destination", "行き先")
-SECTION_MOVE = OfferedValue("move", "出入り")
+SECTION_MOVE = OfferedValue("move", "出入り", listed=True)
 TARGET = OfferedValue("target", "相手")
-HOW = OfferedValue("how", "操作")
-REACH = OfferedValue("reach", "届け方")
+HOW = OfferedValue("how", "操作", listed=True)
+REACH = OfferedValue("reach", "届け方", fixed_values=(ORDINARY_VOICE, SHOUT, WHISPER))
 LISTENER = OfferedValue("to", "相手")
 CONTENT = OfferedValue("content", "中身")
 ITEM = OfferedValue("item", "品物")
 RECIPIENT = OfferedValue("to", "渡す相手")
-DECISION = OfferedValue("decision", "決めごと")
-BALLOT = OfferedValue("choice", "選び先")
+DECISION = OfferedValue("decision", "決めごと", listed=True)
+BALLOT = OfferedValue("choice", "選び先", listed=True)
 SAY_INLINE = OfferedValue(
     "say_inline",
     "この行動をしながら発する一言 (任意、200 字以内)。書き方は【この世界の決まり】。",
@@ -93,6 +98,7 @@ class OfferedStep:
     value: OfferedValue
     candidate: DisplayName | PersonRef
     item: ItemInstanceId | NotAnItem = NotAnItem()
+    shown_under: DisplayName | None = None
 
 
 @final
@@ -100,6 +106,7 @@ class OfferedStep:
 class OfferedItemPick:
     value: OfferedValue
     items: tuple[OfferedStep, ...]
+    writes: DisplayName
 
 
 @final

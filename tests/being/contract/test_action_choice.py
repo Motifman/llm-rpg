@@ -403,3 +403,62 @@ class TestActionChoices:
         """同じ名前の選択肢が 2 つあると拒む。名前は LLM のツールの名前になる。"""
         with pytest.raises(ContractViolation, match="choices"):
             ActionChoices((_travel("井戸"), _travel("鍛冶場")))
+
+
+class TestListingWhatTheSceneDoesNotShow:
+    """場面のほかの所に出ていない候補を Being が並べるための印 (listed・fixed_values・writes・asks・shown_under・note) の決まりを保証する。"""
+
+    def test_fixed_values_are_kept_in_order_and_must_not_repeat(self) -> None:
+        """固定の値 (話し方) は渡した順で持ち、同じ値が 2 つあると拒む。"""
+        assert ArgumentOutline(name="reach", label="届け方", fixed_values=["叫ぶ", "ささやく"]).fixed_values == (
+            "叫ぶ",
+            "ささやく",
+        )
+        with pytest.raises(ContractViolation, match="fixed_values"):
+            ArgumentOutline(name="reach", label="届け方", fixed_values=("叫ぶ", "叫ぶ"))
+
+    def test_listed_argument_with_fixed_values_is_rejected(self) -> None:
+        """固定の値はツールの定義に書くので、並べる印と一緒に付けると拒む。"""
+        with pytest.raises(ContractViolation, match="fixed values"):
+            ArgumentOutline(name="reach", label="届け方", listed=True, fixed_values=("叫ぶ",))
+
+    def test_asks_must_say_what_to_write(self) -> None:
+        """いまできない道筋の asks に、何を書くかを持たない値を入れると拒む。行動ごとできないものに asks を付けても拒む。"""
+        with pytest.raises(ContractViolation, match="asks"):
+            UnavailableAction(picked=("金庫", "開ける"), argument="how", reason="鍵", asks=(_CODE,))
+        with pytest.raises(ContractViolation, match="ask"):
+            UnavailableAction(
+                picked=(), reason="手が離せない", asks=(FreeText(name="code", label="番号", writes="番号"),)
+            )
+
+    def test_shown_under_is_only_for_a_first_step(self) -> None:
+        """頭に置く名前 (shown_under) は、2 段の道筋のいまできないものや、候補の下の候補には付けられない。"""
+        with pytest.raises(ContractViolation, match="one-step"):
+            UnavailableAction(picked=("籠", "乗る"), argument="how", reason="満員", shown_under="昇降機の籠")
+        nested = PickOne(
+            name="target",
+            label="相手",
+            candidates=(
+                Candidate(
+                    label="籠",
+                    values=(
+                        PickOne(name="how", label="操作", candidates=(Candidate(label="乗る", shown_under="昇降機"),)),
+                    ),
+                ),
+            ),
+        )
+        with pytest.raises(ContractViolation, match="first step"):
+            ActionChoice(
+                description="説明。",
+                name="interact",
+                label="操作する",
+                outline=_INTERACT_OUTLINE,
+                takes_details=True,
+                values=(nested,),
+            )
+
+    def test_blank_note_is_rejected(self) -> None:
+        """並べない引数の書き方を伝える注記が空白だけなら拒む。注記を付けないなら None にする。"""
+        assert ActionChoices((), note=None).note is None
+        with pytest.raises(ContractViolation, match="note"):
+            ActionChoices((), note=" ")

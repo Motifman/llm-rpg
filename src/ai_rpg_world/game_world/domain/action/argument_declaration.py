@@ -21,6 +21,8 @@ class TextArgument:
 @final
 @dataclass(frozen=True)
 class ItemArgument:
+    writes: DisplayName
+
     def accepts(self, value: TextArgumentValue | ItemInstanceId) -> bool:
         return isinstance(value, ItemInstanceId)
 

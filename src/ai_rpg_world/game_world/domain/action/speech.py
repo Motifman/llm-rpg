@@ -6,7 +6,15 @@ from typing import TYPE_CHECKING, final
 
 from ai_rpg_world.game_world.domain.action.action_arguments import TextArgumentValue
 from ai_rpg_world.game_world.domain.action.action_attempt import CopresenceRequirement, WithPerson
-from ai_rpg_world.game_world.domain.action.offered_action import CONTENT, LISTENER, REACH, OfferedStep
+from ai_rpg_world.game_world.domain.action.offered_action import (
+    CONTENT,
+    LISTENER,
+    ORDINARY_VOICE,
+    REACH,
+    SHOUT,
+    WHISPER,
+    OfferedStep,
+)
 from ai_rpg_world.game_world.domain.exception.action_exception import (
     ArgumentsNotChosenException,
     BlankSpeechContentException,
@@ -18,9 +26,9 @@ from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 
-_WHISPER = OfferedStep(REACH, DisplayName("ささやく"))
-_ORDINARY_VOICE = OfferedStep(REACH, DisplayName("ふつうの声で話す"))
-_SHOUT = OfferedStep(REACH, DisplayName("叫ぶ"))
+_WHISPER = OfferedStep(REACH, DisplayName(WHISPER))
+_ORDINARY_VOICE = OfferedStep(REACH, DisplayName(ORDINARY_VOICE))
+_SHOUT = OfferedStep(REACH, DisplayName(SHOUT))
 
 
 @final

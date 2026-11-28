@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 from ai_rpg_world.being.application.episode_index_revision_tool import (
@@ -33,15 +32,9 @@ from ai_rpg_world.being.contract import (
 
 NameRechooser = Callable[[str, str, Mapping[str, str | None], str | None], str | None]
 
-CANDIDATE_TABLE_HEADING = "現在選べる対象引数"
-FREE_TEXT_WRITES = "{writes}を書く"
-CANDIDATE_TABLE_NOTE = (
-    '※ 引数には「いまできる」の "" の中の文字をそのまま書く。「いまできない」は、（）の理由があるあいだは選んでも断られる。'
-    "一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。"
-)
-AVAILABLE_NOW = "いまできる"
-UNAVAILABLE_NOW = "いまできない"
-NOTHING_AVAILABLE = "(なし)"
+CANDIDATE_TABLE_HEADING = "選べる操作"
+WRITES = "{name} に{writes}を書く"
+NOTHING_LISTED = "なし"
 DETAILS = "details"
 HIDDEN_TEXT = "本文"
 _INNER_THOUGHT_MAX_LENGTH = 500
@@ -59,13 +52,16 @@ class ActionTools:
         name_for: Callable[[PersonPlaceholderValue], str],
         *,
         recall_limit: int,
+        seen_in_scene: Iterable[PersonInText] = (),
     ) -> None:
         self._choices = choices
         self._being_tools = being_tools
-        # 番号は表に出る人だけで数える。いまはできない理由にだけ出る人を数えると、表に 1 人しか出ないのに番号が付く。
+        # 番号は候補と場面に出る人だけで数える。理由にだけ出る人を数えると、1 人しか見えないのに番号が付く。
+        # 場面と候補で同じ番号を使うのは、場面から書き写した名前を同じ人に戻すため。
         self._people = PeopleCalledApart(
             name_for,
             (
+                *seen_in_scene,
                 *(
                     p
                     for choice in choices.choices
@@ -83,6 +79,9 @@ class ActionTools:
             ),
         )
         self._recall_limit = recall_limit
+
+    def text_naming_people(self, text: TextWithPeople) -> str:
+        return text.template.format_map({key: self._people.called(person) for key, person in text.people.items()})
 
     def definitions(self) -> tuple[dict[str, Any], ...]:
         definitions = [self._definition(choice) for choice in self._choices.choices]
@@ -224,38 +223,63 @@ class ActionTools:
                 place[argument] = path[-1]
 
     def candidate_table(self) -> Description | None:
-        lines = [
-            line for choice in self._choices.choices for row in self._rows(choice) for line in row.lines(choice.name)
-        ]
-        if not lines:
+        """できる・できないとその理由は書かない。できない候補を選べば、世界がそのとき理由を付けて断る。"""
+        lines = [line for choice in self._choices.choices for line in self._listed_lines(choice)]
+        note = self._choices.note
+        if not lines and note is None:
             return None
-        return Description(heading=CANDIDATE_TABLE_HEADING, text="\n".join((*lines, CANDIDATE_TABLE_NOTE)))
-
-    def _rows(self, choice: ActionChoice) -> list[_PickRow | _WriteRow | _WholeChoiceRow]:
-        outlined = frozenset(o.name for o in choice.outline)
-        rows: list[_PickRow | _WriteRow | _WholeChoiceRow] = [
-            _WholeChoiceRow(self._reason_text(u.reason)) for u in choice.unavailable if u.argument is None
-        ]
-        rows += self._picks(choice.values, outlined, None)
-        for unavailable in choice.unavailable:
-            if unavailable.argument is None:
-                continue
-            name = _shown_name(unavailable.argument, outlined)
-            parent = self._label(unavailable.picked[-2]) if len(unavailable.picked) > 1 else None
-            row = next((r for r in rows if isinstance(r, _PickRow) and (r.name, r.parent) == (name, parent)), None)
-            if row is None:
-                row = _PickRow(name, parent, ())
-                rows.append(row)
-            row.unavailable.append((self._label(unavailable.picked[-1]), self._reason_text(unavailable.reason)))
-        return rows
-
-    def _reason_text(self, reason: str | TextWithPeople) -> str:
-        text = (
-            reason
-            if isinstance(reason, str)
-            else reason.template.format_map({key: self._people.called(person) for key, person in reason.people.items()})
+        return Description(
+            heading=CANDIDATE_TABLE_HEADING,
+            text="\n".join((*(lines or [NOTHING_LISTED]), *(() if note is None else (note,)))),
         )
-        return text.rstrip("。")
+
+    def _listed_lines(self, choice: ActionChoice) -> list[str]:
+        outlined = frozenset(o.name for o in choice.outline)
+        listed = frozenset(o.name for o in choice.outline if o.listed)
+        rows: dict[str | None, dict[str, str]] = {}
+        shown_under: dict[str, dict[str, str]] = {}
+        self._list(choice.values, None, listed, outlined, rows, shown_under)
+        for unavailable in choice.unavailable:
+            if unavailable.argument not in listed:
+                continue
+            labels = [self._label(label) for label in unavailable.picked]
+            row = (
+                shown_under.setdefault(unavailable.shown_under, {})
+                if unavailable.shown_under is not None
+                else rows.setdefault(labels[-2] if len(labels) > 1 else None, {})
+            )
+            row.setdefault(labels[-1], _asks_text(unavailable.asks, outlined))
+        # いちばん上の段の候補 (決めごと) の下にも並べる候補 (選び先) があれば、行動の名前を添えて 1 行にまとめる
+        top = rows.pop(None, {})
+        unfolded = {label: asked for label, asked in top.items() if label not in rows}
+        lines = [f"{choice.name}: {_quoted_row(unfolded)}"] if unfolded else []
+        lines += [f"{choice.name} {_quoted(label)}: {_quoted_row(rows.pop(label))}" for label in top if label in rows]
+        lines += [f"{_quoted(name)}: {_quoted_row(labels)} ({choice.name})" for name, labels in shown_under.items()]
+        lines += [f"{_quoted(parent)}: {_quoted_row(labels)}" for parent, labels in rows.items() if parent is not None]
+        return lines
+
+    def _list(
+        self,
+        values: Sequence[ChoiceValue],
+        parent: str | None,
+        listed: frozenset[str],
+        outlined: frozenset[str],
+        rows: dict[str | None, dict[str, str]],
+        shown_under: dict[str, dict[str, str]],
+    ) -> None:
+        for value in values:
+            if not isinstance(value, PickOne):
+                continue
+            for candidate in value.candidates:
+                label = self._label(candidate.label)
+                if value.name in listed:
+                    row = (
+                        shown_under.setdefault(candidate.shown_under, {})
+                        if candidate.shown_under is not None
+                        else rows.setdefault(parent, {})
+                    )
+                    row.setdefault(label, _asks_for(candidate, outlined))
+                self._list(candidate.values, label, listed, outlined, rows, shown_under)
 
     def _definition(self, choice: ActionChoice) -> dict[str, Any]:
         properties: dict[str, Any] = {
@@ -263,6 +287,7 @@ class ActionTools:
                 "type": "string",
                 "description": o.label,
                 **({} if o.max_length is None else {"maxLength": o.max_length}),
+                **({"enum": list(o.fixed_values)} if o.fixed_values else {}),
             }
             for o in choice.outline
         }
@@ -290,24 +315,14 @@ class ActionTools:
             properties[memo] = memo_field_property(episode_source_offered=self._being_tools.episode_index_shown)
         return _function(
             choice.name,
-            f"{choice.description}候補のある引数には【{CANDIDATE_TABLE_HEADING}】の「{AVAILABLE_NOW}」の文字をそのまま書く。",
+            choice.description
+            + (
+                f'候補は【{CANDIDATE_TABLE_HEADING}】の "" の中の文字をそのまま書く。'
+                if any(o.listed for o in choice.outline)
+                else ""
+            ),
             {"type": "object", "properties": properties, "required": required},
         )
-
-    def _picks(
-        self, values: Sequence[ChoiceValue], outlined: frozenset[str], parent: str | None
-    ) -> Iterator[_PickRow | _WriteRow]:
-        for value in values:
-            name = _shown_name(value.name, outlined)
-            if isinstance(value, FreeText):
-                if value.writes is not None:
-                    yield _WriteRow(name, parent, FREE_TEXT_WRITES.format(writes=value.writes))
-                continue
-            labels = tuple(dict.fromkeys(self._label(c.label) for c in value.candidates))
-            if labels:
-                yield _PickRow(name, parent, labels)
-            for candidate in value.candidates:
-                yield from self._picks(candidate.values, outlined, self._label(candidate.label))
 
     def _described(self, candidate: Candidate) -> str | None:
         """候補の下で選べるものを説明にする。名前だけでは、意味を推し量る材料が無い。"""
@@ -338,42 +353,21 @@ def _shown_name(name: str, outlined: frozenset[str]) -> str:
     return name if name in outlined else f"{DETAILS}.{name}"
 
 
-def _heading(choice_name: str, name: str, parent: str | None) -> str:
-    return f"- {choice_name}.{name}{'' if parent is None else f' ({_quoted(parent)})'}:"
+def _asks_for(candidate: Candidate, outlined: frozenset[str]) -> str:
+    return _asks_text(candidate.values, outlined)
 
 
-@dataclass
-class _PickRow:
-    name: str
-    parent: str | None
-    available: tuple[str, ...]
-    unavailable: list[tuple[str, str]] = field(default_factory=list)
-
-    def lines(self, choice_name: str) -> list[str]:
-        lines = [_heading(choice_name, self.name, self.parent), f"    {AVAILABLE_NOW}:"]
-        lines += [f"      {_quoted(label)}" for label in self.available] or [f"      {NOTHING_AVAILABLE}"]
-        if self.unavailable:
-            lines.append(f"    {UNAVAILABLE_NOW}:")
-            lines += [f"      {_quoted(label)}（{reason}）" for label, reason in self.unavailable]
-        return lines
+def _asks_text(values: Sequence[ChoiceValue], outlined: frozenset[str]) -> str:
+    asked = [
+        WRITES.format(name=_shown_name(value.name, outlined), writes=value.writes)
+        for value in values
+        if value.writes is not None
+    ]
+    return f" ({'、'.join(asked)})" if asked else ""
 
 
-@dataclass(frozen=True)
-class _WriteRow:
-    name: str
-    parent: str | None
-    writes: str
-
-    def lines(self, choice_name: str) -> list[str]:
-        return [f"{_heading(choice_name, self.name, self.parent)} {self.writes}"]
-
-
-@dataclass(frozen=True)
-class _WholeChoiceRow:
-    reason: str
-
-    def lines(self, choice_name: str) -> list[str]:
-        return [f"- {choice_name}: {UNAVAILABLE_NOW}（{self.reason}）"]
+def _quoted_row(labels: Mapping[str, str]) -> str:
+    return ", ".join(f"{_quoted(label)}{asked}" for label, asked in labels.items())
 
 
 def _function(name: str, description: str, parameters: dict[str, Any]) -> dict[str, Any]:

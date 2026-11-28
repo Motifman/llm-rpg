@@ -123,7 +123,7 @@ class TestLlmCallsInThePromptDataset:
         gens = next(c for c in calls if c["character_name"] == "ゲン")
         assert gens["phase"] == "choose_action" and gens["world_tick"] == 0
         assert [m["role"] for m in gens["restored"]["messages"]] == ["system", "user"]
-        assert "【現在選べる対象引数】" in gens["restored"]["messages"][1]["content"]
+        assert "【選べる操作】" in gens["restored"]["messages"][1]["content"]
         assert any(t["function"]["name"] == "speak" for t in gens["restored"]["tools"])
         assert gens["output"]["tool"] == "speak"
 

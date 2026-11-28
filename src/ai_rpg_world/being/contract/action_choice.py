@@ -41,12 +41,16 @@ class FreeText:
 
 @dataclass(frozen=True, kw_only=True)
 class Candidate:
+    """``shown_under`` は、道筋の最初の段の候補を並べて見せるときに頭に置く名前 (例: 籠に乗り込むの、昇降機の籠)。"""
+
     label: str | PersonInText
     values: Sequence[ChoiceValue] = field(default_factory=tuple)
     count: int = 1
+    shown_under: str | None = None
 
     def __post_init__(self) -> None:
         _require_label(self.label, "label")
+        require_optional_text(self.shown_under, "shown_under")
         object.__setattr__(self, "values", _values(self.values))
         if isinstance(self.count, bool) or not isinstance(self.count, int) or self.count < 1:
             raise ContractViolation(f"count must be a positive int, got {self.count!r}")
@@ -58,13 +62,17 @@ class Candidate:
 
 @dataclass(frozen=True, kw_only=True)
 class PickOne:
+    """``writes`` は、候補を並べないときに、何を書くかを伝える言葉 (例: 奪う品の名前)。"""
+
     name: str
     label: str
     candidates: Sequence[Candidate]
+    writes: str | None = None
 
     def __post_init__(self) -> None:
         _require_name(self.name, "name")
         require_text(self.label, "label")
+        require_optional_text(self.writes, "writes")
         candidates = tuple(self.candidates)
         if not all(isinstance(c, Candidate) for c in candidates):
             raise ContractViolation("candidates must be Candidate items")
@@ -100,6 +108,9 @@ class ArgumentOutline:
 
     ``hidden_as`` は、自由に書いた値を【直近の出来事】の呼び出しの行で伏せるときの言葉 (例: 発言)。自由に書いた文を
     そのまま引用すると、手本として写されるため。
+
+    ``listed`` は、候補をこのターンの場面のほかの所で見せていないので、Being が並べて見せる引数 (例: 対象ごとの操作)。
+    ``fixed_values`` は、どのターンでも同じ値から選ぶ引数の値 (例: 話し方)。ツールの定義に書いてよい。
     """
 
     name: str
@@ -107,12 +118,23 @@ class ArgumentOutline:
     required: bool = False
     hidden_as: str | None = None
     max_length: int | None = None
+    listed: bool = False
+    fixed_values: Sequence[str] = ()
 
     def __post_init__(self) -> None:
         _require_name(self.name, "name")
         require_text(self.label, "label")
         require_bool(self.required, "required")
+        require_bool(self.listed, "listed")
         require_optional_text(self.hidden_as, "hidden_as")
+        fixed_values = tuple(self.fixed_values)
+        for value in fixed_values:
+            require_text(value, "fixed_values")
+        if len(set(fixed_values)) != len(fixed_values):
+            raise ContractViolation(f"fixed_values must not repeat a value: {fixed_values}")
+        if fixed_values and self.listed:
+            raise ContractViolation(f"{self.name!r} has fixed values and need not be listed")
+        object.__setattr__(self, "fixed_values", fixed_values)
         if self.max_length is not None and (
             isinstance(self.max_length, bool) or not isinstance(self.max_length, int) or self.max_length < 1
         ):
@@ -125,11 +147,15 @@ class UnavailableAction:
 
     ``argument`` は、``picked`` の最後の名前がどの引数の候補か。道筋の途中の候補がいまは並ばないこともあるので、
     候補の並びからは決められない。
+
+    ``asks`` は、選べたなら道筋の最後の候補が求めたはずの、自分で書く値。``shown_under`` は ``Candidate`` と同じ。
     """
 
     picked: Sequence[str | PersonInText]
     reason: str | TextWithPeople
     argument: str | None = None
+    asks: Sequence[FreeText] = ()
+    shown_under: str | None = None
 
     def __post_init__(self) -> None:
         picked = tuple(self.picked)
@@ -143,7 +169,16 @@ class UnavailableAction:
             _require_name(self.argument, "argument")
         if not isinstance(self.reason, TextWithPeople):
             require_text(self.reason, "reason")
+        asks = tuple(self.asks)
+        if not all(isinstance(a, FreeText) and a.writes is not None for a in asks):
+            raise ContractViolation("asks must be FreeText items that say what to write")
+        if asks and not picked:
+            raise ContractViolation("unavailable whole action must not ask for values")
+        require_optional_text(self.shown_under, "shown_under")
+        if self.shown_under is not None and len(picked) != 1:
+            raise ContractViolation(f"only a one-step unavailable path is shown under a name, got {picked!r}")
         object.__setattr__(self, "picked", picked)
+        object.__setattr__(self, "asks", asks)
 
     def covers_whole_action(self) -> bool:
         return not self.picked
@@ -234,6 +269,8 @@ def _require_paths(values: Sequence[ChoiceValue], outer_names: frozenset[str], *
             continue
         if nested and not value.candidates:
             raise ContractViolation(f"nested values must offer candidates: {value.name!r}")
+        if nested and any(c.shown_under is not None for c in value.candidates):
+            raise ContractViolation(f"only a first step is shown under a name: {value.name!r}")
         for candidate in value.candidates:
             _require_paths(candidate.values, names, nested=True)
 
@@ -252,9 +289,13 @@ def _leads_to_a_candidate(values: Sequence[ChoiceValue], picked: tuple[object, .
 
 @dataclass(frozen=True)
 class ActionChoices:
+    """``note`` は、並べて見せない引数をどこから書き写すかを伝える一言。"""
+
     choices: Sequence[ActionChoice]
+    note: str | None = None
 
     def __post_init__(self) -> None:
+        require_optional_text(self.note, "note")
         choices = tuple(self.choices)
         if not all(isinstance(c, ActionChoice) for c in choices):
             raise ContractViolation("choices must be ActionChoice items")

@@ -20,14 +20,14 @@ class TestInteractionDeclarationArguments:
                     ArgumentDeclaration(
                         name=ArgumentName("message"), kind=TextArgument(writes=DisplayName("書く言葉"))
                     ),
-                    ArgumentDeclaration(name=ArgumentName("message"), kind=ItemArgument()),
+                    ArgumentDeclaration(name=ArgumentName("message"), kind=ItemArgument(writes=DisplayName("品物の名前"))),
                 )
             )
 
     def test_distinct_argument_names_are_kept_in_the_written_order(self) -> None:
         """arguments に別々の名前を書くと、断らずに書いた順のまま持ち、DeclaredInteraction としても同じ並びが読める。"""
         message = ArgumentDeclaration(name=ArgumentName("message"), kind=TextArgument(writes=DisplayName("書く言葉")))
-        offering = ArgumentDeclaration(name=ArgumentName("offering"), kind=ItemArgument())
+        offering = ArgumentDeclaration(name=ArgumentName("offering"), kind=ItemArgument(writes=DisplayName("品物の名前")))
 
         declaration = as_declared_interaction(pull_lever(arguments=(message, offering)))
 
