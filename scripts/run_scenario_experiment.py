@@ -1782,7 +1782,7 @@ def _run_game_world(
     except WorldDesignFlawsException as flaws:
         parser.error(f"{args.scenario} has design flaws: {flaws}")
     except ValueError as error:
-        parser.error(f"cannot build the LLM client: {error}")
+        parser.error(f"cannot prepare the game world: {error}")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     trace_path = out_dir / "trace.jsonl"

@@ -75,6 +75,9 @@ def game_world_writers(settings: GameWorldPlaySettings) -> GameWorldWriters:
     client = create_llm_client_from_config(config)
     if not isinstance(client, LiteLLMClient):
         raise RuntimeError(f"LLM_CLIENT=litellm built {type(client).__name__}")
+    # キーが無いと、run を始めてから全員の選択と書き起こしが落ち続ける
+    if not client.can_call():
+        raise ValueError("OPENAI_API_KEY is not set. The game world needs it to call the LLM")
     return GameWorldWriters(
         action_choosing=client,
         episode_writer=LlmEpisodeWriter(client),

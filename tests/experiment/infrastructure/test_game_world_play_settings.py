@@ -6,6 +6,7 @@ from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryW
 from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
 from ai_rpg_world.experiment.infrastructure.game_world_run import game_world_writers
+from ai_rpg_world.infrastructure.llm import litellm_client
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
 
@@ -53,11 +54,18 @@ class TestGameWorldPlaySettings:
             GameWorldPlaySettings.from_runtime_config({"MEMO_TOOLS_ENABLED": "yes"})
 
 
+def _without_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 手元の .env の値でテストの結果が変わらないよう、読み込ませない
+    monkeypatch.setattr(litellm_client, "_load_dotenv_if_available", lambda: None)
+
+
 class TestLlmSettings:
     """GameWorldPlaySettings と game_world_writers が、LLM_CLIENT=litellm のときに古い profile と同じ LLM の鍵で LiteLLM のクライアントを組むことを保証する。"""
 
-    def test_litellm_builds_one_client_for_choosing_and_writing(self) -> None:
+    def test_litellm_builds_one_client_for_choosing_and_writing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """LLM_CLIENT=litellm と LLM_MODEL を書くと、行動を選ぶのも書き起こすのも同じ LiteLLMClient になり、呼ぶ前には endpoint に触れない。"""
+        _without_dotenv(monkeypatch)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
         settings = GameWorldPlaySettings.from_runtime_config(
             {
                 "LLM_CLIENT": "litellm",
@@ -71,6 +79,17 @@ class TestLlmSettings:
         assert isinstance(writers.action_choosing, LiteLLMClient)
         assert isinstance(writers.episode_writer, LlmEpisodeWriter)
         assert isinstance(writers.backstory_writer, LlmBackstoryWriter)
+
+    def test_missing_api_key_is_refused_before_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """OPENAI_API_KEY が無いまま LLM_CLIENT=litellm で組むと、run を始める前に ValueError で断る。"""
+        _without_dotenv(monkeypatch)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        settings = GameWorldPlaySettings.from_runtime_config(
+            {"LLM_CLIENT": "litellm", "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash"}
+        )
+
+        with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+            game_world_writers(settings)
 
     def test_llm_keys_are_refused_with_the_stub(self) -> None:
         """スタブのまま LLM_MODEL を書くと、効かない設定として ValueError で断る。"""

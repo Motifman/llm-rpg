@@ -5,7 +5,9 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
+
+import pytest
 
 from ai_rpg_world.being.application.choose_action import (
     ActionChoosingCompletion,
@@ -17,6 +19,7 @@ from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.short_term_memory import Attempt, MemoryOperationOutcome, ObservedOutcome, Perception
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
+from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldConditionsSettling
 from ai_rpg_world.game_world.domain.value_object import (
@@ -811,3 +814,56 @@ class TestThinkingAtOnceIsCapped:
         session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
 
         assert completion.most_at_once == 4
+
+
+class _SlowAfterTheFirst(ActionChoosingCompletion):
+    """1 人目はすぐ答え、2 人目からは少し考える。"""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._calls = 0
+
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        with self._lock:
+            self._calls += 1
+            call = self._calls
+        if call > 1:
+            time.sleep(0.05)
+        return _murmur(f"murmur_{call}")
+
+
+class TestLettingGoUnderTheCap:
+    """上限より多くの人にターンがあるとき、巡りの途中で世界が終わると、まだ始めていない呼び出しを取り消すことを保証する。"""
+
+    def test_calls_not_started_are_discarded_without_an_exchange(self) -> None:
+        """上限 1 で 4 人にターンがあり、最初の人のターンのあとで世界が終わると、残りの 3 人の選択は捨てられ、始めていなかった呼び出しはやりとりを持たない。"""
+        session = MineVillageSession(round_limit=1).started()
+        takers = BeingsTakingTurnsAtOnce(
+            session.turn_steps(_SlowAfterTheFirst(), closing="行動を 1 つ選んでください。"),
+            session.turn_rounds,
+            max_thinking=1,
+        )
+        # 1 人目のターンを終えたところで、世界が終わったと答える
+        ended_after_the_first = cast(
+            WorldHasEnded,
+            lambda command: any(isinstance(e, TurnFinishedEvent) for e in session.turn_round_events),
+        )
+
+        stopped = session.play_rounds(takers, world_has_ended=ended_after_the_first)(PlayRoundsCommand(WORLD))
+
+        assert isinstance(stopped, WorldEnded)
+        assert len(stopped.discarded) == 3
+        assert any(d.exchange is None and d.failure is None for d in stopped.discarded)
+
+    def test_cap_below_one_is_refused(self) -> None:
+        """同時に考えさせる人数の上限に 0 を渡すと ValueError で断る。"""
+        session = MineVillageSession(round_limit=1).started()
+
+        with pytest.raises(ValueError):
+            BeingsTakingTurnsAtOnce(
+                session.turn_steps(_CountingThinkers(), closing="行動を 1 つ選んでください。"),
+                session.turn_rounds,
+                max_thinking=0,
+            )
