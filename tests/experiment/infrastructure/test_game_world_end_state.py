@@ -108,3 +108,24 @@ class TestEndStateOfTheGameWorld:
             "mio.json",
             "sayo.json",
         ]
+
+    def test_memory_is_written_even_when_stopping_the_writers_fails(self, tmp_path: Path) -> None:
+        """裏の書き起こしを止めるところで例外が出ても、4 人の記憶のファイルは残り、例外はそのまま上に出る。"""
+        play = _play(tmp_path, MurmuringActionChoosing(), round_limit=2)
+        original_shutdown = play.memory_writing.shutdown
+
+        def shutdown_fails() -> None:
+            original_shutdown()
+            raise RuntimeError("writers did not stop")
+
+        play.memory_writing.shutdown = shutdown_fails  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="writers did not stop"):
+            play.play()
+
+        assert sorted(p.name for p in (tmp_path / "beings").iterdir()) == [
+            "gen.json",
+            "haru.json",
+            "mio.json",
+            "sayo.json",
+        ]
