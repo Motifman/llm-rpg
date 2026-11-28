@@ -12,26 +12,16 @@ from ai_rpg_world.being.application.action_tools import ActionTools
 from ai_rpg_world.being.application.closest_tool_name import format_unsupported_tool_message, suggest_closest_tool_name
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.episode_index_revision_tool import (
-    HANDLE,
-    INDEX_NOT_REVISED_TEXT,
-    MALFORMED_INDEX_REVISION_TEXT,
     EpisodeIndexRevisionOutcome,
-    index_revised_text,
     index_revision_call_text,
-    read_index_revision,
-    unknown_handle_text,
 )
-from ai_rpg_world.being.application.episode_recall_tool import (
-    MALFORMED_HANDLES_TEXT,
-    read_handles,
-    recall_call_text,
-    recalled_text,
-    too_many_handles_text,
-)
+from ai_rpg_world.being.application.episode_recall_tool import recall_call_text
 from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
 from ai_rpg_world.being.application.names_for_people import name_for
 from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
+from ai_rpg_world.being.application.recall_episodes import RecallEpisodes, RecallEpisodesCommand
 from ai_rpg_world.being.application.rechoose_name import NameRechoice, RechooseName
+from ai_rpg_world.being.application.revise_episode_index import ReviseEpisodeIndex, ReviseEpisodeIndexCommand
 from ai_rpg_world.being.application.unwritten_memo_text import (
     WHOLE_MEMO,
     attempted_raw_operation,
@@ -56,7 +46,6 @@ from ai_rpg_world.being.contract import (
 )
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeRepository
-from ai_rpg_world.being.domain.episode_recall import recall_episodes
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
 from ai_rpg_world.being.domain.short_term_memory import (
@@ -67,7 +56,6 @@ from ai_rpg_world.being.domain.short_term_memory import (
 )
 from ai_rpg_world.being.domain.visited_places import VisitedPlacesRepository
 from ai_rpg_world.being.domain.working_memory import Closing
-from ai_rpg_world.domain.being.exception.being_exceptions import EpisodeValidationException
 
 
 @dataclass(frozen=True)
@@ -178,14 +166,13 @@ class ChooseAction:
         rechoose_name: RechooseName | None = None,
         writing_in_background: MemoryWritingInBackground | None = None,
     ) -> None:
-        if recall_limit < 1:
-            raise ValueError("recall_limit must be >= 1")
+        self._recall_episodes = RecallEpisodes(episodes=episodes, recall_limit=recall_limit)
+        self._revise_episode_index = ReviseEpisodeIndex(episodes=episodes)
         self._working_memory = working_memory
         self._completion = completion
         self._short_term_memories = short_term_memories
         self._turn_clock = turn_clock
         self._write_memos = WriteMemos(memo_books=memo_books, episodes=episodes)
-        self._episodes = episodes
         self._visited_places = visited_places
         self._recall_limit = recall_limit
         self._rechoose_name = rechoose_name
@@ -292,7 +279,9 @@ class ChooseAction:
         turn = self._turn_clock.current_turn(being_id) + 1
         if call.tool_name == command.being_tools.episode_recall:
             recall = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
-            body, succeeded = self._recall(being_id, call.arguments, turn=turn)
+            recalled = self._recall_episodes.execute(
+                RecallEpisodesCommand(being_id=being_id, arguments=call.arguments, turn=turn)
+            )
             self._act(
                 being_id,
                 recall,
@@ -300,9 +289,9 @@ class ChooseAction:
                 call_text=recall_call_text(call.tool_name, call.arguments),
                 result=MemoryOperationOutcome(
                     call_id=call_id,
-                    body=body,
+                    body=recalled.body,
                     time=command.now,
-                    succeeded=succeeded,
+                    succeeded=recalled.succeeded,
                     action_summary=own_tool_summary(
                         call.tool_name,
                         call.arguments,
@@ -313,7 +302,9 @@ class ChooseAction:
             return TurnSpentRecalling(move=recall, exchange=exchange)
         if call.tool_name == command.being_tools.episode_index_revision:
             revise = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
-            body, revision = self._revise(being_id, call.arguments, turn=turn)
+            revised = self._revise_episode_index.execute(
+                ReviseEpisodeIndexCommand(being_id=being_id, arguments=call.arguments, turn=turn)
+            )
             self._act(
                 being_id,
                 revise,
@@ -321,9 +312,9 @@ class ChooseAction:
                 call_text=index_revision_call_text(call.tool_name, call.arguments),
                 result=MemoryOperationOutcome(
                     call_id=call_id,
-                    body=body,
+                    body=revised.body,
                     time=command.now,
-                    succeeded=revision.outcome == "revised",
+                    succeeded=revised.succeeded,
                     action_summary=own_tool_summary(
                         call.tool_name,
                         call.arguments,
@@ -331,7 +322,7 @@ class ChooseAction:
                     ),
                 ),
             )
-            return TurnSpentRevisingIndex(move=revise, exchange=exchange, revision=revision)
+            return TurnSpentRevisingIndex(move=revise, exchange=exchange, revision=revised.revision)
         rechoices: list[NameRechoice] = []
         arguments = self._names_matched(call, tools, command.being_tools, rechoices)
         move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=arguments)
@@ -371,44 +362,6 @@ class ChooseAction:
             ),
         )
         return ActionNotChosen(requested_tool=call.tool_name, suggestion=suggestion, exchange=exchange)
-
-    def _recall(self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int) -> tuple[str, bool]:
-        """知らない呼び名は、古い run と同じく、思い出せないと答える成功にする。"""
-        handles = read_handles(arguments)
-        if handles is None:
-            return MALFORMED_HANDLES_TEXT, False
-        # 一部だけ思い出すと、どれを落としたかを本人が知らないまま 1 手が終わる (D1623-2)。
-        if len(set(handles)) > self._recall_limit:
-            return too_many_handles_text(self._recall_limit), False
-        return recalled_text(recall_episodes(self._episodes, being_id, handles, turn=turn)), True
-
-    def _revise(
-        self, being_id: BeingId, arguments: Mapping[str, object], *, turn: int
-    ) -> tuple[str, EpisodeIndexRevisionOutcome]:
-        handle = arguments.get(HANDLE)
-        request = read_index_revision(arguments)
-        if request is None:
-            return MALFORMED_INDEX_REVISION_TEXT, EpisodeIndexRevisionOutcome(
-                handle=handle if isinstance(handle, str) else None, outcome="rejected", reject_reason="malformed"
-            )
-        episode = self._episodes.find_by_handle(being_id, request.handle)
-        if episode is None:
-            return unknown_handle_text(request.handle), EpisodeIndexRevisionOutcome(
-                handle=request.handle, outcome="rejected", reject_reason="unknown_handle"
-            )
-        before = episode.index
-        try:
-            episode.revise_index(request.index, turn=turn)
-        except EpisodeValidationException:
-            return INDEX_NOT_REVISED_TEXT, EpisodeIndexRevisionOutcome(handle=request.handle, outcome="failed")
-        self._episodes.save(episode)
-        return index_revised_text(request.handle, request.index), EpisodeIndexRevisionOutcome(
-            handle=request.handle,
-            outcome="revised",
-            before=before,
-            after=request.index,
-            truncated=request.truncated,
-        )
 
     def _write_memo(
         self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int

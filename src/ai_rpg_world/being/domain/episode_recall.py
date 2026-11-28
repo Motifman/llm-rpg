@@ -1,5 +1,3 @@
-"""呼び名をまとめて受け取り、エピソードを呼び出す。"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -8,8 +6,32 @@ from dataclasses import dataclass
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    EpisodeRecallLimitExceededException,
     EpisodeValidationException,
 )
+
+
+@dataclass(frozen=True)
+class EpisodeRecallHandles:
+    """1 回に思い出す呼び名。同じ呼び名は 1 件と数え、書かれた順に 1 度だけ持つ。"""
+
+    handles: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.handles:
+            raise EpisodeValidationException("handles must not be empty")
+        if len(set(self.handles)) != len(self.handles):
+            raise EpisodeValidationException("handles must not repeat")
+
+    @classmethod
+    def within(cls, handles: Sequence[str], *, limit: int) -> EpisodeRecallHandles:
+        """上限を超えたら、一部だけ思い出さずに断る。どれを落としたかを本人が知らないまま 1 手が終わるため (D1623-2)。"""
+        if limit < 1:
+            raise EpisodeValidationException("limit must be >= 1")
+        unique = tuple(dict.fromkeys(handles))
+        if len(unique) > limit:
+            raise EpisodeRecallLimitExceededException(limit)
+        return cls(unique)
 
 
 @dataclass(frozen=True)
@@ -23,21 +45,13 @@ class RecallResult:
 def recall_episodes(
     repository: EpisodeRepository,
     being_id: BeingId,
-    handles: Sequence[str],
+    handles: EpisodeRecallHandles,
     *,
     turn: int,
 ) -> tuple[RecallResult, ...]:
-    """保存先から取った写しを呼び出し、書き戻して、その写しを返す。同じ呼び名は 1 回の呼び出しで 1 度だけ数え、結果も 1 件にする。
-
-    そのため結果の件数は ``handles`` の件数より少ないことがある。
-
-    どれか 1 件でもターンが決まりに合わなければ、どれも書き戻さない。
-    """
-    if not handles:
-        raise EpisodeValidationException("handles must not be empty")
-    unique = list(dict.fromkeys(handles))
+    """どれか 1 件でもターンが決まりに合わなければ、どれも書き戻さない。"""
     results = []
-    for handle in unique:
+    for handle in handles.handles:
         found = repository.find_by_handle(being_id, handle)
         if found is not None:
             found.recall(turn=turn)
@@ -48,4 +62,4 @@ def recall_episodes(
     return tuple(results)
 
 
-__all__ = ["RecallResult", "recall_episodes"]
+__all__ = ["EpisodeRecallHandles", "RecallResult", "recall_episodes"]

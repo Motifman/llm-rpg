@@ -118,6 +118,16 @@ class EpisodeNotFoundException(BeingDomainException, NotFoundException):
     error_code = "BEING.EPISODE_NOT_FOUND"
 
 
+class EpisodeRecallLimitExceededException(BeingDomainException, BusinessRuleException):
+    """一度に思い出せる件数より多くのエピソードを、まとめて思い出そうとした。"""
+
+    error_code = "BEING.EPISODE_RECALL_LIMIT_EXCEEDED"
+
+    def __init__(self, limit: int, message: str | None = None) -> None:
+        self.limit = limit
+        super().__init__(message or f"at most {limit} episodes can be recalled at once")
+
+
 class EpisodeWritingResponseException(BeingDomainException, ValidationException):
     """エピソードの書き起こしの応答が、決めた形になっていない。"""
 
@@ -243,6 +253,7 @@ __all__ = [
     "BeingSnapshotVersionException",
     "EpisodeConflictException",
     "EpisodeNotFoundException",
+    "EpisodeRecallLimitExceededException",
     "EpisodeValidationException",
     "EpisodeWritingResponseException",
     "MemoEpisodeSourceFromMissingException",

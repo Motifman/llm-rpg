@@ -19,10 +19,11 @@ from ai_rpg_world.being.application.episode_recall_tool import (
     too_many_handles_text,
 )
 from ai_rpg_world.being.domain.episode import EpisodeRepository
-from ai_rpg_world.being.domain.episode_recall import recall_episodes
+from ai_rpg_world.being.domain.episode_recall import EpisodeRecallHandles, recall_episodes
 from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
+from ai_rpg_world.domain.being.exception.being_exceptions import EpisodeRecallLimitExceededException
 from ai_rpg_world.domain.common.exception import DomainException
 
 _logger = logging.getLogger(__name__)
@@ -58,7 +59,9 @@ class BeingEpisodeRecallToolExecutor:
         if handles is None:
             self._record(acting, outcome="rejected", reject_reason="malformed", max_handles=self.max_handles, **base)
             return LlmCommandResultDto(success=False, message=MALFORMED_HANDLES_TEXT, error_code="INVALID_ARGUMENT")
-        if len(set(handles)) > self.max_handles:
+        try:
+            within = EpisodeRecallHandles.within(handles, limit=self.max_handles)
+        except EpisodeRecallLimitExceededException:
             self._record(acting, outcome="rejected", reject_reason="too_many", max_handles=self.max_handles, **base)
             return LlmCommandResultDto(
                 success=False,
@@ -67,7 +70,7 @@ class BeingEpisodeRecallToolExecutor:
             )
         try:
             turn = self.turn_reader.current_turn(acting.being_id)
-            results = recall_episodes(self.repository, acting.being_id, handles, turn=turn)
+            results = recall_episodes(self.repository, acting.being_id, within, turn=turn)
         except DomainException as exc:
             _logger.warning("episode recall failed (being_id=%s): %s", acting.being_id.value, exc)
             self._record(

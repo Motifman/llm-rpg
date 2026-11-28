@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from types import MappingProxyType
 
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
@@ -67,6 +68,22 @@ class EpisodeIndex:
     def __post_init__(self) -> None:
         _require_text(self.summary, "summary", max_length=INDEX_TEXT_MAX_LENGTH)
         _require_text(self.recall_when, "recall_when", max_length=INDEX_TEXT_MAX_LENGTH)
+
+    @classmethod
+    def fitted(cls, *, summary: str, recall_when: str) -> FittedEpisodeIndex:
+        """上限を超えた文は上限で切る。本人が書き直した目次を、長さだけで捨てないため (design_decisions D1623)。"""
+        texts = {"summary": summary, "recall_when": recall_when}
+        truncated = {name: len(text) for name, text in texts.items() if len(text) > INDEX_TEXT_MAX_LENGTH}
+        fitted = {name: text[:INDEX_TEXT_MAX_LENGTH] for name, text in texts.items()}
+        return FittedEpisodeIndex(index=cls(**fitted), truncated=MappingProxyType(truncated))
+
+
+@dataclass(frozen=True)
+class FittedEpisodeIndex:
+    """``truncated`` は、切った項目 (summary・recall_when) と切る前の長さ。"""
+
+    index: EpisodeIndex
+    truncated: Mapping[str, int]
 
 
 @dataclass(frozen=True)
@@ -384,6 +401,7 @@ __all__ = [
     "Episode",
     "EpisodeEvent",
     "EpisodeIndex",
+    "FittedEpisodeIndex",
     "EpisodeIndexRevised",
     "EpisodeRecalled",
     "EpisodeRepository",

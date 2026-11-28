@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from enum import Enum
+from typing import Any
 
 from ai_rpg_world.being.domain.episode import INDEX_TEXT_MAX_LENGTH, EpisodeIndex
 from ai_rpg_world.being.domain.working_memory import EPISODE_INDEX_HEADING
@@ -14,6 +15,7 @@ HANDLE = "handle"
 ABOUT = "about"
 RECALL_WHEN = "recall_when"
 _FREE_TEXT_PLACEHOLDERS = {ABOUT: "話題", RECALL_WHEN: "本文"}
+_ARGUMENT_NAMES = {"summary": ABOUT, "recall_when": RECALL_WHEN}
 
 MALFORMED_INDEX_REVISION_TEXT = (
     f"handle には【{EPISODE_INDEX_HEADING}】の ep_ で始まる呼び名を、"
@@ -61,25 +63,19 @@ class IndexRevisionRequest:
 
 
 def read_index_revision(arguments: Mapping[str, object]) -> IndexRevisionRequest | None:
-    """崩れていれば None。ドメインは上限を超えた文を受け付けないので、上限で切る (design_decisions D1623)。"""
+    """崩れていれば None。"""
     handle = arguments.get(HANDLE)
-    raw = {key: arguments.get(key) for key in (ABOUT, RECALL_WHEN)}
+    about = arguments.get(ABOUT)
+    recall_when = arguments.get(RECALL_WHEN)
     if not isinstance(handle, str) or not handle.strip():
         return None
-    if not all(isinstance(value, str) and value.strip() for value in raw.values()):
+    if not isinstance(about, str) or not about.strip() or not isinstance(recall_when, str) or not recall_when.strip():
         return None
-    texts: dict[str, str] = {}
-    truncated: dict[str, int] = {}
-    for key, value in raw.items():
-        text = str(value).strip()
-        if len(text) > INDEX_TEXT_MAX_LENGTH:
-            truncated[key] = len(text)
-            text = text[:INDEX_TEXT_MAX_LENGTH]
-        texts[key] = text
+    fitted = EpisodeIndex.fitted(summary=about.strip(), recall_when=recall_when.strip())
     return IndexRevisionRequest(
         handle=handle.strip(),
-        index=EpisodeIndex(summary=texts[ABOUT], recall_when=texts[RECALL_WHEN]),
-        truncated=truncated,
+        index=fitted.index,
+        truncated={_ARGUMENT_NAMES[name]: length for name, length in fitted.truncated.items()},
     )
 
 
@@ -98,13 +94,24 @@ def index_revision_call_text(tool_name: str, arguments: Mapping[str, object]) ->
     return f"{tool_name}({', '.join(parts)})"
 
 
+class EpisodeIndexRevisionResult(Enum):
+    REVISED = "revised"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+class IndexRevisionRejectReason(Enum):
+    MALFORMED = "malformed"
+    UNKNOWN_HANDLE = "unknown_handle"
+
+
 @dataclass(frozen=True)
 class EpisodeIndexRevisionOutcome:
     """断った直しも残す。残さないと、直そうとして断られたのか、直そうとしなかったのかを見分けられない。"""
 
     handle: str | None
-    outcome: Literal["revised", "rejected", "failed"]
-    reject_reason: Literal["malformed", "unknown_handle"] | None = None
+    outcome: EpisodeIndexRevisionResult
+    reject_reason: IndexRevisionRejectReason | None = None
     before: EpisodeIndex | None = None
     after: EpisodeIndex | None = None
     truncated: Mapping[str, int] = field(default_factory=dict)
@@ -117,6 +124,8 @@ __all__ = [
     "MALFORMED_INDEX_REVISION_TEXT",
     "RECALL_WHEN",
     "EpisodeIndexRevisionOutcome",
+    "EpisodeIndexRevisionResult",
+    "IndexRevisionRejectReason",
     "IndexRevisionRequest",
     "episode_index_revision_description",
     "episode_index_revision_parameters",
