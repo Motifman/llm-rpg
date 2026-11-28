@@ -273,6 +273,7 @@ choice_descriptions:
   duration_hours: "{hours} 時間ほど"
   duration_minutes: "{minutes} 分ほど"
   duration_turns: "{turns} ターンぶんほど"
+  closing: 利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。
 
 world_map:
   place: "  {spot} ({lighting}) → {exits}"
