@@ -258,6 +258,21 @@ class TestObservationsWhileChoosing:
         kinds = [type(e) for e in rounds.get_events()][-2:]
         assert kinds == [TurnFinishedEvent, ObservationPassedOnEvent]
 
+    def test_held_observation_is_not_passed_on_again_in_a_later_turn(self) -> None:
+        """巡り 1 で預かってターンの終わりに回した観測は、巡り 2 でゲンがまた選んでターンを終えても、もう一度は回らない。"""
+        rounds = _rounds()
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.begin_choosing((_GEN,))
+        rounds.notice_observation(_GEN, _observation(False))
+        rounds.finish_turn(_GEN, Acted())
+        rounds.close_round()
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.begin_choosing((_GEN,))
+
+        rounds.finish_turn(_GEN, Acted())
+
+        assert _passed_on(rounds) == [(_GEN, "扉が壊れた")]
+
     def test_observation_after_the_choice_came_back_is_passed_on_at_once(self) -> None:
         """選び終えて行為を確定させているあいだのゲンに届いた観測 (自分の行為の結果など) は、預からずに回る。"""
         rounds = _rounds()
