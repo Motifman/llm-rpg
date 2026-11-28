@@ -1,0 +1,26 @@
+{
+  "profile": "game_world_mine_v2_v41_thinking_capped",
+  "description": "新しい世界 (game_world) の廃坑の山村を実 LLM で回す (#2235)。モデル・provider・思考の強さ・出力の上限・同時に呼ぶ数・記憶 (目次 10 件、一度に 3 件まで呼び出し、メモ帳) は、古い世界の memory_jev_mine_v1_v41_thinking_capped_being_memory とそろえた。新しい世界には、Jev の判定 (TYPED_JUDGMENT_*)、手番の居眠り (LLM_IDLE_TIMEOUT_TICKS)、prompt_dataset の失敗の扱いの指定 (PROMPT_DATASET_CAPTURE_FAILURE_POLICY。新しい世界は書けなくても止めずに数える)が無いので、そこは古い run と条件が違う。LLM の連続失敗で run を止める数 (LLM_FAILURE_STREAK_ABORT) も指定できず、新しい世界は 2 巡り以上にまたがって 8 回続けて失敗したら止める。書き起こしを待つ上限は、実 LLM の書き起こしが run の終わりに間に合うよう 60 秒にした (古い世界の既定は 10 秒)。2026-11-29 に docs/llm_provider_selection.md の手順で確かめた: deepseek-v4.1-flash は日付の無い ID だが、どの provider も deepseek-v4.1-flash-20260910 を配信している (別の版 -1017 は別 ID)。古い run と比べるため日付の無い ID のままにした。DeepInfra (fp8、入力 0.112〜0.21 / キャッシュ 0.0034〜0.0063 / 出力 0.34〜0.63 ドル / MTok の 3 つの endpoint) は tool_choice=required で 12/12 通過、応答 0.7〜1.2 秒。プローブは思考の設定を送れないので、思考ありの確かめは 2 巡りの run で行う。",
+  "world": "game_world",
+  "scenario": "data/scenarios/mine_village_v2.yaml",
+  "max_world_ticks": 40,
+  "snapshot_save": false,
+  "runtime_config": {
+    "LLM_CLIENT": "litellm",
+    "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash",
+    "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
+    "OPENROUTER_PROVIDER": "DeepInfra",
+    "LLM_REASONING_EFFORT": "low",
+    "LLM_MAX_OUTPUT_TOKENS": 4096,
+    "LLM_TURN_PARALLEL_WORKERS": 2,
+    "MEMO_TOOLS_ENABLED": true,
+    "BEING_EPISODE_INDEX_ENABLED": true,
+    "BEING_EPISODE_INDEX_LIMIT": 10,
+    "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
+    "PLAY_WAKE_WAITING_AFTER_ROUNDS": 3,
+    "SCENARIO_RANDOM_SEED": 42,
+    "ASYNC_EVENT_WORKERS": 2,
+    "ASYNC_EVENT_MAX_PENDING": 100,
+    "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS": 60
+  }
+}
