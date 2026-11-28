@@ -152,7 +152,7 @@ class GroupMembership:                            # 世界に 1 つ
 
 
 class WorldClock:                                 # 世界に 1 つ。time_of_day は昼夜を宣言した世界だけ
-    def advance(self, day_night: DayNightDeclaration | NoDayNight, facts: WorldFacts) -> None: ...   # 時間帯が変わったら、facts で知らせの相手を選んで TimeOfDayChangedEvent に載せる (D2203)
+    def advance(self, day_night: DayNightDeclaration | NoDayNight) -> None: ...   # 時間帯が変わったら TimeOfDayChangedEvent をためる。知らせの相手は載せない (D2330)
 
     def now(self) -> WorldTick: ...
     def time_of_day(self, day_night: DayNightDeclaration) -> TimeOfDay: ...
@@ -461,7 +461,7 @@ GroupDecisionReachedEvent, GroupDecisionUnresolvedEvent
 PersonActedEvent, ActionAttemptFailedEvent
 ```
 
-- `TimeOfDayChangedEvent` は、時間帯の知らせの相手 (`audience`) を載せる。刺激に変える役は世界を読まないので、変わった時点で選んでおく (D2203)
+- `TimeOfDayChangedEvent` は、時間帯が変わった事実だけを持ち、知らせの相手を載せない。相手は刺激に変える役が tick の終わりの世界から選ぶ (D2330)
 - 前後の値で反応するハンドラのために、状態の変化のイベントは変わる前と後の値を持つ (`ItemStateChangedEvent`、`WeatherChangedEvent`、`TimeOfDayChangedEvent`、`SpotAtmosphereChangedEvent`)
 - `ItemHeldEvent` / `ItemPutAwayEvent` / `ItemGivenUpEvent` は持ち主と品物を持つ。`PersonInventory` は持ち主の場所を知らないので、場所は受けるハンドラが `Whereabouts` で引く。`ItemGivenUpEvent` は、手に持っていたかも持つ (手放したあとでは引けないため)
 - 状態が変わらない操作 (同じ値への `set`、現れている物の `reveal`、手にある物の `hold` など) は、断らず、イベントも出さない。断ると `CommandScope` ごと巻き戻り、同じ効果を当て直す出来事や反応が全体を止めるため

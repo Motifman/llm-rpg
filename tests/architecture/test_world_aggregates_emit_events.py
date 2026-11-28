@@ -236,14 +236,6 @@ _CHANGES_EVERY_TICK = WeatherDeclaration(
 )
 
 
-class _FactsNotRead:
-    def __getattr__(self, name: str) -> object:
-        raise AssertionError(f"read facts.{name} while advancing a clock without day and night")
-
-
-_FACTS_NOT_READ: Any = _FactsNotRead()
-
-
 def _cleared(aggregate: AggregateRoot[Any]) -> None:
     aggregate.clear_events()
 
@@ -603,7 +595,7 @@ _STATE_CHANGING_CALLS: dict[str, Callable[[], _PreparedCall]] = {
         Weather.from_declaration(_WORLD, _CHANGES_EVERY_TICK),
         lambda w: w.pass_time(WorldTick(1), _CHANGES_EVERY_TICK, FractionsInOrder((0.8,))),
     ),
-    "WorldClock.advance": lambda: _with(WorldClock.start(_WORLD), lambda c: c.advance(NoDayNight(), _FACTS_NOT_READ)),
+    "WorldClock.advance": lambda: _with(WorldClock.start(_WORLD), lambda c: c.advance(NoDayNight())),
     "WorldStage.enter": lambda: _with(
         WorldStage.from_initial_stage(_WORLD, _stage("before_dawn"), _NOW),
         lambda s: s.enter(_stage("dawn"), WorldTick(1)),

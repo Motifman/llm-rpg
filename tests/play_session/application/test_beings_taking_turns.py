@@ -19,9 +19,11 @@ from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.short_term_memory import Attempt, MemoryOperationOutcome, ObservedOutcome, Perception
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
+from ai_rpg_world.game_world.application.deliver_perception import DeliverPerceptionCommand
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldConditionsSettling
+from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.value_object import (
     Count,
     FlagId,
@@ -33,6 +35,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     StateKeyId,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.value_object.readiness_to_act import FreeToAct
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsAtOnce
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, PlayStopped, WorldEnded
@@ -46,7 +49,7 @@ from ai_rpg_world.play_session.domain.turn_rounds import (
     TurnFinishedEvent,
     TurnSkipReason,
 )
-from tests.play_session.mine_village_session import WORLD, MineVillageSession
+from tests.play_session.mine_village_session import WORLD, MineVillageSession, door_breaks_at
 
 _GEN = PersonId("gen")
 
@@ -122,6 +125,100 @@ def _ready_to_start_the_lift(session: WorldSession) -> None:
     world.inventory(_GEN).receive(key, ItemSpecId("lift_key"), WorldTick(0))
     world.whereabouts().teleport(PersonBody(_GEN), nouns.spot_of(SpotId("lift_landing")), now)
     world.whereabouts().enter_section(PersonBody(_GEN), nouns.section_of(SpotSectionId("cage")), frozenset())
+
+
+class _DoorBreaksWhileGenChooses(_AnswersByPerson):
+    """ゲンに頼まれているあいだに、ゲンのいる南の横坑口で扉が壊れたことを世界から届ける。"""
+
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        if self._session.turn_rounds.get(WORLD).due_turns()[0] == _GEN:
+            self._session.deliver_perception(
+                DeliverPerceptionCommand(
+                    cause=TimePassed(), from_actions=(door_breaks_at(SpotId("south_adit_mouth")),), from_states=()
+                )
+            )
+        return super().choose_action(messages, tools, reasoning_off=reasoning_off)
+
+
+class _DoorBreaksAndGenFails(_DoorBreaksWhileGenChooses):
+    """扉が壊れたことを届けたあと、ゲンの呼び出しだけを LLM の時間切れのように落とす。"""
+
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        reply = super().choose_action(messages, tools, reasoning_off=reasoning_off)
+        if self.asked[-1] == _GEN:
+            raise TimeoutError("no reply in 95 seconds")
+        return reply
+
+
+class TestChoosingOneByOne:
+    """BeingsTakingTurnsOneByOne が、1 人ずつ選び始めと選び終わりを巡りに伝え、選んでいるあいだに届いた観測をターンの後に回すことを保証する。"""
+
+    def test_what_gen_perceived_while_choosing_comes_after_his_own_result(self) -> None:
+        """1 人ずつ回すとき、ゲンが選んでいるあいだに南の横坑口で扉が壊れると、ゲンの短期記憶には自分の試みのあとに「扉が壊れた」が並ぶ。"""
+        session = MineVillageSession(round_limit=1).started()
+        answers = _DoorBreaksWhileGenChooses(session, {})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        gens = session.short_term_memories.get(BeingId(_GEN.value)).unsummarized()
+        kinds = [
+            "own" if isinstance(e, Attempt) else e.observation.body
+            for e in gens
+            if isinstance(e, Attempt) or (isinstance(e, Perception) and "扉" in e.observation.body)
+        ]
+        assert kinds == ["own", "扉が壊れた"]
+
+    def test_what_gen_perceives_from_his_own_action_reaches_him_before_his_turn_ends(self) -> None:
+        """1 人ずつ回すとき、ゲンがカンテラを灯すと、自分の行為で届いた「カンテラの灯を入手しました。」は預からず、ゲンのターンを終えるより前に渡る。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        session.scope.run(_ready_to_start_the_lift)
+        answers = _AnswersByPerson(
+            session, {_GEN: [_reply("interact", "light", target="カンテラ", how="油を足して灯す")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        gens = [
+            "finished" if isinstance(e, TurnFinishedEvent) else e.observation.body.template
+            for e in session.turn_round_events
+            if getattr(e, "person", None) == _GEN and isinstance(e, (TurnFinishedEvent, ObservationPassedOnEvent))
+        ]
+        assert gens.index("カンテラの灯を入手しました。") < gens.index("finished")
+
+    def test_what_gen_perceived_while_his_call_failed_reaches_him_after_the_failed_turn(self) -> None:
+        """1 人ずつ回すとき、ゲンが選んでいるあいだに扉が壊れ、そのあとゲンの呼び出しが落ちても、「扉が壊れた」は失敗したターンを終えたあとにゲンへ渡る。"""
+        session = MineVillageSession(round_limit=1).started()
+        answers = _DoorBreaksAndGenFails(session, {})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        gens = [
+            "finished" if isinstance(e, TurnFinishedEvent) else e.observation.body.template
+            for e in session.turn_round_events
+            if getattr(e, "person", None) == _GEN and isinstance(e, (TurnFinishedEvent, ObservationPassedOnEvent))
+        ]
+        assert gens[-2:] == ["finished", "扉が壊れた"]
+        assert "扉が壊れた" in [
+            e.observation.body
+            for e in session.short_term_memories.get(BeingId(_GEN.value)).unsummarized()
+            if isinstance(e, Perception)
+        ]
+
+    def test_what_an_earlier_turn_caused_reaches_the_next_person_before_choosing(self) -> None:
+        """1 人ずつ回すとき、先に回るゲンがふつうの声で話すと、あとに回るサヨが選ぶときのプロンプトに、もうその言葉が出ている。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        answers = _AnswersByPerson(
+            session, {_GEN: [_reply("speak", "g1", reach="ふつうの声で話す", content="灯りを点けよう")]}
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        [sayos] = [prompt for person, prompt in answers.prompts if person == PersonId("sayo")]
+        assert "ゲンが「灯りを点けよう」と言った。" in sayos
 
 
 class TestBeingsTakingTurnsOneByOne:
@@ -527,6 +624,9 @@ class TestEpisodesWrittenWhileTakingTurns:
         try:
             session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
             assert session.memory_writing.finish(BeingId(_GEN.value)) is True
+            rounds = session.turn_rounds.get(WORLD)
+            rounds.open_round({_GEN: FreeToAct()})
+            session.turn_rounds.save(rounds)
             list(session.beings_taking_turns(next_turn).take_turns([_GEN]))
         finally:
             session.memory_writing.shutdown()
@@ -802,7 +902,7 @@ class TestThinkingAtOnceIsCapped:
         """上限を 2 にすると、4 人にターンがあっても、同時に考えるのは 2 人まで。"""
         session = MineVillageSession(round_limit=1).started()
         completion = _CountingThinkers()
-        takers = BeingsTakingTurnsAtOnce(session.turn_steps(completion), session.turn_rounds, max_thinking=2)
+        takers = BeingsTakingTurnsAtOnce(session.turn_steps(completion), max_thinking=2)
 
         session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
@@ -844,7 +944,6 @@ class TestLettingGoUnderTheCap:
         session = MineVillageSession(round_limit=1).started()
         takers = BeingsTakingTurnsAtOnce(
             session.turn_steps(_SlowAfterTheFirst()),
-            session.turn_rounds,
             max_thinking=1,
         )
         # 1 人目のターンを終えたところで、世界が終わったと答える
@@ -866,7 +965,6 @@ class TestLettingGoUnderTheCap:
         with pytest.raises(ValueError):
             BeingsTakingTurnsAtOnce(
                 session.turn_steps(_CountingThinkers()),
-                session.turn_rounds,
                 max_thinking=0,
             )
 

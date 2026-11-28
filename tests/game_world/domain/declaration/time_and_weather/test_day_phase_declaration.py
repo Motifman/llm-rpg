@@ -107,14 +107,14 @@ class TestDayPhaseAddressees:
 
 
 class TestDayPhaseAnnouncement:
-    """DayPhaseDeclaration.stimuli_when_entered が、時間帯に入ったことを、選んだ相手への目立たない世界の知らせにすることを保証する。"""
+    """DayPhaseDeclaration.stimuli_when_entered が、時間帯に入ったことを、その時点の世界で決まる相手への目立たない世界の知らせにすることを保証する。"""
 
     def test_announcement_becomes_a_background_announcement_to_the_addressees(self) -> None:
-        """朝に入ると、ハルとゲンに宛てた目立たない世界の知らせ「空が白み、朝になった。」になる。"""
-        [stimulus] = _morning(EveryoneAwake()).stimuli_when_entered(frozenset({_HARU, _GEN}), _AT)
+        """広場にいる人を相手に書いた朝に入ると、相手に選ばれて起きている広場のハルと去ったトモに宛てた、目立たない世界の知らせ「空が白み、朝になった。」になる。"""
+        [stimulus] = _morning(_outdoors()).stimuli_when_entered(_village().facts(), _AT)
 
         assert stimulus == AnnouncementStimulus(
-            audience=frozenset({_HARU, _GEN}),
+            audience=frozenset({_HARU, _TOMO}),
             text=_MORNING.about({}),
             salience=Background(),
             at=_AT,
@@ -125,4 +125,4 @@ class TestDayPhaseAnnouncement:
         """知らせの文を書いていない時間帯に入っても、刺激を作らない。"""
         phase = replace(_morning(EveryoneAwake()), announcement=NoAnnouncement())
 
-        assert phase.stimuli_when_entered(frozenset({_HARU}), _AT) == ()
+        assert phase.stimuli_when_entered(_village().facts(), _AT) == ()

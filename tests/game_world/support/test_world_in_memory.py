@@ -308,7 +308,7 @@ class TestFactsSeeWhatAggregatesChanged:
             world_stage=WorldStage.from_initial_stage(_WORLD, _DAY, WorldTick(0)), stage_declarations=(_DAY, _NIGHT)
         )
         for _ in range(2):
-            world.clock().advance(NoDayNight(), world.facts())
+            world.clock().advance(NoDayNight())
 
         world.aggregates().world_stage().enter(_NIGHT, world.facts().now())
 
@@ -465,8 +465,8 @@ class TestClockPeopleAndNouns:
         """時計を 2 回進めると、now と clock の now は tick 2。"""
         world = _world()
 
-        world.clock().advance(NoDayNight(), world.facts())
-        world.clock().advance(NoDayNight(), world.facts())
+        world.clock().advance(NoDayNight())
+        world.clock().advance(NoDayNight())
 
         assert world.facts().now() == WorldTick(2)
         assert world.facts().clock().now() == WorldTick(2)
@@ -489,7 +489,7 @@ class TestClockPeopleAndNouns:
         )
         world = _world(day_night=day_night)
 
-        world.clock().advance(day_night, world.facts())
+        world.clock().advance(day_night)
 
         assert world.facts().day_night() == day_night
         assert world.facts().clock().time_of_day(day_night) == TimeOfDay(7)

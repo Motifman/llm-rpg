@@ -10,6 +10,7 @@ from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import CommonRuleRefusal
 from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.condition import FailureReason, HiddenFailure
+from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextAboutPeople
 from ai_rpg_world.game_world.domain.perception import Background, BodilyStimulus, Stimulus
@@ -32,12 +33,19 @@ class WorldStateRefusal:
     code: RefusalCode
 
 
+_WORLD_ALREADY_ENDED = WorldStateRefusal(RefusalCode(WorldAlreadyEndedException.error_code))
+
+
 @final
 @dataclass(frozen=True)
 class ActionRefusal:
     attempt: ActionAttempt
     reason: CommonRuleRefusal | PreconditionRefusal | WorldStateRefusal
     text: TextAboutPeople
+
+    def leaves_a_record(self) -> bool:
+        # 終わった世界は、断られた試みの記録も含めて変えない
+        return self.reason != _WORLD_ALREADY_ENDED
 
     def outcome_for_actor(self, design: WorldDesign, situation: ActorSituation) -> ActionOutcomeForActor:
         # 断られる前に使い切られた品物は名前を引けないので、要約を出さない

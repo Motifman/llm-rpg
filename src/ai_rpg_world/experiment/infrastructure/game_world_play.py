@@ -250,7 +250,7 @@ class GameWorldPlay:
             ObservationExit(world, day_night, design.clock_wording, HandObservationToBeing(world, turn_rounds)),
             self.perception_reports,
         )
-        distributor.register_receiver(DeliverPerceptionOfCommittedEvents(design, deliver_perception))
+        distributor.register_receiver(DeliverPerceptionOfCommittedEvents(scope, design, deliver_perception))
 
         self._start = StartPlaySession(
             open_world=OpenWorld(self._store),
@@ -311,19 +311,18 @@ class GameWorldPlay:
             describe_result=DescribeActionResult(scope, design, day_night),
             receive_result=ReceiveActionResult(short_term_memories, clock),
             end_being_turn=EndBeingTurn(short_term_memories, clock),
+            turn_rounds=turn_rounds,
         )
         self._play_rounds = PlayRounds(
             casts=casts,
             turn_rounds=turn_rounds,
             # 同じシードで同じ並びを再現したいとき (fuzz) は、返事の順にスレッドの都合が入らないよう 1 人ずつ頼む
-            turn_takers=BeingsTakingTurnsAtOnce(steps, turn_rounds, max_thinking=settings.turn_parallel_workers)
+            turn_takers=BeingsTakingTurnsAtOnce(steps, max_thinking=settings.turn_parallel_workers)
             if turns_at_once
             else BeingsTakingTurnsOneByOne(steps),
             check_readiness=CheckReadinessToAct(scope),
             world_has_ended=WorldHasEnded(scope),
-            accept_time_passage=AcceptWorldTimePassage(
-                scope, PassWorldTime(scope), SettleWorldConditions(scope, design)
-            ),
+            accept_time_passage=AcceptWorldTimePassage(PassWorldTime(scope), SettleWorldConditions(scope, design)),
         )
         self._end_play = EndPlaySession(
             casts=casts,

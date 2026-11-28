@@ -5,6 +5,7 @@ from typing import Any, final
 
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.objects_and_items.ground_items import (
     GroundItemPlacedEvent,
@@ -158,8 +159,8 @@ def _outcome_decided(event: PersonOutcomeDecidedEvent, design: WorldDesign) -> t
     return event.outcome.announced_to(event.person, event.at)
 
 
-def _time_of_day_changed(event: TimeOfDayChangedEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
-    return design.day_night.phase_named(event.after).stimuli_when_entered(event.audience, event.at)
+def _time_of_day_changed(event: TimeOfDayChangedEvent, design: WorldDesign, facts: WorldFacts) -> tuple[Stimulus, ...]:
+    return design.day_night.phase_named(event.after).stimuli_when_entered(facts, event.at)
 
 
 def _ran_out(event: ItemRanOutEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
@@ -188,6 +189,11 @@ _TRANSLATIONS: dict[type[DomainEvent], Callable[[Any, WorldDesign], tuple[Stimul
     JointActionCompletedEvent: _joint_completed,
     JointActionTimedOutEvent: _joint_timed_out,
     PersonOutcomeDecidedEvent: _outcome_decided,
+}
+
+_TRANSLATIONS_READING_THE_WORLD: dict[
+    type[DomainEvent], Callable[[Any, WorldDesign, WorldFacts], tuple[Stimulus, ...]]
+] = {
     TimeOfDayChangedEvent: _time_of_day_changed,
 }
 
@@ -255,12 +261,14 @@ NOT_PERCEIVED_EVENT_KINDS: frozenset[type[DomainEvent]] = frozenset(
 class StimulusTranslator:
     @classmethod
     def translated_kinds(cls) -> frozenset[type[DomainEvent]]:
-        return frozenset(_TRANSLATIONS)
+        return frozenset((*_TRANSLATIONS, *_TRANSLATIONS_READING_THE_WORLD))
 
-    def stimuli_of(self, event: DomainEvent, design: WorldDesign) -> tuple[Stimulus, ...]:
+    def stimuli_of(self, event: DomainEvent, design: WorldDesign, facts: WorldFacts) -> tuple[Stimulus, ...]:
         kind = type(event)
         if kind in NOT_PERCEIVED_EVENT_KINDS:
             return ()
+        if kind in _TRANSLATIONS_READING_THE_WORLD:
+            return _TRANSLATIONS_READING_THE_WORLD[kind](event, design, facts)
         if kind not in _TRANSLATIONS:
             raise UntranslatedEventKindError(
                 f"{kind.__name__} is neither translated into stimuli nor listed as not perceived"

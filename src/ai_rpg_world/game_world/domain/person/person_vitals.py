@@ -57,6 +57,12 @@ from ai_rpg_world.game_world.domain.value_object import (
     Rate,
     WorldTick,
 )
+from ai_rpg_world.game_world.domain.value_object.readiness_to_act import (
+    FreeToAct,
+    InTheMiddleOfAction,
+    ReadinessToAct,
+    UnableToAct,
+)
 from ai_rpg_world.game_world.domain.whereabouts.occupant import DepartedPerson, Occupant, PersonBody
 
 if TYPE_CHECKING:
@@ -247,6 +253,17 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
 
     def can_act(self) -> bool:
         return isinstance(self._life_state, Alive)
+
+    def acts_in_living_body(self, outcome_undecided: bool) -> bool:
+        return self.can_act() and outcome_undecided
+
+    def readiness_to_act(self, now: WorldTick, outcome_undecided: bool) -> ReadinessToAct:
+        # 死者が動ける世界でも、死者にはターンを回さない
+        if not self.acts_in_living_body(outcome_undecided):
+            return UnableToAct()
+        if self.is_busy(now):
+            return InTheMiddleOfAction()
+        return FreeToAct()
 
     def life_state(self) -> LifeState:
         return self._life_state

@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.domain.declaration.verb.happening_declaration impor
 from ai_rpg_world.game_world.domain.declaration.verb.joint_action_declaration import JointActionDeclaration
 from ai_rpg_world.game_world.domain.declaration.verb.reaction_declaration import ReactionDeclaration
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
+from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.value_object import WorldTick
 from ai_rpg_world.game_world.domain.value_object.reaction_id import ReactionId
 from ai_rpg_world.game_world.domain.world_records.joint_action_progress import JointActionSettlement
@@ -33,7 +34,10 @@ class SettleWorldConditions:
         self._design = design
 
     def __call__(self, command: SettleWorldConditionsCommand) -> None:
-        self._scope.run(lambda session: _Settling(session, self._design, command.occasion).settle())
+        try:
+            self._scope.run(lambda session: _Settling(session, self._design, command.occasion).settle())
+        except WorldAlreadyEndedException:
+            return
 
 
 @final
@@ -46,6 +50,7 @@ class _Settling:
         self._fired_reactions: set[ReactionId] = set()
 
     def settle(self) -> None:
+        self._session.ending().admit_change()
         # 出来事は 1 tick に 1 回、反応と二人で合わせる操作は 1 回の落ち着かせに 1 回までなので、発火のある回は宣言の数を超えない。
         # 超えたら帳簿か発火の記録の誤りで、上限が無いとイベントをためながら回り続ける
         round_limit = (

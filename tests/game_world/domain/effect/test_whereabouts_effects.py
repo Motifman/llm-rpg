@@ -107,8 +107,8 @@ class TestTeleportEffect:
     def test_arrival_is_stamped_with_the_world_tick_now(self) -> None:
         """時計が 2 tick 進んだ世界で Alice を井戸へ移すと、井戸に入ったイベントの at は 2 tick になる。"""
         world = _world(vitals(ALICE))
-        world.clock().advance(NoDayNight(), world.facts())
-        world.clock().advance(NoDayNight(), world.facts())
+        world.clock().advance(NoDayNight())
+        world.clock().advance(NoDayNight())
 
         TeleportEffect(_named(ALICE), _WELL).apply(world.facts(), world.aggregates(), _QUAKE)
 

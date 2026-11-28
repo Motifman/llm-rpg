@@ -960,7 +960,7 @@ class _Village:
     def votes_and_waits_it_out(self, attempt: GroupDecisionBallotAttempt) -> None:
         self.votes(attempt)
         for _ in range(self.design.world_rules.action_durations[ActionKind.CAST_BALLOT].value):
-            self.scope.run(lambda session: session.clock().advance(self.design.day_night, session.facts()))
+            self.scope.run(lambda session: session.clock().advance(self.design.day_night))
 
 
 def _ballots(actions: tuple[AvailableAction, ...]) -> list[AvailableAction]:

@@ -7,7 +7,7 @@ class OpenWorld:
 class AdvanceWorldTick:
     def __call__(self, command: AdvanceWorldTickCommand) -> None:
         # 1. PassWorldTime                → ハンドラを全部済ませる
-        #    時間帯が変わったら、宣言の audience でその時点の相手を選び、TimeOfDayChangedEvent に載せる (D2203)
+        #    時間帯が変わったら TimeOfDayChangedEvent をためる。知らせの相手は、刺激に変えるときに tick の終わりの世界から選ぶ (D2330)
         # 2. SettleWorldConditions        → ハンドラを全部済ませる
         # 1 tick が現実の何秒かは実行の設定で決める
         ...
@@ -197,10 +197,10 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 
 ## 世界と外側
 
-- 入口は、行為を受け付ける `AcceptAction` と、時間を進める要求を受け付ける `AcceptWorldTimePassage`。どちらも 1 回の呼び出しで 1 つを同期で確定させる。世界の側に待ち行列は持たない
+- 入口は、選んだ行為を受け付ける `TakeChosenAction` と、時間を進める要求を受け付ける `AcceptWorldTimePassage`。どちらも 1 回の呼び出しで 1 つを同期で確定させる。世界の側に待ち行列は持たない
 - 届いた順に 1 つずつ呼ぶのも、同時に呼ばないのも、外側の責任
-- 世界が終わったあとに届いた行為と時間を進める要求は、どちらも断り、世界を変えない。規則は `WorldEnding.admit_change` が持つ。行為には「世界はもう終わった」の文 (`RefusalTexts.world_state`) で `ActionRefused` を返し、断られた試みは記録しない。時間には `WorldTimePassageRefused` を返す。外側は、返事か `WorldHasEnded` で終わりを知る (D2218)
-- 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つのコマンドの確定が 1 つの `CommandScope`。終わっていないかの確かめと `SettleWorldConditions` は、それぞれ別の範囲) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
+- 世界が終わったあとに届いた行為と時間を進める要求は、どちらも断り、世界を変えない。規則は `WorldEnding.admit_change` が持ち、世界を変える取引 (行為の確定、時間の経過、落ち着かせ) の頭で呼ぶ。行為には「世界はもう終わった」の文 (`RefusalTexts.world_state`) で `ActionRefused` を返し、断られた試みは記録しない。時間には `WorldTimePassageRefused` を返す。外側は、返事か `WorldHasEnded` で終わりを知る (D2218)
+- 世界がするのは、コマンドを届いた順に 1 つずつ確定させること (1 つのコマンドの確定が 1 つの `CommandScope`。`SettleWorldConditions` は別の範囲) と、時間を進めること (`AdvanceWorldTick`) だけ。同時に最後の 1 席を取りに来たら、先に確定したほうが通る
 - `SettleWorldConditions` は、1 つのコマンドが確定するたびと、時間を進めるたびに回す
 - Being が世界に入るとき、外側は問い合わせ `BriefEnteringPerson` に、その人と立場 (`CharacterBriefing.known_facts`)・目的 (`CharacterBriefing.objective`) を渡す。世界は、導入 (`WorldIntroduction.text`)、世界の前提 (`WorldIntroduction.premises`)、立場を、`BriefingHeadings` の見出しの違う `Description` にした案内 (`Orientation`) と、課す目的の文と、最初から知っている人 (`knows_at_start`) を返す。外側は、知っている人を Being の名前に変えて紹介 (`EnvironmentEntry.introductions`) にし、目的を課された目的 (`EnvironmentEntry.imposed_goal`) で渡す。世界は Being の名前を知らないため (D2222、#2229)
 - 外側は、Being を世界に入れる前に、入口 `NamePerson` で Being の名前を世界の名簿 (`PeopleRegister`) に付ける。名前を付けていない人が出てくる観測は作れない (D2229-3)
@@ -216,7 +216,7 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 2. ActionPrerequisiteCheck.cleared (行っているあいだは Busy。話すことだけはできる。通ったら暗がりの誰かに向けた相手をその場から選ぶ)
 3. 行為ごとの前提 (InteractionDeclaration.precondition など)
 4. 世界を変える (Effect.apply、または専用のモデルの集約)
-   世界を変える前に、行う人の状況 (ActorSituation.of) と、人ごとの居場所 (PeopleWhoWereThere.before_the_effect) を読む (D2216)
+   世界を変える前に、行う人の状況・人ごとの居場所・本人に返す結末を ActionAttempt.fixed_before_effect で 1 つの値 (ActionFixedBeforeEffect) にする (D2216、D2327)
    最後に、体を使う行為なら PersonVitals.exert、PersonVitals.start_action (行っているあいだ)、LatestActions.note (PersonActedEvent。効果の前の居場所を present に載せる)、
    ScenarioProgress.note_joint_action_part_done (どの二人で合わせる操作のどの部分に当たるかは帳簿が決める。D2173)
 ──
@@ -224,7 +224,7 @@ class DropMonsterLootHandler(EventHandler[MonsterDiedEvent]): ...   # 死んだ�
 6. SettleWorldConditions (別の範囲。断られたときも回す)
 7. コマンドへの返事 (通った / 断られた理由) を返す
 
-1 と 2 のあいだで、`AcceptAction` が世界が終わっていないかを確かめる。2〜5 は行為ごとのユースケースを呼べば済み、6 と 7 は `AcceptAction` が受け持つ。2〜4 と断られたときは、共通の流れ `CarryOutAction` が受け持つ。行為ごとのユースケースは、行為の試みを持つコマンド (`StartTravelCommand(attempt: TravelAttempt)` など) を受け、`ActionSteps` の 2 つ (3 の `unmet_precondition` と、4 で世界を変えて行っているあいだの長さを返す `change_world`) だけを書く。返事は `ActionDone()` か `ActionRefused(refusal: ActionRefusal)` (#2146)
+2 の前に、同じ範囲の中で `WorldEnding.admit_change` が世界が終わっていないかを確かめる。2〜5 は行為ごとのユースケースを呼べば済み、6 と 7 は `TakeChosenAction` が受け持つ。2〜4 と断られたときは、共通の流れ `CarryOutAction` が受け持つ。行為ごとのユースケースは、行為の試みを持つコマンド (`StartTravelCommand(attempt: TravelAttempt)` など) を受け、`ActionSteps` の 2 つ (3 の `unmet_precondition` と、4 で世界を変えて行っているあいだの長さを返す `change_world`) だけを書く。返事は `ActionDone(attempt, outcome)` か `ActionRefused(refusal, outcome)` で、本人に返す文と要約 (`ActionOutcomeForActor`) は確定または断りを記録する範囲の中で決まる (#2146、D2327)
 
 ```python
 class ActionSteps(Protocol[_Attempt]):

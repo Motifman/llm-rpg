@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
-from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal
+from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, WorldStateRefusal
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import TooTired
 from ai_rpg_world.game_world.domain.action.interaction_attempts import ObjectInteractionAttempt
 from ai_rpg_world.game_world.domain.action.manner import Openly
+from ai_rpg_world.game_world.domain.action.refusal_code import RefusalCode
 from ai_rpg_world.game_world.domain.condition.subject import Anyone
 from ai_rpg_world.game_world.domain.exception.game_world_exception import RepeatedMementoKeyException
+from ai_rpg_world.game_world.domain.exception.whereabouts_exception import SectionFullException
+from ai_rpg_world.game_world.domain.exception.world_progress_exception import WorldAlreadyEndedException
 from ai_rpg_world.game_world.domain.exception.world_records_exception import LatestActionsDisagreeWithAnyoneException
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
@@ -133,6 +138,29 @@ class TestLatestActionsFailedAttempt:
             DepartedPerson(_ALICE),
             {ItemInstanceId("item_1"): ItemSpecId("rope")},
         )
+
+    def test_refusal_because_the_world_has_ended_records_no_event(self) -> None:
+        """世界がもう終わったことで断られた試みは、ActionAttemptFailedEvent をためず、最後に行った行為も変えない。"""
+        latest = LatestActions.start(_WORLD)
+        ended = replace(
+            _refusal_of(_ALICE_SEARCHES), reason=WorldStateRefusal(RefusalCode.of(WorldAlreadyEndedException()))
+        )
+
+        latest.note_failed_attempt(ended, situation_for_tests(), WorldTick(5))
+
+        assert latest.get_events() == []
+        assert latest.last_done_at(_ALICE, ActionKind.SEARCH) == NeverDone()
+
+    def test_refusal_by_another_world_state_still_records_event(self) -> None:
+        """世界の終わり以外の世界の状態 (籠が満員) で断られた試みは、今までどおり ActionAttemptFailedEvent をためる。"""
+        latest = LatestActions.start(_WORLD)
+        full = replace(_refusal_of(_ALICE_SEARCHES), reason=WorldStateRefusal(RefusalCode.of(SectionFullException())))
+
+        latest.note_failed_attempt(full, situation_for_tests(), WorldTick(5))
+
+        [event] = latest.get_events()
+        assert isinstance(event, ActionAttemptFailedEvent)
+        assert event.refusal == full
 
 
 def _refusal_of(attempt: ActionAttemptForTests) -> ActionRefusal:

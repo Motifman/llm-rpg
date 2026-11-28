@@ -24,10 +24,11 @@ class PassWorldTime:
 
 
 def _pass_one_tick(session: WorldSession) -> None:
+    session.ending().admit_change()
     facts = session.facts()
     world = session.aggregates()
     clock = session.clock()
-    clock.advance(facts.day_night(), facts)
+    clock.advance(facts.day_night())
     now = clock.now()
     world.whereabouts().advance_travels(facts.passages().closed_passages(), now)
     rules = facts.rules()

@@ -6,7 +6,6 @@ from typing import final
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, OwnActionResult, TextWithPeople
 from ai_rpg_world.game_world.application.action.action_reply import ActionReply
 from ai_rpg_world.game_world.application.command_scope import CommandScope
-from ai_rpg_world.game_world.application.observation_exit import observed_time_of
 from ai_rpg_world.game_world.application.take_chosen_action import TurnGuidance
 from ai_rpg_world.game_world.application.world_perception_senses import WorldPerceptionSenses
 from ai_rpg_world.game_world.application.world_store import WorldSession
@@ -46,5 +45,5 @@ class DescribeActionResult:
         self, session: WorldSession, reply: ActionReply | TurnGuidance
     ) -> tuple[str | TextWithPeople, TextWithPeople | None, ObservedTime]:
         view = WorldPerceptionSenses(session.facts()).view_for(reply.actor())
-        time = observed_time_of(self._day_night.day_and_clock_time_at(session.clock().now()), self._clock)
+        time = self._clock.observed_time_at(session.clock().now(), self._day_night)
         return reply.result_for_actor(view), reply.summary_for_actor(view), time

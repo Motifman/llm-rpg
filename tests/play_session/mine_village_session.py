@@ -18,8 +18,6 @@ from ai_rpg_world.being.application.receive_action_result import ReceiveActionRe
 from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisodesOnLeaving
 from ai_rpg_world.being.application.writing_circumstances import CircumstancesOfBeings
 from ai_rpg_world.being.contract import OfferedBeingTools
-from ai_rpg_world.being.domain.being import Being
-from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_being_repository import InMemoryBeingRepository
@@ -175,7 +173,9 @@ class MineVillageSession:
             PerceptionReportsReceived(),
         )
         if delivers_world_events:
-            distributor.register_receiver(DeliverPerceptionOfCommittedEvents(scenario.design, self.deliver_perception))
+            distributor.register_receiver(
+                DeliverPerceptionOfCommittedEvents(scope, scenario.design, self.deliver_perception)
+            )
         self.episodes = InMemoryEpisodeRepository(handoff=discard_events)
         self.memo_books = InMemoryMemoBookRepository(handoff=discard_events)
         self.visited_places = InMemoryVisitedPlacesRepository()
@@ -204,7 +204,7 @@ class MineVillageSession:
         return BeingsTakingTurnsOneByOne(self.turn_steps(completion))
 
     def beings_taking_turns_at_once(self, completion: ActionChoosingCompletion) -> BeingsTakingTurnsAtOnce:
-        return BeingsTakingTurnsAtOnce(self.turn_steps(completion), self.turn_rounds)
+        return BeingsTakingTurnsAtOnce(self.turn_steps(completion))
 
     def turn_steps(self, completion: ActionChoosingCompletion) -> BeingTurnSteps:
         design = _scenario().design
@@ -248,6 +248,7 @@ class MineVillageSession:
             describe_result=DescribeActionResult(self.scope, design, day_night),
             receive_result=ReceiveActionResult(self.short_term_memories, self.clock),
             end_being_turn=EndBeingTurn(self.short_term_memories, self.clock),
+            turn_rounds=self.turn_rounds,
         )
 
     def play_rounds(self, turn_takers: TurnTakers, *, world_has_ended: WorldHasEnded | None = None) -> PlayRounds:
@@ -259,7 +260,7 @@ class MineVillageSession:
             check_readiness=CheckReadinessToAct(self.scope),
             world_has_ended=world_has_ended or WorldHasEnded(self.scope),
             accept_time_passage=AcceptWorldTimePassage(
-                self.scope, PassWorldTime(self.scope), SettleWorldConditions(self.scope, design)
+                PassWorldTime(self.scope), SettleWorldConditions(self.scope, design)
             ),
         )
 
