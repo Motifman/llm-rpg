@@ -153,7 +153,7 @@ class _PlayStoppingWith:
     def __init__(self, stopped: PlayStopped | Exception) -> None:
         self._stopped = stopped
 
-    def play(self, log: object = None) -> GameWorldPlayResult:
+    def play(self, log: object = None, **_: object) -> GameWorldPlayResult:
         if isinstance(self._stopped, Exception):
             raise self._stopped
         return GameWorldPlayResult(
@@ -212,7 +212,7 @@ class TestGameWorldTraceOfTheRun:
         assert "game_world.observation_passed_on" in kinds
 
     def test_world_events_and_perception_are_in_the_trace(self, tmp_path: Path) -> None:
-        """smoke で 3 巡り回すと、時間を進めた世界の出来事が 3 件出て、話した声の知らせは話した本人に「自分の行為」で届かなかったと残る。"""
+        """smoke で 3 巡り回すと、時間を進めた世界の出来事が 3 件出て、話した声の知らせは話した本人に「自分の行為」で届かなかったと残り、行為の出来事はその知らせより前に並ぶ。"""
         out = tmp_path / "run"
 
         main(["--profile", "smoke_stub_game_world", "--out", str(out)])
@@ -228,3 +228,6 @@ class TestGameWorldTraceOfTheRun:
             for m in s["missed_by"]
         ]
         assert "own_act" in missed
+        first_act = next(i for i, e in enumerate(events) if e["payload"].get("event_type") == "PersonActedEvent")
+        first_delivery = next(i for i, e in enumerate(events) if e["kind"] == "game_world.perception_delivered")
+        assert first_act < first_delivery

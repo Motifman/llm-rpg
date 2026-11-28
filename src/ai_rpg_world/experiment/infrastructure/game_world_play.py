@@ -114,6 +114,7 @@ class GameWorldPlayResult:
     finished_turns: int
     failed_choices: tuple[str, ...]
     writing_failures: dict[str, int]
+    trace_failures: int = 0
 
 
 class _PerceptionReportsWritten:
@@ -149,7 +150,6 @@ class GameWorldPlay:
         settings: GameWorldPlaySettings,
         writers: GameWorldWriters,
         round_limit: int,
-        closing: Closing,
         turns_at_once: bool = True,
     ) -> None:
         design = scenario.design
@@ -242,7 +242,7 @@ class GameWorldPlay:
                 episode_index_revision=_EPISODE_INDEX_REVISION if index_shown else None,
                 episode_index_shown=index_shown,
             ),
-            closing=closing,
+            closing=Closing(instruction=design.choice_descriptions.closing),
             describe_scene=DescribeScene(scope, design),
             mark_body_as_shown=MarkBodyAsShown(scope),
             offer_choices=OfferActionChoices(scope, design),
@@ -329,6 +329,7 @@ class GameWorldPlay:
             finished_turns=self._finished_turns,
             failed_choices=tuple(self._failed_choices),
             writing_failures=self.memory_writing.failures(),
+            trace_failures=self._trace.failures,
         )
 
     def _person_of(self, being_id: BeingId) -> PersonId:
@@ -343,7 +344,6 @@ class GameWorldPlay:
         return self._scope.run(lambda session: session.facts().now())
 
     def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
-        self._trace.record_turn_rounds_events(events)
         for event in events:
             if not isinstance(event, TurnFinishedEvent):
                 continue
@@ -352,6 +352,8 @@ class GameWorldPlay:
             if isinstance(event.outcome, ChoiceFailed) and len(self._failed_choices) < _FAILED_CHOICES_KEPT:
                 self._failed_choices.append(event.outcome.reason)
         self._turn_round_dispatcher.handoff(events)
+        # 記録より先に Being へ渡す。記録が落ちても観測は届く
+        self._trace.record_turn_rounds_events(events)
 
 
 def _discard(events: Sequence[DomainEvent]) -> None:

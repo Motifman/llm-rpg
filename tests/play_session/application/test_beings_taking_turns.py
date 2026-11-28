@@ -798,9 +798,7 @@ class TestThinkingAtOnceIsCapped:
         """上限を 2 にすると、4 人にターンがあっても、同時に考えるのは 2 人まで。"""
         session = MineVillageSession(round_limit=1).started()
         completion = _CountingThinkers()
-        takers = BeingsTakingTurnsAtOnce(
-            session.turn_steps(completion, closing="行動を 1 つ選んでください。"), session.turn_rounds, max_thinking=2
-        )
+        takers = BeingsTakingTurnsAtOnce(session.turn_steps(completion), session.turn_rounds, max_thinking=2)
 
         session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
@@ -841,7 +839,7 @@ class TestLettingGoUnderTheCap:
         """上限 1 で 4 人にターンがあり、最初の人のターンのあとで世界が終わると、残りの 3 人の選択は捨てられ、始めていなかった呼び出しはやりとりを持たない。"""
         session = MineVillageSession(round_limit=1).started()
         takers = BeingsTakingTurnsAtOnce(
-            session.turn_steps(_SlowAfterTheFirst(), closing="行動を 1 つ選んでください。"),
+            session.turn_steps(_SlowAfterTheFirst()),
             session.turn_rounds,
             max_thinking=1,
         )
@@ -863,7 +861,25 @@ class TestLettingGoUnderTheCap:
 
         with pytest.raises(ValueError):
             BeingsTakingTurnsAtOnce(
-                session.turn_steps(_CountingThinkers(), closing="行動を 1 つ選んでください。"),
+                session.turn_steps(_CountingThinkers()),
                 session.turn_rounds,
                 max_thinking=0,
             )
+
+
+class TestClosingComesFromTheWorld:
+    """ターンの締めの一文を、世界 (ja_default.yaml の choice_descriptions.closing) が渡すことを保証する。"""
+
+    def test_prompt_ends_with_the_old_runs_closing(self) -> None:
+        """廃坑の山村 v2 でゲンに渡るプロンプトは、古い run と同じ「利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。」で終わる。"""
+        session = MineVillageSession(round_limit=1).started()
+        completion = ScriptedActionChoosing(_murmuring(4))
+
+        session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
+
+        assert (
+            completion.calls[0]
+            .messages[-1]["content"]
+            .rstrip()
+            .endswith("利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。")
+        )

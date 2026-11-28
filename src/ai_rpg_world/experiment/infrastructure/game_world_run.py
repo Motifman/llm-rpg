@@ -7,7 +7,6 @@ from typing_extensions import assert_never
 
 from ai_rpg_world.application.llm.wiring._llm_client_factory import create_llm_client_from_config
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
-from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
 from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
@@ -20,7 +19,6 @@ from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 from ai_rpg_world.play_session.application.play_rounds import ChoosingKeptFailing, RoundLimitReached, WorldEnded
 
 GAME_WORLD = "game_world"
-CLOSING = Closing(instruction="利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。")
 
 
 def prepare_game_world_play(
@@ -33,7 +31,6 @@ def prepare_game_world_play(
         settings=settings,
         writers=game_world_writers(settings),
         round_limit=round_limit,
-        closing=CLOSING,
     )
 
 
@@ -61,6 +58,7 @@ def run_summary(result: GameWorldPlayResult) -> dict[str, Any]:
         "failed_choices": list(result.failed_choices),
         "discarded_choices": discarded,
         "memory_writing_failures": dict(sorted(result.writing_failures.items())),
+        "trace_failures": result.trace_failures,
     }
 
 
