@@ -31,6 +31,7 @@ class ChoiceDescriptions:
     duration_hours: str
     duration_minutes: str
     duration_turns: str
+    closing: str
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "by_choice", MappingProxyType(dict(self.by_choice)))
@@ -46,10 +47,9 @@ class ChoiceDescriptions:
                 raise ValueOutOfRangeException(
                     f"ChoiceDescriptions.{name} must write exactly {sorted(allowed)}, got {text!r}"
                 )
-        if not self.tend_without_tending.endswith("。") or _names_in(self.tend_without_tending):
-            raise ValueOutOfRangeException(
-                f"ChoiceDescriptions.tend_without_tending must end a sentence, got {self.tend_without_tending!r}"
-            )
+        for name, text in (("tend_without_tending", self.tend_without_tending), ("closing", self.closing)):
+            if not text.endswith("。") or _names_in(text):
+                raise ValueOutOfRangeException(f"ChoiceDescriptions.{name} must end a sentence, got {text!r}")
         for name, text, names in (
             ("duration_hours", self.duration_hours, frozenset({"hours"})),
             ("duration_minutes", self.duration_minutes, frozenset({"minutes"})),
