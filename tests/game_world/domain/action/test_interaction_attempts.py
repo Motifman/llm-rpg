@@ -129,6 +129,13 @@ class TestPropertiesReadFromTheDeclaration:
         assert not attempt.can_start_while_busy()
 
     @pytest.mark.parametrize("target", _BUILDERS)
+    def test_is_not_waiting(self, target: str) -> None:
+        """操作は、何を相手にしても待つことには当たらず、is_waiting() は偽を答える。"""
+        attempt = _BUILDERS[target](InteractionForTests(InteractionId("pull")), Openly(), _NO_ARGUMENTS)
+
+        assert not attempt.is_waiting()
+
+    @pytest.mark.parametrize("target", _BUILDERS)
     def test_is_allowed_by_interaction_id_not_by_kind(self, target: str) -> None:
         """操作は、段階の allowed_actions に自分の InteractionId があるときだけ許され、ActionKind だけでは許されない。"""
         attempt = _BUILDERS[target](InteractionForTests(InteractionId("pull")), Openly(), _NO_ARGUMENTS)

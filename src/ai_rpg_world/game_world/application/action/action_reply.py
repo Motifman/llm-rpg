@@ -12,7 +12,6 @@ from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.people import TextAboutPeople
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
-from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.value_object import PersonId
 
 
@@ -24,7 +23,7 @@ class ActionDone:
     summary: TextAboutPeople
 
     def was_waiting(self) -> bool:
-        return self.attempt.kind() is ActionKind.WAIT
+        return self.attempt.is_waiting()
 
     def succeeded(self) -> bool:
         return True

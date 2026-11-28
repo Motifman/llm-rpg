@@ -6,7 +6,7 @@ application 層は集約と宣言を順に呼ぶだけにする (CLAUDE.md「ド
 - ドメインの型で見分ける: isinstance の第 2 引数、または match の case のクラスが game_world.domain の型
 - None を見て分岐する: None との比較 (is / is not / == / !=) と case None
 - 知覚の値をその場で作る: 目立ち方・知覚の品質・刺激の型のコンストラクタを直に呼ぶ。クラスメソッドのファクトリは落とさない
-- ドメインの値を取り出して比べる: 順序比較と == / != (None を除く) のうち、片側が属性か呼び出しのもの
+- ドメインの値を取り出して比べる: 順序比較と == / != / is / is not (None を除く) のうち、片側が属性か呼び出しのもの
 
 見ないもの: in / not in (帳簿やキャッシュの引き当て)、ドメインに問うて分岐する手順 (`if item.has_run_out(now):`)。
 後者は複数の集約を順に呼ぶ手順と構文で見分けられないので、レビューの観点で補う。
@@ -43,7 +43,7 @@ _PERCEPTION_VALUE_MODULES = frozenset(
     }
 )
 
-_EXTRACTED_VALUE_COMPARISONS = (ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Eq, ast.NotEq)
+_EXTRACTED_VALUE_COMPARISONS = (ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Eq, ast.NotEq, ast.Is, ast.IsNot)
 
 
 @dataclass(frozen=True)
@@ -294,6 +294,9 @@ _REACHED = "from ai_rpg_world.game_world.domain.world_progress.group_decision im
         ("def f(item, now):\n    return item.expires_at <= now\n", EXTRACTED_COMPARISON),
         ("def f(a, b):\n    return a.value == b.value\n", EXTRACTED_COMPARISON),
         ("def f(stock):\n    return stock.count() > 0\n", EXTRACTED_COMPARISON),
+        ("def f(a, K):\n    return a.kind() is K.WAIT\n", EXTRACTED_COMPARISON),
+        ("def f(a, K):\n    return a.kind is not K.WAIT\n", EXTRACTED_COMPARISON),
+        ("def f(self, occasion):\n    return self is occasion.AFTER\n", EXTRACTED_COMPARISON),
     ],
 )
 def test_leaked_shape_is_reported_with_file_and_shape(tmp_path: Path, source: str, shape: _Shape) -> None:
@@ -317,7 +320,7 @@ def test_leaked_shape_is_reported_with_file_and_shape(tmp_path: Path, source: st
         "def f(t, at):\n    return ItemRanOutNotice(t, at)\n",
         "def f(self, spot):\n    return spot not in self._lighting\n",
         "def f(a, b):\n    return a < b\n",
-        "def f(self, occasion):\n    return self is occasion.AFTER\n",
+        "def f(a, b):\n    return a is b\n",
         "def f(item, now):\n    if item.has_run_out(now):\n        item.run_out(now)\n",
         "def f(p):\n    match p:\n        case int():\n            pass\n        case _:\n            pass\n",
     ],
