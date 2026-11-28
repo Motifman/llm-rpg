@@ -259,7 +259,7 @@ class MineVillageSession:
             check_readiness=CheckReadinessToAct(self.scope),
             world_has_ended=world_has_ended or WorldHasEnded(self.scope),
             accept_time_passage=AcceptWorldTimePassage(
-                self.scope, PassWorldTime(self.scope), SettleWorldConditions(self.scope, design)
+                PassWorldTime(self.scope), SettleWorldConditions(self.scope, design)
             ),
         )
 

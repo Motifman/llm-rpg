@@ -106,7 +106,7 @@ class WorldForAccepting:
         self.scope = CommandScope(self.store, distributor)
         settle = SettleWorldConditions(self.scope, self.design)
         self.accept_action = AcceptAction(self.scope, self.design, settle)
-        self.accept_time = AcceptWorldTimePassage(self.scope, PassWorldTime(self.scope), settle)
+        self.accept_time = AcceptWorldTimePassage(PassWorldTime(self.scope), settle)
         self._enter_section = EnterSection(CarryOutAction(self.scope, self.design), self.design)
 
     def receive(self, events: tuple[DomainEvent, ...]) -> None:

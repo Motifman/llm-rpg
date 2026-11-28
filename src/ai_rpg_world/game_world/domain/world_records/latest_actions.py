@@ -121,6 +121,8 @@ class LatestActions(AggregateRoot[LatestActionsEvent]):
         )
 
     def note_failed_attempt(self, refusal: ActionRefusal, situation: ActorSituation, now: WorldTick) -> None:
+        if not refusal.leaves_a_record():
+            return
         self.add_event(
             ActionAttemptFailedEvent(
                 **new_event_stamp(),
