@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from typing import Any, Protocol, final
@@ -61,6 +62,7 @@ class GameWorldTrace:
         self._names = dict(names)
         self._now = now
         self._failures = 0
+        self._failures_lock = threading.Lock()
 
     @property
     def failures(self) -> int:
@@ -89,7 +91,9 @@ class GameWorldTrace:
         try:
             write()
         except Exception:
-            self._failures += 1
+            # 書き起こしの費用は裏のスレッドからも書くので、数えるのを取り合わない
+            with self._failures_lock:
+                self._failures += 1
             _logger.warning("failed to write the game world trace", exc_info=True)
 
     def _record_turn_rounds_events(self, events: Sequence[TurnRoundsEvent]) -> None:
@@ -128,7 +132,7 @@ class GameWorldTrace:
                 GameWorldTraceKind.BEING_EVENT,
                 tick=tick,
                 event_type=type(event).__name__,
-                person=None if not isinstance(being_id, BeingId) else self._person(person_of(being_id)),
+                person=self._person_of_being(being_id, person_of),
                 fields={
                     # 短期記憶の出来事といきさつは本文ごと並ぶので、件数だけにする
                     k: (len(v) if k in _COUNTED_ONLY and isinstance(v, list) else v)
@@ -136,6 +140,15 @@ class GameWorldTrace:
                     if k not in _EVENT_STAMP and k != "being_id"
                 },
             )
+
+    def _person_of_being(self, being_id: object, person_of: Callable[[BeingId], PersonId]) -> dict[str, str] | None:
+        # 人を引けなくても、同じ束のほかのイベントは書く
+        if not isinstance(being_id, BeingId):
+            return None
+        try:
+            return self._person(person_of(being_id))
+        except Exception:
+            return {"being_id": being_id.value}
 
     def now(self) -> int:
         return self._now()
@@ -242,7 +255,7 @@ class GameWorldTrace:
 
 _EVENT_STAMP = frozenset({"event_id", "occurred_at", "sequence"})
 _MAX_DEPTH = 4
-_COUNTED_ONLY = frozenset({"experiences", "backstories"})
+_COUNTED_ONLY = frozenset({"experiences", "backstories", "dropped"})
 _logger = logging.getLogger(__name__)
 
 

@@ -6,7 +6,10 @@ from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCall, AuxL
 from ai_rpg_world.being.application.choose_action import ActionChoosingReply, LlmExchange, ToolCallReply
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.being.domain.being_id import BeingId
-from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRangeFilledEvent
+from ai_rpg_world.being.domain.short_term_memory import (
+    ShortTermMemoryOldestTurnsDroppedEvent,
+    ShortTermMemoryRangeFilledEvent,
+)
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.experiment.infrastructure.game_world_trace import GameWorldTrace, GameWorldTraceKind
 from ai_rpg_world.game_world.domain.people.people_register import PersonNamedEvent
@@ -242,6 +245,23 @@ class TestBeingSideInTheTrace:
         assert kind == GameWorldTraceKind.BEING_EVENT
         assert payload["person"] == {"person_id": "gen", "name": "ゲン"}
         assert payload["fields"] == {"turn": 20, "until_turn": 10, "experiences": 0, "backstories": 0}
+
+    def test_dropped_experiences_are_counted_and_an_unknown_being_still_gets_a_row(self) -> None:
+        """外した出来事 (dropped) は件数だけを残し、配役に無い Being のイベントも、being_id だけを付けて書く。"""
+        trace, kept = _trace()
+        event = ShortTermMemoryOldestTurnsDroppedEvent(
+            **new_event_stamp(), being_id=BeingId("stranger"), turn=30, until_turn=3, dropped=()
+        )
+
+        def unknown(being_id: BeingId) -> PersonId:
+            raise LookupError(being_id.value)
+
+        trace.record_being_events([event], person_of=unknown)
+
+        [(_, _, payload)] = kept.records
+        assert payload["person"] == {"being_id": "stranger"}
+        assert payload["fields"]["dropped"] == 0
+        assert trace.failures == 0
 
     def test_aux_call_keeps_its_component_and_cost(self) -> None:
         """エピソードの書き起こしの呼び出しは、部品の名前と費用と時間を残し、tick は入れない。"""
