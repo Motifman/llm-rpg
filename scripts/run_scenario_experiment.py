@@ -1761,6 +1761,10 @@ def _run_game_world(
     # 新しい世界の trace はまだ古い viewer で読めないので HTML を作らない。snapshot もまだ無い
     if args.snapshot_save_dir is not None or args.snapshot_load_dir is not None or config_source.get("snapshot_save"):
         parser.error("the game world cannot save or load snapshots yet")
+    if args.publish_gist:
+        parser.error("the game world cannot publish a gist yet")
+    if args.max_world_ticks < 1:
+        parser.error(f"max_world_ticks must be >= 1 for the game world, got {args.max_world_ticks}")
     try:
         settings = GameWorldPlaySettings.from_runtime_config(runtime_config_source)
     except ValueError as error:
@@ -1814,7 +1818,12 @@ def _run_game_world(
             experiment_manifest_sha256=manifest_sha256,
             **settings.to_trace_dict(),
         )
-        summary = run_summary(play.play())
+        try:
+            summary = run_summary(play.play())
+        except BaseException as error:
+            # 途中で落ちた run も、run_end が無いと終わったのか書きかけなのか見分けられない
+            rec.record(TraceEventKind.RUN_END, world=_GAME_WORLD, outcome="ERROR", error=repr(error))
+            raise
         summary["elapsed_sec"] = time.monotonic() - started
         rec.record(TraceEventKind.RUN_END, **summary)
     report_path.write_text(_game_world_report(args.scenario, summary), encoding="utf-8")

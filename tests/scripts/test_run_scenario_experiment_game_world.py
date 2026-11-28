@@ -14,6 +14,11 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.run_scenario_experiment import main  # noqa: E402
 
+from ai_rpg_world.experiment.infrastructure import game_world_run  # noqa: E402
+from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlayResult  # noqa: E402
+from ai_rpg_world.game_world.domain.value_object import WorldTick  # noqa: E402
+from ai_rpg_world.play_session.application.play_rounds import ChoosingKeptFailing, PlayStopped  # noqa: E402
+
 _SCENARIOS = _REPO_ROOT / "data" / "scenarios"
 _MINE_VILLAGE_V2 = _SCENARIOS / "mine_village_v2.yaml"
 
@@ -126,3 +131,62 @@ class TestGameWorldStopsAtTheEntrance:
 
         assert stopped.value.code == 2
         assert "unknown world" in capsys.readouterr().err
+
+    def test_publishing_a_gist_is_refused(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """新しい世界で --publish-gist を付けると、黙って公開をとばさずに断る。"""
+        with pytest.raises(SystemExit) as stopped:
+            main(["--profile", "smoke_stub_game_world", "--out", str(tmp_path / "run"), "--publish-gist"])
+
+        assert stopped.value.code == 2
+        assert "cannot publish a gist" in capsys.readouterr().err
+
+    def test_round_limit_below_one_is_refused(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """--max-world-ticks 0 を渡すと、巡りの上限が 1 以上でないと知らせて断る。"""
+        with pytest.raises(SystemExit) as stopped:
+            main(["--profile", "smoke_stub_game_world", "--out", str(tmp_path / "run"), "--max-world-ticks", "0"])
+
+        assert stopped.value.code == 2
+        assert "max_world_ticks must be >= 1" in capsys.readouterr().err
+
+
+class _PlayStoppingWith:
+    def __init__(self, stopped: PlayStopped | Exception) -> None:
+        self._stopped = stopped
+
+    def play(self) -> GameWorldPlayResult:
+        if isinstance(self._stopped, Exception):
+            raise self._stopped
+        return GameWorldPlayResult(stopped=self._stopped, last_tick=WorldTick(4), finished_turns=9, writing_failures={})
+
+
+class TestGameWorldRunResult:
+    """run の入口が、遊びの止まり方を終了コードと run_end に写すことを保証する。"""
+
+    def test_play_that_kept_failing_to_choose_exits_with_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """選び続けて失敗して止まった遊びは、終了コード 1 になり、run_end に止まった理由の並びが残る。"""
+        stopped = ChoosingKeptFailing(reasons=("TimeoutError: a",) * 8)
+        monkeypatch.setattr(game_world_run, "prepare_game_world_play", lambda **_: _PlayStoppingWith(stopped))
+        out = tmp_path / "run"
+
+        code = main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        assert code == 1
+        end = _run_end(out)
+        assert (end["outcome"], end["stop_reasons"]) == ("CHOOSING_KEPT_FAILING", ["TimeoutError: a"] * 8)
+
+    def test_play_that_raised_leaves_a_run_end_with_the_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """遊びの途中で例外が出ると、その例外を上に出し、trace には outcome=ERROR の run_end が残る。"""
+        monkeypatch.setattr(
+            game_world_run, "prepare_game_world_play", lambda **_: _PlayStoppingWith(RuntimeError("store broke"))
+        )
+        out = tmp_path / "run"
+
+        with pytest.raises(RuntimeError, match="store broke"):
+            main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        end = _run_end(out)
+        assert end["outcome"] == "ERROR" and "store broke" in str(end["error"])

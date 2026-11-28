@@ -99,12 +99,13 @@ class GameWorldPlayResult:
     writing_failures: dict[str, int]
 
 
-class _PerceptionReportsKept:
+class _PerceptionReportsCounted:
+    # 書き出しは #2233 で足す。run のあいだ全部ためると、長い run でメモリが増え続ける
     def __init__(self) -> None:
-        self.reports: list[PerceptionDeliveryReport] = []
+        self.count = 0
 
     def receive(self, report: PerceptionDeliveryReport) -> None:
-        self.reports.append(report)
+        self.count += 1
 
 
 def _failed_handing_off(*_: object) -> None:
@@ -163,7 +164,7 @@ class GameWorldPlay:
         )
 
         self.casts = casts = InMemoryCastRepository(handoff=_discard)
-        self.turn_round_events: list[TurnRoundsEvent] = []
+        self._finished_turns = 0
         self._turn_round_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_failed_handing_off)
         self._turn_round_dispatcher.register_after_commit(
             ObservationPassedOnEvent,
@@ -173,7 +174,7 @@ class GameWorldPlay:
         )
         self.turn_rounds = turn_rounds = InMemoryTurnRoundsRepository(handoff=self._hand_off_turn_round_events)
 
-        self.perception_reports = _PerceptionReportsKept()
+        self.perception_reports = _PerceptionReportsCounted()
         deliver_perception = DeliverPerception(
             scope,
             ObservationExit(world, day_night, design.clock_wording, HandObservationToBeing(world, turn_rounds)),
@@ -265,18 +266,20 @@ class GameWorldPlay:
             self._start(self._start_command)
             stopped = self._play_rounds(PlayRoundsCommand(self.world))
             self._end_play(EndPlaySessionCommand(self.world))
+            last_tick = self._scope.run(lambda session: session.facts().now())
         finally:
             # 書き終わった書き起こしを捨てないよう、例外で抜けても止める
             self.memory_writing.shutdown()
+            self._store.close()
         return GameWorldPlayResult(
             stopped=stopped,
-            last_tick=self._scope.run(lambda session: session.facts().now()),
-            finished_turns=sum(1 for event in self.turn_round_events if isinstance(event, TurnFinishedEvent)),
+            last_tick=last_tick,
+            finished_turns=self._finished_turns,
             writing_failures=self.memory_writing.failures(),
         )
 
     def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
-        self.turn_round_events.extend(events)
+        self._finished_turns += sum(1 for event in events if isinstance(event, TurnFinishedEvent))
         self._turn_round_dispatcher.handoff(events)
 
 
