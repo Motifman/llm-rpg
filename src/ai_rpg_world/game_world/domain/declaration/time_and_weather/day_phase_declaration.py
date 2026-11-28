@@ -38,7 +38,7 @@ class DayPhaseDeclaration:
             if not facts.vitals(person).is_down() and not facts.outcomes().has_left_the_world(person)
         )
 
-    def stimuli_when_entered(self, audience: frozenset[PersonId], at: WorldTick) -> tuple[Stimulus, ...]:
+    def stimuli_when_entered(self, facts: WorldFacts, at: WorldTick) -> tuple[Stimulus, ...]:
         from ai_rpg_world.game_world.domain.perception.announcement_stimulus import AnnouncementStimulus
         from ai_rpg_world.game_world.domain.perception.salience import Background
 
@@ -46,7 +46,7 @@ class DayPhaseDeclaration:
             return ()
         return (
             AnnouncementStimulus(
-                audience=audience,
+                audience=self.addressees(facts, at),
                 text=self.announcement.about({}),
                 salience=Background(),
                 at=at,

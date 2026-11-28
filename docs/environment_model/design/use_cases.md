@@ -7,7 +7,7 @@ class OpenWorld:
 class AdvanceWorldTick:
     def __call__(self, command: AdvanceWorldTickCommand) -> None:
         # 1. PassWorldTime                → ハンドラを全部済ませる
-        #    時間帯が変わったら、宣言の audience でその時点の相手を選び、TimeOfDayChangedEvent に載せる (D2203)
+        #    時間帯が変わったら TimeOfDayChangedEvent をためる。知らせの相手は、刺激に変えるときに tick の終わりの世界から選ぶ (D2330)
         # 2. SettleWorldConditions        → ハンドラを全部済ませる
         # 1 tick が現実の何秒かは実行の設定で決める
         ...

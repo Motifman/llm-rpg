@@ -120,7 +120,7 @@ class WorldForSearchAndTend:
 
     def pass_ticks(self, count: int) -> None:
         for _ in range(count):
-            self.scope.run(lambda session: session.clock().advance(self.design.day_night, session.facts()))
+            self.scope.run(lambda session: session.clock().advance(self.design.day_night))
 
     def count_of(self, person: PersonId, spec: ItemSpecDeclaration) -> Count:
         session = self.store.session()

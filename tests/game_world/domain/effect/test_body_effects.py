@@ -32,7 +32,7 @@ from tests.game_world.support.world_in_memory import world_in_memory
 def _world(*people_vitals: PersonVitals, ticks: int = 0) -> WorldSession:
     world = world_in_memory(world=WORLD, people=(ALICE, BOB), vitals=people_vitals)
     for _ in range(ticks):
-        world.clock().advance(NoDayNight(), world.facts())
+        world.clock().advance(NoDayNight())
     return world
 
 

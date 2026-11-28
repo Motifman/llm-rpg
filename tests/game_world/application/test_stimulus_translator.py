@@ -7,6 +7,7 @@ import pytest
 
 from ai_rpg_world.eventing import DomainEvent, new_event_stamp
 from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator, UntranslatedEventKindError
+from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_arguments import ChosenArguments
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_refusal import ActionRefusal, PreconditionRefusal, WorldStateRefusal
@@ -34,6 +35,7 @@ from ai_rpg_world.game_world.domain.action.wait_reason import NoReason
 from ai_rpg_world.game_world.domain.condition.condition import HiddenFailure
 from ai_rpg_world.game_world.domain.condition.condition_path import ConditionPath
 from ai_rpg_world.game_world.domain.condition.people_selection import PeopleSelection
+from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
 from ai_rpg_world.game_world.domain.declaration.object_and_item import Lasts
 from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
@@ -87,13 +89,23 @@ from ai_rpg_world.game_world.domain.perception import (
 )
 from ai_rpg_world.game_world.domain.perception.own_action_completion import OwnActionCompletion
 from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
-from ai_rpg_world.game_world.domain.person import DeclaredOutcome, Died, Outcome, PersonOutcomeDecidedEvent
+from ai_rpg_world.game_world.domain.perception.stimulus import Stimulus
+from ai_rpg_world.game_world.domain.person import (
+    DeclaredOutcome,
+    Died,
+    Outcome,
+    PersonOutcomeDecidedEvent,
+    PersonVitals,
+)
+from ai_rpg_world.game_world.domain.person.life_state import WorldHappening
 from ai_rpg_world.game_world.domain.rules.action_kind import ActionKind
 from ai_rpg_world.game_world.domain.rules.tend_rule import TendRule
 from ai_rpg_world.game_world.domain.sound.loudness import Loudness
 from ai_rpg_world.game_world.domain.value_object import (
+    Damage,
     DescriptionText,
     DisplayName,
+    HitPoints,
     InteractionId,
     ItemSpecId,
     ObjectId,
@@ -126,6 +138,7 @@ from ai_rpg_world.game_world.domain.world_records import (
     JointActionTimedOutEvent,
     PersonActedEvent,
 )
+from tests.game_world.support.facts_not_read import FACTS_NOT_READ
 from tests.game_world.support.joint_actions_for_tests import both_levers, levers_at, pushing
 from tests.game_world.support.verb_declarations_for_tests import lever_pulled_quietly, pull_lever, seen_clearly_only
 from tests.game_world.support.verb_parts_for_tests import AlwaysHolds, ChangesNothing
@@ -140,11 +153,18 @@ from tests.game_world.support.world_design_for_tests import (
     section,
     spot,
 )
+from tests.game_world.support.world_in_memory import world_in_memory
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
 
 _WORLD = WorldId("mine_village")
 _HAL = PersonId("hal")
 _NOW = WorldTick(4)
+
+
+def _translated(event: DomainEvent, design: WorldDesign, facts: WorldFacts = FACTS_NOT_READ) -> tuple[Stimulus, ...]:
+    return StimulusTranslator().stimuli_of(event, design, facts)
+
+
 _LANTERN = ItemSpecId("lantern")
 _RAN_OUT = "カンテラの灯が燃え尽きた。"
 
@@ -191,9 +211,7 @@ class TestStimulusTranslatorArrival:
 
     def test_walking_in_becomes_the_arrival_sight_at_the_spot(self) -> None:
         """ハルが広場から通りを通って井戸に着くと、ハル自身には届けない井戸の見える刺激ができ、文は古い run と同じ「{actor}が「広場」から〈通り〉を通って井戸にやってきた。」の形でハルを指す。"""
-        [completion, stimulus] = StimulusTranslator().stimuli_of(
-            _entered(CameThrough(SpotId("plaza"), PassageId("street"))), _design()
-        )
+        [completion, stimulus] = _translated(_entered(CameThrough(SpotId("plaza"), PassageId("street"))), _design())
 
         assert isinstance(completion, OwnActionCompletion) and isinstance(stimulus, SightStimulus)
         assert stimulus.withheld_from == frozenset({_HAL})
@@ -205,9 +223,7 @@ class TestStimulusTranslatorArrival:
 
     def test_walking_in_tells_the_arriver_it_arrived_as_its_own_action(self) -> None:
         """ハルが広場から井戸に着くと、ハルにだけ、行く (travel_to) の続きとして、着いたことの要約と結果の文が届く刺激ができる。"""
-        completion = StimulusTranslator().stimuli_of(
-            _entered(CameThrough(SpotId("plaza"), PassageId("street"))), _design()
-        )[0]
+        completion = _translated(_entered(CameThrough(SpotId("plaza"), PassageId("street"))), _design())[0]
 
         assert isinstance(completion, OwnActionCompletion)
         assert (completion.person, completion.tool, completion.summary.template.template) == (
@@ -218,7 +234,7 @@ class TestStimulusTranslatorArrival:
 
     def test_teleporting_in_makes_no_stimulus(self) -> None:
         """teleport で井戸に着いたときは、来た場所が無いので刺激を作らない。"""
-        assert StimulusTranslator().stimuli_of(_entered(Teleported()), _design()) == ()
+        assert _translated(_entered(Teleported()), _design()) == ()
 
 
 class TestStimulusTranslatorItemRanOut:
@@ -226,14 +242,14 @@ class TestStimulusTranslatorItemRanOut:
 
     def test_lantern_carried_by_hal_becomes_a_bodily_stimulus_to_hal(self) -> None:
         """ハルが持っていたカンテラの時間が切れると、ハル本人の体の刺激が 1 つでき、文は ended_text になる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_ran_out(CarriedBy(_HAL)), _design())
+        [stimulus] = _translated(_ran_out(CarriedBy(_HAL)), _design())
 
         assert isinstance(stimulus, BodilyStimulus)
         assert (stimulus.person, stimulus.text.template.template, stimulus.at) == (_HAL, _RAN_OUT, _NOW)
 
     def test_lantern_lying_at_the_well_becomes_a_sight_stimulus_there(self) -> None:
         """井戸の地面にあったカンテラの時間が切れると、井戸の見える刺激が 1 つでき、文は ended_text になる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_ran_out(LyingAt(SpotId("well"))), _design())
+        [stimulus] = _translated(_ran_out(LyingAt(SpotId("well"))), _design())
 
         assert isinstance(stimulus, SightStimulus)
         assert (stimulus.where, stimulus.witness.clear.template.template) == (SpotId("well"), _RAN_OUT)
@@ -246,12 +262,12 @@ class TestStimulusTranslatorEventKinds:
         """知覚に出さない一覧にある時計の進んだイベントは、刺激を作らない。"""
         event = WorldTickAdvancedEvent(**new_event_stamp(), world_id=_WORLD, before=WorldTick(3), after=_NOW)
 
-        assert StimulusTranslator().stimuli_of(event, _design()) == ()
+        assert _translated(event, _design()) == ()
 
     def test_kind_neither_translated_nor_listed_is_refused(self) -> None:
         """変換も無く、知覚に出さない一覧にも無い種類のイベントを渡すと UntranslatedEventKindError を投げ、種類の名前を添える。"""
         with pytest.raises(UntranslatedEventKindError, match="_EventNobodyClassified"):
-            StimulusTranslator().stimuli_of(_EventNobodyClassified(**new_event_stamp()), _design())
+            _translated(_EventNobodyClassified(**new_event_stamp()), _design())
 
 
 _MINA = PersonId("mina")
@@ -360,7 +376,7 @@ def _acted(
 
 
 def _sight(attempt: ActionAttempt) -> SightStimulus:
-    stimulus = StimulusTranslator().stimuli_of(_acted(attempt), _acts_design())[0]
+    stimulus = _translated(_acted(attempt), _acts_design())[0]
     assert isinstance(stimulus, SightStimulus)
     return stimulus
 
@@ -415,9 +431,7 @@ class TestStimulusTranslatorBuiltInActs:
 
     def test_speaking_aloud_makes_a_voice_with_the_words(self) -> None:
         """ハルが「やあ」と話すと、見える刺激に続いて、文が「{actor}が「やあ」と言った。」の、誰宛てでもない声ができる。"""
-        _, voice = StimulusTranslator().stimuli_of(
-            _acted(SpeechAttempt(_HAL, OrdinaryVoice(), SpeechContent("やあ"))), _acts_design()
-        )
+        _, voice = _translated(_acted(SpeechAttempt(_HAL, OrdinaryVoice(), SpeechContent("やあ"))), _acts_design())
 
         assert isinstance(voice, SoundStimulus)
         assert (voice.clear.template.template, voice.source) == ("{actor}が「やあ」と言った。", Voice(NotWhispered()))
@@ -426,7 +440,7 @@ class TestStimulusTranslatorBuiltInActs:
         """効果の前にミナが井戸にいたと PersonActedEvent が持つとき、ハルが話した見える刺激にも声にも、その居場所が載る (D2216)。"""
         before = PeopleWhoWereThere({_MINA: AtSpot(SpotId("well"), OpenArea())})
 
-        stimuli = StimulusTranslator().stimuli_of(
+        stimuli = _translated(
             _acted(SpeechAttempt(_HAL, OrdinaryVoice(), SpeechContent("やあ")), present=before), _acts_design()
         )
 
@@ -435,9 +449,7 @@ class TestStimulusTranslatorBuiltInActs:
 
     def test_whispering_makes_a_voice_whispered_to_the_listener(self) -> None:
         """ハルがミナにささやくと、声はミナ宛てで、見える刺激ではミナに相手の文が当たる。"""
-        sight, voice = StimulusTranslator().stimuli_of(
-            _acted(SpeechAttempt(_HAL, Whisper(_MINA), SpeechContent("静かに"))), _acts_design()
-        )
+        sight, voice = _translated(_acted(SpeechAttempt(_HAL, Whisper(_MINA), SpeechContent("静かに"))), _acts_design())
 
         assert isinstance(sight, SightStimulus) and isinstance(sight.target, SightTarget)
         assert isinstance(voice, SoundStimulus)
@@ -460,19 +472,19 @@ class TestStimulusTranslatorBuiltInActs:
         event = replace(_acted(GroundItemPickupAttempt(_HAL, _PICKAXE, Openly())), item_specs={})
 
         with pytest.raises(PerceivedItemSpecNotGivenException):
-            StimulusTranslator().stimuli_of(event, _acts_design())
+            _translated(event, _acts_design())
 
     def test_acting_while_at_no_spot_makes_no_stimulus(self) -> None:
         """どの場所にもいない (移動中の) 人の行為は、見える刺激も聞こえる刺激も作らない。"""
         event = _acted(WaitAttempt(_HAL, NoReason()), at_spot=NotAtSpot())
 
-        assert StimulusTranslator().stimuli_of(event, _acts_design()) == ()
+        assert _translated(event, _acts_design()) == ()
 
     def test_departed_actor_is_marked_on_the_stimulus(self) -> None:
         """去った人として動くハルが拾うと、見える刺激は行った人が去った人だと持つ。"""
         event = _acted(GroundItemPickupAttempt(_HAL, _PICKAXE, Openly()), actor_as=DepartedPerson(_HAL))
 
-        [stimulus] = StimulusTranslator().stimuli_of(event, _acts_design())
+        [stimulus] = _translated(event, _acts_design())
 
         assert isinstance(stimulus, SightStimulus) and stimulus.actor_departed is True
 
@@ -517,7 +529,7 @@ class TestStimulusTranslatorDeclaredInteractions:
         greet = design.person_interaction(InteractionId("greet"))
 
         with pytest.raises(PerceptionTargetNotGivenException):
-            StimulusTranslator().stimuli_of(
+            _translated(
                 _acted(PersonInteractionAttempt(_HAL, SomeoneInTheDark(), greet, ChosenArguments(), Openly())), design
             )
 
@@ -530,7 +542,7 @@ class TestStimulusTranslatorDeclaredInteractions:
         )
 
         with pytest.raises(PerceivedItemSpecNotGivenException):
-            StimulusTranslator().stimuli_of(event, design)
+            _translated(event, design)
 
 
 _REFUSED = TextWithUnassignedPeople("手がふさがっていて拾えない。").about({})
@@ -559,13 +571,13 @@ class TestStimulusTranslatorFailedActs:
 
     def test_refusal_by_a_common_rule_makes_no_stimulus(self) -> None:
         """行っている最中 (Busy) で断られた拾う行為は、失敗の文を宣言していても、刺激を作らない。周りから見て何も起きていないため。"""
-        stimuli = StimulusTranslator().stimuli_of(_failed(Busy()), _acts_design(failure_witness=True))
+        stimuli = _translated(_failed(Busy()), _acts_design(failure_witness=True))
 
         assert stimuli == ()
 
     def test_refusal_while_changing_the_world_is_seen_when_the_author_wrote_it(self) -> None:
         """世界を変える途中で断られ、作者が失敗の文を書いていれば、「{actor}が拾い損ねた。」の見える刺激だけができ、本人には届けない印が付く。"""
-        [seen] = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design(failure_witness=True))
+        [seen] = _translated(_failed(_WORLD_REFUSED), _acts_design(failure_witness=True))
 
         assert isinstance(seen, SightStimulus)
         assert (seen.where, seen.witness.clear.template.template, seen.target, seen.withheld_from) == (
@@ -579,13 +591,13 @@ class TestStimulusTranslatorFailedActs:
         """行為ごとの前提で断られ、作者が失敗の文を書いていれば、見える刺激だけができる。"""
         reason = PreconditionRefusal(HiddenFailure(ConditionPath.root()))
 
-        stimuli = StimulusTranslator().stimuli_of(_failed(reason), _acts_design(failure_witness=True))
+        stimuli = _translated(_failed(reason), _acts_design(failure_witness=True))
 
         assert [type(stimulus) for stimulus in stimuli] == [SightStimulus]
 
     def test_refusal_without_a_failure_text_makes_no_stimulus(self) -> None:
         """作者が失敗の文を書いていなければ、世界を変える途中で断られても、刺激を作らない。"""
-        stimuli = StimulusTranslator().stimuli_of(_failed(_WORLD_REFUSED), _acts_design())
+        stimuli = _translated(_failed(_WORLD_REFUSED), _acts_design())
 
         assert stimuli == ()
 
@@ -593,7 +605,7 @@ class TestStimulusTranslatorFailedActs:
         """どの場所にもいない人が断られたときは、失敗の文があっても、刺激を作らない。"""
         event = _failed(_WORLD_REFUSED, at_spot=NotAtSpot())
 
-        stimuli = StimulusTranslator().stimuli_of(event, _acts_design(failure_witness=True))
+        stimuli = _translated(event, _acts_design(failure_witness=True))
 
         assert stimuli == ()
 
@@ -656,7 +668,7 @@ class TestStimulusTranslatorHappenings:
 
     def test_sight_notice_is_seen_at_its_spot_even_without_audience(self) -> None:
         """SightAt の知らせは、知らせの相手がいなくても、井戸の見える刺激「井戸の灯が揺れた。」になる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_fired("lamp_flicker"), _happenings_design())
+        [stimulus] = _translated(_fired("lamp_flicker"), _happenings_design())
 
         assert isinstance(stimulus, SightStimulus)
         assert (stimulus.where, stimulus.witness.clear.template.template, stimulus.involved, stimulus.salience) == (
@@ -670,14 +682,14 @@ class TestStimulusTranslatorHappenings:
         """発火のイベントに、効果の前にハルが井戸にいたことが載っていれば、井戸の見える刺激はその居場所を持つ (D2207)。"""
         event = _fired("lamp_flicker", present=_HAL_AT_THE_WELL)
 
-        [stimulus] = StimulusTranslator().stimuli_of(event, _happenings_design())
+        [stimulus] = _translated(event, _happenings_design())
 
         assert isinstance(stimulus, SightStimulus)
         assert stimulus.present == _HAL_AT_THE_WELL
 
     def test_sound_notice_is_a_noise_from_its_spot(self) -> None:
         """SoundFrom の知らせは、井戸で鳴った大きい物音「坑道の奥で岩が崩れた。」になる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_fired("cave_in"), _happenings_design())
+        [stimulus] = _translated(_fired("cave_in"), _happenings_design())
 
         assert isinstance(stimulus, SoundStimulus)
         assert (stimulus.origin, stimulus.loudness, stimulus.clear.template.template, stimulus.source) == (
@@ -689,7 +701,7 @@ class TestStimulusTranslatorHappenings:
 
     def test_announcement_goes_to_the_audience_chosen_before_the_effect(self) -> None:
         """AnnouncementTo の知らせは、イベントに載った相手 (ハル) への世界の知らせになる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_fired("bell"), _happenings_design())
+        [stimulus] = _translated(_fired("bell"), _happenings_design())
 
         assert stimulus == AnnouncementStimulus(
             audience=frozenset({_HAL}),
@@ -702,16 +714,16 @@ class TestStimulusTranslatorHappenings:
         """効果を当てる途中で断られた発火は、知らせを宣言していても刺激を作らない。"""
         event = _fired("cave_in", RefusalCode("WORLD_FLAGS.ALREADY_RAISED"))
 
-        assert StimulusTranslator().stimuli_of(event, _happenings_design()) == ()
+        assert _translated(event, _happenings_design()) == ()
 
     def test_happening_without_notice_makes_no_stimulus(self) -> None:
         """知らせを宣言していない出来事の発火は、刺激を作らない。"""
-        assert StimulusTranslator().stimuli_of(_fired("quiet"), _happenings_design()) == ()
+        assert _translated(_fired("quiet"), _happenings_design()) == ()
 
     def test_firing_of_an_undeclared_happening_is_refused(self) -> None:
         """宣言に無い出来事の発火を渡すと、どの知らせかを引けないので UndeclaredVerbException を投げる。"""
         with pytest.raises(UndeclaredVerbException):
-            StimulusTranslator().stimuli_of(_fired("unknown"), _happenings_design())
+            _translated(_fired("unknown"), _happenings_design())
 
 
 _LEVERS = levers_at("shaft")
@@ -767,7 +779,7 @@ class TestStimulusTranslatorJointActions:
 
     def test_completion_becomes_the_complete_notice_to_its_audience(self) -> None:
         """両方の梃子が揃うと、complete_notice の「岩が動いた。」が、イベントに載った相手 (ハル) への世界の知らせになる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_completed(), _joint_actions_design())
+        [stimulus] = _translated(_completed(), _joint_actions_design())
 
         assert stimulus == AnnouncementStimulus(
             audience=frozenset({_HAL}),
@@ -778,14 +790,14 @@ class TestStimulusTranslatorJointActions:
 
     def test_timeout_becomes_the_timeout_notice(self) -> None:
         """窓を過ぎると、timeout_notice の坑道で鳴る物音「坑道の奥で岩が崩れた。」になる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_timed_out(), _joint_actions_design())
+        [stimulus] = _translated(_timed_out(), _joint_actions_design())
 
         assert isinstance(stimulus, SoundStimulus)
         assert (stimulus.origin, stimulus.clear.template.template) == (SpotId("shaft"), "坑道の奥で岩が崩れた。")
 
     def test_timeout_sound_carries_where_people_were_before_the_effect(self) -> None:
         """時間切れのイベントに、効果の前にハルが坑道にいたことが載っていれば、坑道の物音はその居場所を持つ (D2207)。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_timed_out(present=_HAL_IN_THE_SHAFT), _joint_actions_design())
+        [stimulus] = _translated(_timed_out(present=_HAL_IN_THE_SHAFT), _joint_actions_design())
 
         assert isinstance(stimulus, SoundStimulus)
         assert stimulus.present == _HAL_IN_THE_SHAFT
@@ -794,13 +806,13 @@ class TestStimulusTranslatorJointActions:
         """効果を当てる途中で断られた揃いは、知らせを宣言していても刺激を作らない。"""
         event = _completed(RefusalCode("GAME_WORLD.INVENTORY_FULL"))
 
-        assert StimulusTranslator().stimuli_of(event, _joint_actions_design()) == ()
+        assert _translated(event, _joint_actions_design()) == ()
 
     def test_refused_timeout_makes_no_stimulus(self) -> None:
         """効果を当てる途中で断られた時間切れは、知らせを宣言していても刺激を作らない。"""
         event = _timed_out(RefusalCode("GAME_WORLD.INVENTORY_FULL"))
 
-        assert StimulusTranslator().stimuli_of(event, _joint_actions_design()) == ()
+        assert _translated(event, _joint_actions_design()) == ()
 
 
 _RESCUED = OutcomeDeclaration(
@@ -819,7 +831,7 @@ class TestStimulusTranslatorOutcomes:
 
     def test_declared_outcome_becomes_a_notable_announcement_to_the_person_alone(self) -> None:
         """ハルの結末が「救出」に決まると、ハルだけに宛てた目立つ世界の知らせ「ハルは昇降機で外へ出た。」になり、世界から外れたハルにも届く。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_outcome_decided(DeclaredOutcome(_RESCUED)), _design())
+        [stimulus] = _translated(_outcome_decided(DeclaredOutcome(_RESCUED)), _design())
 
         assert stimulus == AnnouncementStimulus(
             audience=frozenset({_HAL}),
@@ -831,7 +843,7 @@ class TestStimulusTranslatorOutcomes:
 
     def test_death_makes_no_announcement(self) -> None:
         """ハルの結末が死んだこと (Died) に決まっても、作者の文が無いので刺激を作らない。"""
-        assert StimulusTranslator().stimuli_of(_outcome_decided(Died()), _design()) == ()
+        assert _translated(_outcome_decided(Died()), _design()) == ()
 
 
 _DAWN = TextWithUnassignedPeople("空が白み、朝になった。")
@@ -872,16 +884,17 @@ def _phase_entered(phase: str, before: str) -> TimeOfDayChangedEvent:
         before=DayPhaseName(before),
         after=DayPhaseName(phase),
         at=_NOW,
-        audience=frozenset({_HAL}),
     )
 
 
 class TestStimulusTranslatorTimeOfDay:
-    """StimulusTranslator が、時間帯に入ったことを、イベントに載った相手への目立たない世界の知らせに変えることを保証する。"""
+    """StimulusTranslator が、時間帯に入ったことを、翻訳する時点の世界で起きている相手への目立たない世界の知らせに変えることを保証する。"""
 
-    def test_entering_morning_becomes_a_background_announcement_to_the_audience(self) -> None:
-        """朝に入ると、イベントに載った相手 (ハル) への目立たない世界の知らせ「空が白み、朝になった。」になる。"""
-        [stimulus] = StimulusTranslator().stimuli_of(_phase_entered("morning", "predawn"), _time_of_day_design())
+    def test_entering_morning_becomes_a_background_announcement_to_those_awake(self) -> None:
+        """朝に入ると、起きているハルへの目立たない世界の知らせ「空が白み、朝になった。」になり、気を失っているアキには宛てない。"""
+        world = _hal_awake_and_aki_fainted()
+
+        [stimulus] = _translated(_phase_entered("morning", "predawn"), _time_of_day_design(), world.facts())
 
         assert stimulus == AnnouncementStimulus(
             audience=frozenset({_HAL}),
@@ -893,4 +906,23 @@ class TestStimulusTranslatorTimeOfDay:
 
     def test_entering_a_phase_without_announcement_makes_no_stimulus(self) -> None:
         """知らせの文を書いていない夜明け前に入っても、刺激を作らない。"""
-        assert StimulusTranslator().stimuli_of(_phase_entered("predawn", "morning"), _time_of_day_design()) == ()
+        world = _hal_awake_and_aki_fainted()
+
+        assert _translated(_phase_entered("predawn", "morning"), _time_of_day_design(), world.facts()) == ()
+
+
+_AKI = PersonId("aki")
+
+
+def _hal_awake_and_aki_fainted() -> WorldSession:
+    well = spot("well")
+    world = world_in_memory(
+        world=_WORLD,
+        people=(_HAL, _AKI),
+        spots=(well,),
+        vitals=tuple(PersonVitals.start(person, HitPoints(current=10, maximum=10)) for person in (_HAL, _AKI)),
+    )
+    for person in (_HAL, _AKI):
+        world.aggregates().whereabouts().place(PersonBody(person), well)
+    world.aggregates().vitals(_AKI).take_damage(Damage(10), _NOW, WorldHappening())
+    return world

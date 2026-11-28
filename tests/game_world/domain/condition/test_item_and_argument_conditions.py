@@ -60,7 +60,7 @@ def _world_with_torch_from(tick: int) -> tuple[WorldSession, ItemInstanceId]:
     torch = Item.come_into_world(ItemInstanceId("torch-1"), _TORCH, WorldTick(tick))
     a_world = world_in_memory(world=WORLD, item_specs=(_TORCH,), items=(torch,))
     for _ in range(3):
-        a_world.clock().advance(a_world.facts().day_night(), a_world.facts())
+        a_world.clock().advance(a_world.facts().day_night())
     return a_world, torch.item_id
 
 

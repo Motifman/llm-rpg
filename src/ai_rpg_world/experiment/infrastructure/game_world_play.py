@@ -250,7 +250,7 @@ class GameWorldPlay:
             ObservationExit(world, day_night, design.clock_wording, HandObservationToBeing(world, turn_rounds)),
             self.perception_reports,
         )
-        distributor.register_receiver(DeliverPerceptionOfCommittedEvents(design, deliver_perception))
+        distributor.register_receiver(DeliverPerceptionOfCommittedEvents(scope, design, deliver_perception))
 
         self._start = StartPlaySession(
             open_world=OpenWorld(self._store),

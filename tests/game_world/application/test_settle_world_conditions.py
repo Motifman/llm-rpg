@@ -171,7 +171,7 @@ class _SettledWorld:
         self.events.extend(events)
 
     def pass_time(self) -> None:
-        self.scope.run(lambda session: session.clock().advance(self._design.day_night, session.facts()))
+        self.scope.run(lambda session: session.clock().advance(self._design.day_night))
 
     def push(self, person: PersonId, lever: ObjectDeclaration) -> ActionReply:
         interaction = self._design.interaction_on_object(lever.object_id, PUSH)
