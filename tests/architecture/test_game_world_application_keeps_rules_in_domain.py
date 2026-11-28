@@ -296,6 +296,7 @@ _REACHED = "from ai_rpg_world.game_world.domain.world_progress.group_decision im
         ("def f(stock):\n    return stock.count() > 0\n", EXTRACTED_COMPARISON),
         ("def f(a, K):\n    return a.kind() is K.WAIT\n", EXTRACTED_COMPARISON),
         ("def f(a, K):\n    return a.kind is not K.WAIT\n", EXTRACTED_COMPARISON),
+        ("def f(self, occasion):\n    return self is occasion.AFTER\n", EXTRACTED_COMPARISON),
     ],
 )
 def test_leaked_shape_is_reported_with_file_and_shape(tmp_path: Path, source: str, shape: _Shape) -> None:
