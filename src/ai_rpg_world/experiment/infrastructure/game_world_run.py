@@ -5,13 +5,18 @@ from typing import Any
 
 from typing_extensions import assert_never
 
+from ai_rpg_world.application.llm.wiring._llm_client_factory import create_llm_client_from_config
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
 from ai_rpg_world.being.domain.working_memory import Closing
+from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
+from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
 from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldPlayResult, GameWorldWriters
-from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+from ai_rpg_world.experiment.infrastructure.game_world_play_settings import LITELLM, GameWorldPlaySettings
 from ai_rpg_world.experiment.infrastructure.murmuring_action_choosing import MurmuringActionChoosing
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
+from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 from ai_rpg_world.play_session.application.play_rounds import ChoosingKeptFailing, RoundLimitReached, WorldEnded
 
 GAME_WORLD = "game_world"
@@ -26,7 +31,7 @@ def prepare_game_world_play(
         scenario=load_scenario(scenario_path),
         scenario_hash=scenario_hash,
         settings=settings,
-        writers=_stub_writers(),
+        writers=game_world_writers(settings),
         round_limit=round_limit,
         closing=CLOSING,
     )
@@ -59,9 +64,19 @@ def run_summary(result: GameWorldPlayResult) -> dict[str, Any]:
     }
 
 
-def _stub_writers() -> GameWorldWriters:
+def game_world_writers(settings: GameWorldPlaySettings) -> GameWorldWriters:
+    if settings.llm_client != LITELLM:
+        return GameWorldWriters(
+            action_choosing=MurmuringActionChoosing(),
+            episode_writer=ScriptedEpisodeWriter(),
+            backstory_writer=ScriptedBackstoryWriter(),
+        )
+    config = ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_CLIENT": LITELLM, **settings.llm_values})
+    client = create_llm_client_from_config(config)
+    if not isinstance(client, LiteLLMClient):
+        raise RuntimeError(f"LLM_CLIENT=litellm built {type(client).__name__}")
     return GameWorldWriters(
-        action_choosing=MurmuringActionChoosing(),
-        episode_writer=ScriptedEpisodeWriter(),
-        backstory_writer=ScriptedBackstoryWriter(),
+        action_choosing=client,
+        episode_writer=LlmEpisodeWriter(client),
+        backstory_writer=LlmBackstoryWriter(client.complete_short_term_summary_json),
     )

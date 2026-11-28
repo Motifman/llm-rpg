@@ -31,6 +31,7 @@ from ai_rpg_world.game_world.domain.value_object import (
     WorldTick,
 )
 from ai_rpg_world.game_world.domain.whereabouts import PersonBody
+from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsAtOnce
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
 from ai_rpg_world.play_session.domain.turn_rounds import (
     ChoiceFailed,
@@ -765,3 +766,48 @@ class TestBeingsTakingTurnsAtOnce:
         mios = session.short_term_memories.get(BeingId("mio")).unsummarized()
         assert "mio_late" not in [e.move.call_id for e in mios if isinstance(e, Attempt)]
         assert session.memo_books.get(BeingId("mio")).memos == ()
+
+
+class _CountingThinkers(ActionChoosingCompletion):
+    """同時に考えている人数の最大を数える。並べて呼ばれたかが分かるよう、少しだけ考える。"""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._thinking = 0
+        self.most_at_once = 0
+
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        with self._lock:
+            self._thinking += 1
+            self.most_at_once = max(self.most_at_once, self._thinking)
+        time.sleep(0.05)
+        with self._lock:
+            self._thinking -= 1
+        return _murmur("murmur")
+
+
+class TestThinkingAtOnceIsCapped:
+    """BeingsTakingTurnsAtOnce が、同時に考えさせる人数を上限 (max_thinking) までに抑えることを保証する。"""
+
+    def test_at_most_two_think_at_once_when_capped_at_two(self) -> None:
+        """上限を 2 にすると、4 人にターンがあっても、同時に考えるのは 2 人まで。"""
+        session = MineVillageSession(round_limit=1).started()
+        completion = _CountingThinkers()
+        takers = BeingsTakingTurnsAtOnce(
+            session.turn_steps(completion, closing="行動を 1 つ選んでください。"), session.turn_rounds, max_thinking=2
+        )
+
+        session.play_rounds(takers)(PlayRoundsCommand(WORLD))
+
+        assert completion.most_at_once == 2
+
+    def test_everyone_thinks_at_once_without_a_cap(self) -> None:
+        """上限を決めなければ、ターンのある 4 人が同時に考える。"""
+        session = MineVillageSession(round_limit=1).started()
+        completion = _CountingThinkers()
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+
+        assert completion.most_at_once == 4

@@ -252,7 +252,7 @@ class GameWorldPlay:
             casts=casts,
             turn_rounds=turn_rounds,
             # 同じシードで同じ並びを再現したいとき (fuzz) は、返事の順にスレッドの都合が入らないよう 1 人ずつ頼む
-            turn_takers=BeingsTakingTurnsAtOnce(steps, turn_rounds)
+            turn_takers=BeingsTakingTurnsAtOnce(steps, turn_rounds, max_thinking=settings.turn_parallel_workers)
             if turns_at_once
             else BeingsTakingTurnsOneByOne(steps),
             check_readiness=CheckReadinessToAct(scope),

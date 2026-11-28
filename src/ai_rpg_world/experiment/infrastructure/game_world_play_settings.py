@@ -2,11 +2,27 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, final
 
 _STUB = "stub"
-_CLIENTS = (_STUB,)
+LITELLM = "litellm"
+_CLIENTS = (_STUB, LITELLM)
+# 古い世界と同じ作り方で LiteLLM のクライアントを組むので、値の確かめ方と既定値は古い世界の読み手に任せる
+_LLM_KEYS = frozenset(
+    {
+        "LLM_MODEL",
+        "OPENAI_API_BASE",
+        "OPENROUTER_PROVIDER",
+        "OPENROUTER_QUANTIZATION",
+        "LLM_REASONING_EFFORT",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "LLM_REQUEST_TIMEOUT_SECONDS",
+        "LLM_WALL_TIME_CAP_SECONDS",
+        "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
+        "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
+    }
+)
 
 
 @final
@@ -22,15 +38,18 @@ class GameWorldPlaySettings:
     writing_workers: int = 2
     writing_max_pending: int = 100
     random_seed: int = 42
+    turn_parallel_workers: int | None = None
+    llm_values: Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_runtime_config(cls, values: Mapping[str, str]) -> GameWorldPlaySettings:
         # 古い世界の鍵を黙って読み捨てると、効いていない設定で run を回してしまう
-        unknown = sorted(set(values) - set(_READERS))
+        unknown = sorted(set(values) - set(_READERS) - _LLM_KEYS)
         if unknown:
             raise ValueError(f"runtime_config keys not used by the game world: {unknown}")
-        read = {field: reader(values[key]) for key, (field, reader) in _READERS.items() if key in values}
-        settings = cls(**read)
+        read = {name: reader(values[key]) for key, (name, reader) in _READERS.items() if key in values}
+        llm_values = {key: values[key] for key in sorted(_LLM_KEYS & set(values))}
+        settings = cls(**read, llm_values=llm_values)
         settings._validate()
         return settings
 
@@ -47,6 +66,10 @@ class GameWorldPlaySettings:
             raise ValueError("ASYNC_EVENT_WORKERS and ASYNC_EVENT_MAX_PENDING must be >= 1")
         if not math.isfinite(self.writing_wait_limit_seconds) or self.writing_wait_limit_seconds < 0:
             raise ValueError("ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS must be a finite number >= 0")
+        if self.turn_parallel_workers is not None and self.turn_parallel_workers < 1:
+            raise ValueError(f"LLM_TURN_PARALLEL_WORKERS must be >= 1, got {self.turn_parallel_workers}")
+        if self.llm_values and self.llm_client != LITELLM:
+            raise ValueError(f"LLM keys {sorted(self.llm_values)} are only read when LLM_CLIENT is litellm")
 
 
 def _bool(raw: str) -> bool:
@@ -68,4 +91,5 @@ _READERS: dict[str, tuple[str, Any]] = {
     "ASYNC_EVENT_WORKERS": ("writing_workers", int),
     "ASYNC_EVENT_MAX_PENDING": ("writing_max_pending", int),
     "SCENARIO_RANDOM_SEED": ("random_seed", int),
+    "LLM_TURN_PARALLEL_WORKERS": ("turn_parallel_workers", int),
 }

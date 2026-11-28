@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
+from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+from ai_rpg_world.experiment.infrastructure.game_world_run import game_world_writers
+from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
 
 class TestGameWorldPlaySettings:
@@ -32,10 +36,10 @@ class TestGameWorldPlaySettings:
         with pytest.raises(ValueError, match="LLM_IDLE_TIMEOUT_TICKS"):
             GameWorldPlaySettings.from_runtime_config({"LLM_IDLE_TIMEOUT_TICKS": "6"})
 
-    def test_llm_client_not_available_yet_is_refused(self) -> None:
-        """LLM_CLIENT に、新しい世界でまだ使えない litellm を書くと ValueError で断る。"""
+    def test_unknown_llm_client_is_refused(self) -> None:
+        """LLM_CLIENT に stub と litellm 以外 (random) を書くと ValueError で断る。"""
         with pytest.raises(ValueError, match="LLM_CLIENT"):
-            GameWorldPlaySettings.from_runtime_config({"LLM_CLIENT": "litellm"})
+            GameWorldPlaySettings.from_runtime_config({"LLM_CLIENT": "random"})
 
     @pytest.mark.parametrize("key", ["PLAY_WAKE_WAITING_AFTER_ROUNDS", "BEING_EPISODE_INDEX_LIMIT"])
     def test_counts_below_one_are_refused(self, key: str) -> None:
@@ -47,3 +51,39 @@ class TestGameWorldPlaySettings:
         """真偽の鍵に 1 / 0 / true / false 以外 (yes) を書くと ValueError で断る。"""
         with pytest.raises(ValueError):
             GameWorldPlaySettings.from_runtime_config({"MEMO_TOOLS_ENABLED": "yes"})
+
+
+class TestLlmSettings:
+    """GameWorldPlaySettings と game_world_writers が、LLM_CLIENT=litellm のときに古い profile と同じ LLM の鍵で LiteLLM のクライアントを組むことを保証する。"""
+
+    def test_litellm_builds_one_client_for_choosing_and_writing(self) -> None:
+        """LLM_CLIENT=litellm と LLM_MODEL を書くと、行動を選ぶのも書き起こすのも同じ LiteLLMClient になり、呼ぶ前には endpoint に触れない。"""
+        settings = GameWorldPlaySettings.from_runtime_config(
+            {
+                "LLM_CLIENT": "litellm",
+                "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash",
+                "LLM_REASONING_EFFORT": "low",
+            }
+        )
+
+        writers = game_world_writers(settings)
+
+        assert isinstance(writers.action_choosing, LiteLLMClient)
+        assert isinstance(writers.episode_writer, LlmEpisodeWriter)
+        assert isinstance(writers.backstory_writer, LlmBackstoryWriter)
+
+    def test_llm_keys_are_refused_with_the_stub(self) -> None:
+        """スタブのまま LLM_MODEL を書くと、効かない設定として ValueError で断る。"""
+        with pytest.raises(ValueError, match="LLM_MODEL"):
+            GameWorldPlaySettings.from_runtime_config({"LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash"})
+
+    def test_tool_choice_is_not_read(self) -> None:
+        """新しい世界は tool_choice を required だけで扱うので、LLM_TOOL_CHOICE を書くと断る。"""
+        with pytest.raises(ValueError, match="LLM_TOOL_CHOICE"):
+            GameWorldPlaySettings.from_runtime_config({"LLM_CLIENT": "litellm", "LLM_TOOL_CHOICE": "auto"})
+
+    def test_parallel_workers_below_one_is_refused(self) -> None:
+        """同時に呼ぶ数の上限 LLM_TURN_PARALLEL_WORKERS に 0 を書くと ValueError で断り、書かなければ上限なし (None)。"""
+        with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
+            GameWorldPlaySettings.from_runtime_config({"LLM_TURN_PARALLEL_WORKERS": "0"})
+        assert GameWorldPlaySettings.from_runtime_config({}).turn_parallel_workers is None

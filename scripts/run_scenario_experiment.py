@@ -1781,6 +1781,8 @@ def _run_game_world(
         parser.error(f"{args.scenario} declares no day and night. The game world needs time.day_night (D2222)")
     except WorldDesignFlawsException as flaws:
         parser.error(f"{args.scenario} has design flaws: {flaws}")
+    except ValueError as error:
+        parser.error(f"cannot build the LLM client: {error}")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     trace_path = out_dir / "trace.jsonl"
