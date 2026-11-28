@@ -221,9 +221,12 @@ class ActionTools:
             return None
         return Description(heading=CANDIDATE_TABLE_HEADING, text="\n".join((*lines, CANDIDATE_TABLE_NOTE)))
 
-    def _rows(self, choice: ActionChoice) -> list[_PickRow | _WriteRow]:
+    def _rows(self, choice: ActionChoice) -> list[_PickRow | _WriteRow | _WholeChoiceRow]:
         outlined = frozenset(o.name for o in choice.outline)
-        rows = list(self._picks(choice.values, outlined, None))
+        rows: list[_PickRow | _WriteRow | _WholeChoiceRow] = [
+            _WholeChoiceRow(self._reason_text(u.reason)) for u in choice.unavailable if u.argument is None
+        ]
+        rows += self._picks(choice.values, outlined, None)
         for unavailable in choice.unavailable:
             if unavailable.argument is None:
                 continue
@@ -353,6 +356,14 @@ class _WriteRow:
 
     def lines(self, choice_name: str) -> list[str]:
         return [f"{_heading(choice_name, self.name, self.parent)} {self.writes}"]
+
+
+@dataclass(frozen=True)
+class _WholeChoiceRow:
+    reason: str
+
+    def lines(self, choice_name: str) -> list[str]:
+        return [f"- {choice_name}: {UNAVAILABLE_NOW}（{self.reason}）"]
 
 
 def _function(name: str, description: str, parameters: dict[str, Any]) -> dict[str, Any]:
