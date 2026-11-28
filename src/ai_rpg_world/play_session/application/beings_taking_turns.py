@@ -30,7 +30,14 @@ from ai_rpg_world.game_world.application.tell_current_time import TellCurrentTim
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.play_session.application.play_rounds import DiscardedChoice, FinishedTurn, TurnsInProgress
 from ai_rpg_world.play_session.domain.cast import CastRepository
-from ai_rpg_world.play_session.domain.turn_rounds import Acted, ChoiceFailed, TurnOutcome, TurnRoundsRepository, Waited
+from ai_rpg_world.play_session.domain.turn_rounds import (
+    Acted,
+    ChoiceFailed,
+    ChoseNoAction,
+    TurnOutcome,
+    TurnRoundsRepository,
+    Waited,
+)
 
 ChoiceOutcome = ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen
 
@@ -98,10 +105,8 @@ class BeingTurnSteps:
         return command
 
     def carry_out(self, person: PersonId, chosen: ChoiceOutcome) -> TurnOutcome:
-        # LLM は答えたが世界に渡す行動が無いとき (ツールを呼ばない、無いツール、思い出すだけ、目次を直すだけ) は、呼び出しの失敗ではないので
-        # 失敗の続きを切り、ターンを使ったものとして次の巡りでまた頼む
         if not isinstance(chosen, ActionChosen):
-            return Acted()
+            return ChoseNoAction()
         reply = self._take_chosen_action(TakeChosenActionCommand(person, chosen.move))
         result = self._describe_result(DescribeActionResultCommand(reply=reply, call_id=chosen.move.call_id))
         self._receive_result.execute(ReceiveActionResultCommand(being_id=self.being_of(person), result=result))

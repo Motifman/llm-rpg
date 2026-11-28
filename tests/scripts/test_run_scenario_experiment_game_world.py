@@ -16,8 +16,9 @@ from scripts.run_scenario_experiment import main  # noqa: E402
 
 from ai_rpg_world.experiment.infrastructure import game_world_run  # noqa: E402
 from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlayResult  # noqa: E402
-from ai_rpg_world.game_world.domain.value_object import WorldTick  # noqa: E402
-from ai_rpg_world.play_session.application.play_rounds import ChoosingKeptFailing, PlayStopped  # noqa: E402
+from ai_rpg_world.game_world.domain.value_object import PersonId, WorldTick  # noqa: E402
+from ai_rpg_world.play_session.application.play_rounds import DiscardedChoice, PlayStopped, WorldEnded  # noqa: E402
+from ai_rpg_world.play_session.domain.turn_rounds import ChoosingKeptFailing, RoundLimitReached  # noqa: E402
 
 _SCENARIOS = _REPO_ROOT / "data" / "scenarios"
 _MINE_VILLAGE_V2 = _SCENARIOS / "mine_village_v2.yaml"
@@ -223,7 +224,7 @@ class TestGameWorldRunResult:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """選び続けて失敗して止まった遊びは、終了コード 1 になり、run_end に止まった理由の並びが残る。"""
-        stopped = ChoosingKeptFailing(reasons=("TimeoutError: a",) * 8)
+        stopped = PlayStopped(ChoosingKeptFailing(reasons=("TimeoutError: a",) * 8))
         monkeypatch.setattr(game_world_run, "prepare_game_world_play", lambda **_: _PlayStoppingWith(stopped))
         out = tmp_path / "run"
 
@@ -247,6 +248,39 @@ class TestGameWorldRunResult:
 
         end = _run_end(out)
         assert end["outcome"] == "ERROR" and "store broke" in str(end["error"])
+
+    @pytest.mark.parametrize(
+        ("stopped", "expected"),
+        [
+            (
+                PlayStopped(WorldEnded(), (DiscardedChoice(person=PersonId("mio"), exchange=None, failure=None),)),
+                ("WORLD_ENDED", None, 1),
+            ),
+            (PlayStopped(RoundLimitReached()), ("ROUND_LIMIT_REACHED", None, 0)),
+            (
+                PlayStopped(
+                    ChoosingKeptFailing(reasons=("TimeoutError: a",) * 8),
+                    (DiscardedChoice(person=PersonId("gen"), exchange=None, failure=None),) * 2,
+                ),
+                ("CHOOSING_KEPT_FAILING", ["TimeoutError: a"] * 8, 2),
+            ),
+        ],
+    )
+    def test_run_end_names_how_the_play_stopped(
+        self,
+        stopped: PlayStopped,
+        expected: tuple[str, list[str] | None, int],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """世界の終わり・巡りの上限・選び続けた失敗のどれで止まっても、run_end の outcome・stop_reasons・捨てた選択の数が止まった結果どおりに残る。"""
+        monkeypatch.setattr(game_world_run, "prepare_game_world_play", lambda **_: _PlayStoppingWith(stopped))
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        end = _run_end(out)
+        assert (end["outcome"], end["stop_reasons"], end["discarded_choices"]) == expected
 
 
 class TestGameWorldEndStateThroughTheRun:

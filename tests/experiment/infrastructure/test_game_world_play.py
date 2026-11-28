@@ -12,7 +12,7 @@ from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
 from ai_rpg_world.experiment.infrastructure.murmuring_action_choosing import MurmuringActionChoosing
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
-from ai_rpg_world.play_session.application.play_rounds import RoundLimitReached
+from ai_rpg_world.play_session.domain.turn_rounds import RoundLimitReached
 
 _MINE_VILLAGE_V2 = Path(__file__).parents[3] / "data" / "scenarios" / "mine_village_v2.yaml"
 
@@ -55,7 +55,7 @@ class TestGameWorldPlay:
 
         result = _play(completion, round_limit=2).play()
 
-        assert isinstance(result.stopped, RoundLimitReached)
+        assert isinstance(result.stopped.reason, RoundLimitReached)
         second_round = completion.prompts[4:]
         assert any("が「ふむ」と言った。" in prompt for prompt in second_round)
 
