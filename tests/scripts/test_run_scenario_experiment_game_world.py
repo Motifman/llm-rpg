@@ -281,3 +281,21 @@ class TestGameWorldEndStateThroughTheRun:
 
         assert stopped.value.code == 2
         assert "already exists" in capsys.readouterr().err
+
+    def test_world_file_left_by_a_failed_preparation_is_removed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """組み立ての途中で断られても、作りかけの world.sqlite を残さず、同じ OUT でやり直せる。"""
+        out = tmp_path / "run"
+
+        def fails_after_making_the_world(**kwargs: object) -> object:
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "world.sqlite").write_bytes(b"half made")
+            raise ValueError("the scenario needs fixing")
+
+        monkeypatch.setattr(game_world_run, "prepare_game_world_play", fails_after_making_the_world)
+
+        with pytest.raises(SystemExit):
+            main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        assert not (out / "world.sqlite").exists()

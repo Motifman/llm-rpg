@@ -353,14 +353,18 @@ class GameWorldPlay:
             self._end_play(EndPlaySessionCommand(self.world))
             last_tick = self._scope.run(lambda session: session.facts().now())
         finally:
-            # 書き終わった書き起こしを捨てないよう、例外で抜けても止める
-            self.memory_writing.shutdown()
-            # 止まった遊びも分析できるよう、書き起こしを入れたあとの記憶を残す
-            if self._memory_files is not None:
-                self._written_memory = self._memory_files.write(
-                    (person, name, being_id) for name, (person, being_id, _) in self._people_by_name.items()
-                )
-            self._store.close()
+            try:
+                # 書き終わった書き起こしを捨てないよう、例外で抜けても止める
+                self.memory_writing.shutdown()
+            finally:
+                try:
+                    # 止まった遊びも分析できるよう、書き起こしを入れたあとの記憶を残す
+                    if self._memory_files is not None:
+                        self._written_memory = self._memory_files.write(
+                            (person, name, being_id) for name, (person, being_id, _) in self._people_by_name.items()
+                        )
+                finally:
+                    self._store.close()
         return GameWorldPlayResult(
             stopped=stopped,
             last_tick=last_tick,

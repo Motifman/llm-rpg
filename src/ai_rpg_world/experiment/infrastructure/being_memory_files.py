@@ -32,10 +32,16 @@ class BeingMemoryFiles:
         self._memories = memories
 
     def write(self, people: Iterable[tuple[PersonId, str, BeingId]]) -> WrittenMemoryFiles:
-        self._directory.mkdir(parents=True, exist_ok=True)
+        listed = tuple(people)
+        try:
+            self._directory.mkdir(parents=True, exist_ok=True)
+        # 置き場所を作れなくても、遊びを止めた本当の理由を上書きしない
+        except OSError:
+            _logger.warning("failed to make %s", self._directory, exc_info=True)
+            return WrittenMemoryFiles((), len(listed))
         paths: list[Path] = []
         failures = 0
-        for person, name, being_id in people:
+        for person, name, being_id in listed:
             # 1 人ぶん書けなくても、ほかの人の記憶は残す
             try:
                 paths.append(self._write_one(person, name, being_id))

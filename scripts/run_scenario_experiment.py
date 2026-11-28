@@ -1787,12 +1787,15 @@ def _run_game_world(
         parser.error(str(error))
     scenario_hash = _sha256_file(args.scenario)
     try:
-        play = prepare_game_world_play(
-            scenario_path=args.scenario,
-            scenario_hash=scenario_hash,
-            settings=settings,
-            round_limit=args.max_world_ticks,
-            out_dir=out_dir,
+        play = _prepared_without_leaving_a_world(
+            out_dir,
+            lambda: prepare_game_world_play(
+                scenario_path=args.scenario,
+                scenario_hash=scenario_hash,
+                settings=settings,
+                round_limit=args.max_world_ticks,
+                out_dir=out_dir,
+            ),
         )
     except NotDeclaredInThisWorldException:
         parser.error(f"{args.scenario} declares no day and night. The game world needs time.day_night (D2222)")
@@ -1871,6 +1874,15 @@ def _run_game_world(
     print(f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']}", flush=True)
     # 選び続けて失敗して止まった run は、成果物は残すが比べる材料にならない
     return 1 if summary["outcome"] == "CHOOSING_KEPT_FAILING" else 0
+
+
+def _prepared_without_leaving_a_world(out_dir: Path, prepare: Callable[[], Any]) -> Any:
+    # 組み立ての途中で断ると、作りかけの world.sqlite が残り、シナリオを直して同じ OUT でやり直すと断られる
+    try:
+        return prepare()
+    except BaseException:
+        (out_dir / "world.sqlite").unlink(missing_ok=True)
+        raise
 
 
 def _game_world_report(scenario_path: Path, summary: Mapping[str, Any]) -> str:
