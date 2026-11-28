@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import final
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCall
 from ai_rpg_world.being.application.choose_action import ActionChoosingCompletion, ChooseAction
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.end_being_turn import EndBeingTurn
@@ -94,6 +95,21 @@ class GameWorldWriters:
     action_choosing: ActionChoosingCompletion
     episode_writer: EpisodeWriter
     backstory_writer: BackstoryWriter
+    aux_calls: AuxCallsForwarded | None = None
+
+
+@final
+class AuxCallsForwarded:
+    """LLM のクライアントは組み立てのときに補助の呼び出しの受け口を受け取るので、書く先は遊びを始めるときに渡す。"""
+
+    def __init__(self) -> None:
+        self._forward: Callable[[AuxLlmCall], None] = lambda call: None
+
+    def forward_to(self, forward: Callable[[AuxLlmCall], None]) -> None:
+        self._forward = forward
+
+    def record(self, call: AuxLlmCall) -> None:
+        self._forward(call)
 
 
 @final
@@ -134,6 +150,7 @@ class GameWorldPlay:
         turns_at_once: bool = True,
     ) -> None:
         design = scenario.design
+        self._writers = writers
         # 時刻の札を作る部品は昼夜を前提にするので、昼夜を宣言しない世界は組み立てる前に断る (D2222)
         day_night = design.day_night_declaration()
         self.world = world = WorldId(f"{scenario_path.stem}#1")
@@ -251,7 +268,7 @@ class GameWorldPlay:
             casts=casts,
             turn_rounds=turn_rounds,
             # 同じシードで同じ並びを再現したいとき (fuzz) は、返事の順にスレッドの都合が入らないよう 1 人ずつ頼む
-            turn_takers=BeingsTakingTurnsAtOnce(steps, turn_rounds)
+            turn_takers=BeingsTakingTurnsAtOnce(steps, turn_rounds, max_thinking=settings.turn_parallel_workers)
             if turns_at_once
             else BeingsTakingTurnsOneByOne(steps),
             check_readiness=CheckReadinessToAct(scope),
@@ -289,6 +306,10 @@ class GameWorldPlay:
             failed_choices=tuple(self._failed_choices),
             writing_failures=self.memory_writing.failures(),
         )
+
+    def forward_aux_calls(self, forward: Callable[[AuxLlmCall], None]) -> None:
+        if self._writers.aux_calls is not None:
+            self._writers.aux_calls.forward_to(forward)
 
     def now(self) -> WorldTick:
         return self._scope.run(lambda session: session.facts().now())

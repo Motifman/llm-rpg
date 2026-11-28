@@ -142,20 +142,32 @@ class _TurnsOneByOne:
 
 @final
 class BeingsTakingTurnsAtOnce:
-    def __init__(self, steps: BeingTurnSteps, turn_rounds: TurnRoundsRepository) -> None:
+    def __init__(
+        self, steps: BeingTurnSteps, turn_rounds: TurnRoundsRepository, *, max_thinking: int | None = None
+    ) -> None:
+        if max_thinking is not None and max_thinking < 1:
+            raise ValueError(f"max_thinking must be >= 1, got {max_thinking}")
         self._steps = steps
         self._turn_rounds = turn_rounds
+        self._max_thinking = max_thinking
 
     def take_turns(self, people: Sequence[PersonId]) -> TurnsInProgress:
-        return _TurnsAtOnce(self._steps, self._turn_rounds, people)
+        return _TurnsAtOnce(self._steps, self._turn_rounds, people, self._max_thinking)
 
 
 @final
 class _TurnsAtOnce:
-    def __init__(self, steps: BeingTurnSteps, turn_rounds: TurnRoundsRepository, people: Sequence[PersonId]) -> None:
+    def __init__(
+        self,
+        steps: BeingTurnSteps,
+        turn_rounds: TurnRoundsRepository,
+        people: Sequence[PersonId],
+        max_thinking: int | None,
+    ) -> None:
         self._steps = steps
         self._turn_rounds = turn_rounds
         self._people = tuple(people)
+        self._max_thinking = max_thinking
         self._executor: ThreadPoolExecutor | None = None
         self._thinking: dict[Future[ActionThought], PersonId] = {}
         self._let_go = False
@@ -174,7 +186,9 @@ class _TurnsAtOnce:
             rounds = self._turn_rounds.get(self._steps.world)
             rounds.begin_choosing(tuple(person for person, _ in prompts))
             self._turn_rounds.save(rounds)
-            self._executor = ThreadPoolExecutor(max_workers=len(prompts), thread_name_prefix="being_thinking")
+            self._executor = ThreadPoolExecutor(
+                max_workers=min(len(prompts), self._max_thinking or len(prompts)), thread_name_prefix="being_thinking"
+            )
             self._thinking = {
                 self._executor.submit(self._steps.choose_action.think, prompt): p for p, prompt in prompts
             }

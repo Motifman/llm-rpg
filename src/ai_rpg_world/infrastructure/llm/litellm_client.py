@@ -524,6 +524,9 @@ class LiteLLMClient(
             return raw if raw else _VLLM_DEFAULT_PLACEHOLDER_KEY
         return raw
 
+    def can_call(self) -> bool:
+        return bool(self._lite_api_key())
+
     def _assert_can_call_litellm(self) -> None:
         if self._lite_api_key():
             return

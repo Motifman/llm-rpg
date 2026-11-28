@@ -250,14 +250,14 @@ class MineVillageSession:
             end_being_turn=EndBeingTurn(self.short_term_memories, self.clock),
         )
 
-    def play_rounds(self, turn_takers: TurnTakers) -> PlayRounds:
+    def play_rounds(self, turn_takers: TurnTakers, *, world_has_ended: WorldHasEnded | None = None) -> PlayRounds:
         design = _scenario().design
         return PlayRounds(
             casts=self.casts,
             turn_rounds=self.turn_rounds,
             turn_takers=turn_takers,
             check_readiness=CheckReadinessToAct(self.scope),
-            world_has_ended=WorldHasEnded(self.scope),
+            world_has_ended=world_has_ended or WorldHasEnded(self.scope),
             accept_time_passage=AcceptWorldTimePassage(
                 self.scope, PassWorldTime(self.scope), SettleWorldConditions(self.scope, design)
             ),
