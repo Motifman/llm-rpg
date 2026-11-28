@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from difflib import SequenceMatcher
+
+from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, OwnActionResult
 
 # 0.5 は speech_speech → speech_speak の末尾の類似度 0.545 を通し、harvest → travel_to の 0.5 を落とす境目。
 _SUFFIX_RATIO_CUTOFF = 0.5
@@ -74,4 +77,36 @@ def format_unsupported_tool_message(*, requested: str, valid_tools: Iterable[str
     return head + tail
 
 
-__all__ = ["format_unsupported_tool_message", "suggest_closest_tool_name"]
+@dataclass(frozen=True)
+class UnsupportedToolFailure:
+    """``observation`` は自分の 1 手の失敗の結果。``suggestion`` は近い名前で、無ければ None。"""
+
+    observation: Observation
+    suggestion: str | None
+
+
+def unsupported_tool_failure(
+    *, requested: str, valid_tools: Iterable[str], call_id: str, now: ObservedTime, action_summary: str
+) -> UnsupportedToolFailure:
+    """別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。"""
+    valid = list(valid_tools)
+    suggestion = suggest_closest_tool_name(requested, valid)
+    observation = Observation(
+        body=format_unsupported_tool_message(requested=requested, valid_tools=valid, suggestion=suggestion),
+        route=OwnActionResult(call_id=call_id, succeeded=False, action_summary=action_summary),
+        time=now,
+        subject_is_self=True,
+        subject_name=UNKNOWN,
+        source=UNKNOWN,
+        place=UNKNOWN,
+        addressed_to_self=True,
+    )
+    return UnsupportedToolFailure(observation=observation, suggestion=suggestion)
+
+
+__all__ = [
+    "UnsupportedToolFailure",
+    "format_unsupported_tool_message",
+    "suggest_closest_tool_name",
+    "unsupported_tool_failure",
+]

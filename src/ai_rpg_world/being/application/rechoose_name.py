@@ -20,6 +20,8 @@ from semantic_resolver import (
     SemanticResolver,
 )
 
+from ai_rpg_world.being.application.action_tools import ActionTools
+
 #: 候補の名前と重ならない形にする。``none`` のような名前だと、世界にそういう候補があるかのように読める。
 NO_MATCH_OPTION = "__no_match__"
 
@@ -73,12 +75,41 @@ class NameRechoice:
     unavailable_reason: str | None = None
 
 
+@dataclass(frozen=True)
+class NamesMatched:
+    """``arguments`` は候補の名前に合わせた引数。``rechoices`` は選び直しを問うた順の結果。"""
+
+    arguments: Mapping[str, object]
+    rechoices: tuple[NameRechoice, ...]
+
+
 class RechooseName:
     def __init__(self, judging: NameChoiceJudging, *, min_confidence: float) -> None:
         if not 0.0 < float(min_confidence) <= 1.0:
             raise ValueError("min_confidence must be in (0, 1]")
         self._min_confidence = float(min_confidence)
         self._resolver = SemanticResolver(backend=_Backend(judging), policy=_Policy(self._min_confidence))
+
+    def match_names(
+        self,
+        tools: ActionTools,
+        *,
+        tool_name: str,
+        arguments: Mapping[str, object],
+        inner_thought: str | None,
+    ) -> NamesMatched:
+        """候補に当たらない名前だけを選び直す。"""
+        rechoices: list[NameRechoice] = []
+
+        def rechoose(written: str, label: str, candidates: Mapping[str, str | None], parent: str | None) -> str | None:
+            rechoice = self.rechoose(
+                written, label=label, candidates=candidates, parent=parent, tool=tool_name, inner_thought=inner_thought
+            )
+            rechoices.append(rechoice)
+            return rechoice.replaced_with
+
+        matched = tools.with_names_matched(tool_name, arguments, rechoose)
+        return NamesMatched(arguments=matched, rechoices=tuple(rechoices))
 
     def rechoose(
         self,
@@ -187,5 +218,6 @@ __all__ = [
     "NameChoiceQuestion",
     "NameChoiceUnavailable",
     "NameRechoice",
+    "NamesMatched",
     "RechooseName",
 ]

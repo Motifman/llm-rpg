@@ -25,7 +25,9 @@ from ai_rpg_world.being.application.unwritten_memo_text import (
     attempted_raw_operation,
     short_reason,
     unwritten_memo_line,
+    unwritten_memo_lines,
 )
+from ai_rpg_world.being.application.write_memos import UnwrittenMemo
 from ai_rpg_world.being.domain.memo_book import MemoKind
 
 
@@ -102,3 +104,25 @@ class TestShortReason:
     def test_unknown_reason_falls_back_to_the_invalid_text(self) -> None:
         """知らない理由は、書けない形だったとして返す。"""
         assert short_reason("something_new") == "書けない形だった"
+
+
+class TestUnwrittenMemoLines:
+    """unwritten_memo_lines が、書けなかった操作を、書かれていた順に 1 行ずつの文にすることを保証する。"""
+
+    def test_lines_follow_the_written_order_with_the_whole_memo_first(self) -> None:
+        """位置の順に並べ直し、引数ごと崩れていたときの行を先頭に置く。"""
+        lines = unwritten_memo_lines(
+            (
+                UnwrittenMemo(2, REJECTED_NO_SUCH_MEMO, {"do": "remove", "id": "m_3f2a7b"}),
+                UnwrittenMemo(
+                    0, REJECTED_LIMIT_REACHED, {"do": "add", "kind": "todo", "text": "鍵"}, kind=MemoKind.TODO
+                ),
+                UnwrittenMemo(None, REJECTED_NOT_A_LIST, "書いた"),
+            )
+        )
+
+        assert lines == (
+            "「メモの書き込み」は書けなかった（理由: memo は操作の配列で書く）",
+            "「やることに「鍵」を書く」は書けなかった（理由: やることが上限の 5 件。消すか書き換える）",
+            "「m_3f2a7b を消す」は書けなかった（理由: そのメモはない）",
+        )
