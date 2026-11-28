@@ -19,12 +19,12 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.being.application.recent_events_text import NO_RECENT_EVENTS, recent_events_text
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 from ai_rpg_world.being.domain.short_term_memory import (
     RECENT_TURNS,
     Attempt,
     Backstory,
     Lapse,
-    MemoryOperationOutcome,
     Perception,
     ShortTermMemory,
 )
@@ -56,6 +56,13 @@ def _game(
         typed_judgment_port=ScriptedJudgmentPort(),
     )
     return runtime, wiring, recorder
+
+
+def _body_of(experience: object) -> str:
+    if isinstance(experience, Perception):
+        return experience.observation.body_without_people()
+    assert isinstance(experience, Attempt) and isinstance(experience.response, OldWorldPreformattedLine)
+    return experience.response.body
 
 
 def _turn(wiring: _WorldLlmWiring) -> Any:
@@ -108,7 +115,7 @@ class TestCopyInTheRuntime:
             (
                 e.turn,
                 type(e).__name__,
-                (e.observation if isinstance(e, Perception) else e.result.observation).body.split("\n")[0],
+                _body_of(e).split("\n")[0],
             )
             for e in experiences
         ]
@@ -150,7 +157,7 @@ class TestMemoryOperationsAndLapsesInTheRuntime:
             e for e in runtime._being_short_term_memory_store.get(being_id).experiences if isinstance(e, Attempt)
         ]
         assert (attempt.turn, attempt.move.tool_name) == (1, TOOL_NAME_EPISODE_RECALL)
-        assert isinstance(attempt.result, MemoryOperationOutcome)
+        assert isinstance(attempt.response, OldWorldPreformattedLine)
         assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED) == []
 
     def test_turn_without_a_tool_call_is_kept_as_a_lapse(self) -> None:

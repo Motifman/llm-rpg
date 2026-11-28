@@ -47,7 +47,7 @@ ROUTE_LABELS = {
     "SeenOrHeard": "見た・聞いた",
     "ToldOrWritten": "言われた・書かれていた",
     "OwnBodyState": "自分の体の状態",
-    "OwnActionResult": "自分の行動の結果",
+    "OwnAction": "自分の行為について知ったこと",
     "EnvironmentNotice": "環境からの知らせ",
 }
 
@@ -175,7 +175,7 @@ def tally_trace(trace_path: Path, tally: Tally) -> None:
             )
             try:
                 tally.add(
-                    observation_from_action_result(entry, call_id=call_id, observer=who),
+                    observation_from_action_result(entry, observer=who),
                     f"tool:{payload.get('tool')}",
                 )
             except ObservationNotRepresentable as refused:
@@ -198,7 +198,7 @@ def render_markdown(tally: Tally) -> str:
     total = sum(tally.converted.values())
     routes = [r for r in ROUTE_LABELS if tally.converted[r]]
     lines = [
-        f"run {tally.runs} 本、変換した観測 {total} 件 (うちツールの結果 {tally.converted['OwnActionResult']} 件)",
+        f"run {tally.runs} 本、変換した観測 {total} 件 (うちツールの結果 {tally.converted['OwnAction']} 件)",
         "",
         "| 欄 | 全体 | " + " | ".join(f"{ROUTE_LABELS[r]} ({tally.converted[r]})" for r in routes) + " |",
         "|---|---|" + "---|" * len(routes),

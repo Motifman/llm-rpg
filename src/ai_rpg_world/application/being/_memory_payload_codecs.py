@@ -15,14 +15,14 @@ from typing import Any
 
 from ai_rpg_world.being.contract import (
     UNKNOWN,
+    ActionTaken,
     AgentMove,
     EnvironmentNotice,
     FrozenJsonObject,
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionCompleted,
-    OwnActionResult,
+    OwnAction,
     OwnBodyState,
     SeenOrHeard,
     ToldOrWritten,
@@ -37,17 +37,17 @@ from ai_rpg_world.being.domain.memo_book import (
     MemoProvenance,
     MemoSource,
 )
+from ai_rpg_world.being.domain.old_world_preformatted_line import OldWorldPreformattedLine
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
+    AttemptNotAnsweredYet,
+    AttemptResponse,
+    AttemptTaken,
     AwaitedBackstory,
     Backstory,
     Lapse,
-    MemoryOperationOutcome,
-    ObservedOutcome,
-    Outcome,
     Perception,
     ShortTermMemory,
-    UnknownOutcome,
 )
 from ai_rpg_world.being.domain.visited_places import VisitedPlace
 from ai_rpg_world.domain.common.exception import DomainException
@@ -185,40 +185,18 @@ _ROUTE_KINDS: dict[type, str] = {
     SeenOrHeard: "seen_or_heard",
     ToldOrWritten: "told_or_written",
     OwnBodyState: "own_body_state",
-    OwnActionResult: "own_action_result",
-    OwnActionCompleted: "own_action_completed",
+    OwnAction: "own_action",
     EnvironmentNotice: "environment_notice",
 }
-_ROUTES_WITHOUT_FIELDS: dict[str, Any] = {
-    "seen_or_heard": SeenOrHeard,
-    "told_or_written": ToldOrWritten,
-    "own_body_state": OwnBodyState,
-    "environment_notice": EnvironmentNotice,
-}
+_ROUTES: dict[str, Any] = {kind: route for route, kind in _ROUTE_KINDS.items()}
 
 
 def _route_to_dict(route: Any) -> dict[str, Any]:
-    out: dict[str, Any] = {"kind": _ROUTE_KINDS[type(route)]}
-    if isinstance(route, OwnActionResult):
-        out["call_id"] = route.call_id
-        out["succeeded"] = route.succeeded
-        out["action_summary"] = route.action_summary
-    if isinstance(route, OwnActionCompleted):
-        out["action_summary"] = route.action_summary
-        out["tool"] = route.tool
-        out["succeeded"] = route.succeeded
-    return out
+    return {"kind": _ROUTE_KINDS[type(route)]}
 
 
 def _dict_to_route(data: dict[str, Any]) -> Any:
-    kind = data["kind"]
-    if kind == "own_action_result":
-        # 要約を足す前 (#2232) に保存した snapshot の結果には要約が無いので、要約の無い結果として読む
-        summary = data["action_summary"] if "action_summary" in data else None
-        return OwnActionResult(call_id=data["call_id"], succeeded=data["succeeded"], action_summary=summary)
-    if kind == "own_action_completed":
-        return OwnActionCompleted(action_summary=data["action_summary"], tool=data["tool"], succeeded=data["succeeded"])
-    return _ROUTES_WITHOUT_FIELDS[kind]()
+    return _ROUTES[data["kind"]]()
 
 
 def _known_or_none(value: Any) -> Any:
@@ -317,26 +295,35 @@ class _ExperienceToDict:
             "observation": _observation_to_dict(perception.observation),
         }
 
-    def attempted(self, attempt: Attempt, result: Observation) -> dict[str, Any]:
-        return {**self.attempted_without_result(attempt), "result": {"observation": _observation_to_dict(result)}}
-
-    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> dict[str, Any]:
+    def attempted(self, attempt: Attempt, taken: ActionTaken) -> dict[str, Any]:
         return {
-            **self.attempted_without_result(attempt),
-            "result": {
-                "memory_operation": {
-                    "call_id": result.call_id,
-                    "body": result.body,
-                    "time": _time_to_dict(result.time),
-                    "order": _order_to_dict(result.order),
-                    "succeeded": result.succeeded,
-                    "action_summary": result.action_summary,
+            **self.attempted_without_response(attempt),
+            "response": {
+                "taken": {
+                    "call_id": taken.call_id,
+                    "action_summary": taken.action_summary,
+                    "accepted": taken.accepted,
+                    "time": _time_to_dict(taken.time),
+                    "order": _order_to_dict(taken.order),
                 }
             },
         }
 
-    def attempted_without_result(self, attempt: Attempt) -> dict[str, Any]:
-        return {"kind": "attempt", **_attempt_fields_to_dict(attempt), "result": None}
+    def attempted_without_response(self, attempt: Attempt) -> dict[str, Any]:
+        return {"kind": "attempt", **_attempt_fields_to_dict(attempt), "response": None}
+
+    def attempted_in_old_world(self, attempt: Attempt, line: OldWorldPreformattedLine) -> dict[str, Any]:
+        return {
+            **self.attempted_without_response(attempt),
+            "response": {
+                "old_world_line": {
+                    "call_id": line.call_id,
+                    "body": line.body,
+                    "time": _time_to_dict(line.time),
+                    "order": _order_to_dict(line.order),
+                }
+            },
+        }
 
     def lapsed(self, lapse: Lapse) -> dict[str, Any]:
         return {
@@ -348,29 +335,35 @@ class _ExperienceToDict:
         }
 
 
-def _dict_to_attempt_result(data: dict[str, Any] | None) -> Outcome:
+def _dict_to_attempt_response(data: dict[str, Any] | None) -> AttemptResponse:
     if data is None:
-        return UnknownOutcome()
-    if "observation" in data:
-        return ObservedOutcome(_dict_to_observation(data["observation"]))
-    operation = data["memory_operation"]
-    return MemoryOperationOutcome(
-        call_id=operation["call_id"],
-        body=operation["body"],
-        time=_dict_to_time(operation["time"]),
-        order=_dict_to_order(operation["order"]),
-        # 成否と要約を足す前 (D2240) の記憶の道具の結果は、要約の無い成功として読む。
-        succeeded=operation["succeeded"] if "succeeded" in operation else True,
-        action_summary=operation["action_summary"] if "action_summary" in operation else None,
+        return AttemptNotAnsweredYet()
+    if "taken" in data:
+        taken = data["taken"]
+        return AttemptTaken(
+            ActionTaken(
+                call_id=taken["call_id"],
+                action_summary=taken["action_summary"],
+                accepted=taken["accepted"],
+                time=_dict_to_time(taken["time"]),
+                order=_dict_to_order(taken["order"]),
+            )
+        )
+    line = data["old_world_line"]
+    return OldWorldPreformattedLine(
+        call_id=line["call_id"],
+        body=line["body"],
+        time=_dict_to_time(line["time"]),
+        order=_dict_to_order(line["order"]),
     )
 
 
-def _dict_to_attempt(data: dict[str, Any], *, result: Outcome = UnknownOutcome()) -> Attempt:
+def _dict_to_attempt(data: dict[str, Any], *, response: AttemptResponse = AttemptNotAnsweredYet()) -> Attempt:
     # 書けなかったメモの理由と呼び出しの文を足す前 (D2240) の試みには、どちらも無い。
     return Attempt(
         turn=data["turn"],
         move=_dict_to_move(data["move"]),
-        result=result,
+        response=response,
         memo_rejections=tuple(data["memo_rejections"]) if "memo_rejections" in data else (),
         call_text=data["call_text"] if "call_text" in data else None,
     )
@@ -381,7 +374,7 @@ def _dict_to_experience(data: dict[str, Any]) -> Perception | Attempt | Lapse:
     if kind == "perception":
         return Perception(turn=data["turn"], observation=_dict_to_observation(data["observation"]))
     if kind == "attempt":
-        return _dict_to_attempt(data, result=_dict_to_attempt_result(data["result"]))
+        return _dict_to_attempt(data, response=_dict_to_attempt_response(data["response"]))
     if kind == "lapse":
         return Lapse(
             turn=data["turn"],
@@ -390,14 +383,6 @@ def _dict_to_experience(data: dict[str, Any]) -> Perception | Attempt | Lapse:
             order=_dict_to_order(data["order"]),
         )
     raise KeyError(f"unknown experience kind {kind!r}")
-
-
-def _event_to_experience(data: dict[str, Any]) -> Perception | Attempt:
-    """短期記憶を集約に作り直す前の形 (観測と、自分の行動の結果なら 1 手) を読む (design_decisions D1824-9)。"""
-    observation = _dict_to_observation(data["observation"])
-    if data["move"] is None:
-        return Perception(turn=data["turn"], observation=observation)
-    return Attempt(turn=data["turn"], move=_dict_to_move(data["move"]), result=ObservedOutcome(observation))
 
 
 def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
@@ -438,11 +423,7 @@ def _dict_to_awaited_backstory(data: dict[str, Any]) -> AwaitedBackstory | None:
 
 def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) -> ShortTermMemory:
     try:
-        experiences = (
-            tuple(_event_to_experience(event) for event in data["events"])
-            if "events" in data
-            else tuple(_dict_to_experience(experience) for experience in data["experiences"])
-        )
+        experiences = tuple(_dict_to_experience(experience) for experience in data["experiences"])
         awaiting = data.get("awaiting")
         awaited = _dict_to_awaited_backstory(data)
         return ShortTermMemory(

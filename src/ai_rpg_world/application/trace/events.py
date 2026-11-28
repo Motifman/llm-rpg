@@ -154,6 +154,8 @@ class TraceEventKind:
     #     現 scenario と異なる場合は cross-scenario transfer)
     #   - removed_memory_keys: list[{being_id, counts: {キー: 件数}}] (= 消した
     #     部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない)
+    #     行動の結果を持っていたころの短期記憶を今の形に書き換えた件数も、
+    #     being_short_term_memory.own_action_result などのキーで載る (#2345)
     #   - removed_declared_memory_kinds: list[{being_id, counts: {種類: 件数}}] (= 古い
     #     snapshot から読み捨てた記憶の種類の宣言。D1469-1)
     #   - player_beings_source: "world_snapshot" / "being_snapshots" / "startup" (= 誰がどのプレイヤーを動かして

@@ -15,8 +15,7 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionCompleted,
-    OwnActionResult,
+    OwnAction,
     OwnBodyState,
     PersonInText,
     SeenOrHeard,
@@ -188,120 +187,27 @@ class TestOptionalAdvice:
             Observation(**_fields(wants_wake=UNKNOWN))
 
 
-class TestOwnActionResultRoute:
-    """経路が「自分の行動の結果」のときだけ、呼び出しの ID と成否が必須になることを保証する。"""
-
-    def test_own_action_result_requires_call_id_and_success(self) -> None:
-        """呼び出しの ID か成否のどちらかを省くと「自分の行動の結果」は作れない。"""
-        with pytest.raises(TypeError):
-            OwnActionResult(call_id="call-1")  # type: ignore[call-arg]
-        with pytest.raises(TypeError):
-            OwnActionResult(succeeded=True)  # type: ignore[call-arg]
-
-    def test_own_action_result_rejects_blank_call_id(self) -> None:
-        """呼び出しの ID が空文字なら拒む。"""
-        with pytest.raises(ContractViolation):
-            OwnActionResult(call_id=" ", succeeded=True)
-
-    def test_own_action_result_rejects_non_bool_success(self) -> None:
-        """成否が bool でなければ拒む。"""
-        with pytest.raises(ContractViolation):
-            OwnActionResult(call_id="call-1", succeeded="ok")  # type: ignore[arg-type]
-
-    def test_observation_carries_call_id_and_success_through_route(self) -> None:
-        """「自分の行動の結果」の観測は、経路から呼び出しの ID と成否を読める。"""
-        observation = Observation(**_fields(route=OwnActionResult(call_id="call-7", succeeded=False)))
-
-        assert isinstance(observation.route, OwnActionResult)
-        assert observation.route.call_id == "call-7"
-        assert observation.route.succeeded is False
+class TestOwnActionRoute:
+    """経路「自分の行為について本人が知ったこと」(OwnAction) が、ほかの経路と同じく欄を持たないことを保証する。"""
 
     @pytest.mark.parametrize(
-        "route",
-        [
-            SeenOrHeard(),
-            ToldOrWritten(),
-            OwnBodyState(),
-            EnvironmentNotice(),
-            OwnActionCompleted(action_summary="「南の坑道」に着いた", tool="travel_to"),
-        ],
+        "route", [SeenOrHeard(), ToldOrWritten(), OwnBodyState(), OwnAction(), EnvironmentNotice()]
     )
-    def test_other_routes_have_no_call_id(self, route: object) -> None:
-        """「自分の行動の結果」以外の経路は、呼び出しの ID を持たない。"""
-        assert not hasattr(route, "call_id")
+    def test_routes_have_no_fields(self, route: object) -> None:
+        """どの経路も欄を持たない。呼び出しとの対応や要約は、観測ではなく行動の返事 (ActionTaken) が持つ。"""
+        assert dataclasses.fields(route) == ()  # type: ignore[arg-type]
 
-
-class TestOwnActionResultSummary:
-    """OwnActionResult が、行動の要約を、無し・文字列・人の穴つきの文で持ち、人の穴を本文と一緒に呼び名で埋めることを保証する。"""
-
-    _TO_SAYO = TextWithPeople(
-        template="「{target}」に囁いた",
-        people={"target": PersonInText(handle=2, appearance="髪を結った娘", visible_name="サヨ")},
-    )
-
-    def test_summary_is_none_unless_given(self) -> None:
-        """要約を渡さなければ、要約は None になる。世界の外で作る結果や、要約を足す前の snapshot のため。"""
-        assert OwnActionResult(call_id="call-1", succeeded=True).action_summary is None
-
-    def test_blank_summary_is_rejected(self) -> None:
-        """空白だけの要約を渡すと ContractViolation で拒む。"""
-        with pytest.raises(ContractViolation):
-            OwnActionResult(call_id="call-1", succeeded=True, action_summary=" ")
-
-    def test_people_in_the_summary_are_named_with_the_body(self) -> None:
-        """要約が人の穴つきの文のとき、観測の人の穴を呼び名で埋めると、要約も「「サヨ」に囁いた」に埋まる。"""
-        route = OwnActionResult(call_id="call-1", succeeded=True, action_summary=self._TO_SAYO)
-        observation = Observation(**_fields(route=route, body="「水を汲もう」とささやいた。"))
-
-        named = observation.with_people_named(lambda text: text.template.replace("{target}", "サヨ"))
-
-        assert isinstance(named.route, OwnActionResult)
-        assert named.route.action_summary == "「サヨ」に囁いた"
-
-
-class TestOwnActionCompletedRoute:
-    """OwnActionCompleted が、呼び出しと 1 対 1 ではなくあとから届く自分の行動の結果を、要約・ツールの名前・成否で持つことを保証する。"""
-
-    _ARRIVED = "「南の横坑の奥」に着いた"
-
-    def test_completion_is_a_route_of_an_observation(self) -> None:
-        """着いたことは、要約とツールの名前を持つ経路として観測に載せられ、成否は省くと成功になる。"""
-        route = OwnActionCompleted(action_summary=self._ARRIVED, tool="travel_to")
-
-        observation = Observation(**_fields(route=route, body="「南の横坑の奥」に到着した。"))
-
-        assert observation.route == OwnActionCompleted(action_summary=self._ARRIVED, tool="travel_to", succeeded=True)
-
-    def test_blank_summary_is_rejected(self) -> None:
-        """空白だけの要約は ContractViolation で拒む。"""
-        with pytest.raises(ContractViolation, match="action_summary"):
-            OwnActionCompleted(action_summary=" ", tool="travel_to")
-
-    @pytest.mark.parametrize("tool", ["", "travel to", "移動"])
-    def test_tool_must_be_an_ascii_identifier(self, tool: str) -> None:
-        """ツールの名前が ASCII の識別子でなければ ContractViolation で拒む。呼び出しの行にそのまま出すため。"""
-        with pytest.raises(ContractViolation, match="tool"):
-            OwnActionCompleted(action_summary=self._ARRIVED, tool=tool)
-
-    def test_non_bool_success_is_rejected(self) -> None:
-        """成否が真偽値でなければ ContractViolation で拒む。"""
-        with pytest.raises(ContractViolation, match="succeeded"):
-            OwnActionCompleted(action_summary=self._ARRIVED, tool="travel_to", succeeded="yes")  # type: ignore[arg-type]
-
-    def test_people_in_the_summary_are_named_with_the_body(self) -> None:
-        """要約が人の穴つきの文のとき、観測の人の穴を呼び名で埋めると、要約も埋まる。"""
-        summary = TextWithPeople(
-            template="「{target}」のところに着いた",
+    def test_people_in_an_own_action_body_are_named(self) -> None:
+        """OwnAction の観測の本文の人の穴を呼び名で埋めると、本文が「サヨは手がふさがっている」に埋まり、経路は変わらない。"""
+        body = TextWithPeople(
+            template="{target}は手がふさがっている",
             people={"target": PersonInText(handle=2, appearance="髪を結った娘", visible_name="サヨ")},
         )
-        observation = Observation(
-            **_fields(route=OwnActionCompleted(action_summary=summary, tool="travel_to"), body="着いた。")
-        )
+        observation = Observation(**_fields(route=OwnAction(), body=body, subject_is_self=True))
 
         named = observation.with_people_named(lambda text: text.template.replace("{target}", "サヨ"))
 
-        assert isinstance(named.route, OwnActionCompleted)
-        assert named.route.action_summary == "「サヨ」のところに着いた"
+        assert (named.body, named.route) == ("サヨは手がふさがっている", OwnAction())
 
 
 class TestObservedTime:

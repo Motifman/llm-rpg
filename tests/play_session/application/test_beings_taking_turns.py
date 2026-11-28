@@ -14,10 +14,11 @@ from ai_rpg_world.being.application.choose_action import (
     ActionChoosingReply,
     ToolCallReply,
 )
-from ai_rpg_world.being.contract import OwnActionResult
+from ai_rpg_world.being.application.recent_events_text import recent_events_text
+from ai_rpg_world.being.contract import Observation, OwnAction
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
-from ai_rpg_world.being.domain.short_term_memory import Attempt, MemoryOperationOutcome, ObservedOutcome, Perception
+from ai_rpg_world.being.domain.short_term_memory import Attempt, AttemptTaken, Perception
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
 from ai_rpg_world.game_world.application.deliver_perception import DeliverPerceptionCommand
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
@@ -76,6 +77,18 @@ def _answered_attempts(session: MineVillageSession, person: PersonId) -> list[At
         for e in session.short_term_memories.get(BeingId(person.value)).unsummarized()
         if isinstance(e, Attempt) and e.is_answered()
     ]
+
+
+def _accepted(attempt: Attempt) -> bool:
+    assert isinstance(attempt.response, AttemptTaken)
+    return attempt.response.taken.accepted
+
+
+def _noticed_right_after(session: MineVillageSession, person: PersonId, attempt: Attempt) -> Observation:
+    experiences = session.short_term_memories.get(BeingId(person.value)).unsummarized()
+    noticed = experiences[experiences.index(attempt) + 1]
+    assert isinstance(noticed, Perception) and isinstance(noticed.observation.route, OwnAction)
+    return noticed.observation
 
 
 class _AnswersByPerson(ActionChoosingCompletion):
@@ -252,8 +265,8 @@ class TestBeingsTakingTurnsOneByOne:
             shown = repr(call.tools) + "".join(message["content"] for message in call.messages)
             assert "listen" not in shown and "耳を澄ま" not in shown
 
-    def test_result_of_the_chosen_action_answers_the_attempt(self) -> None:
-        """1 巡り目に全員がふつうの声で「ふむ」と言うと、ゲンの短期記憶の試みに、話す行為の成功の文と行動の要約が結び付く。"""
+    def test_action_taken_answers_the_attempt_and_what_was_noticed_follows_it(self) -> None:
+        """1 巡り目に全員がふつうの声で「ふむ」と言うと、ゲンの試みに通った返事と行動の要約が結び付き、そのすぐ後に本人が知った観測が残る。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
 
         session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(_murmuring(4))))(
@@ -261,11 +274,12 @@ class TestBeingsTakingTurnsOneByOne:
         )
 
         [attempt] = _answered_attempts(session, _GEN)
-        assert isinstance(attempt.result, ObservedOutcome)
-        assert attempt.result.observation.body == "「ふむ」と言った。"
-        route = attempt.result.observation.route
-        assert isinstance(route, OwnActionResult)
-        assert (route.succeeded, route.action_summary) == (True, "あなたは言った: 「ふむ」")
+        assert isinstance(attempt.response, AttemptTaken)
+        assert (attempt.response.taken.accepted, attempt.response.taken.action_summary) == (
+            True,
+            "あなたは言った: 「ふむ」",
+        )
+        assert _noticed_right_after(session, _GEN, attempt).body == "「ふむ」と言った。"
 
     def test_choosing_to_wait_skips_the_next_round(self) -> None:
         """1 巡り目にゲンだけが待つを選ぶと、2 巡り目はゲンを除く 3 人にだけ頼む。"""
@@ -311,9 +325,8 @@ class TestBeingsTakingTurnsOneByOne:
         session.play_rounds(session.beings_taking_turns(ScriptedActionChoosing(replies)))(PlayRoundsCommand(WORLD))
 
         [attempt] = _answered_attempts(session, _GEN)
-        assert isinstance(attempt.result, ObservedOutcome)
-        assert attempt.result.observation.route.succeeded is False  # type: ignore[union-attr]
-        assert "北の坑道" in str(attempt.result.observation.body)
+        assert not _accepted(attempt)
+        assert "北の坑道" in str(_noticed_right_after(session, _GEN, attempt).body)
 
     def test_lift_started_by_gen_ends_the_world_and_stops_the_play(self) -> None:
         """鍵を持ったゲンが暗い乗り場の籠にいて、発電機が暖まっている。ゲンの Being がカンテラを灯し、灯を手に持ってから操作盤で昇降機を動かすと、世界が終わる。同じ巡りの残りの人には頼まず、WorldEnded で止まる (#2232 の完了条件)。"""
@@ -335,8 +348,7 @@ class TestBeingsTakingTurnsOneByOne:
         assert stopped == PlayStopped(WorldEnded())
         assert completion.asked[-1] == _GEN
         [lit, held, started] = _answered_attempts(session, _GEN)
-        assert isinstance(started.result, ObservedOutcome)
-        assert (started.move.call_id, started.result.observation.route.succeeded) == ("start_lift", True)  # type: ignore[union-attr]
+        assert (started.move.call_id, _accepted(started)) == ("start_lift", True)
 
     def test_failed_llm_call_is_a_failed_turn_and_the_others_still_take_theirs(self) -> None:
         """ゲンの LLM の呼び出しが例外で落ちると、ゲンのターンは選べなかったターンとして残り、世界にも記憶にも何も入らず、同じ巡りの残りの人には頼む。"""
@@ -353,10 +365,10 @@ class TestBeingsTakingTurnsOneByOne:
 
 
 class TestArrivalComesBackAsOwnAction:
-    """移動して着いたことが、着いた本人には目撃の文ではなく、自分の行動の行として届くことを保証する。"""
+    """移動して着いたことが、着いた本人には目撃の文ではなく、自分の行為について知った観測として届くことを保証する。"""
 
-    def test_gen_reads_setting_off_and_arriving_as_his_own_action_lines(self) -> None:
-        """ゲンが南の横坑口から暗い南の横坑の奥へ移ると、次のターンの【直近の出来事】に、古い run と同じ出発の行と着いた行が並び、自分を見分けられない「誰かがどこからかやって来た。」は無い。"""
+    def test_gen_reads_setting_off_as_his_action_and_arriving_as_an_observation(self) -> None:
+        """ゲンが南の横坑口から暗い南の横坑の奥へ移ると、次のターンの【直近の出来事】に、出発の行動の行と、着いたことの 1 行の観測が並ぶ。呼び出し: travel_to() と、自分を見分けられない「誰かがどこからかやって来た。」は無い。"""
         session = MineVillageSession(delivers_world_events=True, round_limit=3).started()
         answers = _AnswersByPerson(session, {_GEN: [_reply("travel_to", "t1", destination="南の横坑の奥")]})
 
@@ -364,13 +376,10 @@ class TestArrivalComesBackAsOwnAction:
 
         last_prompt = [prompt for person, prompt in answers.prompts if person == _GEN][-1]
         recent = last_prompt[last_prompt.index("【直近の出来事】") : last_prompt.index("【思い出せる出来事】")]
-        assert (
-            "[行動] 「南の横坑口」から「南の横坑の奥」へ向かって出発した → [結果] 「南の横坑の奥」へ移動中。" in recent
-        )
-        assert (
-            "[行動] 「南の横坑の奥」に着いた → [結果] 「南の横坑の奥」に到着した。ここから次の行動を選べる。" in recent
-        )
-        assert "  呼び出し: travel_to()" in recent
+        assert "] [行動] 「南の横坑口」から「南の横坑の奥」へ向かって出発した\n" in recent
+        assert "] 「南の横坑の奥」に到着した。ここから次の行動を選べる。\n" in recent
+        assert "travel_to()" not in recent
+        assert "[結果]" not in recent
         assert "やって来た" not in recent
 
 
@@ -683,7 +692,7 @@ class TestRevisingTheIndexWhileTakingTurns:
         assert revised is not None and revised.index.summary == "井戸でサヨと話した"
         [attempt] = _answered_attempts(session, _GEN)
         assert attempt.move.tool_name == "episode_revise_index"
-        assert isinstance(attempt.result, MemoryOperationOutcome) and attempt.result.succeeded
+        assert _accepted(attempt)
         assert [e.outcome for e in _finished_turns(session) if e.person == _GEN] == [ChoseNoAction()]
 
 
@@ -782,6 +791,28 @@ class TestBeingsTakingTurnsAtOnce:
         assert kinds == ["own", "サヨが「灯りを点けよう」と言った。"]
         [attempt] = _answered_attempts(session, _GEN)
         assert attempt.move.call_id == "gen"
+
+    def test_gens_recent_events_show_his_action_then_what_he_noticed_then_what_was_held(self) -> None:
+        """サヨの言葉がゲンの考えているあいだに同じ時に確定すると、ゲンの【直近の出来事】は、自分の行動、それについて知ったこと、サヨの言葉の順に並ぶ。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        speak = _reply("speak", "sayo_speaks", reach="ふつうの声で話す", content="灯りを点けよう")
+        completion = _ThinkingAtOnce(
+            {
+                _SAYO: [_Planned(speak)],
+                _GEN: [_Planned(_murmur("gen"), returns_after=_has_finished(session, _SAYO))],
+            }
+        )
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
+
+        lines = recent_events_text(session.short_term_memories.get(BeingId("gen"))).split("\n")
+        own = lines.index("- [Day 1 深夜 0:00] [行動] あなたは言った: 「ふむ」")
+        assert lines[own + 1 : own + 2] == ['  呼び出し: speak(reach="ふつうの声で話す", content=本文)']
+        assert lines[own + 2 : own + 4] == [
+            "- [Day 1 深夜 0:00] 「ふむ」と言った。",
+            "- [Day 1 深夜 0:00] サヨが「灯りを点けよう」と言った。",
+        ]
 
     def test_gen_who_chose_to_wait_is_woken_by_what_happened_while_he_was_choosing(self) -> None:
         """ゲンが考えているあいだに隣でサヨが探し始めると (目立つ出来事)、ゲンが待つを選んでも、次の巡りにまた頼まれる。"""

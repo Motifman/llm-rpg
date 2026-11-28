@@ -1,36 +1,21 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.application.being._memory_payload_codecs import _dict_to_route, _route_to_dict
-from ai_rpg_world.being.contract import OwnActionCompleted, OwnActionResult
+from ai_rpg_world.being.contract import EnvironmentNotice, OwnAction, OwnBodyState, SeenOrHeard, ToldOrWritten
 
 
-class TestOwnActionResultRouteCodec:
-    """Being の snapshot が、自分の行動の結果の経路を、行動の要約ごと読み書きすることを保証する。"""
+class TestRouteCodec:
+    """Being の snapshot が、観測の経路を種類の名前だけで読み書きすることを保証する。"""
 
-    def test_summary_survives_a_round_trip(self) -> None:
-        """要約「「井戸」へ移動した」を持つ結果は、書いて読み直しても同じ要約を持つ。"""
-        route = OwnActionResult(call_id="call-1", succeeded=True, action_summary="「井戸」へ移動した")
-
+    @pytest.mark.parametrize(
+        "route", [SeenOrHeard(), ToldOrWritten(), OwnBodyState(), OwnAction(), EnvironmentNotice()]
+    )
+    def test_every_route_survives_a_round_trip(self, route: object) -> None:
+        """どの経路も、書いて読み直すと同じ経路に戻る。"""
         assert _dict_to_route(_route_to_dict(route)) == route
 
-    def test_result_saved_before_summaries_reads_without_a_summary(self) -> None:
-        """要約を足す前に保存した結果 (action_summary の欄が無い) は、要約の無い結果として読む。"""
-        saved = {"kind": "own_action_result", "call_id": "call-1", "succeeded": False}
-
-        assert _dict_to_route(saved) == OwnActionResult(call_id="call-1", succeeded=False)
-
-
-class TestOwnActionCompletedRouteCodec:
-    """Being の snapshot が、あとから届いた自分の行動の結果の経路を、要約・ツールの名前・成否ごと読み書きすることを保証する。"""
-
-    def test_arrival_survives_a_round_trip(self) -> None:
-        """「「南の横坑の奥」に着いた」の成功は、書いて読み直しても同じ要約・ツール・成否を持つ。"""
-        route = OwnActionCompleted(action_summary="「南の横坑の奥」に着いた", tool="travel_to")
-
-        assert _dict_to_route(_route_to_dict(route)) == route
-
-    def test_blocked_travel_survives_a_round_trip(self) -> None:
-        """着けなかった失敗も、書いて読み直すと失敗のまま戻る。"""
-        route = OwnActionCompleted(action_summary="「南の坑道」へ向かった", tool="travel_to", succeeded=False)
-
-        assert _dict_to_route(_route_to_dict(route)) == route
+    def test_own_action_is_written_by_its_kind_only(self) -> None:
+        """自分の行為について本人が知ったことの経路は {"kind": "own_action"} で書く。"""
+        assert _route_to_dict(OwnAction()) == {"kind": "own_action"}

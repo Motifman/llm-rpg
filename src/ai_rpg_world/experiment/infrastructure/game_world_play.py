@@ -16,7 +16,7 @@ from ai_rpg_world.being.application.leave_environment import LeaveEnvironment
 from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
 from ai_rpg_world.being.application.perceive_observation import PerceiveObservation
 from ai_rpg_world.being.application.prepare_being import PrepareBeing
-from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult
+from ai_rpg_world.being.application.receive_action_taken import ReceiveActionTaken
 from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisodesOnLeaving
 from ai_rpg_world.being.application.writing_circumstances import CircumstancesOfBeings
 from ai_rpg_world.being.contract import OfferedBeingTools
@@ -56,7 +56,7 @@ from ai_rpg_world.game_world.application.deliver_perception import DeliverPercep
 from ai_rpg_world.game_world.application.deliver_perception_of_committed_events import (
     DeliverPerceptionOfCommittedEvents,
 )
-from ai_rpg_world.game_world.application.describe_action_result import DescribeActionResult
+from ai_rpg_world.game_world.application.describe_action_taken import DescribeActionTaken
 from ai_rpg_world.game_world.application.describe_scene import DescribeScene
 from ai_rpg_world.game_world.application.mark_body_as_shown import MarkBodyAsShown
 from ai_rpg_world.game_world.application.name_person import NamePerson
@@ -308,8 +308,8 @@ class GameWorldPlay:
                 label_for=self._label_for_being,
             ),
             take_chosen_action=TakeChosenAction(scope, design, SettleWorldConditions(scope, design)),
-            describe_result=DescribeActionResult(scope, design, day_night),
-            receive_result=ReceiveActionResult(short_term_memories, clock),
+            describe_taken=DescribeActionTaken(world, scope, design, day_night),
+            receive_taken=ReceiveActionTaken(short_term_memories, clock),
             end_being_turn=EndBeingTurn(short_term_memories, clock),
             turn_rounds=turn_rounds,
         )

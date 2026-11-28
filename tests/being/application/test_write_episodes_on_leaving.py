@@ -5,12 +5,20 @@ from ai_rpg_world.being.application.write_episodes_on_leaving import (
     WriteEpisodesOnLeaving,
     WriteEpisodesOnLeavingCommand,
 )
-from ai_rpg_world.being.contract import UNKNOWN, AgentMove, Observation, ObservedTime, OwnActionResult, SeenOrHeard
+from ai_rpg_world.being.contract import (
+    UNKNOWN,
+    ActionTaken,
+    AgentMove,
+    Observation,
+    ObservedTime,
+    OwnAction,
+    SeenOrHeard,
+)
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode import EpisodeIndex
 from ai_rpg_world.being.domain.episode_writer import EpisodeContent, EpisodeContents, EpisodeWriter
 from ai_rpg_world.being.domain.persona import Persona
-from ai_rpg_world.being.domain.short_term_memory import ObservedOutcome, ShortTermMemory
+from ai_rpg_world.being.domain.short_term_memory import AttemptTaken, ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
@@ -25,11 +33,10 @@ CONTENTS = EpisodeContents(
 )
 
 
-def _observation(body: str, *, own_call_id: str | None = None) -> Observation:
-    own = own_call_id is not None
+def _observation(body: str, *, own: bool = False) -> Observation:
     return Observation(
         body=body,
-        route=OwnActionResult(call_id=own_call_id, succeeded=True) if own else SeenOrHeard(),
+        route=OwnAction() if own else SeenOrHeard(),
         time=ObservedTime(display="1日目 朝"),
         subject_is_self=own,
         subject_name=UNKNOWN,
@@ -125,12 +132,20 @@ class TestWriteEpisodesOnLeaving:
 
         assert store.get(ADA).experiences == before
 
-    def test_answered_move_is_written_with_its_result(self) -> None:
-        """結果の来た 1 手は、結果の行として書き手に渡る。"""
+    def test_answered_move_is_written_with_what_was_noticed(self) -> None:
+        """返事の来た 1 手は「[行動] 要約」の行で、本人が知ったことはその次の観測の行で、書き手に渡る。"""
         store = InMemoryShortTermMemoryRepository(handoff=discard_events)
         memory = ShortTermMemory.empty(ADA)
         memory.act(AgentMove(call_id="call-1", tool_name="wait", arguments={}), current_turn=1)
-        memory.receive_result(ObservedOutcome(_observation("待った", own_call_id="call-1")), current_turn=1)
+        memory.receive_response(
+            AttemptTaken(
+                ActionTaken(
+                    call_id="call-1", action_summary="その場で待機した", accepted=True, time=ObservedTime("1日目 朝")
+                )
+            ),
+            current_turn=1,
+        )
+        memory.perceive(_observation("しばらく様子を見た。", own=True), current_turn=1)
         store.save(memory)
         writer = _Writer()
 
@@ -138,4 +153,4 @@ class TestWriteEpisodesOnLeaving:
             store, writer, AddEpisodesToMemory(InMemoryEpisodeRepository(handoff=discard_events))
         ).execute(_command())
 
-        assert writer.events_texts == ["- [1日目 朝] 待った"]
+        assert writer.events_texts == ["- [1日目 朝] [行動] その場で待機した\n- [1日目 朝] しばらく様子を見た。"]

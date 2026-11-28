@@ -169,7 +169,7 @@ class PlayerShortTermMemoryCopy:
         result = result_from_action_result(
             payload, call_id=provenance.execution_request_id, observer=observer, order=order
         )
-        memory.receive_result(result, current_turn=current_turn)
+        memory.receive_response(result, current_turn=current_turn)
 
     def _not_copied(self, player_id: PlayerId, being_id: BeingId | None, **payload: Any) -> None:
         try:

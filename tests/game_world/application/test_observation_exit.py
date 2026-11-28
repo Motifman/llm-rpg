@@ -12,7 +12,7 @@ from ai_rpg_world.being.contract import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionCompleted,
+    OwnAction,
     OwnBodyState,
     PersonInText,
     SeenOrHeard,
@@ -143,13 +143,13 @@ class TestObservationExit:
         """知覚の質のどの種類にも、観測の経路が決まっている。"""
         _, observation = _handed_over(_perceived(quality=quality))
 
-        assert isinstance(observation.route, (SeenOrHeard, OwnBodyState, EnvironmentNotice, OwnActionCompleted))
+        assert isinstance(observation.route, (SeenOrHeard, OwnBodyState, EnvironmentNotice, OwnAction))
 
-    def test_completion_of_own_action_becomes_own_action_completed_route(self) -> None:
-        """着いたことのように、あとから届く自分の行動の結果は、要約とツールの名前を持つ OwnActionCompleted の経路で渡る。"""
+    def test_completion_of_own_action_becomes_own_action_route(self) -> None:
+        """着いたことのように、あとから届く自分の行為の知らせは、自分の行為について本人が知ったこと (OwnAction) の経路で渡る。"""
         _, observation = _handed_over(_perceived(quality=_ARRIVED))
 
-        assert observation.route == OwnActionCompleted(action_summary="「井戸」に着いた", tool="travel_to")
+        assert observation.route == OwnAction()
 
     @pytest.mark.parametrize("calls_attention", [True, False])
     def test_wants_wake_follows_whether_it_calls_attention(self, calls_attention: bool) -> None:

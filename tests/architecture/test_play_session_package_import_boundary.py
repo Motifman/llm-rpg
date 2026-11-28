@@ -31,7 +31,7 @@ _BEING_ENTRANCES = tuple(
         "enter_environment",
         "perceive_observation",
         "choose_action",
-        "receive_action_result",
+        "receive_action_taken",
         "end_being_turn",
         "leave_environment",
     )
@@ -50,7 +50,7 @@ _WORLD_ENTRANCES = tuple(
         "offer_action_choices",
         "take_chosen_action",
         "tell_current_time",
-        "describe_action_result",
+        "describe_action_taken",
     )
 )
 # 締めの一文 (Closing) は ChooseAction のコマンドの一部なので、入口と一緒に許す

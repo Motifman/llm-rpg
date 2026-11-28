@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Protocol, final
 
-from ai_rpg_world.being.contract import EnvironmentNotice, OwnActionCompleted, OwnBodyState, Route, SeenOrHeard
+from ai_rpg_world.being.contract import EnvironmentNotice, OwnAction, OwnBodyState, Route, SeenOrHeard
 from ai_rpg_world.game_world.domain.lighting.sight_quality import SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.missed_notice import MissedNotice
@@ -45,8 +45,6 @@ class Perceived:
         recipient.perceived(self)
 
     def route(self) -> Route:
-        if isinstance(self.quality, Completed):
-            return OwnActionCompleted(action_summary=self.quality.summary.for_being(), tool=self.quality.tool)
         return _ROUTES[type(self.quality)]
 
 
@@ -60,6 +58,7 @@ _ROUTES: Final[Mapping[type, Route]] = MappingProxyType(
         Felt: OwnBodyState(),
         Told: EnvironmentNotice(),
         NoticedOnWaking: EnvironmentNotice(),
+        Completed: OwnAction(),
     }
 )
 

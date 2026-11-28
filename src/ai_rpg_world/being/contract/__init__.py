@@ -10,6 +10,7 @@ from ai_rpg_world.being.contract.action_choice import (
     PickOne,
     UnavailableAction,
 )
+from ai_rpg_world.being.contract.action_taken import ActionTaken
 from ai_rpg_world.being.contract.agent_move import AgentMove, FrozenJsonObject, JsonValue
 from ai_rpg_world.being.contract.description import Description, Here, Orientation, Scene
 from ai_rpg_world.being.contract.environment_entry import EnvironmentEntry, Introduction
@@ -21,8 +22,7 @@ from ai_rpg_world.being.contract.observation import (
     Observation,
     ObservedTime,
     OccurrenceOrder,
-    OwnActionCompleted,
-    OwnActionResult,
+    OwnAction,
     OwnBodyState,
     Route,
     SeenOrHeard,
@@ -43,6 +43,7 @@ __all__ = [
     "UNKNOWN",
     "ActionChoice",
     "ActionChoices",
+    "ActionTaken",
     "AgentMove",
     "ArgumentOutline",
     "Candidate",
@@ -61,8 +62,7 @@ __all__ = [
     "ObservedTime",
     "OccurrenceOrder",
     "Orientation",
-    "OwnActionCompleted",
-    "OwnActionResult",
+    "OwnAction",
     "OwnBodyState",
     "PersonInText",
     "PersonPlaceholderValue",

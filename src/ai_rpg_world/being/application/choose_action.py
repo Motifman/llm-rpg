@@ -18,6 +18,7 @@ from ai_rpg_world.being.application.episode_index_revision_tool import (
 from ai_rpg_world.being.application.episode_recall_tool import recall_call_text
 from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
 from ai_rpg_world.being.application.names_for_people import name_for
+from ai_rpg_world.being.application.own_action_noticed import own_action_noticed
 from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
 from ai_rpg_world.being.application.recall_episodes import RecallEpisodes, RecallEpisodesCommand
 from ai_rpg_world.being.application.rechoose_name import NameRechoice, NamesMatched, RechooseName
@@ -27,8 +28,8 @@ from ai_rpg_world.being.application.unwritten_memo_text import unwritten_memo_li
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
 from ai_rpg_world.being.application.write_memos import WriteMemos, WriteMemosCommand
 from ai_rpg_world.being.contract import (
-    UNKNOWN,
     ActionChoices,
+    ActionTaken,
     AgentMove,
     Description,
     FrozenJsonObject,
@@ -37,7 +38,6 @@ from ai_rpg_world.being.contract import (
     ObservedTime,
     OfferedBeingTools,
     Orientation,
-    OwnActionResult,
     Scene,
 )
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -45,9 +45,7 @@ from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
 from ai_rpg_world.being.domain.short_term_memory import (
-    MemoryOperationOutcome,
-    ObservedOutcome,
-    Outcome,
+    AttemptTaken,
     ShortTermMemoryRepository,
 )
 from ai_rpg_world.being.domain.visited_places import VisitedPlacesRepository
@@ -146,7 +144,7 @@ class ActionNotChosen:
 
 
 class ChooseAction:
-    """選んだ行動の結果は、世界が返したあとに ``ReceiveActionResult`` で残す。"""
+    """世界に渡した行動の返事は、世界が返したあとに ``ReceiveActionTaken`` で残す。"""
 
     def __init__(
         self,
@@ -268,7 +266,8 @@ class ChooseAction:
             turn,
             move,
             call_text=recall_call_text(turn.call.tool_name, turn.call.arguments),
-            result=turn.own_tool_outcome(recalled.body, succeeded=recalled.succeeded),
+            taken=turn.own_tool_taken(accepted=recalled.succeeded),
+            noticed=own_action_noticed(recalled.body, turn.command.now),
         )
         return TurnSpentRecalling(move=move, exchange=turn.exchange)
 
@@ -281,7 +280,8 @@ class ChooseAction:
             turn,
             move,
             call_text=index_revision_call_text(turn.call.tool_name, turn.call.arguments),
-            result=turn.own_tool_outcome(revised.body, succeeded=revised.succeeded),
+            taken=turn.own_tool_taken(accepted=revised.succeeded),
+            noticed=own_action_noticed(revised.body, turn.command.now),
         )
         return TurnSpentRevisingIndex(move=move, exchange=turn.exchange, revision=revised.revision)
 
@@ -300,7 +300,8 @@ class ChooseAction:
             self._act(
                 turn,
                 AgentMove(call_id=turn.call_id, tool_name=call.tool_name, arguments={}),
-                result=ObservedOutcome(failure.observation),
+                taken=failure.taken,
+                noticed=failure.noticed,
             )
             return ActionNotChosen(requested_tool=call.tool_name, suggestion=failure.suggestion, exchange=turn.exchange)
         # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
@@ -311,7 +312,6 @@ class ChooseAction:
             move,
             memo_rejections=memo_rejections,
             call_text=tools.call_text(call.tool_name, matched.arguments),
-            result=None,
         )
         return ActionChosen(move=move, exchange=turn.exchange, name_rechoices=matched.rechoices)
 
@@ -346,15 +346,18 @@ class ChooseAction:
         turn: _Turn,
         move: AgentMove,
         *,
-        result: Outcome | None,
+        taken: ActionTaken | None = None,
+        noticed: Observation | None = None,
         memo_rejections: tuple[str, ...] = (),
         call_text: str | None = None,
     ) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。
         memory = self._short_term_memories.get(turn.being_id)
         memory.act(move, current_turn=turn.number, memo_rejections=memo_rejections, call_text=call_text)
-        if result is not None:
-            memory.receive_result(result, current_turn=turn.number)
+        if taken is not None:
+            memory.receive_response(AttemptTaken(taken), current_turn=turn.number)
+        if noticed is not None:
+            memory.perceive(noticed, current_turn=turn.number)
         self._short_term_memories.save(memory)
         self._turn_clock.advance_turn(turn.being_id)
 
@@ -380,13 +383,9 @@ class _Turn:
             call_id=self.call_id, tool_name=self.call.tool_name, arguments=FrozenJsonObject(self.call.arguments)
         )
 
-    def own_tool_outcome(self, body: str, *, succeeded: bool) -> MemoryOperationOutcome:
-        return MemoryOperationOutcome(
-            call_id=self.call_id,
-            body=body,
-            time=self.command.now,
-            succeeded=succeeded,
-            action_summary=self.action_summary(),
+    def own_tool_taken(self, *, accepted: bool) -> ActionTaken:
+        return ActionTaken(
+            call_id=self.call_id, action_summary=self.action_summary(), accepted=accepted, time=self.command.now
         )
 
     def action_summary(self) -> str:
