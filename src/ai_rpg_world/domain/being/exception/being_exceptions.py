@@ -74,7 +74,7 @@ class BeingIntroducedToItselfException(BeingDomainException, BusinessRuleExcepti
 
 
 class BeingNotAttachedException(BeingDomainException, StateException):
-    """どの環境にも入っていない Being を、環境から外そうとした。"""
+    """どの環境にも入っていない Being を環境から外そうとしたか、いまの環境の名前や知っていることを問うた。"""
 
     error_code = "BEING.NOT_ATTACHED"
 

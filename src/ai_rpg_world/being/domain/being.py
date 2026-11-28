@@ -52,6 +52,19 @@ class Being(AggregateRoot[DomainEvent]):
     def is_attached(self) -> bool:
         return self._attachment is not None
 
+    def current_environment_name(self) -> str:
+        """入っていなければ ``BeingNotAttachedException`` で断る。"""
+        return self._current_attachment().environment_name
+
+    def known_facts_here(self) -> str | None:
+        """入っていなければ ``BeingNotAttachedException`` で断る。人柄に混ぜると別の環境へ持ち越すので分けて持つ (D2222)。"""
+        return self._current_attachment().known_facts
+
+    def _current_attachment(self) -> BeingAttachment:
+        if self._attachment is None:
+            raise BeingNotAttachedException(f"Being({self._being_id}) is not attached")
+        return self._attachment
+
     def attach(self, attachment: BeingAttachment) -> None:
         """乗り換えるときは先に ``detach`` する。同時に入れる環境は 1 つまで。"""
         if not isinstance(attachment, BeingAttachment):

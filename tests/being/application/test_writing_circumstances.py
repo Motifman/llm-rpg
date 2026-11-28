@@ -9,6 +9,7 @@ from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.infrastructure.in_memory_being_repository import InMemoryBeingRepository
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotAttachedException
 
 GEN = BeingId("gen")
 GENS_PERSONA = Persona(name="ゲン", first_person="俺")
@@ -35,6 +36,6 @@ class TestCircumstancesOfBeings:
         assert circumstances.persona_text_of(GEN) == circumstances.circumstances_of(GEN).persona_text
 
     def test_being_outside_any_environment_is_refused(self) -> None:
-        """どの環境にも入っていない Being は、書き起こす環境が無いので LookupError で断る。"""
-        with pytest.raises(LookupError):
+        """どの環境にも入っていない Being は、書き起こす環境が無いので BeingNotAttachedException で断る。"""
+        with pytest.raises(BeingNotAttachedException):
             CircumstancesOfBeings(_beings(None)).circumstances_of(GEN)

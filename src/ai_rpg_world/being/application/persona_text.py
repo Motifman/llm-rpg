@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.persona import Persona
 
 PERSONA_HEADING = "ペルソナ"
@@ -23,6 +24,10 @@ def persona_text(persona: Persona, known_facts: str | None) -> str:
     return "\n\n".join(p for p in paragraphs if p)
 
 
+def persona_text_of(being: Being) -> str:
+    return persona_text(being.persona, being.known_facts_here())
+
+
 def _bare(text: str) -> str:
     return text.rstrip("。")
 
@@ -31,4 +36,4 @@ def _listed(texts: Iterable[str]) -> str:
     return "、".join(_bare(t) for t in texts)
 
 
-__all__ = ["PERSONA_HEADING", "persona_text"]
+__all__ = ["PERSONA_HEADING", "persona_text", "persona_text_of"]

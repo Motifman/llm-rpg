@@ -287,6 +287,7 @@ class GameWorldPlay:
             tell_time=TellCurrentTime(scope, day_night, design.clock_wording),
             choose_action=LabeledChooseAction(
                 ChooseAction(
+                    beings=beings,
                     working_memory=CurrentWorkingMemory(
                         beings=beings,
                         short_term_memories=short_term_memories,
