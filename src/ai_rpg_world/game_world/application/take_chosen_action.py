@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import final
 
 from ai_rpg_world.being.contract import AgentMove, TextWithPeople
-from ai_rpg_world.game_world.application.accept_action import AcceptAction, AcceptActionCommand
 from ai_rpg_world.game_world.application.action.action_reply import ActionReply
 from ai_rpg_world.game_world.application.action.carry_out_action import CarryOutAction
 from ai_rpg_world.game_world.application.action.cast_ballot import CastBallot, CastBallotCommand
@@ -36,7 +35,10 @@ from ai_rpg_world.game_world.application.action.use_item import UseItem, UseItem
 from ai_rpg_world.game_world.application.action.wait import Wait, WaitCommand
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.list_available_actions import ListAvailableActions
-from ai_rpg_world.game_world.application.settle_world_conditions import SettleWorldConditions
+from ai_rpg_world.game_world.application.settle_world_conditions import (
+    SettleWorldConditions,
+    SettleWorldConditionsCommand,
+)
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     EnterSectionAttempt,
@@ -66,7 +68,7 @@ from ai_rpg_world.game_world.domain.action.interaction_attempts import (
     ObjectInteractionAttempt,
     PersonInteractionAttempt,
 )
-from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
+from ai_rpg_world.game_world.domain.condition.settling_occasion import SettlingOccasion
 from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
 from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.value_object import PersonId
@@ -109,12 +111,12 @@ class TakeChosenAction:
         self._scope = scope
         self._design = design
         self._list = ListAvailableActions(scope, design)
-        self._accept = AcceptAction(scope, design, settle)
+        self._settle = settle
         self._carry_out = CarryOutAction(scope, design)
 
     def __call__(self, command: TakeChosenActionCommand) -> ActionReply | TurnGuidance:
         chosen, now = self._scope.run(lambda session: self._read(session, command))
-        entrances = _ActionEntrancesOf(self._accept, self._carry_out, self._design, command.person, now)
+        entrances = _ActionEntrancesOf(self._settle, self._carry_out, self._design, command.person, now)
         return chosen.entered_through(entrances)
 
     def _read(
@@ -128,9 +130,14 @@ class TakeChosenAction:
 @final
 class _ActionEntrancesOf:
     def __init__(
-        self, accept: AcceptAction, carry_out: CarryOutAction, design: WorldDesign, person: PersonId, now: WorldTick
+        self,
+        settle: SettleWorldConditions,
+        carry_out: CarryOutAction,
+        design: WorldDesign,
+        person: PersonId,
+        now: WorldTick,
     ) -> None:
-        self._accept = accept
+        self._settle = settle
         self._person = person
         self._now = now
         self._start_travel = StartTravel(carry_out, design)
@@ -152,61 +159,64 @@ class _ActionEntrancesOf:
         self._interact_with_carried_item = InteractWithCarriedItem(carry_out, design)
         self._interact_with_person = InteractWithPerson(carry_out, design)
 
+    def _settled(self, reply: ActionReply) -> ActionReply:
+        # 断られた行為も試みの記録で世界を変えているので、確定した行為と同じく落ち着かせる
+        self._settle(SettleWorldConditionsCommand(SettlingOccasion.AFTER_COMMAND))
+        return reply
+
     def misfit(self, text: str) -> ActionReply | TurnGuidance:
         return TurnGuidance(self._person, text, self._now)
 
     def travel(self, attempt: TravelAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(StartTravelCommand(attempt), self._start_travel))
+        return self._settled(self._start_travel(StartTravelCommand(attempt)))
 
     def speak(self, attempt: SpeechAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(SpeakCommand(attempt), self._speak))
+        return self._settled(self._speak(SpeakCommand(attempt)))
 
     def listen(self, attempt: ListeningAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(ListenCommand(attempt), self._listen))
+        return self._settled(self._listen(ListenCommand(attempt)))
 
     def wait(self, attempt: WaitAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(WaitCommand(attempt), self._wait))
+        return self._settled(self._wait(WaitCommand(attempt)))
 
     def tend(self, attempt: TendAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(TendFallenPersonCommand(attempt), self._tend_fallen_person))
+        return self._settled(self._tend_fallen_person(TendFallenPersonCommand(attempt)))
 
     def hand_over(self, attempt: ItemHandOverAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(HandOverItemsCommand(attempt), self._hand_over_items))
+        return self._settled(self._hand_over_items(HandOverItemsCommand(attempt)))
 
     def pick_up(self, attempt: GroundItemPickupAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(PickUpGroundItemCommand(attempt), self._pick_up_ground_item))
+        return self._settled(self._pick_up_ground_item(PickUpGroundItemCommand(attempt)))
 
     def drop(self, attempt: ItemDropAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(DropItemCommand(attempt), self._drop_item))
+        return self._settled(self._drop_item(DropItemCommand(attempt)))
 
     def search_spot(self, attempt: SpotSearchAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(SearchSpotCommand(attempt), self._search_spot))
+        return self._settled(self._search_spot(SearchSpotCommand(attempt)))
 
     def use_item(self, attempt: ItemUseAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(UseItemCommand(attempt), self._use_item))
+        return self._settled(self._use_item(UseItemCommand(attempt)))
 
     def enter_section(self, attempt: EnterSectionAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(EnterSectionCommand(attempt), self._enter_section))
+        return self._settled(self._enter_section(EnterSectionCommand(attempt)))
 
     def leave_section(self, attempt: LeaveSectionAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(LeaveSectionCommand(attempt), self._leave_section))
+        return self._settled(self._leave_section(LeaveSectionCommand(attempt)))
 
     def hold(self, attempt: HoldItemAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(HoldItemCommand(attempt), self._hold_item))
+        return self._settled(self._hold_item(HoldItemCommand(attempt)))
 
     def put_away(self, attempt: PutAwayItemAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(PutAwayItemCommand(attempt), self._put_away_item))
+        return self._settled(self._put_away_item(PutAwayItemCommand(attempt)))
 
     def cast_ballot(self, attempt: GroupDecisionBallotAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(CastBallotCommand(attempt), self._cast_ballot))
+        return self._settled(self._cast_ballot(CastBallotCommand(attempt)))
 
     def interact_with_object(self, attempt: ObjectInteractionAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(InteractWithObjectCommand(attempt), self._interact_with_object))
+        return self._settled(self._interact_with_object(InteractWithObjectCommand(attempt)))
 
     def interact_with_carried_item(self, attempt: CarriedItemInteractionAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(
-            AcceptActionCommand(InteractWithCarriedItemCommand(attempt), self._interact_with_carried_item)
-        )
+        return self._settled(self._interact_with_carried_item(InteractWithCarriedItemCommand(attempt)))
 
     def interact_with_person(self, attempt: PersonInteractionAttempt) -> ActionReply | TurnGuidance:
-        return self._accept(AcceptActionCommand(InteractWithPersonCommand(attempt), self._interact_with_person))
+        return self._settled(self._interact_with_person(InteractWithPersonCommand(attempt)))

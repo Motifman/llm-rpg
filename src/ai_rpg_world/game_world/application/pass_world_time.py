@@ -24,6 +24,7 @@ class PassWorldTime:
 
 
 def _pass_one_tick(session: WorldSession) -> None:
+    session.ending().admit_change()
     facts = session.facts()
     world = session.aggregates()
     clock = session.clock()

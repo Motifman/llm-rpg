@@ -41,6 +41,7 @@ class CarryOutAction:
 
         def carry_out(session: WorldSession) -> ActionDone:
             nonlocal aimed
+            session.ending().admit_change()
             facts = session.facts()
             aimed = self._check.cleared(attempt, steps, facts, self._texts)
             return self._carry_out_aimed(aimed, steps, session, facts)

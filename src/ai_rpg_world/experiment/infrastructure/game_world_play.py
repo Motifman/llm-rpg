@@ -322,9 +322,7 @@ class GameWorldPlay:
             else BeingsTakingTurnsOneByOne(steps),
             check_readiness=CheckReadinessToAct(scope),
             world_has_ended=WorldHasEnded(scope),
-            accept_time_passage=AcceptWorldTimePassage(
-                scope, PassWorldTime(scope), SettleWorldConditions(scope, design)
-            ),
+            accept_time_passage=AcceptWorldTimePassage(PassWorldTime(scope), SettleWorldConditions(scope, design)),
         )
         self._end_play = EndPlaySession(
             casts=casts,
