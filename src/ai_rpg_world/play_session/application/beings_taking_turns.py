@@ -83,7 +83,7 @@ class BeingsTakingTurnsOneByOne(TurnTakers):
         # LLM の呼び出しの失敗は provider ごとに型が違うので、型で絞らずに ChooseAction ごと囲み、呼び出しが落ちたターンとして数える
         except Exception as error:
             return ChoiceFailed(f"{type(error).__name__}: {error}")
-        # LLM は答えたが世界に渡す行動が無いとき (ツールを呼ばない、無いツール、思い出すだけ) は、呼び出しの失敗ではないので
+        # LLM は答えたが世界に渡す行動が無いとき (ツールを呼ばない、無いツール、思い出すだけ、目次を直すだけ) は、呼び出しの失敗ではないので
         # 失敗の続きを切り、ターンを使ったものとして次の巡りでまた頼む
         if not isinstance(chosen, ActionChosen):
             return Acted()

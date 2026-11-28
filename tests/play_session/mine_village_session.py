@@ -206,6 +206,7 @@ class MineVillageSession:
                 inner_thought="inner_thought",
                 memo=MEMO_FIELD_NAME,
                 episode_recall="episode_recall",
+                episode_index_revision="episode_revise_index",
                 episode_index_shown=True,
             ),
             closing=Closing(instruction=closing),

@@ -10,7 +10,8 @@ from ai_rpg_world.being.application.choose_action import (
 )
 from ai_rpg_world.being.contract import OwnActionResult
 from ai_rpg_world.being.domain.being_id import BeingId
-from ai_rpg_world.being.domain.short_term_memory import Attempt, ObservedOutcome, Perception
+from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
+from ai_rpg_world.being.domain.short_term_memory import Attempt, MemoryOperationOutcome, ObservedOutcome, Perception
 from ai_rpg_world.being.infrastructure.scripted_action_choosing import ScriptedActionChoosing
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.trigger import WorldConditionsSettling
@@ -455,7 +456,7 @@ class TestMemoOfferedToBeings:
     """新しい世界が Being にメモの引数を出し、書いたメモが次のターンの【メモ】に出ることを保証する。"""
 
     def test_first_prompt_explains_the_memo_and_every_action_takes_it(self) -> None:
-        """1 ターン目から、システムプロンプトに古い run と同じ【メモの書き方】が出て、思い出す道具を除く行動のツールはどれも memo の引数を持つ。"""
+        """1 ターン目から、システムプロンプトに古い run と同じ【メモの書き方】が出て、思い出す道具と目次を直す道具を除く行動のツールはどれも memo の引数を持つ。"""
         session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
         completion = ScriptedActionChoosing(_murmuring(4))
 
@@ -465,7 +466,9 @@ class TestMemoOfferedToBeings:
         assert (
             "【メモの書き方】\n- 行動の tool の `memo` に、あとで使いたいことを書ける。" in first.messages[0]["content"]
         )
-        actions = [tool for tool in first.tools if tool["function"]["name"] != "episode_recall"]
+        actions = [
+            tool for tool in first.tools if tool["function"]["name"] not in {"episode_recall", "episode_revise_index"}
+        ]
         assert actions and all("memo" in tool["function"]["parameters"]["properties"] for tool in actions)
 
     def test_memo_written_with_an_action_appears_in_the_next_turn(self) -> None:
@@ -534,3 +537,38 @@ class TestEpisodesWrittenWhileTakingTurns:
         for person in _turn_order(session):
             [episode] = session.episodes.list_by_being(BeingId(person.value))
             assert episode.environment_name == "廃坑の山村" and "ふむ" in episode.body
+
+
+class TestRevisingTheIndexWhileTakingTurns:
+    """新しい世界で、Being が目次を直すツールを選ぶと、世界に行為を渡さずに目次が直ることを保証する (#2261 の完了条件)。"""
+
+    def test_gen_revises_the_index_of_an_episode_and_the_world_sees_no_action(self) -> None:
+        """ゲンが目次の「金庫の番号を聞いた」を「井戸でサヨと話した」に直すと、目次が直り、ゲンの行為は世界に渡らない。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        gen = BeingId(_GEN.value)
+        episode = Episode.write(
+            being_id=gen,
+            episode_id="3f2a7b00-0000-4000-8000-00000000abcd",
+            environment_name="廃坑の山村",
+            written_turn=0,
+            index=EpisodeIndex(summary="金庫の番号を聞いた", recall_when="金庫の話が出たとき"),
+            body="サヨと井戸で話した。",
+        )
+        session.episodes.add(episode)
+        revise = _reply(
+            "episode_revise_index",
+            "r1",
+            handle=episode.handle,
+            about="井戸でサヨと話した",
+            recall_when="井戸の話が出たとき",
+            inner_thought="目次が違っていた",
+        )
+        answers = _AnswersByPerson(session, {_GEN: [revise]})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        revised = session.episodes.find_by_handle(gen, episode.handle)
+        assert revised is not None and revised.index.summary == "井戸でサヨと話した"
+        [attempt] = _answered_attempts(session, _GEN)
+        assert attempt.move.tool_name == "episode_revise_index"
+        assert isinstance(attempt.result, MemoryOperationOutcome) and attempt.result.succeeded
