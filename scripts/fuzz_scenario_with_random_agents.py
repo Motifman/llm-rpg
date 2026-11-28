@@ -610,6 +610,126 @@ def _unknown_names(runtime: Any, viewer: int) -> dict[str, str]:
     return unknown
 
 
+def _profile_world(profile_path: Path) -> str | None:
+    world = json.loads(profile_path.read_text(encoding="utf-8")).get("world")
+    return None if world is None else str(world)
+
+
+def game_world_identifiers(scenario_path: Path) -> frozenset[str]:
+    """新しい世界のシナリオの英字の識別子。名詞の宣言と、品物・出来事などの欄の鍵から集める。"""
+    import yaml
+
+    from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
+
+    nouns = load_scenario(scenario_path).design.nouns
+    found = {
+        *(c.person_id.value for c in nouns.all_characters()),
+        *(f.flag_id.value for f in nouns.all_flags()),
+        *(s.spot_id.value for s in nouns.all_spots()),
+        *(p.passage_id.value for p in nouns.all_passages()),
+        *(o.object_id.value for o in nouns.all_objects()),
+        *(s.section_id.value for s in nouns.all_sections()),
+    }
+    source = yaml.safe_load(scenario_path.read_text(encoding="utf-8")) or {}
+    for section in ("item_specs", "happenings", "reactions", "person_interactions", "groupings"):
+        keys = source.get(section) or {}
+        if isinstance(keys, dict):
+            found.update(str(key) for key in keys)
+    return frozenset(i for i in found if re.fullmatch(r"[a-z][a-z0-9]*_[a-z0-9_]+", i))
+
+
+def run_random_agents_in_game_world(
+    scenario_path: Path,
+    *,
+    seed: int,
+    max_world_ticks: int,
+    profile_path: Path,
+    known_holes: Sequence[KnownHole] = KNOWN_HOLES,
+) -> FuzzResult:
+    """新しい世界 (game_world) で、全員でたらめに行動させて ``max_world_ticks`` 巡り回す (#2234)。"""
+    from ai_rpg_world.being.application.choose_action import ActionChoosingReply
+    from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
+    from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
+    from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldWriters
+    from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+    from ai_rpg_world.experiment.infrastructure.game_world_run import CLOSING
+    from ai_rpg_world.experiment.infrastructure.random_action_choosing import CandidateTable, RandomActionChoosing
+    from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
+
+    result = FuzzResult(scenario=scenario_path.stem, seed=seed, max_world_ticks=max_world_ticks)
+    identifiers = game_world_identifiers(scenario_path)
+    seen_leaks: set[str] = set()
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    values = {
+        **profile.get("runtime_config", {}),
+        "LLM_CLIENT": "stub",
+        "SCENARIO_RANDOM_SEED": seed,
+    }
+    settings = GameWorldPlaySettings.from_runtime_config(
+        {key: ("1" if v else "0") if isinstance(v, bool) else str(v) for key, v in values.items()}
+    )
+    holder: dict[str, GameWorldPlay] = {}
+
+    def now() -> int:
+        return holder["play"].now().value if "play" in holder else 0
+
+    class _Watched(RandomActionChoosing):
+        def choose_action(
+            self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+        ) -> ActionChoosingReply:
+            tick = now()
+            for text in (*(m["content"] for m in messages), *tool_texts(tools)):
+                for line in find_leaks(text, identifiers):
+                    if line not in seen_leaks:
+                        seen_leaks.add(line)
+                        result.findings.append(FuzzFinding("leak", tick, line[:200]))
+            for line in CandidateTable.read(messages[-1]["content"]).unreadable_lines:
+                result.findings.append(FuzzFinding("unreadable_candidates", tick, line[:200]))
+            reply = super().choose_action(messages, tools, reasoning_off=reasoning_off)
+            if reply.tool_call is not None:
+                result.actions.append(FuzzAction(tick, 0, reply.tool_call.tool_name, dict(reply.tool_call.arguments)))
+            return reply
+
+    errors = _ErrorLogCollector(now)
+    root = logging.getLogger()
+    root.addHandler(errors)
+    try:
+        play = GameWorldPlay(
+            scenario_path=scenario_path,
+            scenario=load_scenario(scenario_path),
+            scenario_hash=scenario_path.stem,
+            settings=settings,
+            writers=GameWorldWriters(
+                action_choosing=_Watched(seed),
+                episode_writer=ScriptedEpisodeWriter(),
+                backstory_writer=ScriptedBackstoryWriter(),
+            ),
+            round_limit=max_world_ticks,
+            closing=CLOSING,
+            turns_at_once=False,
+        )
+        holder["play"] = play
+        try:
+            played = play.play()
+        except Exception as exc:
+            result.findings.append(FuzzFinding("exception", now(), _describe_exception(exc)))
+        else:
+            result.reached_tick = played.last_tick.value
+            for reason in played.failed_choices:
+                result.findings.append(FuzzFinding("swallowed_exception", result.reached_tick, reason[:300]))
+            result.async_event_delivery_failures = dict(played.writing_failures)
+            for reason, count in played.writing_failures.items():
+                if reason in ASYNC_EVENT_DELIVERY_HOLE_REASONS:
+                    result.findings.append(
+                        FuzzFinding("exception", result.reached_tick, f"memory writing {reason} x{count}")
+                    )
+    finally:
+        root.removeHandler(errors)
+    result.findings += [FuzzFinding("logged_error", tick, detail[:300]) for tick, detail in errors.records]
+    result.findings = [classify(f, known_holes) for f in result.findings]
+    return result
+
+
 def _parse_seeds(text: str) -> list[int]:
     seeds: list[int] = []
     for part in text.split(","):
@@ -635,10 +755,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.getLogger().addHandler(logging.NullHandler())
+    game_world = _profile_world(args.profile) == "game_world"
     results: list[FuzzResult] = []
     for scenario in args.scenario:
         for seed in _parse_seeds(args.seeds):
-            result = run_random_agents(scenario, seed=seed, max_world_ticks=args.ticks, profile_path=args.profile)
+            if game_world:
+                result = run_random_agents_in_game_world(
+                    scenario, seed=seed, max_world_ticks=args.ticks, profile_path=args.profile
+                )
+            else:
+                result = run_random_agents(scenario, seed=seed, max_world_ticks=args.ticks, profile_path=args.profile)
             results.append(result)
             print(result.report(), flush=True)
     print(summarize(results))

@@ -156,7 +156,9 @@ class _PlayStoppingWith:
     def play(self) -> GameWorldPlayResult:
         if isinstance(self._stopped, Exception):
             raise self._stopped
-        return GameWorldPlayResult(stopped=self._stopped, last_tick=WorldTick(4), finished_turns=9, writing_failures={})
+        return GameWorldPlayResult(
+            stopped=self._stopped, last_tick=WorldTick(4), finished_turns=9, failed_choices=(), writing_failures={}
+        )
 
 
 class TestGameWorldRunResult:
