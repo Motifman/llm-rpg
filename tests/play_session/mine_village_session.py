@@ -202,23 +202,13 @@ class MineVillageSession:
             ),
         )
 
-    def beings_taking_turns(
-        self,
-        completion: ActionChoosingCompletion,
-        *,
-        closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
-    ) -> BeingsTakingTurnsOneByOne:
-        return BeingsTakingTurnsOneByOne(self.turn_steps(completion, closing=closing))
+    def beings_taking_turns(self, completion: ActionChoosingCompletion) -> BeingsTakingTurnsOneByOne:
+        return BeingsTakingTurnsOneByOne(self.turn_steps(completion))
 
-    def beings_taking_turns_at_once(
-        self,
-        completion: ActionChoosingCompletion,
-        *,
-        closing: str = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
-    ) -> BeingsTakingTurnsAtOnce:
-        return BeingsTakingTurnsAtOnce(self.turn_steps(completion, closing=closing), self.turn_rounds)
+    def beings_taking_turns_at_once(self, completion: ActionChoosingCompletion) -> BeingsTakingTurnsAtOnce:
+        return BeingsTakingTurnsAtOnce(self.turn_steps(completion), self.turn_rounds)
 
-    def turn_steps(self, completion: ActionChoosingCompletion, *, closing: str) -> BeingTurnSteps:
+    def turn_steps(self, completion: ActionChoosingCompletion) -> BeingTurnSteps:
         design = _scenario().design
         day_night = design.day_night
         assert isinstance(day_night, DayNightDeclaration)
@@ -233,7 +223,7 @@ class MineVillageSession:
                 episode_index_revision="episode_revise_index",
                 episode_index_shown=True,
             ),
-            closing=Closing(instruction=closing),
+            closing=Closing(instruction=design.choice_descriptions.closing),
             describe_scene=DescribeScene(self.scope, design),
             mark_body_as_shown=MarkBodyAsShown(self.scope),
             offer_choices=OfferActionChoices(self.scope, design),
