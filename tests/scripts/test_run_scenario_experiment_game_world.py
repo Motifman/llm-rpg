@@ -28,6 +28,11 @@ def _run_end(out: Path) -> dict[str, object]:
     return end["payload"]
 
 
+def _run_start(out: Path) -> dict[str, object]:
+    [start] = [e for e in map(json.loads, (out / "trace.jsonl").read_text().splitlines()) if e["kind"] == "run_start"]
+    return start["payload"]
+
+
 def _without_day_night(tmp_path: Path) -> Path:
     shutil.copytree(_SCENARIOS / "common", tmp_path / "common")
     text = _MINE_VILLAGE_V2.read_text(encoding="utf-8")
@@ -79,7 +84,7 @@ class TestGameWorldThroughMake:
     def test_save_dir_that_make_adds_does_not_stop_the_run(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """make experiment は OUT を渡すといつも --snapshot-save-dir OUT/snapshots を付ける。新しい世界はそれで止まらず、保存しないと表示し、保存先を作らず、manifest の保存先も空にする。"""
+        """make experiment は OUT を渡すといつも --snapshot-save-dir OUT/snapshots を付ける。新しい世界はそれで止まらず、保存しないと表示し、run_start に保存を飛ばした印を残す。"""
         out = tmp_path / "run"
 
         code = main(
@@ -88,8 +93,15 @@ class TestGameWorldThroughMake:
 
         assert code == 0
         assert "does not save snapshots yet" in capsys.readouterr().out
-        assert not (out / "snapshots").exists()
-        assert json.loads((out / "experiment.config.resolved.json").read_text())["snapshot_save_dir"] is None
+        assert _run_start(out)["snapshot_save_skipped"] is True
+
+    def test_run_without_a_save_dir_is_not_marked_as_skipping(self, tmp_path: Path) -> None:
+        """保存先を渡さなければ、run_start の保存を飛ばした印は偽。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out), "--max-world-ticks", "1"])
+
+        assert _run_start(out)["snapshot_save_skipped"] is False
 
 
 class TestGameWorldStopsAtTheEntrance:

@@ -1762,11 +1762,11 @@ def _run_game_world(
     from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
     from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 
-    # 新しい世界にはまだ snapshot が無い。profile で保存を頼むか読み込みを頼んだら断る
     if args.snapshot_load_dir is not None or config_source.get("snapshot_save"):
         parser.error("the game world cannot save or load snapshots yet")
-    # make experiment は OUT を渡すといつも保存先を付けるので、それだけでは断らない。保存しないことは表示と manifest に残す
-    if args.snapshot_save_dir is not None:
+    # make experiment は OUT を渡すといつも保存先を付けるので、それだけでは断らない。保存しないことは表示と run_start に残す
+    snapshot_save_skipped = args.snapshot_save_dir is not None
+    if snapshot_save_skipped:
         print(
             f"[warn] the game world does not save snapshots yet; {args.snapshot_save_dir} is left unwritten", flush=True
         )
@@ -1822,6 +1822,7 @@ def _run_game_world(
         rec.record(
             TraceEventKind.RUN_START,
             world=_GAME_WORLD,
+            snapshot_save_skipped=snapshot_save_skipped,
             scenario=args.scenario.name,
             scenario_sha256=scenario_hash,
             max_world_ticks=args.max_world_ticks,
