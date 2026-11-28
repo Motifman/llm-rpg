@@ -258,3 +258,24 @@ class TestGameWorldTraceOfTheRun:
         ]
         assert filled
         assert {p["person"]["name"] for p in filled} <= {"ハル", "ミオ", "ゲン", "サヨ"}
+
+
+class TestGameWorldViewers:
+    """run の入口が、新しい世界でも trace.html と prompt.html を作り、--no-html のときは作らないことを保証する。"""
+
+    def test_trace_and_prompt_viewers_are_written(self, tmp_path: Path) -> None:
+        """smoke を 1 巡り回すと、trace.html と prompt.html ができ、地図の viewer は作らない。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out), "--max-world-ticks", "1"])
+
+        assert (out / "trace.html").exists() and (out / "prompt.html").exists()
+        assert not (out / "viewer.html").exists()
+
+    def test_no_html_writes_no_viewer(self, tmp_path: Path) -> None:
+        """--no-html を付けると、HTML を 1 つも作らない。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out), "--max-world-ticks", "1", "--no-html"])
+
+        assert not list(out.glob("*.html"))

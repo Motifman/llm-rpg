@@ -1754,11 +1754,11 @@ def _run_game_world(
     runtime_config_source: Mapping[str, str],
 ) -> int:
     from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+    from ai_rpg_world.experiment.infrastructure.game_world_report import game_world_report
     from ai_rpg_world.experiment.infrastructure.game_world_run import prepare_game_world_play, run_summary
     from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
     from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 
-    # 新しい世界の trace はまだ古い viewer で読めないので HTML を作らない。snapshot もまだ無い
     if args.snapshot_save_dir is not None or args.snapshot_load_dir is not None or config_source.get("snapshot_save"):
         parser.error("the game world cannot save or load snapshots yet")
     if args.publish_gist:
@@ -1801,7 +1801,7 @@ def _run_game_world(
         max_world_ticks=args.max_world_ticks,
         snapshot_save_dir=None,
         snapshot_load_dir=None,
-        no_html=True,
+        no_html=args.no_html,
         no_progress_jsonl=True,
         world=_GAME_WORLD,
     )
@@ -1844,30 +1844,31 @@ def _run_game_world(
             raise
         summary["elapsed_sec"] = time.monotonic() - started
         rec.record(TraceEventKind.RUN_END, **summary)
-    report_path.write_text(_game_world_report(args.scenario, summary), encoding="utf-8")
+    report_path.write_text(
+        game_world_report(
+            title=f"{args.scenario.stem} run",
+            trace_path=trace_path,
+            summary=summary,
+            elapsed=_format_duration(summary["elapsed_sec"]),
+        ),
+        encoding="utf-8",
+    )
+    if not args.no_html:
+        # 地図と時系列の viewer は古い世界の形 (scenario.json、player_id) を前提にするので作らない
+        _write_html_artifact(
+            name="trace.html",
+            path=out_dir / "trace.html",
+            render=lambda: _render_trace_html(trace_path, title=f"{args.scenario.stem} run (game_world)"),
+        )
+        _write_html_artifact(
+            name="prompt.html", path=out_dir / "prompt.html", render=lambda: _render_prompt_viewer_html(out_dir)
+        )
     (out_dir / args.scenario.name).write_bytes(args.scenario.read_bytes())
     print(f"[report] {report_path}", flush=True)
     print(f"[trace] {trace_path}", flush=True)
     print(f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']}", flush=True)
     # 選び続けて失敗して止まった run は、成果物は残すが比べる材料にならない
     return 1 if summary["outcome"] == "CHOOSING_KEPT_FAILING" else 0
-
-
-def _game_world_report(scenario_path: Path, summary: Mapping[str, Any]) -> str:
-    failures = summary["memory_writing_failures"]
-    lines = [
-        f"# {scenario_path.stem} run (game_world)",
-        "",
-        f"- outcome: {summary['outcome']}",
-        f"- last_tick: {summary['last_tick']}",
-        f"- finished turns: {summary['finished_turns']}",
-        f"- elapsed: {_format_duration(summary['elapsed_sec'])}",
-        f"- discarded choices: {summary['discarded_choices']}",
-        f"- memory writing failures: {failures if failures else 'none'}",
-    ]
-    if summary["stop_reasons"]:
-        lines += ["", "## stop reasons", "", *(f"- {reason}" for reason in summary["stop_reasons"])]
-    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
