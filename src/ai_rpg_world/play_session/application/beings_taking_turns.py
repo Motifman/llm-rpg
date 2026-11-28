@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed, wait
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import final
 
 from ai_rpg_world.being.application.choose_action import (
@@ -197,8 +197,6 @@ class _TurnsAtOnce:
         self._let_go = True
         for future in self._thinking:
             future.cancel()
-        # 走っている呼び出しは止められない。返るまで待たないと、遊びを終えたあとに返事が届く
-        wait(tuple(self._thinking))
         discarded = tuple(_discarded(person, future) for future, person in self._thinking.items())
         self._thinking = {}
         if self._executor is not None:
@@ -220,6 +218,7 @@ class _TurnsAtOnce:
 def _discarded(person: PersonId, future: Future[ActionThought]) -> DiscardedChoice:
     if future.cancelled():
         return DiscardedChoice(person=person, exchange=None, failure=None)
+    # 走っている呼び出しは止められないので、返るまで待つ。待たないと、遊びを終えたあとに返事が届く
     error = future.exception()
     if error is not None:
         return DiscardedChoice(person=person, exchange=None, failure=f"{type(error).__name__}: {error}")

@@ -34,6 +34,7 @@ from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
 from ai_rpg_world.play_session.domain.turn_rounds import (
     ChoiceFailed,
+    ObservationPassedOnEvent,
     RoundOpenedEvent,
     SkippedTurn,
     TurnFinishedEvent,
@@ -694,6 +695,23 @@ class TestBeingsTakingTurnsAtOnce:
         outcomes = {e.person: e.outcome for e in _finished_turns(session)}
         assert outcomes.pop(_GEN) == ChoiceFailed("TimeoutError: no reply in 95 seconds")
         assert len(outcomes) == 3 and _answered_attempts(session, _GEN) == []
+
+    def test_what_gen_perceives_from_his_own_action_reaches_him_before_his_turn_ends(self) -> None:
+        """ゲンがカンテラを灯すと、自分の行為で届いた「カンテラの灯を入手しました。」は預からず、ゲンのターンを終えるより前に渡る。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        session.scope.run(_ready_to_start_the_lift)
+        completion = _ThinkingAtOnce(
+            {_GEN: [_Planned(_reply("interact", "light", target="カンテラ", how="油を足して灯す"))]}
+        )
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+
+        gens = [
+            "finished" if isinstance(e, TurnFinishedEvent) else e.observation.body.template
+            for e in session.turn_round_events
+            if getattr(e, "person", None) == _GEN and isinstance(e, (TurnFinishedEvent, ObservationPassedOnEvent))
+        ]
+        assert gens.index("カンテラの灯を入手しました。") < gens.index("finished")
 
     def _world_ending_while_mio_thinks(self) -> tuple[MineVillageSession, object]:
         session = MineVillageSession(delivers_world_events=True).started()
