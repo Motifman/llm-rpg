@@ -1762,9 +1762,15 @@ def _run_game_world(
     from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
     from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 
-    # 新しい世界の trace はまだ古い viewer で読めないので HTML を作らない。snapshot もまだ無い
-    if args.snapshot_save_dir is not None or args.snapshot_load_dir is not None or config_source.get("snapshot_save"):
+    # 新しい世界にはまだ snapshot が無い。profile で保存を頼むか読み込みを頼んだら断る
+    if args.snapshot_load_dir is not None or config_source.get("snapshot_save"):
         parser.error("the game world cannot save or load snapshots yet")
+    # make experiment は OUT を渡すといつも保存先を付けるので、それだけでは断らない。保存しないことは表示と manifest に残す
+    if args.snapshot_save_dir is not None:
+        print(
+            f"[warn] the game world does not save snapshots yet; {args.snapshot_save_dir} is left unwritten", flush=True
+        )
+        args.snapshot_save_dir = None
     if args.publish_gist:
         parser.error("the game world cannot publish a gist yet")
     if args.max_world_ticks < 1:

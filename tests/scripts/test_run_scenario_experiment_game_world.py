@@ -73,6 +73,25 @@ class TestGameWorldSmokeRun:
         assert resolved["runtime_config"]["wake_waiting_after_rounds"] == 3
 
 
+class TestGameWorldThroughMake:
+    """make experiment が付ける引数のまま、新しい世界の smoke が回ることを保証する。"""
+
+    def test_save_dir_that_make_adds_does_not_stop_the_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """make experiment は OUT を渡すといつも --snapshot-save-dir OUT/snapshots を付ける。新しい世界はそれで止まらず、保存しないと表示し、保存先を作らず、manifest の保存先も空にする。"""
+        out = tmp_path / "run"
+
+        code = main(
+            ["--profile", "smoke_stub_game_world", "--out", str(out), "--snapshot-save-dir", str(out / "snapshots")]
+        )
+
+        assert code == 0
+        assert "does not save snapshots yet" in capsys.readouterr().out
+        assert not (out / "snapshots").exists()
+        assert json.loads((out / "experiment.config.resolved.json").read_text())["snapshot_save_dir"] is None
+
+
 class TestGameWorldStopsAtTheEntrance:
     """run の入口が、新しい世界で回せない条件を、世界を開く前に止めて知らせることを保証する。"""
 
@@ -118,6 +137,25 @@ class TestGameWorldStopsAtTheEntrance:
 
         with pytest.raises(SystemExit) as stopped:
             main(["--experiment-config", str(profile), "--out", str(tmp_path / "run")])
+
+        assert stopped.value.code == 2
+        assert "cannot save or load snapshots" in capsys.readouterr().err
+
+    def test_loading_a_snapshot_is_refused(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """新しい世界で --snapshot-load-dir を渡すと、まだ読み込めないと断る。"""
+        (tmp_path / "snapshots").mkdir()
+
+        with pytest.raises(SystemExit) as stopped:
+            main(
+                [
+                    "--profile",
+                    "smoke_stub_game_world",
+                    "--out",
+                    str(tmp_path / "run"),
+                    "--snapshot-load-dir",
+                    str(tmp_path / "snapshots"),
+                ]
+            )
 
         assert stopped.value.code == 2
         assert "cannot save or load snapshots" in capsys.readouterr().err
