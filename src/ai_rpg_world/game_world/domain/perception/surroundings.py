@@ -309,7 +309,6 @@ class VisibleSurroundings:
         # surroundings_in_world は SpotContents をこのモジュールから import するので、頭で import すると循環する。
         from ai_rpg_world.game_world.domain.perception.surroundings_in_world import SurroundingsInWorld
 
-        # 耳を澄ましているかを世界の状態に持たないので、誰も耳を澄ましていないものとして見る。
         return cls.seen_by(
             perceiver_in_world(facts, person, attentive=False), SurroundingsInWorld(person, facts, design)
         )
