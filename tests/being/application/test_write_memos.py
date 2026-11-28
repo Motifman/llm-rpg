@@ -215,6 +215,18 @@ class TestWritingMemos:
         assert written.unwritten == ()
         assert memory.memo_books.get(ADA).memos[0].provenance.source_from == handle  # type: ignore[union-attr]
 
+    def test_fact_can_be_revised_to_a_known_episode_source(self) -> None:
+        """分かったことを書き換えるとき、出どころを本人のエピソードに直せる。"""
+        memory = _Memory()
+        handle = memory.remember_episode()
+        memory.write({"do": "add", "kind": "fact", "text": "籠は 3 人まで", "source": "self", "certainty": "guess"})
+        memo = memory.memo_books.get(ADA).memos[0].handle
+
+        written = memory.write({**_fact_from_episode(handle), "do": "edit", "id": memo}, episode_source_offered=True)
+
+        assert written.unwritten == ()
+        assert memory.memo_books.get(ADA).memos[0].provenance.source_from == handle  # type: ignore[union-attr]
+
     def test_episode_source_is_not_read_when_not_offered(self) -> None:
         """出どころにエピソードを出していない設定では、本人のエピソードがあっても出どころが崩れた操作として外す。"""
         memory = _Memory()
