@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCall, AuxLlmComponent
 from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryWriter
 from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
-from ai_rpg_world.experiment.infrastructure.game_world_run import game_world_writers
+from ai_rpg_world.experiment.infrastructure.game_world_run import aux_call_payload, game_world_writers
 from ai_rpg_world.infrastructure.llm import litellm_client
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
@@ -106,3 +107,22 @@ class TestLlmSettings:
         with pytest.raises(ValueError, match="LLM_TURN_PARALLEL_WORKERS"):
             GameWorldPlaySettings.from_runtime_config({"LLM_TURN_PARALLEL_WORKERS": "0"})
         assert GameWorldPlaySettings.from_runtime_config({}).turn_parallel_workers is None
+
+    def test_writing_calls_are_forwarded_to_where_the_run_writes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """litellm で組んだクライアントの補助の呼び出しの受け口は、遊びを始めるときに渡した書く先へ、呼び出しを 1 件ずつ回す。"""
+        _without_dotenv(monkeypatch)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        writers = game_world_writers(
+            GameWorldPlaySettings.from_runtime_config(
+                {"LLM_CLIENT": "litellm", "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash"}
+            )
+        )
+        written: list[dict[str, object]] = []
+        call = AuxLlmCall(component=AuxLlmComponent.EPISODE_WRITING, model="m", wall_latency_ms=900, success=True)
+
+        assert writers.aux_calls is not None
+        writers.aux_calls.forward_to(lambda forwarded: written.append(aux_call_payload(forwarded)))
+        writers.aux_calls.record(call)
+
+        [payload] = written
+        assert (payload["component"], payload["wall_latency_ms"], payload["success"]) == ("episode_writing", 900, True)
