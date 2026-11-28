@@ -151,7 +151,9 @@ class _Cliff:
         self.reports = PerceptionReportsReceived()
         exit = ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), self.observations)
         distributor.register_receiver(
-            DeliverPerceptionOfCommittedEvents(self.scope, self.design, DeliverPerception(self.scope, exit, self.reports))
+            DeliverPerceptionOfCommittedEvents(
+                self.scope, self.design, DeliverPerception(self.scope, exit, self.reports)
+            )
         )
         self.scope.run(_name_everyone)
 
