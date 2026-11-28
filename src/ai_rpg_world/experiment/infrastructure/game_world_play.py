@@ -327,7 +327,6 @@ class GameWorldPlay:
         return self._scope.run(lambda session: session.facts().now())
 
     def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
-        self._trace.record_turn_rounds_events(events)
         for event in events:
             if not isinstance(event, TurnFinishedEvent):
                 continue
@@ -336,6 +335,8 @@ class GameWorldPlay:
             if isinstance(event.outcome, ChoiceFailed) and len(self._failed_choices) < _FAILED_CHOICES_KEPT:
                 self._failed_choices.append(event.outcome.reason)
         self._turn_round_dispatcher.handoff(events)
+        # 記録より先に Being へ渡す。記録が落ちても観測は届く
+        self._trace.record_turn_rounds_events(events)
 
 
 def _discard(events: Sequence[DomainEvent]) -> None:
