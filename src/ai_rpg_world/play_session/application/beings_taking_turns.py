@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from typing import final
+from typing import Protocol, final
 
 from ai_rpg_world.being.application.choose_action import (
     ActionChosen,
     ActionNotChosen,
     ActionPrompt,
     ActionThought,
-    ChooseAction,
     ChooseActionCommand,
     TurnSpentRecalling,
     TurnSpentRevisingIndex,
@@ -36,6 +35,16 @@ from ai_rpg_world.play_session.domain.turn_rounds import Acted, ChoiceFailed, Tu
 ChoiceOutcome = ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen
 
 
+class ChoosingAction(Protocol):
+    def execute(self, command: ChooseActionCommand) -> ChoiceOutcome: ...
+
+    def prompt(self, command: ChooseActionCommand) -> ActionPrompt: ...
+
+    def think(self, prompt: ActionPrompt) -> ActionThought: ...
+
+    def settle(self, thought: ActionThought) -> ChoiceOutcome: ...
+
+
 @final
 class BeingTurnSteps:
     def __init__(
@@ -49,7 +58,7 @@ class BeingTurnSteps:
         mark_body_as_shown: MarkBodyAsShown,
         offer_choices: OfferActionChoices,
         tell_time: TellCurrentTime,
-        choose_action: ChooseAction,
+        choose_action: ChoosingAction,
         take_chosen_action: TakeChosenAction,
         describe_result: DescribeActionResult,
         receive_result: ReceiveActionResult,

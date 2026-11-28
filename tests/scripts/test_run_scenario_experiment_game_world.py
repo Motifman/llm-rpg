@@ -28,6 +28,11 @@ def _run_end(out: Path) -> dict[str, object]:
     return end["payload"]
 
 
+def _run_start(out: Path) -> dict[str, object]:
+    [start] = [e for e in map(json.loads, (out / "trace.jsonl").read_text().splitlines()) if e["kind"] == "run_start"]
+    return start["payload"]
+
+
 def _without_day_night(tmp_path: Path) -> Path:
     shutil.copytree(_SCENARIOS / "common", tmp_path / "common")
     text = _MINE_VILLAGE_V2.read_text(encoding="utf-8")
@@ -50,7 +55,7 @@ class TestGameWorldSmokeRun:
     """run の入口が、profile の world に game_world と書かれたとき、新しい世界で廃坑の山村 v2 を回すことを保証する。"""
 
     def test_smoke_profile_plays_the_mine_village_to_the_round_limit(self, tmp_path: Path) -> None:
-        """smoke_stub_game_world で 3 tick 回すと、4 人が毎巡りターンを終え (12 ターン)、決めた巡りの数で止まったと run_end に残る。"""
+        """smoke_stub_game_world で 3 tick 回すと、4 人が毎巡りターンを終え (12 ターン)、決めた巡りの数で止まったと run_end に残り、LLM の呼び出し 12 行が prompt_dataset に残る。"""
         out = tmp_path / "run"
 
         code = main(["--profile", "smoke_stub_game_world", "--out", str(out)])
@@ -59,6 +64,8 @@ class TestGameWorldSmokeRun:
         end = _run_end(out)
         assert (end["outcome"], end["last_tick"], end["finished_turns"]) == ("ROUND_LIMIT_REACHED", 3, 12)
         assert end["memory_writing_failures"] == {}
+        assert (end["llm_calls_recorded"], end["llm_calls_not_recorded"]) == (12, 0)
+        assert len((out / "prompt_dataset" / "calls.jsonl").read_text().splitlines()) == 12
         assert (out / "report.md").exists()
 
     def test_resolved_config_marks_the_game_world_and_the_scenario_hash(self, tmp_path: Path) -> None:
@@ -71,6 +78,32 @@ class TestGameWorldSmokeRun:
         assert resolved["world"] == "game_world"
         assert resolved["scenario_sha256"] == hashlib.sha256(_MINE_VILLAGE_V2.read_bytes()).hexdigest()
         assert resolved["runtime_config"]["wake_waiting_after_rounds"] == 3
+
+
+class TestGameWorldThroughMake:
+    """make experiment が付ける引数のまま、新しい世界の smoke が回ることを保証する。"""
+
+    def test_save_dir_that_make_adds_does_not_stop_the_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """make experiment は OUT を渡すといつも --snapshot-save-dir OUT/snapshots を付ける。新しい世界はそれで止まらず、保存しないと表示し、run_start に保存を飛ばした印を残す。"""
+        out = tmp_path / "run"
+
+        code = main(
+            ["--profile", "smoke_stub_game_world", "--out", str(out), "--snapshot-save-dir", str(out / "snapshots")]
+        )
+
+        assert code == 0
+        assert "does not save snapshots yet" in capsys.readouterr().out
+        assert _run_start(out)["snapshot_save_skipped"] is True
+
+    def test_run_without_a_save_dir_is_not_marked_as_skipping(self, tmp_path: Path) -> None:
+        """保存先を渡さなければ、run_start の保存を飛ばした印は偽。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out), "--max-world-ticks", "1"])
+
+        assert _run_start(out)["snapshot_save_skipped"] is False
 
 
 class TestGameWorldStopsAtTheEntrance:
@@ -122,6 +155,25 @@ class TestGameWorldStopsAtTheEntrance:
         assert stopped.value.code == 2
         assert "cannot save or load snapshots" in capsys.readouterr().err
 
+    def test_loading_a_snapshot_is_refused(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """新しい世界で --snapshot-load-dir を渡すと、まだ読み込めないと断る。"""
+        (tmp_path / "snapshots").mkdir()
+
+        with pytest.raises(SystemExit) as stopped:
+            main(
+                [
+                    "--profile",
+                    "smoke_stub_game_world",
+                    "--out",
+                    str(tmp_path / "run"),
+                    "--snapshot-load-dir",
+                    str(tmp_path / "snapshots"),
+                ]
+            )
+
+        assert stopped.value.code == 2
+        assert "cannot save or load snapshots" in capsys.readouterr().err
+
     def test_unknown_world_is_refused(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """world に知らない名前を書くと、古い世界で回さずに断る。"""
         profile = _profile(tmp_path, world="game_wrold")
@@ -156,7 +208,7 @@ class _PlayStoppingWith:
     def forward_aux_calls(self, forward: object) -> None:
         pass
 
-    def play(self, log: object = None) -> GameWorldPlayResult:
+    def play(self, log: object = None, **_: object) -> GameWorldPlayResult:
         if isinstance(self._stopped, Exception):
             raise self._stopped
         return GameWorldPlayResult(

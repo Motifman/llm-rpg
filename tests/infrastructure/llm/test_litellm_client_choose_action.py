@@ -67,3 +67,24 @@ class TestLiteLLMClientChooseAction:
         reply = _client(monkeypatch, invoke).choose_action([], [], reasoning_off=True)
 
         assert invoke.calls[0]["reasoning_effort"] == "none" and not reply.cut_off_while_reasoning
+
+
+class TestPromptCaptureOfChooseAction:
+    """LiteLLMClient.choose_action が、書き出しの文脈を渡されたときだけ invoke に渡し、古い世界の呼び方では渡さないことを保証する。"""
+
+    def test_without_a_context_nothing_is_passed_to_invoke(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """文脈を渡さない古い世界の呼び方では、invoke の prompt_capture_context は None のまま。"""
+        invoke = _Invoke(None, finish_reason="stop", reasoning_effort=None)
+
+        _client(monkeypatch, invoke).choose_action([], [], reasoning_off=False)
+
+        assert invoke.calls[0]["prompt_capture_context"] is None
+
+    def test_given_context_is_passed_to_invoke(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """文脈を渡すと、そのまま invoke に渡り、生の返事ごと書き出される。"""
+        invoke = _Invoke(None, finish_reason="stop", reasoning_effort=None)
+        context = object()
+
+        _client(monkeypatch, invoke).choose_action([], [], reasoning_off=False, prompt_capture_context=context)
+
+        assert invoke.calls[0]["prompt_capture_context"] is context

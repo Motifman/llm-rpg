@@ -89,6 +89,7 @@ class FuzzAction:
     player_id: int
     tool: str
     arguments: Mapping[str, Any]
+    who: str | None = None
 
     def describe(self) -> str:
         args = json.dumps(
@@ -96,7 +97,7 @@ class FuzzAction:
             ensure_ascii=False,
             sort_keys=True,
         )
-        return f"tick {self.tick} P{self.player_id} {self.tool} {args}"
+        return f"tick {self.tick} {self.who or f'P{self.player_id}'} {self.tool} {args}"
 
 
 @dataclass(frozen=True)
@@ -650,6 +651,7 @@ def run_random_agents_in_game_world(
     from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
     from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldWriters
     from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+    from ai_rpg_world.experiment.infrastructure.llm_call_capture import current_label
     from ai_rpg_world.experiment.infrastructure.random_action_choosing import CandidateTable, RandomActionChoosing
     from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 
@@ -687,7 +689,17 @@ def run_random_agents_in_game_world(
                     result.findings.append(FuzzFinding("unreadable_candidates", tick, line[:200]))
             reply = super().choose_action(messages, tools, reasoning_off=reasoning_off)
             if reply.tool_call is not None:
-                result.actions.append(FuzzAction(tick, 0, reply.tool_call.tool_name, dict(reply.tool_call.arguments)))
+                # 誰の呼び出しかは、考える段に付いた名札から取る。プロンプトからは誰のターンかが分からない
+                label = current_label()
+                result.actions.append(
+                    FuzzAction(
+                        tick,
+                        0,
+                        reply.tool_call.tool_name,
+                        dict(reply.tool_call.arguments),
+                        None if label is None else label.name,
+                    )
+                )
             return reply
 
     errors = _ErrorLogCollector(now)

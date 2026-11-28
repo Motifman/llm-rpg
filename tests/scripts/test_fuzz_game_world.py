@@ -88,3 +88,10 @@ class TestFuzzInTheGameWorld:
 
         assert code == 0
         assert "OK   mine_village_v2 seed=0 ticks=1 reached=1" in capsys.readouterr().out
+
+    def test_actions_name_who_acted(self) -> None:
+        """行動の記録には、動いた人の名前が出る (P0 ではない)。"""
+        result = _fuzz(ticks=1)
+
+        assert {a.who for a in result.actions} == {"ハル", "ミオ", "ゲン", "サヨ"}
+        assert all(" P0 " not in a.describe() for a in result.actions)

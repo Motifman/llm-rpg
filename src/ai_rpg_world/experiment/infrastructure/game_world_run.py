@@ -20,6 +20,11 @@ from ai_rpg_world.experiment.infrastructure.game_world_play import (
     GameWorldWriters,
 )
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import LITELLM, GameWorldPlaySettings
+from ai_rpg_world.experiment.infrastructure.llm_call_capture import (
+    CapturedEpisodeWriting,
+    LlmCallCapture,
+    captured_backstory_writing,
+)
 from ai_rpg_world.experiment.infrastructure.murmuring_action_choosing import MurmuringActionChoosing
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
@@ -31,13 +36,15 @@ GAME_WORLD = "game_world"
 def prepare_game_world_play(
     *, scenario_path: Path, scenario_hash: str, settings: GameWorldPlaySettings, round_limit: int
 ) -> GameWorldPlay:
+    capture = LlmCallCapture()
     return GameWorldPlay(
         scenario_path=scenario_path,
         scenario=load_scenario(scenario_path),
         scenario_hash=scenario_hash,
         settings=settings,
-        writers=game_world_writers(settings),
+        writers=game_world_writers(settings, capture),
         round_limit=round_limit,
+        capture=capture,
     )
 
 
@@ -65,10 +72,12 @@ def run_summary(result: GameWorldPlayResult) -> dict[str, Any]:
         "failed_choices": list(result.failed_choices),
         "discarded_choices": discarded,
         "memory_writing_failures": dict(sorted(result.writing_failures.items())),
+        "llm_calls_recorded": result.llm_calls_recorded,
+        "llm_calls_not_recorded": result.llm_calls_not_recorded,
     }
 
 
-def game_world_writers(settings: GameWorldPlaySettings) -> GameWorldWriters:
+def game_world_writers(settings: GameWorldPlaySettings, capture: LlmCallCapture) -> GameWorldWriters:
     if settings.llm_client != LITELLM:
         return GameWorldWriters(
             action_choosing=MurmuringActionChoosing(),
@@ -85,8 +94,8 @@ def game_world_writers(settings: GameWorldPlaySettings) -> GameWorldWriters:
         raise ValueError("OPENAI_API_KEY is not set. The game world needs it to call the LLM")
     return GameWorldWriters(
         action_choosing=client,
-        episode_writer=LlmEpisodeWriter(client),
-        backstory_writer=LlmBackstoryWriter(client.complete_short_term_summary_json),
+        episode_writer=LlmEpisodeWriter(CapturedEpisodeWriting(client, capture)),
+        backstory_writer=LlmBackstoryWriter(captured_backstory_writing(client, capture)),
         aux_calls=aux_calls,
     )
 
