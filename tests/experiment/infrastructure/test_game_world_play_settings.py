@@ -7,6 +7,7 @@ from ai_rpg_world.being.infrastructure.llm_backstory_writer import LlmBackstoryW
 from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
 from ai_rpg_world.experiment.infrastructure.game_world_run import aux_call_payload, game_world_writers
+from ai_rpg_world.experiment.infrastructure.llm_call_capture import LlmCallCapture
 from ai_rpg_world.infrastructure.llm import litellm_client
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
@@ -75,7 +76,7 @@ class TestLlmSettings:
             }
         )
 
-        writers = game_world_writers(settings)
+        writers = game_world_writers(settings, LlmCallCapture())
 
         assert isinstance(writers.action_choosing, LiteLLMClient)
         assert isinstance(writers.episode_writer, LlmEpisodeWriter)
@@ -90,7 +91,7 @@ class TestLlmSettings:
         )
 
         with pytest.raises(ValueError, match="OPENAI_API_KEY"):
-            game_world_writers(settings)
+            game_world_writers(settings, LlmCallCapture())
 
     def test_llm_keys_are_refused_with_the_stub(self) -> None:
         """スタブのまま LLM_MODEL を書くと、効かない設定として ValueError で断る。"""
@@ -115,7 +116,8 @@ class TestLlmSettings:
         writers = game_world_writers(
             GameWorldPlaySettings.from_runtime_config(
                 {"LLM_CLIENT": "litellm", "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash"}
-            )
+            ),
+            LlmCallCapture(),
         )
         written: list[dict[str, object]] = []
         call = AuxLlmCall(component=AuxLlmComponent.EPISODE_WRITING, model="m", wall_latency_ms=900, success=True)
