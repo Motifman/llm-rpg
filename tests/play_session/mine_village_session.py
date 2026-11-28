@@ -56,7 +56,6 @@ from ai_rpg_world.game_world.application.take_chosen_action import TakeChosenAct
 from ai_rpg_world.game_world.application.tell_current_time import TellCurrentTime
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
 from ai_rpg_world.game_world.domain.action.manner import Openly
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import (
     Notable,
