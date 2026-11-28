@@ -1,34 +1,25 @@
 from __future__ import annotations
 
-from typing import Final, Protocol, final
+from typing import Protocol, final
 
 from typing_extensions import assert_never
 
 from ai_rpg_world.being.contract import (
     UNKNOWN,
-    EnvironmentNotice,
     Observation,
-    ObservedTime,
     OccurrenceOrder,
-    OwnBodyState,
     PersonInText,
     PersonPlaceholderValue,
-    Route,
-    SeenOrHeard,
     TextWithPeople,
     UnidentifiedPerson,
 )
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ClockWording,
-    DayAndClockTime,
     DayNightDeclaration,
 )
-from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception import Perceived
-from ai_rpg_world.game_world.domain.perception.perceived_quality import Felt, NoticedOnWaking, Told
-from ai_rpg_world.game_world.domain.sound import HearsClearly, HearsFaintly, HearsMuffled
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, WorldId
 
 
@@ -52,7 +43,7 @@ class ObservationExit:
             Observation(
                 body=text_with_people(perceived.text),
                 route=perceived.route(),
-                time=observed_time_of(self._day_night.day_and_clock_time_at(perceived.happened_at), self._clock),
+                time=self._clock.observed_time_at(perceived.happened_at, self._day_night),
                 subject_is_self=False,
                 subject_name=UNKNOWN,
                 source=UNKNOWN,
@@ -62,10 +53,6 @@ class ObservationExit:
                 order=OccurrenceOrder(environment=self._world.value, value=perceived.happened_at.value),
             ),
         )
-
-
-def observed_time_of(time: DayAndClockTime, clock: ClockWording) -> ObservedTime:
-    return ObservedTime(display=clock.display(time))
 
 
 def text_with_people(text: TextWithAssignedPeople) -> TextWithPeople:
