@@ -67,6 +67,35 @@ class TestEpisodeIndex:
             EpisodeIndex(**values)
 
 
+class TestFittingAnEpisodeIndex:
+    """EpisodeIndex.fitted が、上限を超えた目次の文を上限で切り、切った項目と切る前の長さを残すことを保証する。"""
+
+    def test_text_over_the_limit_is_cut_and_its_length_is_kept(self) -> None:
+        """「どんな記憶か」が 41 字なら 40 字に切り、切る前の長さを残す。上限内の項目はそのまま。"""
+        fitted = EpisodeIndex.fitted(summary="あ" * 41, recall_when="井戸の話")
+
+        assert fitted.index == EpisodeIndex(summary="あ" * 40, recall_when="井戸の話")
+        assert dict(fitted.truncated) == {"summary": 41}
+
+    def test_texts_within_the_limit_are_not_cut(self) -> None:
+        """どちらも 40 字までなら、切らずに目次にし、切った項目は無い。"""
+        fitted = EpisodeIndex.fitted(summary="あ" * 40, recall_when="い" * 40)
+
+        assert fitted.index == EpisodeIndex(summary="あ" * 40, recall_when="い" * 40)
+        assert dict(fitted.truncated) == {}
+
+    def test_both_texts_over_the_limit_are_both_cut(self) -> None:
+        """どちらも上限を超えていれば、どちらも切り、それぞれの切る前の長さを残す。"""
+        fitted = EpisodeIndex.fitted(summary="あ" * 45, recall_when="い" * 50)
+
+        assert dict(fitted.truncated) == {"summary": 45, "recall_when": 50}
+
+    def test_blank_text_is_still_rejected(self) -> None:
+        """切ったあとも目次の決まりは守り、空の文には EpisodeValidationException を投げる。"""
+        with pytest.raises(EpisodeValidationException):
+            EpisodeIndex.fitted(summary=" ", recall_when="井戸の話")
+
+
 class TestWritingAnEpisode:
     """Episode.write が、目次と本文を受け取り、ID から呼び名を作り、まだ呼び出されていないエピソードを返すことを保証する。"""
 

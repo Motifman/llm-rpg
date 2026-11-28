@@ -13,6 +13,10 @@ from ai_rpg_world.being.application.choose_action import (
     TurnSpentRevisingIndex,
 )
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.episode_index_revision_tool import (
+    EpisodeIndexRevisionResult,
+    IndexRevisionRejectReason,
+)
 from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
 from ai_rpg_world.being.application.receive_action_result import ReceiveActionResult, ReceiveActionResultCommand
 from ai_rpg_world.being.application.rechoose_name import NameChoiceAnswer, RechooseName
@@ -640,6 +644,24 @@ class TestRecallingEpisodes:
         assert not attempt.result.succeeded
         assert recalled is not None and recalled.recall_count == 0
 
+    def test_same_handle_written_twice_counts_as_one_within_the_limit(self) -> None:
+        """同じ呼び名を 2 回と別の呼び名を 1 つ書くと 2 件と数え、上限 2 の中で思い出す。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        memories = InMemoryShortTermMemoryRepository()
+
+        _choose(
+            _reply("episode_recall", {"handles": [handle, handle, "ep_ffffff"]}),
+            being_tools=WITH_MEMORY,
+            episodes=episodes,
+            memories=memories,
+        )
+
+        [attempt] = memories.get(GEN).unsummarized()
+        recalled = episodes.find_by_handle(GEN, handle)
+        assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
+        assert attempt.result.succeeded
+        assert recalled is not None and recalled.recall_count == 1
+
     def test_handles_not_written_as_a_list_are_answered_with_how_to_write_them(self) -> None:
         """呼び名を配列で渡さなければ、書き方を失敗の結果に残す。"""
         memories = InMemoryShortTermMemoryRepository()
@@ -823,7 +845,10 @@ class TestRevisingTheEpisodeIndex:
         )
         [revision] = revised.index_history
         assert (revision.previous.summary, revision.revised_turn) == ("親方が金庫の番号を口にした", 1)
-        assert isinstance(outcome, TurnSpentRevisingIndex) and outcome.revision.outcome == "revised"
+        assert (
+            isinstance(outcome, TurnSpentRevisingIndex)
+            and outcome.revision.outcome is EpisodeIndexRevisionResult.REVISED
+        )
         assert outcome.revision.before == EpisodeIndex(
             summary="親方が金庫の番号を口にした", recall_when="金庫の話が出たとき"
         )
@@ -850,7 +875,10 @@ class TestRevisingTheEpisodeIndex:
         kept = episodes.find_by_handle(GEN, handle)
         assert kept is not None and kept.index_history == ()
         assert isinstance(outcome, TurnSpentRevisingIndex)
-        assert (outcome.revision.outcome, outcome.revision.reject_reason) == ("rejected", "unknown_handle")
+        assert (outcome.revision.outcome, outcome.revision.reject_reason) == (
+            EpisodeIndexRevisionResult.REJECTED,
+            IndexRevisionRejectReason.UNKNOWN_HANDLE,
+        )
         [attempt] = memories.get(GEN).unsummarized()
         assert isinstance(attempt, Attempt) and isinstance(attempt.result, MemoryOperationOutcome)
         assert not attempt.result.succeeded
@@ -867,7 +895,10 @@ class TestRevisingTheEpisodeIndex:
         )
 
         assert isinstance(outcome, TurnSpentRevisingIndex)
-        assert (outcome.revision.outcome, outcome.revision.reject_reason) == ("rejected", "malformed")
+        assert (outcome.revision.outcome, outcome.revision.reject_reason) == (
+            EpisodeIndexRevisionResult.REJECTED,
+            IndexRevisionRejectReason.MALFORMED,
+        )
 
     def test_text_over_the_limit_is_cut_to_forty_characters(self) -> None:
         """41 字のどんな記憶かは 40 字に切って目次に入れ、切る前の長さを残す。"""
@@ -906,7 +937,10 @@ class TestRevisingTheEpisodeIndex:
 
         kept = episodes.find_by_handle(GEN, later.handle)
         assert kept is not None and kept.index_history == ()
-        assert isinstance(outcome, TurnSpentRevisingIndex) and outcome.revision.outcome == "failed"
+        assert (
+            isinstance(outcome, TurnSpentRevisingIndex)
+            and outcome.revision.outcome is EpisodeIndexRevisionResult.FAILED
+        )
         [attempt] = memories.get(GEN).unsummarized()
         assert isinstance(attempt.result, MemoryOperationOutcome) and attempt.result.body == "目次を直せなかった。"
 
