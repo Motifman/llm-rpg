@@ -306,6 +306,42 @@ class TestWhoIsAskedWhileOthersAct:
         ]
 
 
+class TestChoicesWhileInTheMiddleOfAnAction:
+    """行為の最中に呼ばれた人の【現在選べる対象引数】に、いまは選べない引数の無い行動が理由つきで出ることを保証する。"""
+
+    _BUSY = "いまできない（手が離せない。今していることが済むまで待つしかない）"
+
+    def test_gen_called_while_searching_sees_explore_and_wait_unavailable(self) -> None:
+        """探している最中 (3 tick かかる) のゲンがサヨにささやかれて呼ばれると、ゲンの候補表に「- explore: いまできない（…）」と「- wait: いまできない（…）」が出る。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=2).started()
+        answers = _AnswersByPerson(
+            session,
+            {
+                _GEN: [_reply("explore", "e1")],
+                PersonId("sayo"): [_reply("speak", "s1", reach="ささやく", to="ゲン", content="そっちはどう？")],
+            },
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        gen = [prompt for person, prompt in answers.prompts if person == _GEN]
+        assert len(gen) == 2
+        table = gen[1][gen[1].index("【現在選べる対象引数】") :]
+        assert f"- explore: {self._BUSY}" in table
+        assert f"- wait: {self._BUSY}" in table
+
+    def test_gen_before_searching_sees_no_unavailable_line_for_explore_or_wait(self) -> None:
+        """何もしていない 1 巡り目のゲンの候補表には、探すと待つの「いまできない」の行が出ない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=1).started()
+        answers = _AnswersByPerson(session, {})
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        [gen] = [prompt for person, prompt in answers.prompts if person == _GEN]
+        table = gen[gen.index("【現在選べる対象引数】") :]
+        assert "- explore:" not in table and "- wait:" not in table
+
+
 class TestBelongingsComingAndGoing:
     """持ち物が増えたり減ったりしたことが、本人にだけ品物の名前つきで届くことを保証する。"""
 

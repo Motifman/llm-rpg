@@ -482,16 +482,60 @@ class TestCandidateTable:
             is None
         )
 
-    def test_whole_action_unavailable_stays_out_of_the_table(self) -> None:
-        """行動ごといまはできない (耳を澄ます) ものは、置く見出しが無いので候補表に出さない。"""
-        listen = ActionChoice(
+    def test_whole_action_unavailable_is_listed_with_its_reason(self) -> None:
+        """行動ごといまはできない (行為の最中に探す) ものは、「- explore: いまできない（理由）」の 1 行で候補表に出る。
+        理由の末尾の句点は落とし、途中の句点は残す。"""
+        explore = ActionChoice(
             description="説明。",
-            name="listen",
-            label="耳を澄ます",
-            unavailable=(UnavailableAction(picked=(), reason="手が離せない"),),
+            name="explore",
+            label="探す",
+            unavailable=(UnavailableAction(picked=(), reason="手が離せない。今していることが済むまで待つしかない。"),),
         )
 
-        assert _table(ActionChoices((listen, _travel("井戸")))) == [
+        assert _table(ActionChoices((explore, _travel("井戸")))) == [
+            "- explore: いまできない（手が離せない。今していることが済むまで待つしかない）",
+            "- travel_to.destination:",
+            "    いまできる:",
+            '      "井戸"',
+            NOTE,
+        ]
+
+    def test_each_whole_action_reason_gets_its_own_line(self) -> None:
+        """行動ごといまはできない理由が 2 つあれば、渡された順に 1 つ 1 行で出る。"""
+        explore = ActionChoice(
+            description="説明。",
+            name="explore",
+            label="探す",
+            unavailable=(
+                UnavailableAction(picked=(), reason="手が離せない。"),
+                UnavailableAction(picked=(), reason="暗くて何も見えない。"),
+            ),
+        )
+
+        assert _table(ActionChoices((explore,))) == [
+            "- explore: いまできない（手が離せない）",
+            "- explore: いまできない（暗くて何も見えない）",
+            NOTE,
+        ]
+
+    def test_action_with_arguments_unavailable_as_a_whole_gives_only_the_one_line(self) -> None:
+        """引数のある行動 (travel_to) が行動ごといまはできないなら、引数の見出しは立てず「- travel_to: いまできない（理由）」の 1 行だけが出る。"""
+        travel = ActionChoice(
+            description="説明。",
+            name="travel_to",
+            label="移動する",
+            outline=(ArgumentOutline(name="destination", label="行き先", required=True),),
+            values=(PickOne(name="destination", label="行き先", candidates=()),),
+            unavailable=(UnavailableAction(picked=(), reason="手が離せない。"),),
+        )
+
+        assert _table(ActionChoices((travel,))) == ["- travel_to: いまできない（手が離せない）", NOTE]
+
+    def test_whole_action_available_gives_no_line(self) -> None:
+        """引数の無い行動がいまできるなら、候補表にその行動の行は出ない。"""
+        explore = ActionChoice(description="説明。", name="explore", label="探す")
+
+        assert _table(ActionChoices((explore, _travel("井戸")))) == [
             "- travel_to.destination:",
             "    いまできる:",
             '      "井戸"',
