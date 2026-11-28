@@ -14,8 +14,9 @@ from ai_rpg_world.game_world.domain.declaration.character import (
     NoSharedDescription,
 )
 from ai_rpg_world.game_world.domain.declaration.progress import OutcomeDeclaration
-from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
+from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.people.people_register import PeopleRegister, PeopleRegisterMemento, PersonName
+from ai_rpg_world.game_world.domain.person import Busy
 from ai_rpg_world.game_world.domain.person.group_membership import (
     GroupMembership,
     GroupMembershipMemento,
@@ -56,6 +57,7 @@ from ai_rpg_world.game_world.infrastructure.persistence.aggregate_codecs import 
 from ai_rpg_world.game_world.infrastructure.persistence.stored_memento_exception import (
     StoredMementoUnreadableException,
 )
+from tests.game_world.support.busy_for_tests import busy_until
 from tests.game_world.support.world_design_for_tests import character
 
 _WORLD = WorldId("island")
@@ -68,7 +70,12 @@ def _vitals() -> PersonVitalsMemento:
     vitals = PersonVitals.start(_ALICE, HitPoints(current=10, maximum=10))
     vitals.add_status_effect(StatusEffect(StatusEffectType("poisoned"), WorldTick(9)))
     vitals.add_status_effect(StatusEffect(StatusEffectType("chilled"), WorldTick(4)))
-    vitals.start_action(WorldTick(12))
+    vitals.start_action(
+        Busy(
+            until=WorldTick(12),
+            doing=TextAboutPeople(TextWithUnassignedPeople("「{target}」を介抱している"), {"target": PersonId("bob")}),
+        )
+    )
     vitals.take_damage(Damage(10), WorldTick(5), StruckByPerson(_BOB))
     return vitals.memento()
 
@@ -159,7 +166,7 @@ class TestRoundTrip:
     def test_every_life_state_survives_a_round_trip(self, life_state: LifeState) -> None:
         """生きている・倒れた (倒れた原因ごと)・死んだ、のどの状態も、読み戻すと同じ状態になる。"""
         hp = HitPoints(current=4 if isinstance(life_state, Alive) else 0, maximum=10)
-        memento = replace(_vitals(), hp=hp, life_state=life_state, busy_until=NotBusy())
+        memento = replace(_vitals(), hp=hp, life_state=life_state, busy=NotBusy())
 
         restored = GAME_WORLD_CODECS.memento(GAME_WORLD_CODECS.stored(memento), PersonVitalsMemento)
 
@@ -180,20 +187,23 @@ class TestRoundTrip:
 
         assert restored.last_shown == last_shown
 
-    def test_person_vitals_row_of_version_1_is_refused(self) -> None:
-        """身体の状態の行は版 2 で書き、最後に見せた身体を持たない版 1 の行は StoredMementoUnreadableException で断る。"""
+    def test_person_vitals_row_of_an_older_version_is_refused(self) -> None:
+        """身体の状態の行は版 3 で書き、していることの文を持たない版 2 以前の行は、変換せずに StoredMementoUnreadableException で断る。"""
         stored = GAME_WORLD_CODECS.stored(_MEMENTOS["person_vitals"])
 
-        assert stored.version == 2
-        with pytest.raises(StoredMementoUnreadableException, match="version 1"):
-            GAME_WORLD_CODECS.memento(replace(stored, version=1), PersonVitalsMemento)
+        assert stored.version == 3
+        for old in (1, 2):
+            with pytest.raises(StoredMementoUnreadableException, match=f"version {old}"):
+                GAME_WORLD_CODECS.memento(replace(stored, version=old), PersonVitalsMemento)
 
-    def test_life_state_is_written_under_its_tag(self) -> None:
-        """倒れた状態は、印 down の中に、倒れた tick と、印で包んだ原因を持つ。"""
+    def test_life_state_and_what_the_person_is_doing_are_written_under_their_tags(self) -> None:
+        """倒れた状態は、印 down の中に、倒れた tick と、印で包んだ原因を持つ。していることは、印 busy の中に、終わる tick と、人の穴つきの文を持つ。"""
         state = json.loads(GAME_WORLD_CODECS.stored(_MEMENTOS["person_vitals"]).state)
 
         assert state["life_state"] == {"down": {"fell_at": 5, "cause": {"struck_by_person": {"person": "bob"}}}}
-        assert state["busy_until"] == {"world_tick": 12}
+        assert state["busy"] == {
+            "busy": {"until": 12, "doing": {"template": "「{target}」を介抱している", "people": {"target": "bob"}}}
+        }
 
     def test_outcomes_keep_the_order_of_people(self) -> None:
         """結末の列は、memento の人の並び (carol, alice, bob) のまま書いて読む。"""

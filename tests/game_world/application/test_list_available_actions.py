@@ -160,6 +160,7 @@ from ai_rpg_world.game_world.domain.world_progress import Abstain, VoteFor
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.support.action_attempt_for_tests import ActionAttemptForTests
+from tests.game_world.support.busy_for_tests import busy_until
 from tests.game_world.support.verb_declarations_for_tests import (
     everyone_votes_on,
     lever_pulled_quietly,
@@ -384,7 +385,7 @@ class _Mine:
             lambda session: (
                 session.aggregates()
                 .vitals(_ALICE)
-                .start_acting(pull_lever(()).exertion, _NOW + Ticks(5), session.facts().rules().fatigue)
+                .start_acting(pull_lever(()).exertion, busy_until(_NOW + Ticks(5)), session.facts().rules().fatigue)
             )
         )
 

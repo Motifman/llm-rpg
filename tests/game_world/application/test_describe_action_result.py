@@ -11,6 +11,7 @@ from ai_rpg_world.game_world.application.describe_action_result import (
     DescribeActionResult,
     DescribeActionResultCommand,
 )
+from ai_rpg_world.game_world.application.describe_scene import DescribeScene, DescribeSceneCommand
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime, PassWorldTimeCommand
 from ai_rpg_world.game_world.application.settle_world_conditions import SettleWorldConditions
@@ -55,6 +56,7 @@ class _GenInTheOffice:
         self.describe = DescribeActionResult(self.scope, design, design.day_night_declaration())
         self.tell_time = TellCurrentTime(self.scope, design.day_night, design.clock_wording)
         self._pass_time = PassWorldTime(self.scope)
+        self._design = design
 
     def _move_to_office(self, session: WorldSession, design: WorldDesign) -> None:
         session.people_register().name(_GEN, DisplayName("ゲン"))
@@ -68,6 +70,11 @@ class _GenInTheOffice:
     def pass_ticks(self, count: int) -> None:
         for _ in range(count):
             self._pass_time(PassWorldTimeCommand())
+
+    def doing_lines(self) -> list[str]:
+        here = DescribeScene(self.scope, self._design)(DescribeSceneCommand(_GEN)).here
+        assert here is not None
+        return [line for line in _template(here.text).split("\n") if "いましていること" in line]
 
 
 def _template(body: str | TextWithPeople) -> str:
@@ -170,6 +177,45 @@ class TestDescribeActionResult:
 
         assert (result.subject_is_self, result.addressed_to_self) == (True, True)
         assert result.time.display == "Day 1 深夜 1:30"
+
+
+class TestWhatGenIsDoing:
+    """行為を始めると、その行為の進行形の文と終わる時刻が、行っているあいだだけ身体の状態の行に出ることを保証する。"""
+
+    def test_searching_gen_sees_what_he_is_doing_until_when(self, mine_village: WorldDesign) -> None:
+        """ゲンが探し始めると、場面に「  いましていること: この場所を探している (Day 1 深夜 1:30 ごろまで)」が出る。"""
+        gen = _GenInTheOffice(mine_village)
+
+        gen.result_of("explore")
+
+        assert gen.doing_lines() == ["  いましていること: この場所を探している (Day 1 深夜 1:30 ごろまで)"]
+
+    def test_operation_is_written_with_its_target_and_display_label(self, mine_village: WorldDesign) -> None:
+        """カンテラを灯している最中は、操作の表示名をそのまま入れた「「カンテラ」で「油を足して灯す」」が出る。"""
+        gen = _GenInTheOffice(mine_village)
+
+        gen.result_of("interact", target="カンテラ", how="油を足して灯す")
+
+        assert gen.doing_lines() == ["  いましていること: 「カンテラ」で「油を足して灯す」 (Day 1 深夜 1:00 ごろまで)"]
+
+    def test_line_disappears_once_the_action_has_ended(self, mine_village: WorldDesign) -> None:
+        """探すのが終わる 3 tick 後には、いましていることの行は出ない。2 tick 後にはまだ出る。"""
+        gen = _GenInTheOffice(mine_village)
+        gen.result_of("explore")
+
+        gen.pass_ticks(2)
+        still = gen.doing_lines()
+        gen.pass_ticks(1)
+
+        assert still and gen.doing_lines() == []
+
+    def test_waiting_adds_no_line(self, mine_village: WorldDesign) -> None:
+        """時間のかからない待つを選んでも、いましていることの行は出ない。"""
+        gen = _GenInTheOffice(mine_village)
+
+        gen.result_of("wait")
+
+        assert gen.doing_lines() == []
 
 
 class TestTellCurrentTime:

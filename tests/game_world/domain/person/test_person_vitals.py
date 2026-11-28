@@ -16,10 +16,12 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
     PersonStartsFallenException,
     StatusEffectKindRepeatedException,
 )
+from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception import DeadPerceiver, DepartedPerceiver, LivingPerceiver
 from ai_rpg_world.game_world.domain.person import (
     Alive,
     BodyChange,
+    Busy,
     Dead,
     Down,
     FatigueLevelChangedEvent,
@@ -68,6 +70,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 )
 from ai_rpg_world.game_world.domain.value_object.readiness_to_act import FreeToAct, InTheMiddleOfAction, UnableToAct
 from ai_rpg_world.game_world.domain.whereabouts import AtSpot, DepartedPerson, OpenArea, PersonBody
+from tests.game_world.support.busy_for_tests import busy_until
 from tests.game_world.support.memento_for_tests import rebuilt_from_memento
 from tests.game_world.support.world_design_for_tests import character, compose_world, nouns, spot
 
@@ -567,7 +570,7 @@ class TestBusy:
         """tick 7 まで行っているなら、tick 6 では is_busy が真、tick 7 では偽。"""
         vitals = _vitals()
 
-        vitals.start_action(WorldTick(7))
+        vitals.start_action(busy_until(WorldTick(7)))
 
         assert vitals.is_busy(WorldTick(6))
         assert not vitals.is_busy(WorldTick(7))
@@ -576,7 +579,7 @@ class TestBusy:
         """初めての start_action は、いつまで行っているかと、前の行為が無かったことを持つ PersonBecameBusyEvent をためる。"""
         vitals = _vitals()
 
-        vitals.start_action(WorldTick(7))
+        vitals.start_action(busy_until(WorldTick(7)))
 
         [event] = vitals.get_events()
         assert isinstance(event, PersonBecameBusyEvent)
@@ -585,10 +588,10 @@ class TestBusy:
     def test_starting_again_replaces_the_end_and_reports_the_previous_end(self) -> None:
         """もう一度 start_action を呼ぶと終わりの tick を置き換え、イベントに前の終わりを持たせる。"""
         vitals = _vitals()
-        vitals.start_action(WorldTick(7))
+        vitals.start_action(busy_until(WorldTick(7)))
         vitals.clear_events()
 
-        vitals.start_action(WorldTick(4))
+        vitals.start_action(busy_until(WorldTick(4)))
 
         assert not vitals.is_busy(WorldTick(5))
         [event] = vitals.get_events()
@@ -603,7 +606,7 @@ class TestBusy:
     def test_start_action_while_not_alive_raises_domain_exception(self, make) -> None:
         """Down・Dead の人は行為を始められず、PersonNotAliveException を投げる。"""
         with pytest.raises(PersonNotAliveException):
-            make().start_action(WorldTick(20))
+            make().start_action(busy_until(WorldTick(20)))
 
 
 class TestStartActing:
@@ -612,19 +615,36 @@ class TestStartActing:
     def test_acting_while_busy_does_not_end_the_ongoing_action_early(self) -> None:
         """tick 7 まで行っている人が tick 2 までの行為を始めても、終わりは tick 7 のままで、PersonBecameBusyEvent は出ない。"""
         vitals = _vitals()
-        vitals.start_action(WorldTick(7))
+        vitals.start_action(busy_until(WorldTick(7)))
         vitals.clear_events()
 
-        vitals.start_acting(DoesNotUseBody(), WorldTick(2), _fatigue())
+        vitals.start_acting(DoesNotUseBody(), busy_until(WorldTick(2)), _fatigue())
 
         assert vitals.is_busy(WorldTick(6))
         assert not [event for event in vitals.get_events() if isinstance(event, PersonBecameBusyEvent)]
+
+    def test_acting_while_busy_keeps_what_the_person_is_doing(self) -> None:
+        """探している最中 (tick 7 まで) にささやいても (tick 2 まで)、tick 6 にしていることは探すのまま。"""
+        vitals = _vitals()
+        searching = Busy(until=WorldTick(7), doing=TextAboutPeople(TextWithUnassignedPeople("探している"), {}))
+        vitals.start_action(searching)
+
+        vitals.start_acting(DoesNotUseBody(), busy_until(WorldTick(2)), _fatigue())
+
+        assert vitals.doing_at(WorldTick(6)) == searching
+
+    def test_nothing_is_being_done_once_the_action_has_ended(self) -> None:
+        """tick 7 までの行為は、tick 7 にはもうしていることにならない。"""
+        vitals = _vitals()
+        vitals.start_action(busy_until(WorldTick(7)))
+
+        assert vitals.doing_at(WorldTick(7)) == NotBusy()
 
     def test_action_using_body_tires_and_makes_busy(self) -> None:
         """UsesBody の行為は疲れを per_exertion だけ増やし、渡した tick まで行っているあいだにする。"""
         vitals = _vitals()
 
-        vitals.start_acting(UsesBody(), WorldTick(3), _fatigue(per_exertion=2))
+        vitals.start_acting(UsesBody(), busy_until(WorldTick(3)), _fatigue(per_exertion=2))
 
         assert vitals.fatigue() == FatigueAmount(2)
         assert vitals.is_busy(WorldTick(2))
@@ -633,7 +653,7 @@ class TestStartActing:
         """DoesNotUseBody の行為は疲れを増やさず、行っているあいだだけを始める。"""
         vitals = _vitals()
 
-        vitals.start_acting(DoesNotUseBody(), WorldTick(3), _fatigue(per_exertion=2))
+        vitals.start_acting(DoesNotUseBody(), busy_until(WorldTick(3)), _fatigue(per_exertion=2))
 
         assert vitals.fatigue() == FatigueAmount(0)
         assert vitals.is_busy(WorldTick(2))
@@ -643,7 +663,7 @@ class TestStartActing:
         vitals = _dead()
         vitals.clear_events()
 
-        vitals.start_acting(UsesBody(), WorldTick(30), _fatigue())
+        vitals.start_acting(UsesBody(), busy_until(WorldTick(30)), _fatigue())
 
         assert not vitals.is_busy(WorldTick(29))
         assert vitals.get_events() == []
@@ -868,7 +888,7 @@ def _memento(
         hunger=HungerAmount(0),
         fatigue=FatigueAmount(0),
         status_effects=status_effects,
-        busy_until=NotBusy(),
+        busy=NotBusy(),
         last_shown=NothingShownYet(),
     )
 
@@ -896,7 +916,7 @@ class TestPersonVitalsMemento:
         vitals.pass_time(WorldTick(2), _death(), _hunger())
         vitals.exert(_fatigue())
         vitals.add_status_effect(StatusEffect(_POISONED, expires_at=WorldTick(4)))
-        vitals.start_action(until=WorldTick(9))
+        vitals.start_action(busy_until(WorldTick(9)))
 
         rebuilt = rebuilt_from_memento(vitals, _DESIGN.nouns)
 
@@ -1062,14 +1082,14 @@ class TestReadinessToAct:
     def test_person_busy_until_later_is_in_the_middle_of_action(self) -> None:
         """tick 3 まで行為を続ける人は、tick 1 に InTheMiddleOfAction。"""
         vitals = _vitals()
-        vitals.start_action(WorldTick(3))
+        vitals.start_action(busy_until(WorldTick(3)))
 
         assert vitals.readiness_to_act(WorldTick(1), outcome_undecided=True) == InTheMiddleOfAction()
 
     def test_person_whose_outcome_is_decided_is_unable_even_when_busy(self) -> None:
         """結末が決まった人は、行為の最中でも UnableToAct。"""
         vitals = _vitals()
-        vitals.start_action(WorldTick(3))
+        vitals.start_action(busy_until(WorldTick(3)))
 
         assert vitals.readiness_to_act(WorldTick(1), outcome_undecided=False) == UnableToAct()
 

@@ -148,13 +148,17 @@ def action_texts(node: YamlNode) -> ActionTexts:
     rows = node.fields(*keys)
     summaries = {}
     done = {}
+    ongoing = {}
     for written_as, key in keys.items():
-        row = rows.required(written_as).fields("summary", "done")
+        row = rows.required(written_as).fields("summary", "done", "ongoing")
         summaries[key] = people_text(row.required("summary"))
         written_done = row.optional("done")
         if written_done is not None:
             done[key] = people_text(written_done)
-    return node.build(lambda: ActionTexts(summaries=summaries, done=done))
+        written_ongoing = row.optional("ongoing")
+        if written_ongoing is not None:
+            ongoing[key] = people_text(written_ongoing)
+    return node.build(lambda: ActionTexts(summaries=summaries, done=done, ongoing=ongoing))
 
 
 _ITEM_JOINER = "item_joiner"

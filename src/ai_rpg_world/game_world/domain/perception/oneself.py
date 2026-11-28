@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from string import Formatter
 from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.game_world.domain.declaration.time_and_weather import NoDayNight
+from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_and_clock_time import DayAndClockTime
+from ai_rpg_world.game_world.domain.people import PeopleSeenBy, PersonRef, TextWithAssignedPeople, Unidentified
+from ai_rpg_world.game_world.domain.person import Busy
 from ai_rpg_world.game_world.domain.person.shown_body import BodyChange
 from ai_rpg_world.game_world.domain.value_object import (
     DescriptionText,
@@ -17,6 +22,7 @@ from ai_rpg_world.game_world.domain.value_object import (
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
     from ai_rpg_world.game_world.domain.declaration.surroundings_texts import SceneTexts
+    from ai_rpg_world.game_world.domain.declaration.time_and_weather.clock_wording import ClockWording
 
 
 @final
@@ -31,6 +37,21 @@ class CarriedKind:
 
 @final
 @dataclass(frozen=True)
+class DoingNow:
+    """``until`` が None なのは、昼夜の無い世界で時刻を書けないとき。"""
+
+    text: TextWithAssignedPeople
+    until: DayAndClockTime | None
+
+
+@final
+@dataclass(frozen=True)
+class NotDoingAnything:
+    pass
+
+
+@final
+@dataclass(frozen=True)
 class Oneself:
     belongings: tuple[CarriedKind, ...]
     hp: HitPoints
@@ -40,6 +61,7 @@ class Oneself:
     fatigue_limit: FatigueAmount
     fatigue_felt: DisplayName | None
     change: BodyChange
+    doing: DoingNow | NotDoingAnything
 
     @classmethod
     def of(cls, person: PersonId, facts: WorldFacts) -> Oneself:
@@ -71,6 +93,7 @@ class Oneself:
             fatigue_limit=rules.fatigue.limit,
             fatigue_felt=rules.fatigue.level_of(vitals.fatigue()).felt_as,
             change=vitals.change_since_shown(),
+            doing=_doing_now(person, facts),
         )
 
     def lines(self, wording: SceneTexts) -> list[str]:
@@ -116,6 +139,40 @@ class Oneself:
             ),
             *([] if self.fatigue_felt is None else [wording.fatigue_felt.format(feel=self.fatigue_felt.text)]),
         ]
+
+
+    def doing_lines(
+        self, wording: SceneTexts, clock: ClockWording, holes: dict[str, PersonRef | Unidentified]
+    ) -> list[str]:
+        """人の穴の名前を場面のほかの人と重ならないものに変え、``holes`` に足した行を、format の書き方で返す。"""
+        if isinstance(self.doing, NotDoingAnything):
+            return []
+        doing = _rekeyed(self.doing.text, "doing_", holes)
+        until = "" if self.doing.until is None else wording.doing_until.format(time=clock.display(self.doing.until))
+        return [_escaped(wording.doing).replace("{{doing}}", doing).replace("{{until}}", _escaped(until))]
+
+
+def _doing_now(person: PersonId, facts: WorldFacts) -> DoingNow | NotDoingAnything:
+    busy = facts.vitals(person).doing_at(facts.now())
+    if not isinstance(busy, Busy):
+        return NotDoingAnything()
+    day_night = facts.day_night()
+    until = None if isinstance(day_night, NoDayNight) else day_night.day_and_clock_time_at(busy.until)
+    return DoingNow(text=busy.doing.seen_by(PeopleSeenBy.in_world(person, facts)), until=until)
+
+
+def _rekeyed(text: TextWithAssignedPeople, prefix: str, holes: dict[str, PersonRef | Unidentified]) -> str:
+    rebuilt: list[str] = []
+    for literal, name, _, _ in Formatter().parse(text.template):
+        rebuilt.append(_escaped(literal))
+        if name is not None:
+            holes[f"{prefix}{name}"] = text.people[name]
+            rebuilt.append(f"{{{prefix}{name}}}")
+    return "".join(rebuilt)
+
+
+def _escaped(text: str) -> str:
+    return text.replace("{", "{{").replace("}", "}}")
 
 
 def _change(amount: int, wording: SceneTexts) -> str:

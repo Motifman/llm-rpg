@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import final
 
+from ai_rpg_world.game_world.domain.people import TextAboutPeople, TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.person.life_state import (
     Alive,
     Dead,
@@ -12,7 +13,7 @@ from ai_rpg_world.game_world.domain.person.life_state import (
     StruckByPerson,
     WorldHappening,
 )
-from ai_rpg_world.game_world.domain.person.person_vitals import NotBusy, PersonVitalsMemento
+from ai_rpg_world.game_world.domain.person.person_vitals import Busy, NotBusy, PersonVitalsMemento
 from ai_rpg_world.game_world.domain.person.shown_body import LastShownBody, NothingShownYet, ShownBody
 from ai_rpg_world.game_world.domain.person.status_effect import StatusEffect, StatusEffectType
 from ai_rpg_world.game_world.domain.value_object import FatigueAmount, HitPoints, HungerAmount, WorldTick
@@ -23,6 +24,7 @@ from ai_rpg_world.game_world.infrastructure.persistence.json_parts import (
     exact_fields,
     json_int,
     json_str,
+    keyed_items,
     person_id_from_json,
     world_tick_from_json,
 )
@@ -61,8 +63,30 @@ _LIFE_STATE: JsonUnion[LifeState] = JsonUnion(
     JsonUnionMember("dead", Dead, lambda dead: {"died_at": dead.died_at.value}, _dead_from_json),
 )
 
-_BUSY_UNTIL: JsonUnion[WorldTick | NotBusy] = JsonUnion(
-    JsonUnionMember("world_tick", WorldTick, lambda tick: tick.value, world_tick_from_json),
+def _busy_to_json(busy: Busy) -> object:
+    return {
+        "until": busy.until.value,
+        "doing": {
+            "template": busy.doing.template.template,
+            "people": {key: person.value for key, person in busy.doing.people.items()},
+        },
+    }
+
+
+def _busy_from_json(raw: object) -> Busy:
+    fields = exact_fields(raw, ("until", "doing"))
+    doing = exact_fields(fields["doing"], ("template", "people"))
+    return Busy(
+        until=world_tick_from_json(fields["until"]),
+        doing=TextAboutPeople(
+            template=TextWithUnassignedPeople(json_str(doing["template"])),
+            people=keyed_items(doing["people"], str, person_id_from_json),
+        ),
+    )
+
+
+_BUSY: JsonUnion[Busy | NotBusy] = JsonUnion(
+    JsonUnionMember("busy", Busy, _busy_to_json, _busy_from_json),
     JsonUnionMember.fieldless("not_busy", NotBusy()),
 )
 
@@ -108,7 +132,7 @@ def _status_effect_from_json(raw: object) -> StatusEffect:
 @final
 class PersonVitalsCodec:
     kind = "person_vitals"
-    version = 2
+    version = 3
     memento_type = PersonVitalsMemento
 
     def to_json(self, memento: PersonVitalsMemento) -> object:
@@ -122,13 +146,13 @@ class PersonVitalsCodec:
                 {"kind": effect.kind.value, "expires_at": effect.expires_at.value}
                 for effect in sorted(memento.status_effects, key=lambda effect: effect.kind.value)
             ],
-            "busy_until": _BUSY_UNTIL.to_json(memento.busy_until),
+            "busy": _BUSY.to_json(memento.busy),
             "last_shown": _LAST_SHOWN.to_json(memento.last_shown),
         }
 
     def from_json(self, raw: object) -> PersonVitalsMemento:
         fields = exact_fields(
-            raw, ("person", "hp", "life_state", "hunger", "fatigue", "status_effects", "busy_until", "last_shown")
+            raw, ("person", "hp", "life_state", "hunger", "fatigue", "status_effects", "busy", "last_shown")
         )
         return PersonVitalsMemento(
             person=person_id_from_json(fields["person"]),
@@ -137,6 +161,6 @@ class PersonVitalsCodec:
             hunger=HungerAmount(json_int(fields["hunger"])),
             fatigue=FatigueAmount(json_int(fields["fatigue"])),
             status_effects=distinct_items(fields["status_effects"], _status_effect_from_json),
-            busy_until=_BUSY_UNTIL.from_json(fields["busy_until"]),
+            busy=_BUSY.from_json(fields["busy"]),
             last_shown=_LAST_SHOWN.from_json(fields["last_shown"]),
         )

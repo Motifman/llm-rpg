@@ -68,6 +68,7 @@ from ai_rpg_world.game_world.domain.whereabouts import DepartedPerson, PersonBod
 from ai_rpg_world.game_world.domain.world_progress import WorldStage
 from ai_rpg_world.game_world.domain.world_progress.group_decision import VoteFor
 from tests.game_world.domain.whereabouts._builders import WORLD, section, spot, thing
+from tests.game_world.support.busy_for_tests import busy_until
 from tests.game_world.support.declarations_for_tests import InteractionForTests
 from tests.game_world.support.world_in_memory import world_in_memory
 from tests.game_world.support.world_rules_for_tests import world_rules_for_tests
@@ -142,7 +143,7 @@ class TestBusy:
     def test_busy_person_is_refused_except_for_speaking(self) -> None:
         """行っている最中 (is_busy) の人が探そうとすると Busy で断り、話すことは断らない。"""
         world = _world()
-        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(busy_until(WorldTick(5)))
 
         assert _reason(SpotSearchAttempt(ALICE), world) == Busy()
         assert _reason(_speak(), world) is None
@@ -150,7 +151,7 @@ class TestBusy:
     def test_person_whose_action_has_ended_is_not_busy(self) -> None:
         """行っているあいだが今の tick までに終わっていれば、Busy で断らない。"""
         world = _world()
-        world.aggregates().vitals(ALICE).start_action(until=WorldTick(0))
+        world.aggregates().vitals(ALICE).start_action(busy_until(WorldTick(0)))
 
         assert _reason(SpotSearchAttempt(ALICE), world) is None
 
@@ -308,7 +309,7 @@ class TestRefusalText:
     def test_refusal_carries_the_attempt_and_the_text_about_the_actor(self) -> None:
         """Busy で断ると、ActionRefusal は試した行為と、RefusalTexts の BUSY の文に行った人を当てた TextAboutPeople を持つ。"""
         world = _world()
-        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(busy_until(WorldTick(5)))
         attempt = SpotSearchAttempt(ALICE)
 
         assert _CHECK.refusal(attempt, world.facts(), TEXTS) == ActionRefusal(
@@ -324,7 +325,7 @@ class TestOrderOfRules:
     def test_fallen_busy_person_is_refused_as_unable_to_act(self) -> None:
         """行っている最中に倒れた人は、Busy ではなく ActorCannotAct で断る。"""
         world = _world()
-        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(busy_until(WorldTick(5)))
         world.aggregates().vitals(ALICE).take_damage(Damage(10), WorldTick(0), WorldHappening())
 
         assert _reason(SpotSearchAttempt(ALICE), world) == ActorCannotAct()
@@ -332,7 +333,7 @@ class TestOrderOfRules:
     def test_stage_is_checked_before_busy(self) -> None:
         """段階で許されず、行っている最中でもある行為は、NotAllowedInThisStage で断る。"""
         world = _world_in_stage(_stage(frozenset({ActionKind.SPEAK})))
-        world.aggregates().vitals(ALICE).start_action(until=WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(busy_until(WorldTick(5)))
 
         assert _reason(SpotSearchAttempt(ALICE), world) == NotAllowedInThisStage()
 
@@ -430,7 +431,7 @@ class TestCleared:
     def test_broken_common_rule_raises_before_choosing(self) -> None:
         """行っている最中の人の暗がりへの操作は、相手を選ぶ前に Busy の断りを持つ ActionRefusedException を投げる。"""
         world = _world()
-        world.aggregates().vitals(ALICE).start_action(WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(busy_until(WorldTick(5)))
         world.aggregates().whereabouts().teleport(PersonBody(BOB), SHORE, _NOW)
 
         with pytest.raises(ActionRefusedException) as broken:
@@ -498,7 +499,7 @@ class TestClearedPrecondition:
     def test_broken_common_rule_refuses_without_asking_precondition(self) -> None:
         """共通の決まり Busy に当たると、行為ごとの前提を確かめずに Busy の断りを投げる。"""
         world = _world()
-        world.aggregates().vitals(ALICE).start_action(WorldTick(5))
+        world.aggregates().vitals(ALICE).start_action(busy_until(WorldTick(5)))
         precondition = _PreconditionForTests(HiddenFailure(ConditionPath.root()))
 
         with pytest.raises(ActionRefusedException) as refused:

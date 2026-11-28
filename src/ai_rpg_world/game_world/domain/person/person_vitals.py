@@ -14,6 +14,7 @@ from ai_rpg_world.game_world.domain.exception.person_exception import (
     PersonStartsFallenException,
     StatusEffectKindRepeatedException,
 )
+from ai_rpg_world.game_world.domain.people.text_about_people import TextAboutPeople
 from ai_rpg_world.game_world.domain.person.life_state import (
     Alive,
     Dead,
@@ -80,6 +81,18 @@ class NotBusy:
 
 @final
 @dataclass(frozen=True)
+class Busy:
+    """``doing`` は、行為を始めたときに確定させた、していることの文。あとから行為の試みを引けないため。"""
+
+    until: WorldTick
+    doing: TextAboutPeople
+
+    def lasts_beyond(self, now: WorldTick) -> bool:
+        return now < self.until
+
+
+@final
+@dataclass(frozen=True)
 class PersonVitalsMemento:
     person: PersonId
     hp: HitPoints
@@ -87,7 +100,7 @@ class PersonVitalsMemento:
     hunger: HungerAmount
     fatigue: FatigueAmount
     status_effects: frozenset[StatusEffect]
-    busy_until: WorldTick | NotBusy
+    busy: Busy | NotBusy
     last_shown: LastShownBody
 
 
@@ -100,7 +113,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         hunger: HungerAmount,
         fatigue: FatigueAmount,
         status_effects: frozenset[StatusEffect],
-        busy_until: WorldTick | NotBusy,
+        busy: Busy | NotBusy,
         last_shown: LastShownBody,
     ) -> None:
         super().__init__()
@@ -118,7 +131,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         self._hunger = hunger
         self._fatigue = fatigue
         self._status_effects = effects
-        self._busy_until = busy_until
+        self._busy = busy
         self._last_shown = last_shown
 
     @classmethod
@@ -139,7 +152,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
             memento.hunger,
             memento.fatigue,
             memento.status_effects,
-            memento.busy_until,
+            memento.busy,
             memento.last_shown,
         )
 
@@ -151,7 +164,7 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
             hunger=self._hunger,
             fatigue=self._fatigue,
             status_effects=frozenset(self._status_effects.values()),
-            busy_until=self._busy_until,
+            busy=self._busy,
             last_shown=self._last_shown,
         )
 
@@ -216,21 +229,21 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         self._require_alive("rest")
         self._change_fatigue(FatigueAmount(max(0, self._fatigue.value - amount.value)), rule)
 
-    def start_action(self, until: WorldTick) -> None:
+    def start_action(self, busy: Busy) -> None:
         self._require_alive("start an action")
-        previous = NoPreviousAction() if isinstance(self._busy_until, NotBusy) else self._busy_until
-        self._busy_until = until
-        self._add(PersonBecameBusyEvent, until=until, previous_until=previous)
+        previous = NoPreviousAction() if isinstance(self._busy, NotBusy) else self._busy.until
+        self._busy = busy
+        self._add(PersonBecameBusyEvent, until=busy.until, previous_until=previous)
 
-    def start_acting(self, exertion: Exertion, until: WorldTick, rule: FatigueRule) -> None:
+    def start_acting(self, exertion: Exertion, busy: Busy, rule: FatigueRule) -> None:
         # 去った人は疲れず、行っているあいだも持たない
         if self.is_dead():
             return
         exertion.tire(self, rule)
-        # 行っている最中に始めた行為は、いまの行為の終わりを早めない
-        if isinstance(self._busy_until, WorldTick) and until < self._busy_until:
+        # 行っている最中に始めた行為は、いまの行為の終わりを早めず、していることも変えない
+        if isinstance(self._busy, Busy) and busy.until < self._busy.until:
             return
-        self.start_action(until)
+        self.start_action(busy)
 
     def note_shown(self) -> None:
         self._last_shown = ShownBody(hp=self._hp, hunger=self._hunger, fatigue=self._fatigue)
@@ -240,7 +253,10 @@ class PersonVitals(AggregateRoot[PersonVitalsEvent]):
         return self._last_shown.change_to(self._hp, self._hunger, self._fatigue)
 
     def is_busy(self, now: WorldTick) -> bool:
-        return isinstance(self._busy_until, WorldTick) and now < self._busy_until
+        return isinstance(self._busy, Busy) and self._busy.lasts_beyond(now)
+
+    def doing_at(self, now: WorldTick) -> Busy | NotBusy:
+        return self._busy if self.is_busy(now) else NotBusy()
 
     def hp(self) -> HitPoints:
         return self._hp

@@ -477,7 +477,7 @@ class TestWordsReachThoseNearby:
 
 
 class TestChoicesWhileInTheMiddleOfAnAction:
-    """行為の最中に呼ばれた人の【選べる操作】に、行動ごといまできない理由を書かないことを保証する。"""
+    """行為の最中に呼ばれた人には、行動ごといまできない理由を書かず、身体の状態にいましていることを出すことを保証する。"""
 
     def test_gen_called_while_searching_sees_no_reason_why_he_cannot_search(self) -> None:
         """探している最中 (3 tick かかる) のゲンがサヨにささやかれて呼ばれても、【選べる操作】に「手が離せない」は出ない。"""
@@ -496,6 +496,24 @@ class TestChoicesWhileInTheMiddleOfAnAction:
         assert len(gen) == 2
         table = gen[1][gen[1].index("【選べる操作】") :]
         assert "手が離せない" not in table
+
+    def test_gen_called_while_searching_sees_what_he_is_doing_in_his_body_state(self) -> None:
+        """探している最中のゲンがサヨにささやかれて呼ばれると、身体の状態に「いましていること: この場所を探している (… ごろまで)」が出る。1 巡り目には出ない。"""
+        session = MineVillageSession(delivers_world_events=True, round_limit=2).started()
+        answers = _AnswersByPerson(
+            session,
+            {
+                _GEN: [_reply("explore", "e1")],
+                PersonId("sayo"): [_reply("speak", "s1", reach="ささやく", to="ゲン", content="そっちはどう？")],
+            },
+        )
+
+        session.play_rounds(session.beings_taking_turns(answers))(PlayRoundsCommand(WORLD))
+
+        first, second = [prompt for person, prompt in answers.prompts if person == _GEN]
+        assert "いましていること" not in first
+        body = second[second.index("身体の状態:") : second.index("【選べる操作】")]
+        assert "  いましていること: この場所を探している (" in body and "ごろまで)" in body
 
 
 class TestBelongingsComingAndGoing:

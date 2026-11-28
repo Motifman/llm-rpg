@@ -9,7 +9,7 @@ from ai_rpg_world.being.contract import Here, PersonInText, Scene, TextWithPeopl
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesNothing, SeesShapes
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
-from ai_rpg_world.game_world.domain.perception.oneself import Oneself
+from ai_rpg_world.game_world.domain.perception.oneself import NotDoingAnything, Oneself
 from ai_rpg_world.game_world.domain.perception.surroundings import Dead, Down, Up, VisibleSurroundings
 from ai_rpg_world.game_world.domain.person.shown_body import BodyChange
 from ai_rpg_world.game_world.domain.value_object import (
@@ -57,6 +57,7 @@ _ONESELF = Oneself(
     fatigue_limit=FatigueAmount(100),
     fatigue_felt=None,
     change=BodyChange(hp=0, hunger=0, fatigue=0),
+    doing=NotDoingAnything(),
 )
 
 

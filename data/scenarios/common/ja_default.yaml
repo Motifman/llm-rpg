@@ -108,66 +108,88 @@ action_texts:
   travel:
     summary: 「{origin}」から「{destination}」へ向かって出発した
     done: 「{destination}」へ移動中。到着までは他の行動はできない。
+    ongoing: 「{destination}」へ向かっている
   arrival:
     summary: 「{destination}」に着いた
     done: 「{destination}」に到着した。ここから次の行動を選べる。
   whisper:
     summary: "「{target}」に囁いた: 「{speech}」"
     done: 「{speech}」とささやいた。
+    ongoing: 「{target}」にささやいている
   speak:
     summary: "あなたは言った: 「{speech}」"
     done: 「{speech}」と言った。
+    ongoing: 話している
   shout:
     summary: "あなたは叫んだ: 「{speech}」"
     done: 「{speech}」と叫んだ。
+    ongoing: 叫んでいる
   listen:
     summary: 耳を澄ました
     done: 耳を澄まし、周囲の音や人の気配を確かめた。
+    ongoing: 耳を澄ましている
   wait:
     summary: その場で待機した
     done: しばらく行動を控えて、様子を見た
+    ongoing: その場で待っている
   tend:
     summary: 「{target}」を介抱した
     done: "{target}を介抱した。"
+    ongoing: 「{target}」を介抱している
   hand_over:
     summary: 「{target}」に「{item}」を渡した
     done: "{item}を{target}に渡した。"
+    ongoing: 「{target}」に「{item}」を渡している
   pick_up:
     summary: 「{item}」を拾った
     done: "{item}を拾い上げた。"
+    ongoing: 「{item}」を拾っている
   drop:
     summary: 「{item}」を地面に置いた
     done: "{item}を地面に置いた。"
+    ongoing: 「{item}」を地面に置いている
   search:
     summary: この場所を探索した
     done: 辺りを探した。
+    ongoing: この場所を探している
   use_item:
     summary: 「{item}」を使った
     done: "{item}を使った。"
+    ongoing: 「{item}」を使っている
   hold:
     summary: 「{item}」を手に持った
     done: "{item}を手に持った。"
+    ongoing: 「{item}」を手に持とうとしている
   put_away:
     summary: 「{item}」をしまった
     done: "{item}をしまった。"
+    ongoing: 「{item}」をしまっている
   cast_ballot:
     summary: 投票した
     done: 投票した。
+    ongoing: 投票している
   vote_for:
     summary: 「{target}」へ投票した
     done: 投票した。
+    ongoing: 「{target}」へ投票している
   enter_section:
     summary: "{section}へ位置を移した"
+    ongoing: 「{section}」へ移っている
   leave_section:
     summary: 「{section}」から出た
+    ongoing: 「{section}」から出ている
   interact_with_object:
     summary: 「{object}」で{how}
+    ongoing: 「{object}」で「{how}」
   interact_with_carried_item:
     summary: 「{item}」で{how}
+    ongoing: 「{item}」で「{how}」
   interact_with_person:
     summary: 「{target}」に対して{how}
+    ongoing: 「{target}」に対して「{how}」
   interact_with_someone_in_the_dark:
     summary: 暗がりで誰かに対して{how}
+    ongoing: 暗がりで誰かに対して「{how}」
 
 built_in_action_perceptions:
   item_joiner: と
@@ -335,6 +357,8 @@ surroundings_texts:
     fatigue: "  疲労: {tier}（{amount}/{limit}）{change}"
     body_change: "、前回 {change}"
     fatigue_felt: "  → {feel}"
+    doing: "  いましていること: {doing}{until}"
+    doing_until: " ({time} ごろまで)"
     need_tiers:
       - { from_percent: 0, name: 問題なし }
       - { from_percent: 20, name: 少し }

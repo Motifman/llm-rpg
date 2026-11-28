@@ -17,15 +17,20 @@ def _with(
     done: dict[ActionTextKey, TextWithUnassignedPeople] | None = None,
     without_summary: ActionTextKey | None = None,
     without_done: ActionTextKey | None = None,
+    ongoing: dict[ActionTextKey, TextWithUnassignedPeople] | None = None,
+    without_ongoing: ActionTextKey | None = None,
 ) -> ActionTexts:
     base = action_texts()
     all_summaries = {**base.summaries, **(summaries or {})}
     all_done = {**base.done, **(done or {})}
+    all_ongoing = {**base.ongoing, **(ongoing or {})}
     if without_summary is not None:
         del all_summaries[without_summary]
     if without_done is not None:
         del all_done[without_done]
-    return ActionTexts(summaries=all_summaries, done=all_done)
+    if without_ongoing is not None:
+        del all_ongoing[without_ongoing]
+    return ActionTexts(summaries=all_summaries, done=all_done, ongoing=all_ongoing)
 
 
 class TestActionTexts:
@@ -56,3 +61,18 @@ class TestActionTexts:
         texts = _with(summaries={ActionTextKey.HAND_OVER: TextWithUnassignedPeople("「{target}」に「{item}」を渡した")})
 
         assert texts.summary_of(ActionTextKey.HAND_OVER).template == "「{target}」に「{item}」を渡した"
+
+    def test_every_row_but_arrival_needs_an_ongoing_text(self) -> None:
+        """探す行のしていることの文が無いと、作るときに ActionTextMissingException を投げる。"""
+        with pytest.raises(ActionTextMissingException, match="search.ongoing"):
+            _with(without_ongoing=ActionTextKey.SEARCH)
+
+    def test_ongoing_text_of_arrival_is_refused(self) -> None:
+        """着いた行は行為ではないので、していることの文を書くと ActionTextMissingException を投げる。"""
+        with pytest.raises(ActionTextMissingException, match="arrival.ongoing"):
+            _with(ongoing={ActionTextKey.ARRIVAL: TextWithUnassignedPeople("着いている")})
+
+    def test_name_the_row_cannot_fill_in_an_ongoing_text_is_refused(self) -> None:
+        """探す行のしていることの文に、探すでは埋められない {item} を書くと UnfilledNameInActionTextException を投げる。"""
+        with pytest.raises(UnfilledNameInActionTextException):
+            _with(ongoing={ActionTextKey.SEARCH: TextWithUnassignedPeople("「{item}」を探している")})

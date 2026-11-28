@@ -387,6 +387,7 @@ class VisibleSurroundings:
         holes: dict[str, PersonRef | Unidentified] = {}
         lines += self._people_lines(wording, names, holes)
         lines += [_letters(line) for line in oneself.lines(wording)]
+        lines += oneself.doing_lines(wording, clock, holes)
         return TextWithAssignedPeople("\n".join(lines), holes)
 
     def _people_lines(

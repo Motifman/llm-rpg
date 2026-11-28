@@ -17,6 +17,7 @@ from ai_rpg_world.game_world.domain.exception.action_exception import ActionRefu
 from ai_rpg_world.game_world.domain.exception.game_world_exception import WorldRefusal
 from ai_rpg_world.game_world.domain.people import TextAboutPeople
 from ai_rpg_world.game_world.domain.perception.people_present import PeopleWhoWereThere
+from ai_rpg_world.game_world.domain.person import Busy
 from ai_rpg_world.game_world.domain.value_object import Ticks
 
 _Attempt = TypeVar("_Attempt", bound=ActionAttempt)
@@ -63,7 +64,9 @@ class CarryOutAction:
         fixed = attempt.fixed_before_effect(self._design, facts)
         world = session.aggregates()
         busy_for = steps.change_world(attempt, facts, world)
-        world.vitals(attempt.actor).start_acting(attempt.exertion(), now + busy_for, facts.rules().fatigue)
+        world.vitals(attempt.actor).start_acting(
+            attempt.exertion(), Busy(until=now + busy_for, doing=fixed.ongoing), facts.rules().fatigue
+        )
         session.latest_actions().note(attempt, fixed.situation, fixed.present, now)
         session.scenario_progress().note_joint_action_part_done(attempt, self._joint_actions, now)
         return ActionDone(attempt, fixed.outcome)

@@ -27,6 +27,7 @@ from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
+from tests.game_world.support.busy_for_tests import busy_until
 
 _MINE_VILLAGE = Path(__file__).parents[3] / "data" / "scenarios" / "mine_village_v2.yaml"
 _WORLD = WorldId("world")
@@ -69,7 +70,7 @@ class _Office:
             lambda session: (
                 session.aggregates()
                 .vitals(_GEN)
-                .start_acting(UsesBody(), WorldTick(0) + Ticks(5), session.facts().rules().fatigue)
+                .start_acting(UsesBody(), busy_until(WorldTick(0) + Ticks(5)), session.facts().rules().fatigue)
             )
         )
 

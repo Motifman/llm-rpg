@@ -121,6 +121,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault, ABC):
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         return self._about_this_act(design.action_texts.summary_of(self._text_key()), design, situation)
 
+    def ongoing_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._about_this_act(design.action_texts.ongoing_of(self._text_key()), design, situation)
+
     def fixed_before_effect(self, design: WorldDesign, facts: WorldFacts) -> ActionFixedBeforeEffect:
         return ActionFixedBeforeEffect.of(self, design, facts)
 
@@ -245,6 +248,9 @@ class TravelAttempt(_BuiltInAttempt):
 
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         return self._from_where(design.action_texts.summary_of(ActionTextKey.TRAVEL), design, situation)
+
+    def ongoing_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._from_where(design.action_texts.ongoing_of(ActionTextKey.TRAVEL), design, situation)
 
     def _from_where(
         self, text: TextWithUnassignedPeople, design: WorldDesign, situation: ActorSituation

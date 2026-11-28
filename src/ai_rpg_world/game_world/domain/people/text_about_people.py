@@ -30,6 +30,10 @@ class TextAboutPeople:
             )
         object.__setattr__(self, "people", MappingProxyType(dict(self.people)))
 
+    # 人の対応は MappingProxyType で複製できないが、値は変わらないので、複製を頼まれたら自分を返す
+    def __deepcopy__(self, memo: dict[int, object]) -> TextAboutPeople:
+        return self
+
     def explains(self) -> bool:
         return True
 

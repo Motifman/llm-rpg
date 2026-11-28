@@ -26,7 +26,7 @@ from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
 )
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.people.person_handle import PersonHandle
-from ai_rpg_world.game_world.domain.person import NotInAnyGroup, Outcome, Undecided
+from ai_rpg_world.game_world.domain.person import Busy, NotBusy, NotInAnyGroup, Outcome, Undecided
 from ai_rpg_world.game_world.domain.person.shown_body import BodyChange
 from ai_rpg_world.game_world.domain.rules.fatigue_rule import FatigueRule
 from ai_rpg_world.game_world.domain.value_object import (
@@ -152,6 +152,8 @@ class PersonVitalsReading(Protocol):
     def change_since_shown(self) -> BodyChange: ...
 
     def is_busy(self, now: WorldTick) -> bool: ...
+
+    def doing_at(self, now: WorldTick) -> Busy | NotBusy: ...
 
     def hp(self) -> HitPoints: ...
 

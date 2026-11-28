@@ -27,7 +27,7 @@ from ai_rpg_world.game_world.domain.person.person_outcomes import (
     PersonOutcomesMemento,
     Undecided,
 )
-from ai_rpg_world.game_world.domain.person.person_vitals import NotBusy, PersonVitals, PersonVitalsMemento
+from ai_rpg_world.game_world.domain.person.person_vitals import Busy, NotBusy, PersonVitals, PersonVitalsMemento
 from ai_rpg_world.game_world.domain.person.person_vitals_events import (
     FatigueLevelChangedEvent,
     HungerLevelChangedEvent,
@@ -66,6 +66,7 @@ __all__ = [
     "NoPreviousAction",
     "NoPreviousStatusEffect",
     "BodyChange",
+    "Busy",
     "NotBusy",
     "NothingShownYet",
     "ShownBody",

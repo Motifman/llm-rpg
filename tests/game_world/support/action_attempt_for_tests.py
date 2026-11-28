@@ -134,6 +134,9 @@ class ActionAttemptForTests(ActionAttempt):
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         raise NotImplementedError(f"{self!r} is not summarized in tests that use it")
 
+    def ongoing_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        raise NotImplementedError(f"{self!r} is not carried out in tests that use it")
+
     def fixed_before_effect(self, design: WorldDesign, facts: WorldFacts) -> ActionFixedBeforeEffect:
         raise NotImplementedError(f"{self!r} is not carried out in tests that use it")
 

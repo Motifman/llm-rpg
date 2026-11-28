@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.declaration.verb.interaction_declaration import InteractionDeclaration
     from ai_rpg_world.game_world.domain.declaration.world_design import WorldDesign
     from ai_rpg_world.game_world.domain.effect.world_aggregates import WorldAggregates
-    from ai_rpg_world.game_world.domain.people import NameInText, TextAboutPeople
+    from ai_rpg_world.game_world.domain.people import NameInText, TextAboutPeople, TextWithUnassignedPeople
 
 _Reply = TypeVar("_Reply")
 
@@ -148,11 +148,18 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
         return people_in_text(self._declared(design, situation.item_specs).success_text, self)
 
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._about_this_act(design.action_texts.summary_of(self._summary_key()), design, situation)
+
+    def ongoing_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
+        return self._about_this_act(design.action_texts.ongoing_of(self._summary_key()), design, situation)
+
+    def _about_this_act(
+        self, text: TextWithUnassignedPeople, design: WorldDesign, situation: ActorSituation
+    ) -> TextAboutPeople:
         how = {"how": self._declared(design, situation.item_specs).display_label}
         target = self._witnessed_target()
         people = {"actor": self.actor} | ({"target": target} if isinstance(target, PersonId) else {})
-        summary = design.action_texts.summary_of(self._summary_key())
-        return summary.about_named(people, {**self._things_named(design, situation.item_specs), **how})
+        return text.about_named(people, {**self._things_named(design, situation.item_specs), **how})
 
     def fixed_before_effect(self, design: WorldDesign, facts: WorldFacts) -> ActionFixedBeforeEffect:
         return ActionFixedBeforeEffect.of(self, design, facts)

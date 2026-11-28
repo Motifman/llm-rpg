@@ -61,6 +61,8 @@ SCENE_LINE_NAMES = {
     "fatigue": ("tier", "amount", "limit", "change"),
     "body_change": ("change",),
     "fatigue_felt": ("feel",),
+    "doing": ("doing", "until"),
+    "doing_until": ("time",),
 }
 
 
@@ -108,6 +110,8 @@ class SceneTexts:
     hunger: str
     fatigue: str
     fatigue_felt: str
+    doing: str
+    doing_until: str
     body_change: str
     need_tiers: NeedTiers
     hit_points_tiers: HitPointsTiers

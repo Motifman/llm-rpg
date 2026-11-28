@@ -14,7 +14,9 @@ from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 
 
 class ActionTextKey(Enum):
-    """``done_by_author`` の行は、成功の文を作者が行為ごとに書くので、ここには要約だけを置く。"""
+    """``done_by_author`` の行は、成功の文を作者が行為ごとに書くので、ここには要約だけを置く。
+    着いた (arrival) は行為ではなく移動の終わりなので、していることの文 (ongoing) を持たない。
+    """
 
     TRAVEL = ("travel", ("origin", "destination"), False, False)
     ARRIVAL = ("arrival", ("destination",), False, False)
@@ -46,6 +48,7 @@ class ActionTextKey(Enum):
         self.written_as = written_as
         self.nameable = frozenset({*names_of_things, "actor", *(("target",) if has_target else ())})
         self.done_by_author = done_by_author
+        self.has_ongoing = written_as != "arrival"
 
 
 @final
@@ -53,18 +56,24 @@ class ActionTextKey(Enum):
 class ActionTexts:
     summaries: Mapping[ActionTextKey, TextWithUnassignedPeople]
     done: Mapping[ActionTextKey, TextWithUnassignedPeople]
+    ongoing: Mapping[ActionTextKey, TextWithUnassignedPeople]
 
     def __post_init__(self) -> None:
         missing = sorted(key.written_as for key in ActionTextKey if key not in self.summaries)
         missing += sorted(
             f"{key.written_as}.done" for key in ActionTextKey if not key.done_by_author and key not in self.done
         )
+        missing += sorted(
+            f"{key.written_as}.ongoing" for key in ActionTextKey if key.has_ongoing and key not in self.ongoing
+        )
         written_by_author = sorted(f"{key.written_as}.done" for key in self.done if key.done_by_author)
-        if missing or written_by_author:
+        never_ongoing = sorted(f"{key.written_as}.ongoing" for key in self.ongoing if not key.has_ongoing)
+        if missing or written_by_author or never_ongoing:
             raise ActionTextMissingException(
-                f"action texts lack {missing} and must leave {written_by_author} to the author"
+                f"action texts lack {missing}, must leave {written_by_author} to the author"
+                f" and must not write {never_ongoing}"
             )
-        for key, text in (*self.summaries.items(), *self.done.items()):
+        for key, text in (*self.summaries.items(), *self.done.items(), *self.ongoing.items()):
             unfilled = sorted(text.placeholders() - key.nameable)
             if unfilled:
                 raise UnfilledNameInActionTextException(
@@ -72,9 +81,13 @@ class ActionTexts:
                 )
         object.__setattr__(self, "summaries", MappingProxyType(dict(self.summaries)))
         object.__setattr__(self, "done", MappingProxyType(dict(self.done)))
+        object.__setattr__(self, "ongoing", MappingProxyType(dict(self.ongoing)))
 
     def summary_of(self, key: ActionTextKey) -> TextWithUnassignedPeople:
         return self.summaries[key]
 
     def done_of(self, key: ActionTextKey) -> TextWithUnassignedPeople:
         return self.done[key]
+
+    def ongoing_of(self, key: ActionTextKey) -> TextWithUnassignedPeople:
+        return self.ongoing[key]

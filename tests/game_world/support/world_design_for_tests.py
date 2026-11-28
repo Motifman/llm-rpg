@@ -268,7 +268,8 @@ def refusal_texts() -> RefusalTexts:
 
 
 def action_texts() -> ActionTexts:
-    """要約は「{行の書き方}した」、成功の文は「{行の書き方}できた。」に、その行で書ける名前を (人も含めて) 並べた文にする。"""
+    """要約は「{行の書き方}した」、成功の文は「{行の書き方}できた。」、していることの文は「{行の書き方}している」に、
+    その行で書ける名前を (人も含めて) 並べた文にする。"""
 
     def names(key: ActionTextKey) -> str:
         return "".join(f" {{{name}}}" for name in sorted(key.nameable - {"actor"}))
@@ -279,6 +280,11 @@ def action_texts() -> ActionTexts:
             key: TextWithUnassignedPeople(f"{key.written_as}できた。{names(key)}")
             for key in ActionTextKey
             if not key.done_by_author
+        },
+        ongoing={
+            key: TextWithUnassignedPeople(f"{key.written_as}している{names(key)}")
+            for key in ActionTextKey
+            if key.has_ongoing
         },
     )
 
@@ -416,6 +422,8 @@ def scene_texts() -> SceneTexts:
         fatigue="  疲労: {tier}（{amount}/{limit}）{change}",
         body_change="、前回 {change}",
         fatigue_felt="  → {feel}",
+        doing="  いましていること: {doing}{until}",
+        doing_until=" ({time} ごろまで)",
         need_tiers=NeedTiers(
             tuple(
                 NeedTier(percent, DisplayName(name))
