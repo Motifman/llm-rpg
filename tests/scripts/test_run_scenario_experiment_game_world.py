@@ -153,7 +153,7 @@ class _PlayStoppingWith:
     def __init__(self, stopped: PlayStopped | Exception) -> None:
         self._stopped = stopped
 
-    def play(self) -> GameWorldPlayResult:
+    def play(self, log: object = None) -> GameWorldPlayResult:
         if isinstance(self._stopped, Exception):
             raise self._stopped
         return GameWorldPlayResult(
@@ -192,3 +192,21 @@ class TestGameWorldRunResult:
 
         end = _run_end(out)
         assert end["outcome"] == "ERROR" and "store broke" in str(end["error"])
+
+
+class TestGameWorldTraceOfTheRun:
+    """run の入口が、新しい世界の遊びの進行を trace.jsonl に書き出すことを保証する。"""
+
+    def test_rounds_turns_and_observations_are_in_the_trace(self, tmp_path: Path) -> None:
+        """smoke で 3 巡り回すと、巡りを開いた・閉じた行が 3 件ずつ、ターンを終えた行が 12 件出て、同じ巡りの order は 1 から 4。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        events = [json.loads(line) for line in (out / "trace.jsonl").read_text().splitlines()]
+        kinds = [e["kind"] for e in events]
+        assert (kinds.count("game_world.round_opened"), kinds.count("game_world.round_closed")) == (3, 3)
+        finished = [e["payload"] for e in events if e["kind"] == "game_world.turn_finished"]
+        assert len(finished) == 12
+        assert sorted(f["order"] for f in finished if f["round"] == 1) == [1, 2, 3, 4]
+        assert "game_world.observation_passed_on" in kinds

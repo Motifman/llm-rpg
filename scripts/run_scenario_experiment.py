@@ -1821,7 +1821,7 @@ def _run_game_world(
             **settings.to_trace_dict(),
         )
         try:
-            summary = run_summary(play.play())
+            summary = run_summary(play.play(rec))
         except BaseException as error:
             # 途中で落ちた run も、run_end が無いと終わったのか書きかけなのか見分けられない
             rec.record(TraceEventKind.RUN_END, world=_GAME_WORLD, outcome="ERROR", error=repr(error))

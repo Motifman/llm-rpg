@@ -33,6 +33,7 @@ from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository impor
 from ai_rpg_world.being.infrastructure.memory_writing_on_threads import MemoryWritingOnThreads
 from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, DomainEvent, EventDispatcher
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+from ai_rpg_world.experiment.infrastructure.game_world_trace import GameWorldTrace, NoTrace, TraceLog
 from ai_rpg_world.game_world.application.accept_world_time_passage import AcceptWorldTimePassage
 from ai_rpg_world.game_world.application.brief_entering_person import BriefEnteringPerson
 from ai_rpg_world.game_world.application.check_readiness_to_act import CheckReadinessToAct
@@ -69,7 +70,13 @@ from ai_rpg_world.play_session.application.hand_observation_to_being import Hand
 from ai_rpg_world.play_session.application.handlers.pass_observation_to_being_handler import (
     PassObservationToBeingHandler,
 )
-from ai_rpg_world.play_session.application.play_rounds import PlayRounds, PlayRoundsCommand, PlayStopped
+from ai_rpg_world.play_session.application.play_rounds import (
+    ChoosingKeptFailing,
+    PlayRounds,
+    PlayRoundsCommand,
+    PlayStopped,
+    WorldEnded,
+)
 from ai_rpg_world.play_session.application.start_play_session import StartPlaySession, StartPlaySessionCommand
 from ai_rpg_world.play_session.domain.turn_rounds import (
     ChoiceFailed,
@@ -173,6 +180,7 @@ class GameWorldPlay:
 
         self.casts = casts = InMemoryCastRepository(handoff=_discard)
         self._finished_turns = 0
+        self._trace = GameWorldTrace(NoTrace(), names={}, now=lambda: 0)
         self._failed_choices: list[str] = []
         self._turn_round_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_failed_handing_off)
         self._turn_round_dispatcher.register_after_commit(
@@ -273,10 +281,14 @@ class GameWorldPlay:
             ),
         )
 
-    def play(self) -> GameWorldPlayResult:
+    def play(self, log: TraceLog | None = None) -> GameWorldPlayResult:
+        names = {role.person: role.being_name for role in self._start_command.roles}
+        self._trace = GameWorldTrace(log or NoTrace(), names=names, now=lambda: self.now().value)
         try:
             self._start(self._start_command)
             stopped = self._play_rounds(PlayRoundsCommand(self.world))
+            if isinstance(stopped, (WorldEnded, ChoosingKeptFailing)):
+                self._trace.record_discarded(stopped.discarded)
             self._end_play(EndPlaySessionCommand(self.world))
             last_tick = self._scope.run(lambda session: session.facts().now())
         finally:
@@ -295,6 +307,7 @@ class GameWorldPlay:
         return self._scope.run(lambda session: session.facts().now())
 
     def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
+        self._trace.record_turn_rounds_events(events)
         for event in events:
             if not isinstance(event, TurnFinishedEvent):
                 continue
