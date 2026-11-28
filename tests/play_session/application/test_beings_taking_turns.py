@@ -765,3 +765,21 @@ class TestBeingsTakingTurnsAtOnce:
         mios = session.short_term_memories.get(BeingId("mio")).unsummarized()
         assert "mio_late" not in [e.move.call_id for e in mios if isinstance(e, Attempt)]
         assert session.memo_books.get(BeingId("mio")).memos == ()
+
+
+class TestClosingComesFromTheWorld:
+    """ターンの締めの一文を、世界 (ja_default.yaml の choice_descriptions.closing) が渡すことを保証する。"""
+
+    def test_prompt_ends_with_the_old_runs_closing(self) -> None:
+        """廃坑の山村 v2 でゲンに渡るプロンプトは、古い run と同じ「利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。」で終わる。"""
+        session = MineVillageSession(round_limit=1).started()
+        completion = ScriptedActionChoosing(_murmuring(4))
+
+        session.play_rounds(session.beings_taking_turns(completion))(PlayRoundsCommand(WORLD))
+
+        assert (
+            completion.calls[0]
+            .messages[-1]["content"]
+            .rstrip()
+            .endswith("利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。")
+        )

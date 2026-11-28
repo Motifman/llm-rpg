@@ -214,7 +214,13 @@ def clock_wording(node: YamlNode) -> ClockWording:
     )
 
 
-_DESCRIPTION_EXTRAS = ("tend_to_player_without_tending", "duration_hours", "duration_minutes", "duration_turns")
+_DESCRIPTION_EXTRAS = (
+    "tend_to_player_without_tending",
+    "duration_hours",
+    "duration_minutes",
+    "duration_turns",
+    "closing",
+)
 
 
 def choice_descriptions(node: YamlNode) -> ChoiceDescriptions:
@@ -227,6 +233,7 @@ def choice_descriptions(node: YamlNode) -> ChoiceDescriptions:
             duration_hours=fields.required("duration_hours").text(),
             duration_minutes=fields.required("duration_minutes").text(),
             duration_turns=fields.required("duration_turns").text(),
+            closing=fields.required("closing").text(),
         )
     )
 
