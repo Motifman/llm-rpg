@@ -20,8 +20,6 @@ from ai_rpg_world.game_world.application.action.start_travel import StartTravel
 from ai_rpg_world.game_world.application.action.tend_fallen_person import TendFallenPerson
 from ai_rpg_world.game_world.application.action.use_item import UseItem
 from ai_rpg_world.game_world.application.command_scope import CommandScope
-from ai_rpg_world.game_world.application.look_around import SurroundingsOf
-from ai_rpg_world.game_world.application.world_perception_senses import perceiver_of
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.action_attempt import ActionAttempt
 from ai_rpg_world.game_world.domain.action.action_candidates import ActionCandidates
@@ -74,7 +72,7 @@ class ListAvailableActions:
 
     def available_in(self, session: WorldSession, person: PersonId) -> AvailableActions:
         facts = session.facts()
-        seen = VisibleSurroundings.seen_by(perceiver_of(facts, person), SurroundingsOf(person, facts, self._design))
+        seen = VisibleSurroundings.seen_by_person(person, facts, self._design)
         candidates = ActionCandidates(person, seen, facts, self._design)
         judge = _Judge(facts, self._design.refusal_texts)
         return AvailableActions(

@@ -37,12 +37,7 @@ class WorldPerceptionSenses:
         return self._reach[(origin, loudness)]
 
     def view_for(self, viewer: PersonId) -> PeopleAsSeen:
-        return PeopleSeenBy(
-            viewer=viewer,
-            register=self._facts.people_register(),
-            name_tags=self._facts.rules().name_tags,
-            knows_at_start=frozenset(self._facts.nouns().character_of(viewer).knows_at_start),
-        )
+        return PeopleSeenBy.in_world(viewer, self._facts)
 
     def random(self) -> RandomSource:
         return self._facts.random()
