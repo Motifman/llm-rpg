@@ -29,6 +29,13 @@ if TYPE_CHECKING:
 
 @final
 @dataclass(frozen=True)
+class NoticeReach:
+    audience: frozenset[PersonId]
+    present: PeopleWhoWereThere
+
+
+@final
+@dataclass(frozen=True)
 class SightAt:
     spot: SpotDeclaration
     texts: SightTextsDeclaration
@@ -59,11 +66,8 @@ class SightAt:
             ),
         )
 
-    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
-        return frozenset()
-
-    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
-        return PeopleWhoWereThere.before_the_effect(facts)
+    def reach_before_the_effect(self, facts: WorldFacts, trigger: Trigger) -> NoticeReach:
+        return NoticeReach(audience=frozenset(), present=PeopleWhoWereThere.before_the_effect(facts))
 
 
 @final
@@ -85,11 +89,8 @@ class SoundFrom:
         heard = self.sound.heard_at(self.spot.spot_id, {}, {}, Noise(), self.salience, at)
         return (replace(heard, present=present),)
 
-    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
-        return frozenset()
-
-    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
-        return PeopleWhoWereThere.before_the_effect(facts)
+    def reach_before_the_effect(self, facts: WorldFacts, trigger: Trigger) -> NoticeReach:
+        return NoticeReach(audience=frozenset(), present=PeopleWhoWereThere.before_the_effect(facts))
 
 
 @final
@@ -110,11 +111,8 @@ class AnnouncementTo:
     ) -> tuple[Stimulus, ...]:
         return (AnnouncementStimulus(audience=audience, text=self.text.about({}), salience=self.salience, at=at),)
 
-    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
-        return self.audience.select(facts, trigger)
-
-    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
-        return PeopleWhoWereThere()
+    def reach_before_the_effect(self, facts: WorldFacts, trigger: Trigger) -> NoticeReach:
+        return NoticeReach(audience=self.audience.select(facts, trigger), present=PeopleWhoWereThere())
 
 
 @final
@@ -128,11 +126,8 @@ class NoNotice:
     ) -> tuple[Stimulus, ...]:
         return ()
 
-    def addressees(self, facts: WorldFacts, trigger: Trigger) -> frozenset[PersonId]:
-        return frozenset()
-
-    def people_present(self, facts: WorldFacts) -> PeopleWhoWereThere:
-        return PeopleWhoWereThere()
+    def reach_before_the_effect(self, facts: WorldFacts, trigger: Trigger) -> NoticeReach:
+        return NoticeReach(audience=frozenset(), present=PeopleWhoWereThere())
 
 
 HappeningNotice = SightAt | SoundFrom | AnnouncementTo

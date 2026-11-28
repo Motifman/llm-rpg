@@ -36,7 +36,6 @@ from ai_rpg_world.game_world.application.action.use_item import UseItem, UseItem
 from ai_rpg_world.game_world.application.action.wait import Wait, WaitCommand
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.list_available_actions import ListAvailableActions
-from ai_rpg_world.game_world.application.offer_action_choices import choice_wording_for
 from ai_rpg_world.game_world.application.settle_world_conditions import SettleWorldConditions
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.action.built_in_attempts import (
@@ -56,6 +55,7 @@ from ai_rpg_world.game_world.domain.action.built_in_attempts import (
     TravelAttempt,
     WaitAttempt,
 )
+from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 from ai_rpg_world.game_world.domain.action.chosen_action import (
     ChosenActionAttempts,
     ChosenActionReading,
@@ -92,7 +92,7 @@ class TurnGuidance:
     def result_for_actor(self, view: PeopleAsSeen) -> str | TextWithPeople:
         return self.text
 
-    def summary_for_actor(self, design: WorldDesign, facts: WorldFacts, view: PeopleAsSeen) -> None:
+    def summary_for_actor(self, view: PeopleAsSeen) -> None:
         return None
 
 
@@ -120,7 +120,7 @@ class TakeChosenAction:
     def _read(
         self, session: WorldSession, command: TakeChosenActionCommand
     ) -> tuple[ChosenActionAttempts | MisfitChosenAction, WorldTick]:
-        wording = choice_wording_for(session, command.person, self._design)
+        wording = ChoiceWording.for_person(command.person, session.facts(), self._design)
         reading = ChosenActionReading.of(command.person, self._list.available_in(session, command.person), wording)
         return reading.attempts_for(command.move), session.facts().now()
 

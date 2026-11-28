@@ -13,11 +13,13 @@ from ai_rpg_world.being.contract import (
     TextWithPeople,
     UnidentifiedPerson,
 )
+from ai_rpg_world.game_world.domain.action.action_outcome_for_actor import UnsummarizedAction
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import (
     ClockWording,
     DayNightDeclaration,
 )
-from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonRef, Unidentified
+from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonRef, TextAboutPeople, Unidentified
+from ai_rpg_world.game_world.domain.people.people_as_seen import PeopleAsSeen
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception import Perceived
 from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, WorldId
@@ -59,6 +61,14 @@ def text_with_people(text: TextWithAssignedPeople) -> TextWithPeople:
     return TextWithPeople(
         template=text.template, people={key: _person_in_text(person) for key, person in text.people.items()}
     )
+
+
+def action_summary_of(summary: TextAboutPeople | UnsummarizedAction, view: PeopleAsSeen) -> TextWithPeople | None:
+    match summary:
+        case UnsummarizedAction():
+            return None
+        case _:
+            return text_with_people(summary.seen_by(view))
 
 
 def _person_in_text(person: PersonRef | Unidentified) -> PersonPlaceholderValue:

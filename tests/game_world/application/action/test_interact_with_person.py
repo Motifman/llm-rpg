@@ -162,6 +162,6 @@ class TestInteractWithSomeoneInTheDark:
 def _summary_for(world: WorldForInteractions, reply: ActionRefused, actor: PersonId) -> object:
     def read(session: WorldSession) -> object:
         facts = session.facts()
-        return reply.summary_for_actor(world.design, facts, WorldPerceptionSenses(facts).view_for(actor))
+        return reply.summary_for_actor(WorldPerceptionSenses(facts).view_for(actor))
 
     return world.scope.run(read)

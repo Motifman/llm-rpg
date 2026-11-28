@@ -106,6 +106,7 @@ _ALLOWED_LEAKS: tuple[_AllowedLeak, ...] = (
     _AllowedLeak("observation_exit.py", TYPE_SWITCH, "case Unidentified():", _EXIT_TO_BEING_CONTRACT),
     _AllowedLeak("observation_exit.py", TYPE_SWITCH, "case DisplayName():", _EXIT_TO_BEING_CONTRACT),
     _AllowedLeak("observation_exit.py", TYPE_SWITCH, "case NoVisibleName():", _EXIT_TO_BEING_CONTRACT),
+    _AllowedLeak("observation_exit.py", TYPE_SWITCH, "case UnsummarizedAction():", _EXIT_TO_BEING_CONTRACT),
 )
 
 

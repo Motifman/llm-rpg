@@ -23,6 +23,7 @@ from ai_rpg_world.game_world.domain.people import PersonRef, TextWithUnassignedP
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
 from ai_rpg_world.game_world.domain.perception.nothing_in_view import NothingInView
 from ai_rpg_world.game_world.domain.perception.perceiver import Perceiver
+from ai_rpg_world.game_world.domain.perception.perceiver_in_world import perceiver_in_world
 from ai_rpg_world.game_world.domain.perception.perception_outcome import Perceived
 from ai_rpg_world.game_world.domain.perception.scene_conditions import SceneConditions
 from ai_rpg_world.game_world.domain.perception.what_perceived_conveys import WhatPerceivedConveys
@@ -299,6 +300,17 @@ class VisibleSurroundings:
             return spot
         return cls.seen_with(
             perceiver.sight_in(senses.lighting_at(spot)), senses.contents_at(spot), senses.conditions_at(spot)
+        )
+
+    @classmethod
+    def seen_by_person(
+        cls, person: PersonId, facts: WorldFacts, design: WorldDesign
+    ) -> VisibleSurroundings | NothingInView:
+        # surroundings_in_world は SpotContents をこのモジュールから import するので、頭で import すると循環する。
+        from ai_rpg_world.game_world.domain.perception.surroundings_in_world import SurroundingsInWorld
+
+        return cls.seen_by(
+            perceiver_in_world(facts, person, attentive=False), SurroundingsInWorld(person, facts, design)
         )
 
     @classmethod

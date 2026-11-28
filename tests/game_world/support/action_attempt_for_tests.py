@@ -18,6 +18,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     UsesBody,
 )
 from ai_rpg_world.game_world.domain.action.action_entrances import ActionEntrances
+from ai_rpg_world.game_world.domain.action.action_fixed_before_effect import ActionFixedBeforeEffect
 from ai_rpg_world.game_world.domain.action.actor_situation import ActorSituation
 from ai_rpg_world.game_world.domain.action.choice_wording import ChoiceWording
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
@@ -132,6 +133,9 @@ class ActionAttemptForTests(ActionAttempt):
 
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         raise NotImplementedError(f"{self!r} is not summarized in tests that use it")
+
+    def fixed_before_effect(self, design: WorldDesign, facts: WorldFacts) -> ActionFixedBeforeEffect:
+        raise NotImplementedError(f"{self!r} is not carried out in tests that use it")
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         raise NotImplementedError(f"{self!r} is not offered in tests that use it")

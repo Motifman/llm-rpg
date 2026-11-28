@@ -4,29 +4,24 @@ import pytest
 
 from ai_rpg_world.being.application.memo_arguments import (
     REJECTED_FROM_NOT_NEEDED,
+    REJECTED_INVALID,
+    REJECTED_LIMIT_REACHED,
+    REJECTED_MISSING_EPISODE_FROM,
     REJECTED_MISSING_FROM,
     REJECTED_MISSING_ID,
     REJECTED_MISSING_PROVENANCE,
     REJECTED_MISSING_TEXT,
+    REJECTED_NO_SUCH_MEMO,
     REJECTED_NOT_A_LIST,
     REJECTED_NOT_AN_OBJECT,
+    REJECTED_PROVENANCE_OUTSIDE_FACT,
     REJECTED_TEXT_TOO_LONG,
     REJECTED_UNKNOWN_DO,
-    REJECTED_UNKNOWN_KIND,
-)
-from ai_rpg_world.being.application.memo_writing import (
-    REJECTED_INVALID,
-    REJECTED_LIMIT_REACHED,
-    REJECTED_NO_SUCH_MEMO,
-    REJECTED_PROVENANCE_OUTSIDE_FACT,
     REJECTED_UNKNOWN_EPISODE,
-    AddMemo,
-    EditMemo,
-    RemoveMemo,
+    REJECTED_UNKNOWN_KIND,
 )
 from ai_rpg_world.being.application.unwritten_memo_text import (
     WHOLE_MEMO,
-    attempted_operation,
     attempted_raw_operation,
     short_reason,
     unwritten_memo_line,
@@ -44,32 +39,6 @@ class TestUnwrittenMemoLine:
         )
 
 
-class TestAttemptedOperation:
-    """attempted_operation が、読めたメモの操作を、番号ではなく中身で言うことを保証する。"""
-
-    @pytest.mark.parametrize(
-        ("kind", "expected"),
-        [
-            (MemoKind.TODO, "やることに「金庫を確かめる」を書く"),
-            (MemoKind.FACT, "分かったことに「金庫を確かめる」を書く"),
-            (MemoKind.PERSON, "人についてのメモに「金庫を確かめる」を書く"),
-        ],
-    )
-    def test_adding_names_the_kind_and_the_text(self, kind: MemoKind, expected: str) -> None:
-        """足す操作は、分類と書こうとした文で言う。"""
-        assert attempted_operation(AddMemo(kind, "金庫を確かめる", None)) == expected
-
-    def test_editing_names_the_memo_and_the_new_text(self) -> None:
-        """書き換える操作は、メモの呼び名と新しい文で言う。"""
-        assert (
-            attempted_operation(EditMemo("m_3f2a7b", "金庫は開いた", None)) == "m_3f2a7b を「金庫は開いた」に書き換える"
-        )
-
-    def test_removing_names_the_memo(self) -> None:
-        """消す操作は、メモの呼び名で言う。"""
-        assert attempted_operation(RemoveMemo("m_3f2a7b")) == "m_3f2a7b を消す"
-
-
 class TestAttemptedRawOperation:
     """attempted_raw_operation が、読めなかった操作を、書かれていた中身からできるだけ言うことを保証する。"""
 
@@ -77,6 +46,8 @@ class TestAttemptedRawOperation:
         ("raw", "expected"),
         [
             ({"do": "add", "kind": "todo", "text": "鍵を取る"}, "やることに「鍵を取る」を書く"),
+            ({"do": "add", "kind": "fact", "text": " 鍵を取る "}, "分かったことに「鍵を取る」を書く"),
+            ({"do": "add", "kind": "person", "text": "鍵を取る"}, "人についてのメモに「鍵を取る」を書く"),
             ({"do": "add", "kind": "wish", "text": "鍵を取る"}, "「鍵を取る」を書く"),
             ({"do": "add"}, "メモを足す"),
             ({"do": "edit", "id": "m_1", "text": "開いた"}, "m_1 を「開いた」に書き換える"),
@@ -112,6 +83,7 @@ class TestShortReason:
             (REJECTED_MISSING_ID, "id に m_ で始まる呼び名がない"),
             (REJECTED_MISSING_PROVENANCE, "分かったことには source と certainty が要る"),
             (REJECTED_MISSING_FROM, "人から聞いたことには from に誰から聞いたかが要る"),
+            (REJECTED_MISSING_EPISODE_FROM, "エピソードから分かったことには from にエピソードの呼び名が要る"),
             (REJECTED_FROM_NOT_NEEDED, "自分で確かめたことには from を書かない"),
             (REJECTED_PROVENANCE_OUTSIDE_FACT, "source と certainty は分かったことにだけ書ける"),
             (REJECTED_NO_SUCH_MEMO, "そのメモはない"),

@@ -102,12 +102,11 @@ class _Settling:
 
     def _fire_happening(self, happening: HappeningDeclaration, now: WorldTick) -> None:
         trigger = HappeningFired(happening)
-        audience = happening.notice.addressees(self._session.facts(), trigger)
-        present = happening.notice.people_present(self._session.facts())
+        reach = happening.notice.reach_before_the_effect(self._session.facts(), trigger)
         refusal = self._session.attempt_apart(
             lambda: happening.effect.apply(self._session.facts(), self._session.aggregates(), trigger)
         )
-        self._session.scenario_progress().note_happening_fired(happening, now, audience, present, refusal)
+        self._session.scenario_progress().note_happening_fired(happening, now, reach.audience, reach.present, refusal)
 
     def _fire_reaction(self, reaction: ReactionDeclaration, truth: bool, now: WorldTick) -> None:
         trigger = ReactionFired(reaction)
@@ -121,13 +120,11 @@ class _Settling:
         self, joint: JointActionDeclaration, settlement: JointActionSettlement, now: WorldTick
     ) -> None:
         trigger = settlement.trigger_for(joint)
-        notice = settlement.notice_in(joint)
-        audience = notice.addressees(self._session.facts(), trigger)
-        present = notice.people_present(self._session.facts())
+        reach = settlement.notice_in(joint).reach_before_the_effect(self._session.facts(), trigger)
         refusal = self._session.attempt_apart(
             lambda: settlement.effect_in(joint).apply(self._session.facts(), self._session.aggregates(), trigger)
         )
-        self._session.scenario_progress().note_joint_action_settled(joint, now, audience, present, refusal)
+        self._session.scenario_progress().note_joint_action_settled(joint, now, reach.audience, reach.present, refusal)
 
     def _end_if_over(self) -> None:
         ending = self._session.ending()
