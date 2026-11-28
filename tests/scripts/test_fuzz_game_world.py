@@ -37,6 +37,13 @@ class TestFuzzInTheGameWorld:
         assert [a.describe() for a in first.actions] == [a.describe() for a in second.actions]
         assert first.actions
 
+    def test_actions_name_who_acted(self) -> None:
+        """行動の記録には、動いた人の名前が出る (P0 ではない)。"""
+        result = _fuzz(ticks=1)
+
+        assert {a.who for a in result.actions} == {"ハル", "ミオ", "ゲン", "サヨ"}
+        assert all(" P0 " not in a.describe() for a in result.actions)
+
     def test_clean_run_reaches_the_round_limit_without_findings(self) -> None:
         """シード 0 で 3 巡り回すと、3 tick まで進み、見つけたものは無い。"""
         result = _fuzz()

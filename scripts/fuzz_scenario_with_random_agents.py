@@ -89,6 +89,7 @@ class FuzzAction:
     player_id: int
     tool: str
     arguments: Mapping[str, Any]
+    who: str | None = None
 
     def describe(self) -> str:
         args = json.dumps(
@@ -96,7 +97,7 @@ class FuzzAction:
             ensure_ascii=False,
             sort_keys=True,
         )
-        return f"tick {self.tick} P{self.player_id} {self.tool} {args}"
+        return f"tick {self.tick} {self.who or f'P{self.player_id}'} {self.tool} {args}"
 
 
 @dataclass(frozen=True)
@@ -650,6 +651,7 @@ def run_random_agents_in_game_world(
     from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
     from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldWriters
     from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+    from ai_rpg_world.experiment.infrastructure.game_world_trace import GameWorldTraceKind
     from ai_rpg_world.experiment.infrastructure.random_action_choosing import CandidateTable, RandomActionChoosing
     from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
 
@@ -685,10 +687,15 @@ def run_random_agents_in_game_world(
                 if line not in seen_unreadable:
                     seen_unreadable.add(line)
                     result.findings.append(FuzzFinding("unreadable_candidates", tick, line[:200]))
-            reply = super().choose_action(messages, tools, reasoning_off=reasoning_off)
-            if reply.tool_call is not None:
-                result.actions.append(FuzzAction(tick, 0, reply.tool_call.tool_name, dict(reply.tool_call.arguments)))
-            return reply
+            return super().choose_action(messages, tools, reasoning_off=reasoning_off)
+
+    class _ActionsKept:
+        # 誰が動いたかは、選んだ行動の trace の行から取る。プロンプトからは誰のターンかが分からない
+        def record(self, kind: str, *, tick: int | None = None, player_id: int | None = None, **payload: Any) -> None:
+            move = payload.get("move")
+            if kind == GameWorldTraceKind.CHOICE and isinstance(move, dict):
+                who = payload["person"]["name"]
+                result.actions.append(FuzzAction(int(tick or 0), 0, str(move["tool"]), dict(move["arguments"]), who))
 
     errors = _ErrorLogCollector(now)
     root = logging.getLogger()
@@ -709,7 +716,7 @@ def run_random_agents_in_game_world(
                 turns_at_once=False,
             )
             holder["play"] = play
-            played = play.play()
+            played = play.play(_ActionsKept())
         # 1 つのシードで落ちても、残りのシードとまとめの行は出す
         except Exception as exc:
             result.findings.append(FuzzFinding("exception", now(), _describe_exception(exc)))

@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from ai_rpg_world.being.application.choose_action import ActionChoosingReply
+from ai_rpg_world.being.application.choose_action import ActionChoosingReply, ToolCallReply
 from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
 from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
 from ai_rpg_world.experiment.infrastructure.game_world_play import GameWorldPlay, GameWorldWriters
@@ -64,3 +64,49 @@ class TestGameWorldPlay:
         result = _play(MurmuringActionChoosing(), round_limit=2).play()
 
         assert (result.last_tick.value, result.finished_turns) == (2, 8)
+
+
+class _Kept:
+    def __init__(self) -> None:
+        self.records: list[tuple[str, dict[str, Any]]] = []
+
+    def record(self, kind: str, *, tick: int | None = None, player_id: int | None = None, **payload: Any) -> None:
+        self.records.append((kind, payload))
+
+
+class _GoingWhereNoOneCan(MurmuringActionChoosing):
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        return ActionChoosingReply(
+            tool_call=ToolCallReply(tool_name="travel_to", arguments={"destination": "北の坑道"}, call_id="go_north")
+        )
+
+
+class TestBeingTurnsInTheTrace:
+    """GameWorldPlay が、LLM とのやりとりと行為の結果を、誰のものかが分かる形で trace に書くことを保証する。"""
+
+    def test_refused_action_keeps_its_reason_with_whose_attempt_it_was(self) -> None:
+        """全員が候補に無い「北の坑道」へ行こうとすると、行為の結果の行に、断られた印と「北の坑道」を含む理由が、試みの call_id と一緒に人ごとに残る。"""
+        kept = _Kept()
+
+        _play(_GoingWhereNoOneCan(), round_limit=1).play(kept)
+
+        results = [p for kind, p in kept.records if kind == "game_world.action_result"]
+        assert {p["person"]["name"] for p in results} == {"ハル", "ミオ", "ゲン", "サヨ"}
+        assert all(p["route"]["succeeded"] is False and p["route"]["call_id"] == "go_north" for p in results)
+        assert all("北の坑道" in str(p["body"]) for p in results)
+
+    def test_choice_names_the_person_and_the_chosen_move(self) -> None:
+        """1 巡り回すと、選んだ行動の行が 4 人ぶん出て、場面の現在地・候補表・選んだ行動と、プロンプトの sha256 が残る。"""
+        kept = _Kept()
+
+        _play(MurmuringActionChoosing(), round_limit=1).play(kept)
+
+        choices = [p for kind, p in kept.records if kind == "game_world.choice"]
+        assert len(choices) == 4
+        gens = next(p for p in choices if p["person"]["name"] == "ゲン")
+        assert gens["move"] == {"tool": "speak", "arguments": {"reach": "ふつうの声で話す", "content": "ふむ"}}
+        assert gens["scene"]["here"]["place"] == "南の横坑口"
+        assert "travel_to.destination" in gens["candidate_table"]
+        assert len(gens["prompt_sha256"]) == 64

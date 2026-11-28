@@ -231,3 +231,15 @@ class TestGameWorldTraceOfTheRun:
         first_act = next(i for i, e in enumerate(events) if e["payload"].get("event_type") == "PersonActedEvent")
         first_delivery = next(i for i, e in enumerate(events) if e["kind"] == "game_world.perception_delivered")
         assert first_act < first_delivery
+
+    def test_each_choice_can_be_looked_up_in_the_prompt_dataset(self, tmp_path: Path) -> None:
+        """選んだ行動の行の llm_call_id で、prompt_dataset/calls.jsonl のプロンプトの全文を 1 件引ける。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out), "--max-world-ticks", "1"])
+
+        events = [json.loads(line) for line in (out / "trace.jsonl").read_text().splitlines()]
+        choice_ids = [e["payload"]["llm_call_id"] for e in events if e["kind"] == "game_world.choice"]
+        calls = [json.loads(line) for line in (out / "prompt_dataset" / "calls.jsonl").read_text().splitlines()]
+        assert len(choice_ids) == 4
+        assert sorted(c["llm_call_id"] for c in calls) == sorted(choice_ids)
