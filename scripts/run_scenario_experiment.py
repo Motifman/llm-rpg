@@ -1754,7 +1754,11 @@ def _run_game_world(
     runtime_config_source: Mapping[str, str],
 ) -> int:
     from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
-    from ai_rpg_world.experiment.infrastructure.game_world_run import prepare_game_world_play, run_summary
+    from ai_rpg_world.experiment.infrastructure.game_world_run import (
+        aux_call_payload,
+        prepare_game_world_play,
+        run_summary,
+    )
     from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
     from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 
@@ -1821,6 +1825,8 @@ def _run_game_world(
             **settings.to_trace_dict(),
         )
         try:
+            # 書き起こしは裏のスレッドで呼ぶので、tick は入れない (世界の保存先に触れない)
+            play.forward_aux_calls(lambda call: rec.record("game_world.aux_llm_call", call=aux_call_payload(call)))
             summary = run_summary(play.play())
         except BaseException as error:
             # 途中で落ちた run も、run_end が無いと終わったのか書きかけなのか見分けられない

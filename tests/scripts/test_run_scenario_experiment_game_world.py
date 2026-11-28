@@ -153,6 +153,9 @@ class _PlayStoppingWith:
     def __init__(self, stopped: PlayStopped | Exception) -> None:
         self._stopped = stopped
 
+    def forward_aux_calls(self, forward: object) -> None:
+        pass
+
     def play(self) -> GameWorldPlayResult:
         if isinstance(self._stopped, Exception):
             raise self._stopped
