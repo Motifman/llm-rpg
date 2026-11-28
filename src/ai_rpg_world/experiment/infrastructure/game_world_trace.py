@@ -35,6 +35,8 @@ class GameWorldTraceKind:
     CHOICE_DISCARDED = "game_world.choice_discarded"
     PERCEPTION_DELIVERED = "game_world.perception_delivered"
     WORLD_EVENT = "game_world.world_event"
+    CHOICE = "game_world.choice"
+    ACTION_RESULT = "game_world.action_result"
 
 
 class TraceLog(Protocol):
@@ -70,6 +72,15 @@ class GameWorldTrace:
                 tool=None if call is None else call.tool_name,
                 arguments=None if call is None else dict(call.arguments),
             )
+
+    def record_being_turn(self, kind: str, person: PersonId, **payload: Any) -> None:
+        self._log.record(kind, tick=self._now(), person=self._person(person), **payload)
+
+    def name_of(self, person: PersonId) -> str:
+        return self._names.get(person, person.value)
+
+    def jsonable(self, value: object) -> Any:
+        return self._jsonable(value)
 
     def record_perception_report(self, report: PerceptionDeliveryReport) -> None:
         self._log.record(

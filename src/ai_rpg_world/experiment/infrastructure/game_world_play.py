@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import final
 
+from ai_rpg_world.application.llm.services.prompt_dataset_capture import PromptDatasetCaptureSink
 from ai_rpg_world.being.application.choose_action import ActionChoosingCompletion, ChooseAction
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.end_being_turn import EndBeingTurn
@@ -19,6 +20,7 @@ from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisod
 from ai_rpg_world.being.application.writing_circumstances import CircumstancesOfBeings
 from ai_rpg_world.being.contract import OfferedBeingTools
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode_writer import EpisodeWriter
 from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
@@ -32,6 +34,7 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
 from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
 from ai_rpg_world.being.infrastructure.memory_writing_on_threads import MemoryWritingOnThreads
 from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, DomainEvent, EventDispatcher
+from ai_rpg_world.experiment.infrastructure.being_turn_trace import TracedChooseAction, TracedReceiveActionResult
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
 from ai_rpg_world.experiment.infrastructure.game_world_trace import GameWorldTrace, NoTrace, TraceLog
 from ai_rpg_world.game_world.application.accept_world_time_passage import AcceptWorldTimePassage
@@ -56,7 +59,7 @@ from ai_rpg_world.game_world.application.take_chosen_action import TakeChosenAct
 from ai_rpg_world.game_world.application.tell_current_time import TellCurrentTime
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
 from ai_rpg_world.game_world.domain.perception.perception_delivery_report import PerceptionDeliveryReport
-from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
@@ -189,6 +192,8 @@ class GameWorldPlay:
         self.casts = casts = InMemoryCastRepository(handoff=_discard)
         self._finished_turns = 0
         self._trace = GameWorldTrace(NoTrace(), names={}, now=lambda: 0)
+        self._prompts: PromptDatasetCaptureSink | None = None
+        self._run_id = ""
         self._failed_choices: list[str] = []
         self._turn_round_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_failed_handing_off)
         self._turn_round_dispatcher.register_after_commit(
@@ -242,28 +247,37 @@ class GameWorldPlay:
             mark_body_as_shown=MarkBodyAsShown(scope),
             offer_choices=OfferActionChoices(scope, design),
             tell_time=TellCurrentTime(scope, day_night, design.clock_wording),
-            choose_action=ChooseAction(
-                working_memory=CurrentWorkingMemory(
-                    beings=beings,
+            choose_action=TracedChooseAction(
+                ChooseAction(
+                    working_memory=CurrentWorkingMemory(
+                        beings=beings,
+                        short_term_memories=short_term_memories,
+                        acquaintances=acquaintances,
+                        episodes=episodes,
+                        memo_books=memo_books,
+                        visited_places=visited_places,
+                        episode_index_limit=settings.episode_index_limit,
+                    ),
+                    completion=writers.action_choosing,
                     short_term_memories=short_term_memories,
-                    acquaintances=acquaintances,
-                    episodes=episodes,
+                    turn_clock=clock,
                     memo_books=memo_books,
+                    episodes=episodes,
                     visited_places=visited_places,
-                    episode_index_limit=settings.episode_index_limit,
+                    recall_limit=settings.episode_recall_max_handles,
+                    writing_in_background=self.memory_writing,
                 ),
-                completion=writers.action_choosing,
-                short_term_memories=short_term_memories,
-                turn_clock=clock,
-                memo_books=memo_books,
-                episodes=episodes,
-                visited_places=visited_places,
-                recall_limit=settings.episode_recall_max_handles,
-                writing_in_background=self.memory_writing,
+                trace=lambda: self._trace,
+                person_of=self._person_of,
+                prompts=lambda: self._prompts,
+                run_id=lambda: self._run_id,
+                player_number_of=self._player_number_of,
             ),
             take_chosen_action=TakeChosenAction(scope, design, SettleWorldConditions(scope, design)),
             describe_result=DescribeActionResult(scope, design, day_night),
-            receive_result=ReceiveActionResult(short_term_memories, clock),
+            receive_result=TracedReceiveActionResult(
+                ReceiveActionResult(short_term_memories, clock), trace=lambda: self._trace, person_of=self._person_of
+            ),
             end_being_turn=EndBeingTurn(short_term_memories, clock),
         )
         self._play_rounds = PlayRounds(
@@ -291,8 +305,12 @@ class GameWorldPlay:
             ),
         )
 
-    def play(self, log: TraceLog | None = None) -> GameWorldPlayResult:
+    def play(
+        self, log: TraceLog | None = None, *, prompts: PromptDatasetCaptureSink | None = None, run_id: str = ""
+    ) -> GameWorldPlayResult:
         names = {role.person: role.being_name for role in self._start_command.roles}
+        self._prompts = prompts
+        self._run_id = run_id
         self._trace = GameWorldTrace(log or NoTrace(), names=names, now=lambda: self.now().value)
         try:
             self._start(self._start_command)
@@ -312,6 +330,14 @@ class GameWorldPlay:
             failed_choices=tuple(self._failed_choices),
             writing_failures=self.memory_writing.failures(),
         )
+
+    def _person_of(self, being_id: BeingId) -> PersonId:
+        cast = self.casts.get(self.world)
+        return next(person for person in cast.people() if cast.being_of(person) == being_id)
+
+    def _player_number_of(self, person: PersonId) -> int:
+        # 古い世界の保存の形は人を整数で持つので、配役の並び順を番号にする
+        return self.casts.get(self.world).people().index(person) + 1
 
     def now(self) -> WorldTick:
         return self._scope.run(lambda session: session.facts().now())
