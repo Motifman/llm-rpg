@@ -33,6 +33,9 @@ class WorldStateRefusal:
     code: RefusalCode
 
 
+_WORLD_ALREADY_ENDED = WorldStateRefusal(RefusalCode(WorldAlreadyEndedException.error_code))
+
+
 @final
 @dataclass(frozen=True)
 class ActionRefusal:
@@ -42,7 +45,7 @@ class ActionRefusal:
 
     def leaves_a_record(self) -> bool:
         # 終わった世界は、断られた試みの記録も含めて変えない
-        return self.reason != WorldStateRefusal(RefusalCode.of(WorldAlreadyEndedException()))
+        return self.reason != _WORLD_ALREADY_ENDED
 
     def outcome_for_actor(self, design: WorldDesign, situation: ActorSituation) -> ActionOutcomeForActor:
         # 断られる前に使い切られた品物は名前を引けないので、要約を出さない

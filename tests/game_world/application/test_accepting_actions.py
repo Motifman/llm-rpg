@@ -101,7 +101,7 @@ class TestActionsAfterWorldEnded:
 
 
 class TestSettlingAfterWorldEnded:
-    """SettleWorldConditions が、世界が終わったあとには、条件が真の出来事も発火させないことを保証する。"""
+    """SettleWorldConditions が、世界が終わったあとには、条件が真の出来事を発火させないことを保証する。反応と二人で合わせる操作は同じ取引の頭で断られるが、ここでは出来事だけを見る。"""
 
     def test_happening_whose_condition_holds_does_not_fire_after_world_ended(self) -> None:
         """落ち着かせを通さずにアリスを籠に乗せ、世界を終わらせてから落ち着かせると、「アリスが籠にいる」で鳴る鐘は鳴らず、何も配られない。"""
