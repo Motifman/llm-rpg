@@ -20,7 +20,6 @@ from ai_rpg_world.being.contract import (
     UnidentifiedPerson,
 )
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
-from ai_rpg_world.game_world.domain.declaration.time_and_weather import DayNightDeclaration
 from ai_rpg_world.game_world.domain.lighting import SeesClearly, SeesShapes
 from ai_rpg_world.game_world.domain.people import NoVisibleName, PersonHandle, PersonRef, Unidentified
 from ai_rpg_world.game_world.domain.people.text_with_assigned_people import TextWithAssignedPeople
