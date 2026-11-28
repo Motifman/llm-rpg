@@ -186,8 +186,8 @@ class TestPerceive:
 
         assert memory.recent() == (Perception(turn=1, observation=noticed),)
 
-    def test_noticed_own_action_goes_right_after_its_move_before_what_was_held_while_choosing(self) -> None:
-        """1 手を選んでいる間に届いて預けられていた同じ時の観測 (番号 6) より、自分の行動と、それについて知った観測が先に並ぶ。"""
+    def test_noticed_own_action_goes_right_after_its_move_before_what_the_next_move_sees(self) -> None:
+        """次の 1 手が見る同じ時の観測 (番号 6) が先に届いていても、自分の行動と、それについて知った観測がその前に並ぶ。"""
         memory = _empty()
         memory.act(_move(), current_turn=5)
         memory.perceive(_observation(body="サヨが「ふむ」と言った", order=_at(3.0)), current_turn=5)
@@ -741,6 +741,20 @@ class TestBackstoryAdded:
             backstory,
             list(range(1, 11)),
         )
+
+    def test_action_and_what_was_noticed_about_it_are_dropped_together(self) -> None:
+        """ターン 10 の行動と、それについて本人が知った観測は、ターン 10 までのいきさつが入ると一緒に外れ、知った観測だけが直近に残ることは無い。"""
+        memory = _empty()
+        for turn in range(1, 21):
+            memory.act(_move(f"call-{turn}"), current_turn=turn)
+            memory.receive_response(_result(f"call-{turn}"), current_turn=turn)
+            memory.perceive(_noticed(f"ターン {turn} の行動で知ったこと"), current_turn=turn)
+        memory.end_turn(turn=20)
+
+        memory.add_backstory(_backstory(10, written_turn=21))
+
+        assert "見た:ターン 10 の行動で知ったこと" not in _bodies(memory)
+        assert _bodies(memory)[:2] == ["試みた:call-11:「扉」を開けようとした", "見た:ターン 11 の行動で知ったこと"]
 
     def test_truncation_given_with_the_backstory_is_reported(self) -> None:
         """いきさつと一緒に渡した切り詰めた項目と元の長さを、いきさつが入ったイベントに載せる。渡さなければ空。いきさつ自体は持たない。"""

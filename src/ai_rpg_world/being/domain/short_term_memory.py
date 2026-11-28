@@ -399,8 +399,8 @@ class ShortTermMemory(AggregateRoot[ShortTermMemoryEvent]):
     def perceive(self, observation: Observation, *, current_turn: int) -> None:
         """観測は 1 手を選ぶ前に届き、次の 1 手がそれを見る。
 
-        自分の行為について本人が知ったことは、答えのあった 1 手と同じターンに入れる。1 手を選んでいる間に届いて
-        預けられていた観測より先に並び、自分の行動のすぐ後に来る。
+        自分の行為について本人が知ったことは、答えのあった 1 手と同じターンに入れる。いきさつに畳むとき、行動と
+        それについて知ったことが別々の範囲に分かれないようにするため。
         """
         current = _require_turn(current_turn, "current_turn")
         own = isinstance(observation.route, OwnAction) and current >= self._recent_from
