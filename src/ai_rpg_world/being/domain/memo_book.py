@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
@@ -12,8 +12,16 @@ from types import MappingProxyType
 
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    MemoEpisodeSourceFromMissingException,
+    MemoHeardSourceFromMissingException,
     MemoLimitReachedException,
     MemoNotFoundException,
+    MemoProvenanceMissingException,
+    MemoProvenanceOutsideFactException,
+    MemoSourceEpisodeUnknownException,
+    MemoSourceFromNotNeededException,
+    MemoSourceNotEpisodeHandleException,
+    MemoTextTooLongException,
     MemoValidationException,
 )
 from ai_rpg_world.eventing import AggregateRoot, DomainEvent, new_event_stamp
@@ -49,7 +57,7 @@ def _require_text(value: object, field_name: str, *, max_length: int | None = No
     if not isinstance(value, str) or not value.strip():
         raise MemoValidationException(f"{field_name} must be non-blank str")
     if max_length is not None and len(value) > max_length:
-        raise MemoValidationException(f"{field_name} must be at most {max_length} characters, got {len(value)}")
+        raise MemoTextTooLongException(f"{field_name} must be at most {max_length} characters, got {len(value)}")
 
 
 def _require_turn(value: object, field_name: str) -> None:
@@ -98,11 +106,16 @@ class MemoProvenance:
             raise MemoValidationException("certainty must be MemoCertainty")
         if self.source is MemoSource.SELF:
             if self.source_from is not None:
-                raise MemoValidationException("source_from must be None when source is self")
+                raise MemoSourceFromNotNeededException("source_from must be None when source is self")
             return
-        _require_text(self.source_from, "source_from")
-        if self.source is MemoSource.EPISODE and not str(self.source_from).startswith(EPISODE_HANDLE_PREFIX):
-            raise MemoValidationException(f"source_from must be an episode handle, got {self.source_from!r}")
+        if not isinstance(self.source_from, str) or not self.source_from.strip():
+            if self.source is MemoSource.EPISODE:
+                raise MemoEpisodeSourceFromMissingException("an episode source needs the episode handle")
+            raise MemoHeardSourceFromMissingException("a heard source needs who it was heard from")
+        if self.source is MemoSource.EPISODE and not self.source_from.startswith(EPISODE_HANDLE_PREFIX):
+            raise MemoSourceNotEpisodeHandleException(
+                f"source_from must be an episode handle, got {self.source_from!r}"
+            )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -134,9 +147,9 @@ class Memo:
         _require_text(self.text, "text", max_length=MEMO_TEXT_MAX_LENGTH)
         if self.kind is MemoKind.FACT:
             if not isinstance(self.provenance, MemoProvenance):
-                raise MemoValidationException("a fact memo needs provenance")
+                raise MemoProvenanceMissingException("a fact memo needs provenance")
         elif self.provenance is not None:
-            raise MemoValidationException(f"a {self.kind.value} memo must not have provenance")
+            raise MemoProvenanceOutsideFactException(f"a {self.kind.value} memo must not have provenance")
         _require_turn(self.written_turn, "written_turn")
         if self.edited_turn is not None:
             _require_turn(self.edited_turn, "edited_turn")
@@ -151,7 +164,76 @@ def _require_known_episode(provenance: MemoProvenance | None, known_episode_hand
         and provenance.source is MemoSource.EPISODE
         and provenance.source_from not in known_episode_handles
     ):
-        raise MemoValidationException(f"no episode {provenance.source_from!r}")
+        raise MemoSourceEpisodeUnknownException(str(provenance.source_from))
+
+
+@dataclass(frozen=True)
+class MemoAddition:
+    kind: MemoKind
+    text: str
+    provenance: MemoProvenance | None
+
+    def write_into(
+        self,
+        book: MemoBook,
+        *,
+        turn: int,
+        environment_name: str,
+        new_memo_id: Callable[[], str],
+        known_episode_handles: Collection[str],
+    ) -> None:
+        book.add(
+            memo_id=new_memo_id(),
+            kind=self.kind,
+            text=self.text,
+            provenance=self.provenance,
+            turn=turn,
+            environment_name=environment_name,
+            known_episode_handles=known_episode_handles,
+        )
+
+
+@dataclass(frozen=True)
+class MemoRevision:
+    handle: str
+    text: str
+    provenance: MemoProvenance | None
+
+    def write_into(
+        self,
+        book: MemoBook,
+        *,
+        turn: int,
+        environment_name: str,
+        new_memo_id: Callable[[], str],
+        known_episode_handles: Collection[str],
+    ) -> None:
+        book.edit(
+            self.handle,
+            text=self.text,
+            turn=turn,
+            provenance=self.provenance,
+            known_episode_handles=known_episode_handles,
+        )
+
+
+@dataclass(frozen=True)
+class MemoRemoval:
+    handle: str
+
+    def write_into(
+        self,
+        book: MemoBook,
+        *,
+        turn: int,
+        environment_name: str,
+        new_memo_id: Callable[[], str],
+        known_episode_handles: Collection[str],
+    ) -> None:
+        book.remove(self.handle)
+
+
+MemoOperation = MemoAddition | MemoRevision | MemoRemoval
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -228,8 +310,26 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
     def _require(self, handle: str) -> Memo:
         memo = self.find(handle)
         if memo is None:
-            raise MemoNotFoundException(f"no memo {handle!r}")
+            raise MemoNotFoundException(handle)
         return memo
+
+    def write(
+        self,
+        operation: MemoOperation,
+        *,
+        turn: int,
+        environment_name: str,
+        new_memo_id: Callable[[], str],
+        known_episode_handles: Collection[str] = (),
+    ) -> None:
+        """当たった操作 1 件につき、イベントを 1 件ためる。"""
+        operation.write_into(
+            self,
+            turn=turn,
+            environment_name=environment_name,
+            new_memo_id=new_memo_id,
+            known_episode_handles=known_episode_handles,
+        )
 
     def add(
         self,
@@ -243,9 +343,6 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
         known_episode_handles: Collection[str] = (),
     ) -> None:
         """``known_episode_handles`` は、出どころに書けるエピソードの呼び名。"""
-        if isinstance(kind, MemoKind) and self._count(kind) >= KIND_LIMITS[kind]:
-            raise MemoLimitReachedException(f"{kind.value} memos are at the limit of {KIND_LIMITS[kind]}")
-        _require_known_episode(provenance, known_episode_handles)
         memo = Memo(
             memo_id=memo_id,
             handle=_handle_for(memo_id, {m.handle for m in self._memos}),
@@ -255,6 +352,9 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
             written_turn=turn,
             environment_name=environment_name,
         )
+        _require_known_episode(provenance, known_episode_handles)
+        if self._count(kind) >= KIND_LIMITS[kind]:
+            raise MemoLimitReachedException(kind)
         self._memos = _checked((*self._memos, memo))
         self.add_event(
             MemoAdded(
@@ -274,8 +374,8 @@ class MemoBook(AggregateRoot[MemoBookEvent]):
         known_episode_handles: Collection[str] = (),
     ) -> None:
         """``provenance`` を渡さなければ、分かったことでも前の出どころのまま。"""
-        memo = self._require(handle)
         _require_known_episode(provenance, known_episode_handles)
+        memo = self._require(handle)
         _require_turn(turn, "turn")
         if memo.edited_turn is not None and turn < memo.edited_turn:
             raise MemoValidationException("turn must not go back before the last edit")
@@ -325,13 +425,17 @@ __all__ = [
     "MEMO_TEXT_MAX_LENGTH",
     "Memo",
     "MemoAdded",
+    "MemoAddition",
     "MemoBook",
     "MemoBookEvent",
     "MemoBookRepository",
     "MemoCertainty",
     "MemoEdited",
     "MemoKind",
+    "MemoOperation",
     "MemoProvenance",
+    "MemoRemoval",
     "MemoRemoved",
+    "MemoRevision",
     "MemoSource",
 ]

@@ -8,6 +8,7 @@ from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId
 
 if TYPE_CHECKING:
     from ai_rpg_world.game_world.domain.condition.aggregate_readings import PeopleRegisterReading
+    from ai_rpg_world.game_world.domain.condition.world_facts import WorldFacts
 
 
 @final
@@ -17,6 +18,15 @@ class PeopleSeenBy:
     register: PeopleRegisterReading
     name_tags: bool
     knows_at_start: frozenset[PersonId]
+
+    @classmethod
+    def in_world(cls, viewer: PersonId, facts: WorldFacts) -> PeopleSeenBy:
+        return cls(
+            viewer=viewer,
+            register=facts.people_register(),
+            name_tags=facts.rules().name_tags,
+            knows_at_start=frozenset(facts.nouns().character_of(viewer).knows_at_start),
+        )
 
     def ref_of(self, person: PersonId) -> PersonRef:
         return PersonRef(

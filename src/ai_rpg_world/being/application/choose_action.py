@@ -28,21 +28,18 @@ from ai_rpg_world.being.application.episode_recall_tool import (
     recalled_text,
     too_many_handles_text,
 )
-from ai_rpg_world.being.application.memo_argument import MEMO_FIELD_NAME
-from ai_rpg_world.being.application.memo_arguments import read_memo_operations
-from ai_rpg_world.being.application.memo_writing import apply_memo_operations
 from ai_rpg_world.being.application.memory_writing_in_background import MemoryWritingInBackground
 from ai_rpg_world.being.application.names_for_people import name_for
 from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
 from ai_rpg_world.being.application.rechoose_name import NameRechoice, RechooseName
 from ai_rpg_world.being.application.unwritten_memo_text import (
     WHOLE_MEMO,
-    attempted_operation,
     attempted_raw_operation,
     short_reason,
     unwritten_memo_line,
 )
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
+from ai_rpg_world.being.application.write_memos import WriteMemos, WriteMemosCommand
 from ai_rpg_world.being.contract import (
     UNKNOWN,
     ActionChoices,
@@ -187,7 +184,7 @@ class ChooseAction:
         self._completion = completion
         self._short_term_memories = short_term_memories
         self._turn_clock = turn_clock
-        self._memo_books = memo_books
+        self._write_memos = WriteMemos(memo_books=memo_books, episodes=episodes)
         self._episodes = episodes
         self._visited_places = visited_places
         self._recall_limit = recall_limit
@@ -418,35 +415,21 @@ class ChooseAction:
     ) -> tuple[str, ...]:
         if being_tools.memo is None or being_tools.memo not in arguments:
             return ()
-        episode_source_offered = being_tools.episode_index_shown
-        read = read_memo_operations(
-            {MEMO_FIELD_NAME: arguments[being_tools.memo]}, episode_source_offered=episode_source_offered
+        written = self._write_memos.execute(
+            WriteMemosCommand(
+                being_id=being_id,
+                memo=arguments[being_tools.memo],
+                episode_source_offered=being_tools.episode_index_shown,
+                turn=turn,
+                environment_name=self._working_memory.environment_name(being_id),
+            )
         )
-        known_episode_handles = (
-            frozenset(e.handle for e in self._episodes.list_by_being(being_id))
-            if episode_source_offered
-            else frozenset()
-        )
-        book = self._memo_books.get(being_id)
-        outcome = apply_memo_operations(
-            book,
-            read.operations,
-            turn=turn,
-            environment_name=self._working_memory.environment_name(being_id),
-            new_memo_id=lambda: str(uuid4()),
-            known_episode_handles=known_episode_handles,
-        )
-        self._memo_books.save(book)
-        unread = [
-            (r.index, WHOLE_MEMO if r.index is None else attempted_raw_operation(r.raw), short_reason(r.reason))
-            for r in read.rejected
-        ]
-        unwritten: list[tuple[int | None, str, str]] = [
-            (r.index, attempted_operation(r.operation), short_reason(r.reason, kind=r.kind)) for r in outcome.rejected
-        ]
         return tuple(
-            unwritten_memo_line(attempted, reason)
-            for _, attempted, reason in sorted(unread + unwritten, key=lambda r: -1 if r[0] is None else r[0])
+            unwritten_memo_line(
+                WHOLE_MEMO if u.index is None else attempted_raw_operation(u.raw),
+                short_reason(u.reason, kind=u.kind),
+            )
+            for u in sorted(written.unwritten, key=lambda u: -1 if u.index is None else u.index)
         )
 
     def _act(
