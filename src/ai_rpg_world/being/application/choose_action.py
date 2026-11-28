@@ -118,6 +118,20 @@ class ChooseActionCommand:
 
 
 @dataclass(frozen=True)
+class ActionPrompt:
+    command: ChooseActionCommand
+    tools: ActionTools
+    messages: tuple[dict[str, str], ...]
+    definitions: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class ActionThought:
+    prompt: ActionPrompt
+    exchange: LlmExchange
+
+
+@dataclass(frozen=True)
 class ActionChosen:
     move: AgentMove
     exchange: LlmExchange
@@ -183,6 +197,9 @@ class ChooseAction:
     def execute(
         self, command: ChooseActionCommand
     ) -> ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen:
+        return self.settle(self.think(self.prompt(command)))
+
+    def prompt(self, command: ChooseActionCommand) -> ActionPrompt:
         if self._writing_in_background is not None:
             self._writing_in_background.take_in_finished(command.being_id)
         tools = ActionTools(command.choices, command.being_tools, name_for, recall_limit=self._recall_limit)
@@ -206,13 +223,25 @@ class ChooseAction:
             {"role": "system", "content": system_prompt_text(memory)},
             {"role": "user", "content": message_text(memory)},
         ]
-        definitions = list(tools.definitions())
-        replies = self._replies(messages, definitions)
-        exchange = LlmExchange(messages=tuple(messages), tools=tuple(definitions), replies=replies)
-        call = replies[-1].tool_call
+        return ActionPrompt(command=command, tools=tools, messages=tuple(messages), definitions=tools.definitions())
+
+    def think(self, prompt: ActionPrompt) -> ActionThought:
+        """LLM を呼ぶだけで、記憶には読みも書きもしない。ほかの人の ``prompt`` / ``settle`` と並べて呼べる。"""
+        replies = self._replies(list(prompt.messages), list(prompt.definitions))
+        return ActionThought(
+            prompt=prompt,
+            exchange=LlmExchange(messages=prompt.messages, tools=prompt.definitions, replies=replies),
+        )
+
+    def settle(
+        self, thought: ActionThought
+    ) -> ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen:
+        command = thought.prompt.command
+        exchange = thought.exchange
+        call = exchange.replies[-1].tool_call
         if call is None:
             return ActionNotChosen(requested_tool=None, suggestion=None, exchange=exchange)
-        outcome = self._outcome_of(call, tools, command, exchange)
+        outcome = self._outcome_of(call, thought.prompt.tools, command, exchange)
         self._visit(command.being_id, command.scene.here)
         return outcome
 
@@ -461,6 +490,8 @@ __all__ = [
     "ActionChoosingCompletion",
     "ActionChoosingReply",
     "ActionNotChosen",
+    "ActionPrompt",
+    "ActionThought",
     "ChooseAction",
     "ChooseActionCommand",
     "LlmExchange",

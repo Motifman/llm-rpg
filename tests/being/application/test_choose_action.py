@@ -199,6 +199,32 @@ def _choose(
     return choose.execute(_command(being_tools)), completion
 
 
+def _chooser(
+    *replies: ActionChoosingReply, memories: ShortTermMemoryRepository, clock: InMemoryMemoryTurnClock
+) -> ChooseAction:
+    episodes = InMemoryEpisodeRepository(handoff=discard_events)
+    memo_books = InMemoryMemoBookRepository(handoff=discard_events)
+    visited_places = InMemoryVisitedPlacesRepository()
+    return ChooseAction(
+        working_memory=CurrentWorkingMemory(
+            beings=_Beings(),
+            short_term_memories=memories,
+            acquaintances=InMemoryAcquaintanceRepository(),
+            episodes=episodes,
+            memo_books=memo_books,
+            visited_places=visited_places,
+            episode_index_limit=5,
+        ),
+        completion=ScriptedActionChoosing(replies),
+        short_term_memories=memories,
+        turn_clock=clock,
+        memo_books=memo_books,
+        episodes=episodes,
+        visited_places=visited_places,
+        recall_limit=2,
+    )
+
+
 def _episodes_with_the_safe_story() -> tuple[EpisodeRepository, str]:
     episodes = InMemoryEpisodeRepository(handoff=discard_events)
     episode = Episode.write(
@@ -389,6 +415,38 @@ class TestChooseAction:
             attempt.result.observation.body
             == "未対応のツールです: gather。 現在使える tool: [interact, pickup_item, speak]"
         )
+
+
+class TestChoosingInThreeSteps:
+    """ChooseAction の prompt・think・settle のうち、think が LLM を呼ぶだけで記憶を書かず、書くのは settle だけであることを保証する。"""
+
+    def test_thinking_leaves_the_memory_and_the_turn_untouched(self) -> None:
+        """prompt と think を済ませただけでは、短期記憶に試みが無く、記憶のターンも 0 のまま。"""
+        memories = InMemoryShortTermMemoryRepository()
+        clock = InMemoryMemoryTurnClock()
+        choose = _chooser(
+            _reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}), memories=memories, clock=clock
+        )
+
+        choose.think(choose.prompt(_command(OfferedBeingTools(inner_thought="inner_thought"))))
+
+        assert memories.get(GEN).unsummarized() == ()
+        assert clock.current_turn(GEN) == 0
+
+    def test_settling_the_thought_keeps_the_attempt(self) -> None:
+        """think の返事を settle に渡すと、選んだ行動が返り、結果を待つ試みとして短期記憶に残る。"""
+        memories = InMemoryShortTermMemoryRepository()
+        clock = InMemoryMemoryTurnClock()
+        choose = _chooser(
+            _reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}), memories=memories, clock=clock
+        )
+        thought = choose.think(choose.prompt(_command(OfferedBeingTools(inner_thought="inner_thought"))))
+
+        outcome = choose.settle(thought)
+
+        [attempt] = memories.get(GEN).unsummarized()
+        assert isinstance(outcome, ActionChosen) and isinstance(attempt, Attempt)
+        assert attempt.move == outcome.move
 
 
 class TestWritingMemoWithTheMove:
