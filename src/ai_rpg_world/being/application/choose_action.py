@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
 from ai_rpg_world.being.application.action_tools import ActionTools
-from ai_rpg_world.being.application.closest_tool_name import format_unsupported_tool_message, suggest_closest_tool_name
+from ai_rpg_world.being.application.closest_tool_name import unsupported_tool_failure
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
 from ai_rpg_world.being.application.episode_index_revision_tool import (
     EpisodeIndexRevisionOutcome,
@@ -20,14 +20,10 @@ from ai_rpg_world.being.application.memory_writing_in_background import MemoryWr
 from ai_rpg_world.being.application.names_for_people import name_for
 from ai_rpg_world.being.application.own_tool_summary import own_tool_summary
 from ai_rpg_world.being.application.recall_episodes import RecallEpisodes, RecallEpisodesCommand
-from ai_rpg_world.being.application.rechoose_name import NameRechoice, RechooseName
+from ai_rpg_world.being.application.rechoose_name import NameRechoice, NamesMatched, RechooseName
+from ai_rpg_world.being.application.remember_visited_place import RememberVisitedPlace, RememberVisitedPlaceCommand
 from ai_rpg_world.being.application.revise_episode_index import ReviseEpisodeIndex, ReviseEpisodeIndexCommand
-from ai_rpg_world.being.application.unwritten_memo_text import (
-    WHOLE_MEMO,
-    attempted_raw_operation,
-    short_reason,
-    unwritten_memo_line,
-)
+from ai_rpg_world.being.application.unwritten_memo_text import unwritten_memo_lines
 from ai_rpg_world.being.application.working_memory_text import message_text, system_prompt_text
 from ai_rpg_world.being.application.write_memos import WriteMemos, WriteMemosCommand
 from ai_rpg_world.being.contract import (
@@ -173,14 +169,12 @@ class ChooseAction:
         self._short_term_memories = short_term_memories
         self._turn_clock = turn_clock
         self._write_memos = WriteMemos(memo_books=memo_books, episodes=episodes)
-        self._visited_places = visited_places
+        self._remember_visited_place = RememberVisitedPlace(visited_places=visited_places)
         self._recall_limit = recall_limit
         self._rechoose_name = rechoose_name
         self._writing_in_background = writing_in_background
 
-    def execute(
-        self, command: ChooseActionCommand
-    ) -> ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen:
+    def execute(self, command: ChooseActionCommand) -> ChoiceOutcome:
         return self.settle(self.think(self.prompt(command)))
 
     def prompt(self, command: ChooseActionCommand) -> ActionPrompt:
@@ -217,49 +211,22 @@ class ChooseAction:
             exchange=LlmExchange(messages=prompt.messages, tools=prompt.definitions, replies=replies),
         )
 
-    def settle(
-        self, thought: ActionThought
-    ) -> ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen:
+    def settle(self, thought: ActionThought) -> ChoiceOutcome:
         command = thought.prompt.command
         exchange = thought.exchange
         call = exchange.replies[-1].tool_call
         if call is None:
             return ActionNotChosen(requested_tool=None, suggestion=None, exchange=exchange)
         outcome = self._outcome_of(call, thought.prompt.tools, command, exchange)
-        self._visit(command.being_id, command.scene.here)
-        return outcome
-
-    def _names_matched(
-        self,
-        call: ToolCallReply,
-        tools: ActionTools,
-        being_tools: OfferedBeingTools,
-        rechoices: list[NameRechoice],
-    ) -> Mapping[str, object]:
-        thought = call.arguments.get(being_tools.inner_thought) if being_tools.inner_thought else None
-
-        def rechoose(written: str, label: str, candidates: Mapping[str, str | None], parent: str | None) -> str | None:
-            if self._rechoose_name is None:
-                return None
-            rechoice = self._rechoose_name.rechoose(
-                written,
-                label=label,
-                candidates=candidates,
-                parent=parent,
-                tool=call.tool_name,
-                inner_thought=thought if isinstance(thought, str) else None,
+        if command.scene.here is not None:
+            self._remember_visited_place.execute(
+                RememberVisitedPlaceCommand(
+                    being_id=command.being_id,
+                    environment_name=self._working_memory.environment_name(command.being_id),
+                    place=command.scene.here.place,
+                )
             )
-            rechoices.append(rechoice)
-            return rechoice.replaced_with
-
-        return tools.with_names_matched(call.tool_name, call.arguments, rechoose)
-
-    def _visit(self, being_id: BeingId, here: Here | None) -> None:
-        if here is None:
-            return
-        places = self._visited_places.get(being_id)
-        places.visit(environment_name=self._working_memory.environment_name(being_id), place=here.place)
-        self._visited_places.save(places)
+        return outcome
 
     def _replies(
         self, messages: list[dict[str, str]], definitions: list[dict[str, Any]]
@@ -273,152 +240,163 @@ class ChooseAction:
 
     def _outcome_of(
         self, call: ToolCallReply, tools: ActionTools, command: ChooseActionCommand, exchange: LlmExchange
-    ) -> ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen:
-        call_id = call.call_id or f"call_{uuid4().hex}"
-        being_id = command.being_id
-        turn = self._turn_clock.current_turn(being_id) + 1
-        if call.tool_name == command.being_tools.episode_recall:
-            recall = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
-            recalled = self._recall_episodes.execute(
-                RecallEpisodesCommand(being_id=being_id, arguments=call.arguments, turn=turn)
-            )
-            self._act(
-                being_id,
-                recall,
-                turn=turn,
-                call_text=recall_call_text(call.tool_name, call.arguments),
-                result=MemoryOperationOutcome(
-                    call_id=call_id,
-                    body=recalled.body,
-                    time=command.now,
-                    succeeded=recalled.succeeded,
-                    action_summary=own_tool_summary(
-                        call.tool_name,
-                        call.arguments,
-                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
-                    ),
-                ),
-            )
-            return TurnSpentRecalling(move=recall, exchange=exchange)
-        if call.tool_name == command.being_tools.episode_index_revision:
-            revise = AgentMove(call_id=call_id, tool_name=call.tool_name, arguments=FrozenJsonObject(call.arguments))
-            revised = self._revise_episode_index.execute(
-                ReviseEpisodeIndexCommand(being_id=being_id, arguments=call.arguments, turn=turn)
-            )
-            self._act(
-                being_id,
-                revise,
-                turn=turn,
-                call_text=index_revision_call_text(call.tool_name, call.arguments),
-                result=MemoryOperationOutcome(
-                    call_id=call_id,
-                    body=revised.body,
-                    time=command.now,
-                    succeeded=revised.succeeded,
-                    action_summary=own_tool_summary(
-                        call.tool_name,
-                        call.arguments,
-                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
-                    ),
-                ),
-            )
-            return TurnSpentRevisingIndex(move=revise, exchange=exchange, revision=revised.revision)
-        rechoices: list[NameRechoice] = []
-        arguments = self._names_matched(call, tools, command.being_tools, rechoices)
-        move = tools.move_from(call_id=call_id, tool_name=call.tool_name, arguments=arguments)
-        if move is not None:
-            # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
-            # 行動が世界に断られても、書いたことは本人がしたことなので残る。
-            rejections = self._write_memo(being_id, command.being_tools, call.arguments, turn=turn)
-            self._act(
-                being_id,
-                move,
-                turn=turn,
-                memo_rejections=rejections,
-                call_text=tools.call_text(call.tool_name, arguments),
-                result=None,
-            )
-            return ActionChosen(move=move, exchange=exchange, name_rechoices=tuple(rechoices))
-        # 別のツールとして実行すると引数の写し替えが要るので、近い名前を添えて失敗のまま返す (design_decisions #231)。
-        suggestion = suggest_closest_tool_name(call.tool_name, tools.tool_names())
-        body = format_unsupported_tool_message(
-            requested=call.tool_name, valid_tools=tools.tool_names(), suggestion=suggestion
+    ) -> ChoiceOutcome:
+        turn = _Turn(
+            being_id=command.being_id,
+            number=self._turn_clock.current_turn(command.being_id) + 1,
+            call_id=call.call_id or f"call_{uuid4().hex}",
+            call=call,
+            command=command,
+            exchange=exchange,
         )
-        self._act(
-            being_id,
-            AgentMove(call_id=call_id, tool_name=call.tool_name, arguments={}),
-            turn=turn,
-            result=ObservedOutcome(
-                _own_failure(
-                    body,
-                    call_id=call_id,
-                    now=command.now,
-                    action_summary=own_tool_summary(
-                        call.tool_name,
-                        call.arguments,
-                        hidden=(command.being_tools.inner_thought, command.being_tools.memo),
-                    ),
-                )
-            ),
-        )
-        return ActionNotChosen(requested_tool=call.tool_name, suggestion=suggestion, exchange=exchange)
+        # 2 つに同じ名前を出されたら、前の実装と同じく思い出す方を採る。辞書は後に書いた方が残る。
+        routes: dict[str | None, Callable[[_Turn], ChoiceOutcome]] = {
+            command.being_tools.episode_index_revision: self._revise,
+            command.being_tools.episode_recall: self._recall,
+        }
+        route = routes.get(call.tool_name)
+        if route is not None:
+            return route(turn)
+        return self._act_on_world(turn, tools)
 
-    def _write_memo(
-        self, being_id: BeingId, being_tools: OfferedBeingTools, arguments: Mapping[str, object], *, turn: int
-    ) -> tuple[str, ...]:
-        if being_tools.memo is None or being_tools.memo not in arguments:
+    def _recall(self, turn: _Turn) -> TurnSpentRecalling:
+        recalled = self._recall_episodes.execute(
+            RecallEpisodesCommand(being_id=turn.being_id, arguments=turn.call.arguments, turn=turn.number)
+        )
+        move = turn.own_tool_move()
+        self._act(
+            turn,
+            move,
+            call_text=recall_call_text(turn.call.tool_name, turn.call.arguments),
+            result=turn.own_tool_outcome(recalled.body, succeeded=recalled.succeeded),
+        )
+        return TurnSpentRecalling(move=move, exchange=turn.exchange)
+
+    def _revise(self, turn: _Turn) -> TurnSpentRevisingIndex:
+        revised = self._revise_episode_index.execute(
+            ReviseEpisodeIndexCommand(being_id=turn.being_id, arguments=turn.call.arguments, turn=turn.number)
+        )
+        move = turn.own_tool_move()
+        self._act(
+            turn,
+            move,
+            call_text=index_revision_call_text(turn.call.tool_name, turn.call.arguments),
+            result=turn.own_tool_outcome(revised.body, succeeded=revised.succeeded),
+        )
+        return TurnSpentRevisingIndex(move=move, exchange=turn.exchange, revision=revised.revision)
+
+    def _act_on_world(self, turn: _Turn, tools: ActionTools) -> ActionChosen | ActionNotChosen:
+        call = turn.call
+        matched = self._names_matched(turn, tools)
+        move = tools.move_from(call_id=turn.call_id, tool_name=call.tool_name, arguments=matched.arguments)
+        if move is None:
+            failure = unsupported_tool_failure(
+                requested=call.tool_name,
+                valid_tools=tools.tool_names(),
+                call_id=turn.call_id,
+                now=turn.command.now,
+                action_summary=turn.action_summary(),
+            )
+            self._act(
+                turn,
+                AgentMove(call_id=turn.call_id, tool_name=call.tool_name, arguments={}),
+                result=ObservedOutcome(failure.observation),
+            )
+            return ActionNotChosen(requested_tool=call.tool_name, suggestion=failure.suggestion, exchange=turn.exchange)
+        # 試みより先に書く。試みを残してから書けずに止まると、世界に渡らない試みが結果を待ち続ける。
+        # 行動が世界に断られても、書いたことは本人がしたことなので残る。
+        memo_rejections = self._write_memo(turn)
+        self._act(
+            turn,
+            move,
+            memo_rejections=memo_rejections,
+            call_text=tools.call_text(call.tool_name, matched.arguments),
+            result=None,
+        )
+        return ActionChosen(move=move, exchange=turn.exchange, name_rechoices=matched.rechoices)
+
+    def _names_matched(self, turn: _Turn, tools: ActionTools) -> NamesMatched:
+        call = turn.call
+        if self._rechoose_name is None:
+            return NamesMatched(
+                arguments=tools.with_names_matched(call.tool_name, call.arguments, lambda *_: None), rechoices=()
+            )
+        inner_thought = turn.inner_thought()
+        return self._rechoose_name.match_names(
+            tools, tool_name=call.tool_name, arguments=call.arguments, inner_thought=inner_thought
+        )
+
+    def _write_memo(self, turn: _Turn) -> tuple[str, ...]:
+        memo = turn.command.being_tools.memo
+        if memo is None or memo not in turn.call.arguments:
             return ()
         written = self._write_memos.execute(
             WriteMemosCommand(
-                being_id=being_id,
-                memo=arguments[being_tools.memo],
-                episode_source_offered=being_tools.episode_index_shown,
-                turn=turn,
-                environment_name=self._working_memory.environment_name(being_id),
+                being_id=turn.being_id,
+                memo=turn.call.arguments[memo],
+                episode_source_offered=turn.command.being_tools.episode_index_shown,
+                turn=turn.number,
+                environment_name=self._working_memory.environment_name(turn.being_id),
             )
         )
-        return tuple(
-            unwritten_memo_line(
-                WHOLE_MEMO if u.index is None else attempted_raw_operation(u.raw),
-                short_reason(u.reason, kind=u.kind),
-            )
-            for u in sorted(written.unwritten, key=lambda u: -1 if u.index is None else u.index)
-        )
+        return unwritten_memo_lines(written.unwritten)
 
     def _act(
         self,
-        being_id: BeingId,
+        turn: _Turn,
         move: AgentMove,
         *,
-        turn: int,
         result: Outcome | None,
         memo_rejections: tuple[str, ...] = (),
         call_text: str | None = None,
     ) -> None:
         # 保存が済んでから時計を進める。先に進めると、保存に失敗したときにターンの番号が 1 つ飛ぶ。
-        memory = self._short_term_memories.get(being_id)
-        memory.act(move, current_turn=turn, memo_rejections=memo_rejections, call_text=call_text)
+        memory = self._short_term_memories.get(turn.being_id)
+        memory.act(move, current_turn=turn.number, memo_rejections=memo_rejections, call_text=call_text)
         if result is not None:
-            memory.receive_result(result, current_turn=turn)
+            memory.receive_result(result, current_turn=turn.number)
         self._short_term_memories.save(memory)
-        self._turn_clock.advance_turn(being_id)
+        self._turn_clock.advance_turn(turn.being_id)
 
 
 def _present(description: Description | None) -> tuple[Description, ...]:
     return () if description is None else (description,)
 
 
-def _own_failure(body: str, *, call_id: str, now: ObservedTime, action_summary: str) -> Observation:
-    return Observation(
-        body=body,
-        route=OwnActionResult(call_id=call_id, succeeded=False, action_summary=action_summary),
-        time=now,
-        subject_is_self=True,
-        subject_name=UNKNOWN,
-        source=UNKNOWN,
-        place=UNKNOWN,
-        addressed_to_self=True,
-    )
+ChoiceOutcome = ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | ActionNotChosen
+
+
+@dataclass(frozen=True, kw_only=True)
+class _Turn:
+    being_id: BeingId
+    number: int
+    call_id: str
+    call: ToolCallReply
+    command: ChooseActionCommand
+    exchange: LlmExchange
+
+    def own_tool_move(self) -> AgentMove:
+        return AgentMove(
+            call_id=self.call_id, tool_name=self.call.tool_name, arguments=FrozenJsonObject(self.call.arguments)
+        )
+
+    def own_tool_outcome(self, body: str, *, succeeded: bool) -> MemoryOperationOutcome:
+        return MemoryOperationOutcome(
+            call_id=self.call_id,
+            body=body,
+            time=self.command.now,
+            succeeded=succeeded,
+            action_summary=self.action_summary(),
+        )
+
+    def action_summary(self) -> str:
+        tools = self.command.being_tools
+        return own_tool_summary(self.call.tool_name, self.call.arguments, hidden=(tools.inner_thought, tools.memo))
+
+    def inner_thought(self) -> str | None:
+        name = self.command.being_tools.inner_thought
+        thought = self.call.arguments.get(name) if name else None
+        return thought if isinstance(thought, str) else None
 
 
 __all__ = [

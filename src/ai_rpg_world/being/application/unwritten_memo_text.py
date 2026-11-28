@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 
 from ai_rpg_world.being.application.memo_arguments import (
     REJECTED_FROM_NOT_NEEDED,
@@ -25,6 +26,7 @@ from ai_rpg_world.being.application.memo_arguments import (
     REJECTED_UNKNOWN_EPISODE,
     REJECTED_UNKNOWN_KIND,
 )
+from ai_rpg_world.being.application.write_memos import UnwrittenMemo
 from ai_rpg_world.being.domain.memo_book import KIND_LIMITS, MEMO_TEXT_MAX_LENGTH, MemoKind
 
 WHOLE_MEMO = "メモの書き込み"
@@ -49,6 +51,15 @@ _SHORT_REASONS = {
     REJECTED_UNKNOWN_EPISODE: "そのエピソードはない",
     REJECTED_INVALID: "書けない形だった",
 }
+
+
+def unwritten_memo_lines(unwritten: Iterable[UnwrittenMemo]) -> tuple[str, ...]:
+    return tuple(
+        unwritten_memo_line(
+            WHOLE_MEMO if u.index is None else attempted_raw_operation(u.raw), short_reason(u.reason, kind=u.kind)
+        )
+        for u in sorted(unwritten, key=lambda u: -1 if u.index is None else u.index)
+    )
 
 
 def unwritten_memo_line(attempted: str, reason: str) -> str:
