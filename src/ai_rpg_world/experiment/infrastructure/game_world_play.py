@@ -20,7 +20,9 @@ from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisod
 from ai_rpg_world.being.application.writing_circumstances import CircumstancesOfBeings
 from ai_rpg_world.being.contract import OfferedBeingTools
 from ai_rpg_world.being.domain.backstory_writer import BackstoryWriter
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.episode_writer import EpisodeWriter
+from ai_rpg_world.being.domain.persona import Persona
 from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_being_repository import InMemoryBeingRepository
@@ -34,6 +36,15 @@ from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository impor
 from ai_rpg_world.being.infrastructure.memory_writing_on_threads import MemoryWritingOnThreads
 from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, DomainEvent, EventDispatcher
 from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+from ai_rpg_world.experiment.infrastructure.llm_call_capture import (
+    CapturedActionChoosing,
+    CountedPromptSink,
+    LabeledBackstoryWriter,
+    LabeledChooseAction,
+    LabeledEpisodeWriter,
+    LlmCallCapture,
+    LlmCallLabel,
+)
 from ai_rpg_world.game_world.application.accept_world_time_passage import AcceptWorldTimePassage
 from ai_rpg_world.game_world.application.brief_entering_person import BriefEnteringPerson
 from ai_rpg_world.game_world.application.check_readiness_to_act import CheckReadinessToAct
@@ -56,7 +67,7 @@ from ai_rpg_world.game_world.application.take_chosen_action import TakeChosenAct
 from ai_rpg_world.game_world.application.tell_current_time import TellCurrentTime
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded
 from ai_rpg_world.game_world.domain.perception.perception_delivery_report import PerceptionDeliveryReport
-from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
+from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
@@ -76,6 +87,7 @@ from ai_rpg_world.play_session.domain.turn_rounds import (
     ChoiceFailed,
     ObservationPassedOnEvent,
     RoundCount,
+    RoundOpenedEvent,
     TurnFinishedEvent,
     TurnRoundsEvent,
 )
@@ -120,6 +132,8 @@ class GameWorldPlayResult:
     finished_turns: int
     failed_choices: tuple[str, ...]
     writing_failures: dict[str, int]
+    llm_calls_recorded: int = 0
+    llm_calls_not_recorded: int = 0
 
 
 class _PerceptionReportsCounted:
@@ -147,10 +161,15 @@ class GameWorldPlay:
         settings: GameWorldPlaySettings,
         writers: GameWorldWriters,
         round_limit: int,
+        capture: LlmCallCapture | None = None,
         turns_at_once: bool = True,
     ) -> None:
         design = scenario.design
         self._writers = writers
+        self._capture = capture or LlmCallCapture()
+        # 書き起こしは裏のスレッドで LLM を呼び、世界の保存先に触れないので、本線で覚えた tick と人を使う
+        self._last_tick: int | None = None
+        self._people_by_name: dict[str, tuple[PersonId, BeingId, int]] = {}
         # 時刻の札を作る部品は昼夜を前提にするので、昼夜を宣言しない世界は組み立てる前に断る (D2222)
         day_night = design.day_night_declaration()
         self.world = world = WorldId(f"{scenario_path.stem}#1")
@@ -180,8 +199,8 @@ class GameWorldPlay:
         visited_places = InMemoryVisitedPlacesRepository()
         circumstances = CircumstancesOfBeings(beings)
         self.memory_writing.write_with(
-            backstory_writer=writers.backstory_writer,
-            episode_writer=writers.episode_writer,
+            backstory_writer=LabeledBackstoryWriter(writers.backstory_writer, label_for=self._label_for_persona),
+            episode_writer=LabeledEpisodeWriter(writers.episode_writer, label_for=self._label_for_persona),
             short_term_memories=short_term_memories,
             episodes=episodes,
             circumstances=circumstances,
@@ -240,24 +259,27 @@ class GameWorldPlay:
             mark_body_as_shown=MarkBodyAsShown(scope),
             offer_choices=OfferActionChoices(scope, design),
             tell_time=TellCurrentTime(scope, day_night, design.clock_wording),
-            choose_action=ChooseAction(
-                working_memory=CurrentWorkingMemory(
-                    beings=beings,
+            choose_action=LabeledChooseAction(
+                ChooseAction(
+                    working_memory=CurrentWorkingMemory(
+                        beings=beings,
+                        short_term_memories=short_term_memories,
+                        acquaintances=acquaintances,
+                        episodes=episodes,
+                        memo_books=memo_books,
+                        visited_places=visited_places,
+                        episode_index_limit=settings.episode_index_limit,
+                    ),
+                    completion=CapturedActionChoosing(writers.action_choosing, self._capture),
                     short_term_memories=short_term_memories,
-                    acquaintances=acquaintances,
-                    episodes=episodes,
+                    turn_clock=clock,
                     memo_books=memo_books,
+                    episodes=episodes,
                     visited_places=visited_places,
-                    episode_index_limit=settings.episode_index_limit,
+                    recall_limit=settings.episode_recall_max_handles,
+                    writing_in_background=self.memory_writing,
                 ),
-                completion=writers.action_choosing,
-                short_term_memories=short_term_memories,
-                turn_clock=clock,
-                memo_books=memo_books,
-                episodes=episodes,
-                visited_places=visited_places,
-                recall_limit=settings.episode_recall_max_handles,
-                writing_in_background=self.memory_writing,
+                label_for=self._label_for_being,
             ),
             take_chosen_action=TakeChosenAction(scope, design, SettleWorldConditions(scope, design)),
             describe_result=DescribeActionResult(scope, design, day_night),
@@ -282,16 +304,25 @@ class GameWorldPlay:
             leave_environment=LeaveEnvironment(
                 writing_in_background=self.memory_writing,
                 write_episodes=WriteEpisodesOnLeaving(
-                    short_term_memories, writers.episode_writer, AddEpisodesToMemory(episodes)
+                    short_term_memories,
+                    LabeledEpisodeWriter(writers.episode_writer, label_for=self._label_for_persona),
+                    AddEpisodesToMemory(episodes),
                 ),
                 circumstances=circumstances,
                 turn_reader=clock,
             ),
         )
 
-    def play(self) -> GameWorldPlayResult:
+    def play(self, *, prompts: CountedPromptSink | None = None, run_id: str = "") -> GameWorldPlayResult:
+        if prompts is not None:
+            self._capture.attach(prompts, run_id)
         try:
             self._start(self._start_command)
+            cast = self.casts.get(self.world)
+            self._people_by_name = {
+                role.being_name: (role.person, cast.being_of(role.person), number)
+                for number, role in enumerate(self._start_command.roles, start=1)
+            }
             stopped = self._play_rounds(PlayRoundsCommand(self.world))
             self._end_play(EndPlaySessionCommand(self.world))
             last_tick = self._scope.run(lambda session: session.facts().now())
@@ -305,17 +336,31 @@ class GameWorldPlay:
             finished_turns=self._finished_turns,
             failed_choices=tuple(self._failed_choices),
             writing_failures=self.memory_writing.failures(),
+            llm_calls_recorded=0 if self._capture.sink is None else self._capture.sink.recorded,
+            llm_calls_not_recorded=0 if self._capture.sink is None else self._capture.sink.failed,
         )
 
     def forward_aux_calls(self, forward: Callable[[AuxLlmCall], None]) -> None:
         if self._writers.aux_calls is not None:
             self._writers.aux_calls.forward_to(forward)
 
+    def _label_for_being(self, being_id: BeingId, purpose: str) -> LlmCallLabel:
+        for name, (person, known, number) in self._people_by_name.items():
+            if known == being_id:
+                return LlmCallLabel(person, name, number, being_id, self.now().value, purpose)
+        raise LookupError(f"no person is played by {being_id.value}")
+
+    def _label_for_persona(self, persona: Persona, purpose: str) -> LlmCallLabel:
+        person, being_id, number = self._people_by_name[persona.name]
+        return LlmCallLabel(person, persona.name, number, being_id, self._last_tick, purpose)
+
     def now(self) -> WorldTick:
         return self._scope.run(lambda session: session.facts().now())
 
     def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
         for event in events:
+            if isinstance(event, RoundOpenedEvent):
+                self._last_tick = event.round - 1
             if not isinstance(event, TurnFinishedEvent):
                 continue
             self._finished_turns += 1

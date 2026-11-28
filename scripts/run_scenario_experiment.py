@@ -1753,12 +1753,14 @@ def _run_game_world(
     config_source_path: Path | None,
     runtime_config_source: Mapping[str, str],
 ) -> int:
+    from ai_rpg_world.application.llm.services.prompt_dataset_capture import PromptDatasetCaptureSink
     from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
     from ai_rpg_world.experiment.infrastructure.game_world_run import (
         aux_call_payload,
         prepare_game_world_play,
         run_summary,
     )
+    from ai_rpg_world.experiment.infrastructure.llm_call_capture import CountedPromptSink
     from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
     from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
 
@@ -1817,6 +1819,22 @@ def _run_game_world(
     )
     print(f"[run] world=game_world scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}", flush=True)
     print(f"[out] {out_dir}", flush=True)
+    # LLM に渡した入力と返ってきた出力は、古い世界と同じく prompt_dataset/ に全文で残す (#2321)
+    prompts = CountedPromptSink(
+        PromptDatasetCaptureSink(
+            run_dir=out_dir,
+            run_id=out_dir.name,
+            run_metadata={
+                "world": _GAME_WORLD,
+                "experiment_manifest_path": str(manifest_path),
+                "experiment_manifest_sha256": manifest_sha256,
+                "profile": config_source.get("profile"),
+                "scenario_path": str(args.scenario),
+                "scenario_sha256": scenario_hash,
+            },
+            failure_policy="fail",
+        )
+    )
     started = time.monotonic()
     with JsonlTraceRecorder(trace_path) as rec:
         rec.record(
@@ -1834,7 +1852,7 @@ def _run_game_world(
         try:
             # 書き起こしは裏のスレッドで呼ぶので、tick は入れない (世界の保存先に触れない)
             play.forward_aux_calls(lambda call: rec.record("game_world.aux_llm_call", call=aux_call_payload(call)))
-            summary = run_summary(play.play())
+            summary = run_summary(play.play(prompts=prompts, run_id=out_dir.name))
         except BaseException as error:
             # 途中で落ちた run も、run_end が無いと終わったのか書きかけなのか見分けられない
             rec.record(TraceEventKind.RUN_END, world=_GAME_WORLD, outcome="ERROR", error=repr(error))
@@ -1858,6 +1876,7 @@ def _game_world_report(scenario_path: Path, summary: Mapping[str, Any]) -> str:
         f"- outcome: {summary['outcome']}",
         f"- last_tick: {summary['last_tick']}",
         f"- finished turns: {summary['finished_turns']}",
+        f"- LLM calls written to prompt_dataset: {summary['llm_calls_recorded']} (not written: {summary['llm_calls_not_recorded']})",
         f"- elapsed: {_format_duration(summary['elapsed_sec'])}",
         f"- discarded choices: {summary['discarded_choices']}",
         f"- memory writing failures: {failures if failures else 'none'}",

@@ -55,7 +55,7 @@ class TestGameWorldSmokeRun:
     """run の入口が、profile の world に game_world と書かれたとき、新しい世界で廃坑の山村 v2 を回すことを保証する。"""
 
     def test_smoke_profile_plays_the_mine_village_to_the_round_limit(self, tmp_path: Path) -> None:
-        """smoke_stub_game_world で 3 tick 回すと、4 人が毎巡りターンを終え (12 ターン)、決めた巡りの数で止まったと run_end に残る。"""
+        """smoke_stub_game_world で 3 tick 回すと、4 人が毎巡りターンを終え (12 ターン)、決めた巡りの数で止まったと run_end に残り、LLM の呼び出し 12 行が prompt_dataset に残る。"""
         out = tmp_path / "run"
 
         code = main(["--profile", "smoke_stub_game_world", "--out", str(out)])
@@ -64,6 +64,8 @@ class TestGameWorldSmokeRun:
         end = _run_end(out)
         assert (end["outcome"], end["last_tick"], end["finished_turns"]) == ("ROUND_LIMIT_REACHED", 3, 12)
         assert end["memory_writing_failures"] == {}
+        assert (end["llm_calls_recorded"], end["llm_calls_not_recorded"]) == (12, 0)
+        assert len((out / "prompt_dataset" / "calls.jsonl").read_text().splitlines()) == 12
         assert (out / "report.md").exists()
 
     def test_resolved_config_marks_the_game_world_and_the_scenario_hash(self, tmp_path: Path) -> None:
@@ -206,7 +208,7 @@ class _PlayStoppingWith:
     def forward_aux_calls(self, forward: object) -> None:
         pass
 
-    def play(self) -> GameWorldPlayResult:
+    def play(self, **_: object) -> GameWorldPlayResult:
         if isinstance(self._stopped, Exception):
             raise self._stopped
         return GameWorldPlayResult(

@@ -979,6 +979,7 @@ class LiteLLMClient(
         self,
         messages: list[dict[str, Any]],
         component: AuxLlmComponent,
+        prompt_capture_context: Any | None = None,
     ) -> dict[str, Any]:
         start_monotonic = time.monotonic()
         response: Any = None
@@ -992,6 +993,9 @@ class LiteLLMClient(
                 start_monotonic=start_monotonic,
                 error_code=e.error_code,
             )
+            self._record_aux_prompt_capture(
+                prompt_capture_context, messages, component, response=response, error=e, output=None
+            )
             raise
         self._record_aux_call(
             component,
@@ -999,7 +1003,29 @@ class LiteLLMClient(
             start_monotonic=start_monotonic,
             error_code=None,
         )
+        self._record_aux_prompt_capture(
+            prompt_capture_context, messages, component, response=response, error=None, output=parsed
+        )
         return parsed
+
+    def _record_aux_prompt_capture(
+        self,
+        prompt_capture_context: Any | None,
+        messages: list[dict[str, Any]],
+        component: AuxLlmComponent,
+        *,
+        response: Any,
+        error: BaseException | None,
+        output: Mapping[str, Any] | None,
+    ) -> None:
+        self._record_prompt_capture(
+            prompt_capture_context,
+            request_kwargs={"model": self._model, "messages": messages, "response_format": {"type": "json_object"}},
+            response=response,
+            error=error,
+            output=output,
+            metrics={"component": component.value, "cost_usd": self._extract_reported_cost_usd(response)},
+        )
 
     def _record_aux_call(
         self,
@@ -1106,16 +1132,22 @@ class LiteLLMClient(
     def complete_short_term_summary_json(
         self,
         messages: list[dict[str, Any]],
+        prompt_capture_context: Any | None = None,
     ) -> dict[str, Any]:
         """tools 無しで、Being の短期記憶のいきさつの JSON object を返す (#1824)。
 
         既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
         prompt 構築や parse は ``LlmBackstoryWriter`` 側の責務。
         """
-        return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_SUMMARY)
+        return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_SUMMARY, prompt_capture_context)
 
     def choose_action(
-        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+        self,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]],
+        *,
+        reasoning_off: bool,
+        prompt_capture_context: Any | None = None,
     ) -> ActionChoosingReply:
         watch = CallOutcomeWatch(None)
         call = self.invoke(
@@ -1124,6 +1156,7 @@ class LiteLLMClient(
             "required",
             metrics_sink=watch,
             reasoning_effort=RETRY_REASONING_EFFORT if reasoning_off else None,
+            prompt_capture_context=prompt_capture_context,
         )
         tool_call = (
             None
@@ -1135,9 +1168,10 @@ class LiteLLMClient(
     def complete_episode_writing_json(
         self,
         messages: list[dict[str, Any]],
+        prompt_capture_context: Any | None = None,
     ) -> dict[str, Any]:
         """目次つきのエピソードの書き起こし (#1626)。要約と同じく熟考を止めて送る。"""
-        return self._complete_aux_json(messages, AuxLlmComponent.EPISODE_WRITING)
+        return self._complete_aux_json(messages, AuxLlmComponent.EPISODE_WRITING, prompt_capture_context)
 
     def _parse_tool_call(
         self,
