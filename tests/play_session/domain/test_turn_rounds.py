@@ -20,6 +20,7 @@ from ai_rpg_world.play_session.domain.play_session_exception import (
 from ai_rpg_world.play_session.domain.turn_rounds import (
     Acted,
     ChoiceFailed,
+    ObservationPassedOnEvent,
     RoundClosedEvent,
     RoundCount,
     RoundOpenedEvent,
@@ -208,6 +209,110 @@ class TestNoticeObservation:
         rounds.open_round({_GEN: FreeToAct()})
 
         assert rounds.due_turns() == ()
+
+
+def _passed_on(rounds: TurnRounds) -> list[tuple[PersonId, str]]:
+    return [(e.person, e.observation.body) for e in rounds.get_events() if isinstance(e, ObservationPassedOnEvent)]
+
+
+class TestObservationsWhileChoosing:
+    """TurnRounds が、まだ選んでいる人に届いた観測を預かり、その人のターンを終えたあとで本人に回し、呼びかけを数えることを保証する。"""
+
+    def test_observation_to_someone_not_choosing_is_passed_on_at_once(self) -> None:
+        """選んでいないゲンに届いた観測は、その場で本人に回る。"""
+        rounds = _rounds()
+        rounds.open_round({_GEN: FreeToAct()})
+
+        rounds.notice_observation(_GEN, _observation(False))
+
+        assert _passed_on(rounds) == [(_GEN, "扉が壊れた")]
+
+    def test_observation_to_someone_choosing_is_held_until_the_turn_ends(self) -> None:
+        """ミオとゲンが選んでいるあいだにゲンへ届いた観測は、ゲンのターンを終えるまで回らず、終えたあとに 1 回だけ回る。"""
+        rounds = _rounds()
+        rounds.open_round({_MIO: FreeToAct(), _GEN: FreeToAct()})
+        rounds.begin_choosing((_MIO, _GEN))
+        rounds.finish_choosing(_MIO)
+        rounds.finish_turn(_MIO, Acted())
+
+        rounds.notice_observation(_GEN, _observation(False))
+        held = _passed_on(rounds)
+        rounds.finish_choosing(_GEN)
+        rounds.finish_turn(_GEN, Acted())
+
+        assert held == []
+        assert _passed_on(rounds) == [(_GEN, "扉が壊れた")]
+
+    def test_held_observation_comes_after_the_turn_is_finished(self) -> None:
+        """預かった観測は、そのターンを終えた記録 (TurnFinishedEvent) より後に回る。"""
+        rounds = _rounds()
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.begin_choosing((_GEN,))
+        rounds.notice_observation(_GEN, _observation(False))
+
+        rounds.finish_turn(_GEN, Acted())
+
+        kinds = [type(e) for e in rounds.get_events()][-2:]
+        assert kinds == [TurnFinishedEvent, ObservationPassedOnEvent]
+
+    def test_observation_after_the_choice_came_back_is_passed_on_at_once(self) -> None:
+        """選び終えて行為を確定させているあいだのゲンに届いた観測 (自分の行為の結果など) は、預からずに回る。"""
+        rounds = _rounds()
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.begin_choosing((_GEN,))
+        rounds.finish_choosing(_GEN)
+
+        rounds.notice_observation(_GEN, _observation(False))
+
+        assert _passed_on(rounds) == [(_GEN, "扉が壊れた")]
+
+    def test_call_held_while_choosing_wakes_the_person_who_chose_to_wait(self) -> None:
+        """選んでいるあいだに目立つ知らせを預かったゲンが待つを選んでも、次の巡りでターンが回る。"""
+        rounds = _rounds(wake_waiting_after=3)
+        rounds.open_round({_GEN: FreeToAct()})
+        rounds.begin_choosing((_GEN,))
+        rounds.notice_observation(_GEN, _observation(True))
+        rounds.finish_turn(_GEN, Waited())
+        rounds.close_round()
+
+        rounds.open_round({_GEN: FreeToAct()})
+
+        assert rounds.due_turns() == (_GEN,)
+
+    def test_call_held_while_choosing_brings_a_turn_back_in_the_middle_of_action(self) -> None:
+        """選んでいるあいだに自分に向けた観測を預かったハルが移動を始めても、次の巡りでターンが回る。"""
+        rounds = _rounds()
+        rounds.open_round({_HARU: FreeToAct()})
+        rounds.begin_choosing((_HARU,))
+        rounds.notice_observation(_HARU, _observation(True, addressed_to_self=True))
+        rounds.finish_turn(_HARU, Acted())
+        rounds.close_round()
+
+        rounds.open_round({_HARU: InTheMiddleOfAction()})
+
+        assert rounds.due_turns() == (_HARU,)
+
+    def test_choosing_someone_without_a_turn_is_refused(self) -> None:
+        """その巡りにターンの無いサヨを、選んでいる人にはできない。"""
+        rounds = _rounds()
+        rounds.open_round({_GEN: FreeToAct(), _SAYO: UnableToAct()})
+
+        with pytest.raises(TurnNotDueException):
+            rounds.begin_choosing((_SAYO,))
+
+    def test_nothing_is_held_once_the_round_is_closed(self) -> None:
+        """全員が選んでいるあいだに観測が届いても、巡りを閉じたときには預かりが残らず、全部回り終えている。"""
+        rounds = _rounds()
+        rounds.open_round({_MIO: FreeToAct(), _GEN: FreeToAct()})
+        rounds.begin_choosing((_MIO, _GEN))
+        rounds.notice_observation(_MIO, _observation(False))
+        rounds.notice_observation(_GEN, _observation(False))
+        rounds.finish_turn(_GEN, Acted())
+        rounds.finish_turn(_MIO, Acted())
+
+        rounds.close_round()
+
+        assert sorted(p.value for p, _ in _passed_on(rounds)) == ["gen", "mio"]
 
 
 class TestTurnsWithinARound:

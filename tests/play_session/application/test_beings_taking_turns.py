@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from ai_rpg_world.being.application.choose_action import (
@@ -30,6 +34,7 @@ from ai_rpg_world.game_world.domain.whereabouts import PersonBody
 from ai_rpg_world.play_session.application.play_rounds import PlayRoundsCommand, RoundLimitReached, WorldEnded
 from ai_rpg_world.play_session.domain.turn_rounds import (
     ChoiceFailed,
+    ObservationPassedOnEvent,
     RoundOpenedEvent,
     SkippedTurn,
     TurnFinishedEvent,
@@ -572,3 +577,191 @@ class TestRevisingTheIndexWhileTakingTurns:
         [attempt] = _answered_attempts(session, _GEN)
         assert attempt.move.tool_name == "episode_revise_index"
         assert isinstance(attempt.result, MemoryOperationOutcome) and attempt.result.succeeded
+
+
+_PEOPLE_BY_NAME = {"ハル": PersonId("haru"), "ミオ": PersonId("mio"), "ゲン": _GEN, "サヨ": PersonId("sayo")}
+_MIO, _SAYO = PersonId("mio"), PersonId("sayo")
+
+
+def _finished_turns(session: MineVillageSession) -> list[TurnFinishedEvent]:
+    return [e for e in session.turn_round_events if isinstance(e, TurnFinishedEvent)]
+
+
+def _has_finished(session: MineVillageSession, person: PersonId, *, times: int = 1) -> Callable[[], bool]:
+    return lambda: sum(1 for e in _finished_turns(session) if e.person == person) >= times
+
+
+@dataclass(frozen=True)
+class _Planned:
+    reply: ActionChoosingReply | Exception
+    returns_after: Callable[[], bool] | None = None
+
+
+class _ThinkingAtOnce(ActionChoosingCompletion):
+    """人柄の名前で誰の呼び出しかを見分け、決めた条件が揃うまで返事を返さない。並べて呼ばれないと条件が揃わず、時間切れで落ちる。"""
+
+    def __init__(
+        self,
+        answers: dict[PersonId, list[_Planned]],
+        *,
+        late: Callable[[PersonId], _Planned | None] = lambda person: None,
+    ) -> None:
+        self._answers = answers
+        self._late = late
+        self._lock = threading.Lock()
+        self.asked: list[PersonId] = []
+        self.timed_out: list[PersonId] = []
+
+    def choose_action(
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]], *, reasoning_off: bool
+    ) -> ActionChoosingReply:
+        found = re.search(r"あなたは(.+?)、", messages[0]["content"])
+        assert found is not None
+        person = _PEOPLE_BY_NAME[found.group(1)]
+        with self._lock:
+            self.asked.append(person)
+            planned = self._answers.get(person, [])
+            plan = self._late(person) or (
+                planned.pop(0) if planned else _Planned(_murmur(f"murmur_{person.value}_{len(self.asked)}"))
+            )
+        if plan.returns_after is not None:
+            deadline = time.monotonic() + 5.0
+            while not plan.returns_after():
+                if time.monotonic() > deadline:
+                    self.timed_out.append(person)
+                    raise AssertionError(f"{person.value} was not asked at the same time as the others")
+                time.sleep(0.005)
+        if isinstance(plan.reply, Exception):
+            raise plan.reply
+        return plan.reply
+
+
+class TestBeingsTakingTurnsAtOnce:
+    """BeingsTakingTurnsAtOnce が、ターンのある全員に同時に考えさせ、返事が返った順に世界で確定させることを保証する。"""
+
+    def test_quicker_reply_is_carried_out_first_and_keeps_its_order(self) -> None:
+        """ゲンの返事がミオの行為の確定まで返らないとき、ミオの行為が先に確定し、TurnFinishedEvent の順もミオがゲンより前になる。"""
+        session = MineVillageSession(round_limit=1).started()
+        completion = _ThinkingAtOnce({_GEN: [_Planned(_murmur("gen"), returns_after=_has_finished(session, _MIO))]})
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
+
+        order = {e.person: e.order for e in _finished_turns(session)}
+        assert order[_MIO] < order[_GEN]
+        assert len(order) == 4
+
+    def test_what_gen_perceived_while_choosing_comes_after_his_own_result(self) -> None:
+        """隣のサヨの言葉がゲンの考えているあいだに確定すると、ゲンの短期記憶には自分の試みと結果のあとに、サヨの言葉が並ぶ。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        speak = _reply("speak", "sayo_speaks", reach="ふつうの声で話す", content="灯りを点けよう")
+        completion = _ThinkingAtOnce(
+            {
+                _SAYO: [_Planned(speak)],
+                _GEN: [_Planned(_murmur("gen"), returns_after=_has_finished(session, _SAYO))],
+            }
+        )
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
+
+        gens = session.short_term_memories.get(BeingId("gen")).unsummarized()
+        kinds = [
+            "own" if isinstance(e, Attempt) else e.observation.body
+            for e in gens
+            if isinstance(e, Attempt) or (isinstance(e, Perception) and "灯りを点けよう" in e.observation.body)
+        ]
+        assert kinds == ["own", "サヨが「灯りを点けよう」と言った。"]
+        [attempt] = _answered_attempts(session, _GEN)
+        assert attempt.move.call_id == "gen"
+
+    def test_gen_who_chose_to_wait_is_woken_by_what_happened_while_he_was_choosing(self) -> None:
+        """ゲンが考えているあいだに隣でサヨが探し始めると (目立つ出来事)、ゲンが待つを選んでも、次の巡りにまた頼まれる。"""
+        session = MineVillageSession(round_limit=2, delivers_world_events=True).started()
+        completion = _ThinkingAtOnce(
+            {
+                _SAYO: [_Planned(_reply("explore", "sayo_explores"))],
+                _GEN: [_Planned(_reply("wait", "gen_waits"), returns_after=_has_finished(session, _SAYO))],
+            }
+        )
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
+
+        assert completion.asked.count(_GEN) == 2
+
+    def test_failed_call_is_a_failed_turn_and_the_others_still_take_theirs(self) -> None:
+        """ゲンの呼び出しが例外で落ちても、ほかの 3 人の行為は確定し、ゲンのターンは選べなかったターンとして残る。"""
+        session = MineVillageSession(round_limit=1).started()
+        completion = _ThinkingAtOnce({_GEN: [_Planned(TimeoutError("no reply in 95 seconds"))]})
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
+
+        outcomes = {e.person: e.outcome for e in _finished_turns(session)}
+        assert outcomes.pop(_GEN) == ChoiceFailed("TimeoutError: no reply in 95 seconds")
+        assert len(outcomes) == 3 and _answered_attempts(session, _GEN) == []
+
+    def test_what_gen_perceives_from_his_own_action_reaches_him_before_his_turn_ends(self) -> None:
+        """ゲンがカンテラを灯すと、自分の行為で届いた「カンテラの灯を入手しました。」は預からず、ゲンのターンを終えるより前に渡る。"""
+        session = MineVillageSession(round_limit=1, delivers_world_events=True).started()
+        session.scope.run(_ready_to_start_the_lift)
+        completion = _ThinkingAtOnce(
+            {_GEN: [_Planned(_reply("interact", "light", target="カンテラ", how="油を足して灯す"))]}
+        )
+
+        session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
+
+        gens = [
+            "finished" if isinstance(e, TurnFinishedEvent) else e.observation.body.template
+            for e in session.turn_round_events
+            if getattr(e, "person", None) == _GEN and isinstance(e, (TurnFinishedEvent, ObservationPassedOnEvent))
+        ]
+        assert gens.index("カンテラの灯を入手しました。") < gens.index("finished")
+
+    def _world_ending_while_mio_thinks(self) -> tuple[MineVillageSession, object]:
+        session = MineVillageSession(delivers_world_events=True).started()
+        session.scope.run(_ready_to_start_the_lift)
+        noted = {"do": "add", "kind": "todo", "text": "籠の様子を見る"}
+
+        def mio_waits_in_the_round_gen_starts_the_lift(person: PersonId) -> _Planned | None:
+            opened = [e for e in session.turn_round_events if isinstance(e, RoundOpenedEvent)][-1]
+            if person != _MIO or _GEN not in opened.due or not _has_finished(session, _GEN, times=2)():
+                return None
+            return _Planned(
+                _reply("speak", "mio_late", reach="ふつうの声で話す", content="待って", memo=[noted]),
+                returns_after=_has_finished(session, _GEN, times=3),
+            )
+
+        completion = _ThinkingAtOnce(
+            {
+                _GEN: [
+                    _Planned(_reply("interact", "light", target="カンテラ", how="油を足して灯す")),
+                    _Planned(_reply("hold_item", "hold", item="カンテラの灯")),
+                    _Planned(_reply("interact", "start_lift", target="籠の操作盤", how="鍵を差して昇降機を動かす")),
+                ]
+            },
+            late=mio_waits_in_the_round_gen_starts_the_lift,
+        )
+        stopped = session.play_rounds(session.beings_taking_turns_at_once(completion))(PlayRoundsCommand(WORLD))
+        assert completion.timed_out == []
+        return session, stopped
+
+    def test_choice_returned_after_the_world_ended_is_discarded_with_its_exchange(self) -> None:
+        """ゲンが昇降機を動かして世界が終わったあとに返ったミオの選択は、世界に送られず、LLM とのやりとりごと WorldEnded に残る。"""
+        _, stopped = self._world_ending_while_mio_thinks()
+
+        assert isinstance(stopped, WorldEnded)
+        [mios] = [d for d in stopped.discarded if d.person == _MIO]
+        assert mios.exchange is not None and mios.failure is None
+        call = mios.exchange.replies[-1].tool_call
+        assert call is not None and call.call_id == "mio_late"
+
+    def test_discarded_choice_leaves_nothing_in_memory_or_memo(self) -> None:
+        """世界が終わって捨てたミオの選択は、ミオの短期記憶にも、添えたメモにも残らない。"""
+        session, _ = self._world_ending_while_mio_thinks()
+
+        mios = session.short_term_memories.get(BeingId("mio")).unsummarized()
+        assert "mio_late" not in [e.move.call_id for e in mios if isinstance(e, Attempt)]
+        assert session.memo_books.get(BeingId("mio")).memos == ()

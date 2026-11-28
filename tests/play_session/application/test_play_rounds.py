@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
 
+import pytest
+
 from ai_rpg_world.game_world.application.deliver_perception import DeliverPerceptionCommand
 from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.value_object import PersonId, SpotId, WorldTick
 from ai_rpg_world.play_session.application.play_rounds import (
     ChoosingKeptFailing,
+    DiscardedChoice,
     FinishedTurn,
     PlayRoundsCommand,
     RoundLimitReached,
@@ -34,18 +37,45 @@ class _TurnTakersForTests:
         *,
         outcomes: dict[PersonId, TurnOutcome] | None = None,
         during: Callable[[PersonId], None] = lambda person: None,
+        discarded: tuple[DiscardedChoice, ...] = (),
+        fails_to_let_go: bool = False,
     ) -> None:
+        self.fails_to_let_go = fails_to_let_go
         self._outcomes = outcomes or {}
         self._during = during
+        self._discarded = discarded
         self.asked: list[frozenset[PersonId]] = []
         self.finished: list[PersonId] = []
 
-    def take_turns(self, people: Sequence[PersonId]) -> Iterator[FinishedTurn]:
+    def take_turns(self, people: Sequence[PersonId]) -> _TurnsForTests:
         self.asked.append(frozenset(people))
-        for person in people:
-            self._during(person)
-            self.finished.append(person)
-            yield FinishedTurn(person, self._outcomes.get(person, Acted()))
+        self.turns = _TurnsForTests(self, tuple(people), self._discarded)
+        return self.turns
+
+    def finish(self, person: PersonId) -> FinishedTurn:
+        self._during(person)
+        self.finished.append(person)
+        return FinishedTurn(person, self._outcomes.get(person, Acted()))
+
+
+class _TurnsForTests:
+    def __init__(
+        self, takers: _TurnTakersForTests, people: tuple[PersonId, ...], discarded: tuple[DiscardedChoice, ...]
+    ) -> None:
+        self._takers = takers
+        self._people = people
+        self._discarded = discarded
+        self.let_go_count = 0
+
+    def __iter__(self) -> Iterator[FinishedTurn]:
+        for person in self._people:
+            yield self._takers.finish(person)
+
+    def let_go(self) -> tuple[DiscardedChoice, ...]:
+        self.let_go_count += 1
+        if self._takers.fails_to_let_go:
+            raise OSError("executor is gone")
+        return self._discarded
 
 
 def _now(session: MineVillageSession) -> WorldTick:
@@ -82,6 +112,42 @@ class TestPlayRoundsStops:
         assert stopped == WorldEnded()
         assert len(takers.finished) == 1
         assert _now(session) == before
+
+    def test_world_ending_during_a_turn_lets_the_rest_go_and_keeps_what_was_discarded(self) -> None:
+        """最初の人の行為で世界が終わると、頼む先に残りを手放させ、捨てた選択を WorldEnded に載せる。"""
+        session = MineVillageSession().started()
+        mios = DiscardedChoice(person=PersonId("mio"), exchange=None, failure=None)
+        takers = _TurnTakersForTests(during=lambda person: _end_world(session), discarded=(mios,))
+
+        stopped = session.play_rounds(takers)(PlayRoundsCommand(WORLD))
+
+        assert stopped == WorldEnded((mios,))
+        assert takers.turns.let_go_count == 1
+
+    def test_failure_in_a_turn_lets_the_rest_go_before_it_propagates(self) -> None:
+        """ターンの最中に世界の側の例外が出ると、頼む先に残りを手放させてから、その例外をそのまま上に出す。"""
+        session = MineVillageSession().started()
+
+        def broken(person: PersonId) -> None:
+            raise RuntimeError("world store is broken")
+
+        takers = _TurnTakersForTests(during=broken)
+
+        with pytest.raises(RuntimeError, match="world store is broken"):
+            session.play_rounds(takers)(PlayRoundsCommand(WORLD))
+        assert takers.turns.let_go_count == 1
+
+    def test_failure_while_letting_go_does_not_replace_the_original_error(self) -> None:
+        """ターンの最中の例外のあと、残りを手放すときにも例外が出たら、上に出るのはターンの最中の例外のほう。"""
+        session = MineVillageSession().started()
+
+        def broken(person: PersonId) -> None:
+            raise RuntimeError("world store is broken")
+
+        takers = _TurnTakersForTests(during=broken, fails_to_let_go=True)
+
+        with pytest.raises(RuntimeError, match="world store is broken"):
+            session.play_rounds(takers)(PlayRoundsCommand(WORLD))
 
     def test_world_already_ended_asks_nobody(self) -> None:
         """始める前に世界が終わっていれば、誰にもターンを頼まずに WorldEnded で止まる。"""
