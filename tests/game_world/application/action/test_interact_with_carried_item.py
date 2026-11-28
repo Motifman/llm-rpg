@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_rpg_world.being.contract import TextWithPeople
 from ai_rpg_world.game_world.application.action.action_reply import ActionDone, ActionRefused
 from ai_rpg_world.game_world.application.world_perception_senses import WorldPerceptionSenses
 from ai_rpg_world.game_world.application.world_store import WorldSession
@@ -56,7 +57,7 @@ class TestInteractWithCarriedItem:
         reply = world.rub(ALICE, world.item_of(ALICE, LAMP))
 
         assert isinstance(reply, ActionDone)
-        assert reply.done_text == TextAboutPeople(
+        assert reply.outcome.result == TextAboutPeople(
             TextWithUnassignedPeople("{actor}はランプを磨いた。"), {"actor": ALICE}
         )
 
@@ -72,26 +73,37 @@ class TestInteractWithCarriedItem:
         reply = world.rub(ALICE, world.item_of(ALICE, LAMP))
 
         assert isinstance(reply, ActionDone)
-        assert reply.done_text == TextAboutPeople(TextWithUnassignedPeople("ランプは磨り減って無くなった。"), {})
+        assert reply.outcome.result == TextAboutPeople(TextWithUnassignedPeople("ランプは磨り減って無くなった。"), {})
 
-    def test_refusal_of_an_item_gone_from_the_world_has_no_summary(self) -> None:
-        """アリスのランプを置こうとして断られたあいだに、ランプが世界から無くなると、品物の名前を引けないので、要約は無い。"""
+    def test_refusal_summary_survives_the_item_running_out_after_the_refusal(self) -> None:
+        """ボブのランプを磨こうとして断られたあとで、そのランプが世界から無くなっても、返事の要約は断られた時点のランプの名前で本人に返る。"""
         world = WorldForInteractions()
-        lamp = world.item_of(ALICE, LAMP)
-        attempt = ItemDropAttempt(ALICE, lamp, Openly())
-        refused = ActionRefused(
-            ActionRefusal(
-                attempt=attempt, reason=NotCarrying(), text=TextWithUnassignedPeople("持っていない。").about({})
-            )
-        )
+        bobs_lamp = world.item_of(BOB, LAMP)
+        reply = world.rub(ALICE, bobs_lamp)
+        assert isinstance(reply, ActionRefused)
+
+        world.scope.run(lambda session: session.aggregates().take_item_out_of_world(bobs_lamp))
+
+        summary = _summary_for(world, reply, ALICE)
+        assert isinstance(summary, TextWithPeople)
+        assert summary.template == "interact_with_carried_itemした rub lamp"
+
+    def test_refusal_of_an_item_already_gone_from_the_world_has_no_summary(self) -> None:
+        """ボブのランプが世界から無くなったあとで、アリスがそのランプを使おうとして NotCarrying で断られると、品物の名前を引けないので、要約は無い。"""
+        world = WorldForInteractions()
+        lamp = world.item_of(BOB, LAMP)
         world.scope.run(lambda session: session.aggregates().take_item_out_of_world(lamp))
 
-        assert _summary_for(world, refused, ALICE) is None
+        reply = world.use(ALICE, lamp)
+
+        assert isinstance(reply, ActionRefused)
+        assert reply.refusal.reason == NotCarrying()
+        assert _summary_for(world, reply, ALICE) is None
 
 
 def _summary_for(world: WorldForInteractions, reply: ActionRefused, actor: PersonId) -> object:
     def read(session: WorldSession) -> object:
         facts = session.facts()
-        return reply.summary_for_actor(world.design, facts, WorldPerceptionSenses(facts).view_for(actor))
+        return reply.summary_for_actor(WorldPerceptionSenses(facts).view_for(actor))
 
     return world.scope.run(read)

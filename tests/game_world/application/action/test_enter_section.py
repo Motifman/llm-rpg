@@ -35,8 +35,8 @@ class TestEnterSection:
         reply = world.enter_cage(ALICE)
 
         assert isinstance(reply, ActionDone)
-        assert reply.done_text == TextAboutPeople(TextWithUnassignedPeople("乗り込んだ。"), {})
-        assert reply.summary.template == TextWithUnassignedPeople("enter_sectionした cage")
+        assert reply.outcome.result == TextAboutPeople(TextWithUnassignedPeople("乗り込んだ。"), {})
+        assert reply.outcome.summary.template == TextWithUnassignedPeople("enter_sectionした cage")
 
     def test_full_section_refuses_with_section_full_code(self) -> None:
         """定員 1 の区画に誰かがいると、次の人は SECTION_FULL の RefusalCode で断られ、区画の外に残る。"""

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, TypeVar, final
@@ -20,6 +21,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     WithGroundItem,
     WithPerson,
 )
+from ai_rpg_world.game_world.domain.action.action_fixed_before_effect import ActionFixedBeforeEffect
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.declared_section_access import DeclaredSectionAccess
 from ai_rpg_world.game_world.domain.action.manner import Manner, Openly
@@ -96,10 +98,16 @@ if TYPE_CHECKING:
 _Reply = TypeVar("_Reply")
 
 
-class _BuiltInAttempt(TriggerAnswersNothingByDefault):
+class _BuiltInAttempt(TriggerAnswersNothingByDefault, ABC):
     actor: PersonId
     _KIND: ClassVar[ActionKind]
     _CHOICE: ClassVar[ActionChoiceKind]
+
+    @abstractmethod
+    def exertion(self) -> Exertion: ...
+
+    @abstractmethod
+    def entered_through(self, entrances: ActionEntrances[_Reply]) -> _Reply: ...
 
     def offered_as(self, wording: ChoiceWording) -> OfferedAction:
         return OfferedAction(self._CHOICE)
@@ -112,6 +120,9 @@ class _BuiltInAttempt(TriggerAnswersNothingByDefault):
 
     def summary_in(self, design: WorldDesign, situation: ActorSituation) -> TextAboutPeople:
         return self._about_this_act(design.action_texts.summary_of(self._text_key()), design, situation)
+
+    def fixed_before_effect(self, design: WorldDesign, facts: WorldFacts) -> ActionFixedBeforeEffect:
+        return ActionFixedBeforeEffect.of(self, design, facts)
 
     def _text_key(self) -> ActionTextKey:
         return _TEXT_KEY_OF_KIND[self._KIND]

@@ -92,7 +92,7 @@ class TurnGuidance:
     def result_for_actor(self, view: PeopleAsSeen) -> str | TextWithPeople:
         return self.text
 
-    def summary_for_actor(self, design: WorldDesign, facts: WorldFacts, view: PeopleAsSeen) -> None:
+    def summary_for_actor(self, view: PeopleAsSeen) -> None:
         return None
 
 

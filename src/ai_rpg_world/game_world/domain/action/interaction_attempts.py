@@ -21,6 +21,7 @@ from ai_rpg_world.game_world.domain.action.action_attempt import (
     WithObject,
     WithPerson,
 )
+from ai_rpg_world.game_world.domain.action.action_fixed_before_effect import ActionFixedBeforeEffect
 from ai_rpg_world.game_world.domain.action.common_rule_refusal import NoOneFoundInTheDark
 from ai_rpg_world.game_world.domain.action.declared_interaction import DeclaredInteraction
 from ai_rpg_world.game_world.domain.action.manner import Manner
@@ -152,6 +153,9 @@ class _InteractionAttempt(TriggerAnswersNothingByDefault, ABC):
         people = {"actor": self.actor} | ({"target": target} if isinstance(target, PersonId) else {})
         summary = design.action_texts.summary_of(self._summary_key())
         return summary.about_named(people, {**self._things_named(design, situation.item_specs), **how})
+
+    def fixed_before_effect(self, design: WorldDesign, facts: WorldFacts) -> ActionFixedBeforeEffect:
+        return ActionFixedBeforeEffect.of(self, design, facts)
 
     @abstractmethod
     def _summary_key(self) -> ActionTextKey: ...
