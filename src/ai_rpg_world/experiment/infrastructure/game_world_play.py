@@ -131,7 +131,6 @@ class GameWorldPlay:
         settings: GameWorldPlaySettings,
         writers: GameWorldWriters,
         round_limit: int,
-        closing: Closing,
         turns_at_once: bool = True,
     ) -> None:
         design = scenario.design
@@ -219,7 +218,7 @@ class GameWorldPlay:
                 episode_index_revision=_EPISODE_INDEX_REVISION if index_shown else None,
                 episode_index_shown=index_shown,
             ),
-            closing=closing,
+            closing=Closing(instruction=design.choice_descriptions.closing),
             describe_scene=DescribeScene(scope, design),
             mark_body_as_shown=MarkBodyAsShown(scope),
             offer_choices=OfferActionChoices(scope, design),

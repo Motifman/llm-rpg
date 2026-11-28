@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,7 @@ from scripts.fuzz_scenario_with_random_agents import (  # noqa: E402
 )
 
 from ai_rpg_world.being.application.choose_action import ActionChoosingReply  # noqa: E402
-from ai_rpg_world.being.domain.working_memory import Closing  # noqa: E402
-from ai_rpg_world.experiment.infrastructure import game_world_run, random_action_choosing  # noqa: E402
+from ai_rpg_world.experiment.infrastructure import random_action_choosing  # noqa: E402
 
 _MINE_VILLAGE_V2 = _REPO_ROOT / "data" / "scenarios" / "mine_village_v2.yaml"
 _PROFILE = _REPO_ROOT / "data" / "experiment_profiles" / "smoke_stub_game_world.json"
@@ -43,14 +43,24 @@ class TestFuzzInTheGameWorld:
 
         assert (result.reached_tick, result.findings) == (3, [])
 
-    def test_scenario_identifier_in_the_prompt_is_found_as_a_leak(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """締めの文にシナリオの ID (lift_key) が混ざると、その行を leak として見つける。"""
-        monkeypatch.setattr(game_world_run, "CLOSING", Closing(instruction="lift_key を取りに行ってください。"))
+    def test_scenario_identifier_in_the_prompt_is_found_as_a_leak(self, tmp_path: Path) -> None:
+        """世界の締めの文にシナリオの ID (lift_key) が混ざると、その行を leak として見つける。"""
+        shutil.copytree(_REPO_ROOT / "data" / "scenarios" / "common", tmp_path / "common")
+        common = tmp_path / "common" / "ja_default.yaml"
+        common.write_text(
+            common.read_text(encoding="utf-8").replace(
+                "  closing: 利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
+                "  closing: lift_key を取りに行ってください。",
+            ),
+            encoding="utf-8",
+        )
+        scenario = tmp_path / "mine_village_v2.yaml"
+        shutil.copy(_MINE_VILLAGE_V2, scenario)
 
-        result = _fuzz(ticks=1)
+        result = run_random_agents_in_game_world(scenario, seed=0, max_world_ticks=1, profile_path=_PROFILE)
 
-        assert [f.kind for f in result.findings] == ["leak"]
-        assert "lift_key" in result.findings[0].detail
+        assert {f.kind for f in result.findings} == {"leak"}
+        assert any("lift_key" in f.detail for f in result.findings)
 
     def test_choosing_that_raised_is_found_as_a_swallowed_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """行動を選ぶ途中で例外が出て、選べなかったターンとして飲まれると、swallowed_exception として見つける。"""

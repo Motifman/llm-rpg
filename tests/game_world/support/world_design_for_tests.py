@@ -338,6 +338,7 @@ def choice_descriptions() -> ChoiceDescriptions:
         duration_hours="{hours} 時間ほど",
         duration_minutes="{minutes} 分ほど",
         duration_turns="{turns} ターンぶんほど",
+        closing="行動を 1 つ選んでください。",
     )
 
 
