@@ -439,6 +439,7 @@ def _write_experiment_manifest(
     snapshot_load_dir: Path | None,
     no_html: bool,
     no_progress_jsonl: bool,
+    world: str = "world_graph",
 ) -> tuple[Path, str]:
     source_payload = _mask_secret_values(dict(config_source))
     source_path = out_dir / "experiment.config.source.json"
@@ -448,6 +449,7 @@ def _write_experiment_manifest(
     )
     resolved_payload = {
         "schema_version": 1,
+        "world": world,
         "profile": config_source.get("profile"),
         "config_source_path": str(config_source_path) if config_source_path else None,
         "argv": list(argv),
@@ -1534,6 +1536,20 @@ def main(argv: list[str] | None = None) -> int:
     if out_dir is None:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         out_dir = _REPO_ROOT / "var" / "runs" / f"{args.scenario.stem}-{ts}"
+
+    if config_source.get("world") == _GAME_WORLD:
+        return _run_game_world(
+            parser=parser,
+            args=args,
+            argv=list(sys.argv if argv is None else [sys.argv[0], *argv]),
+            out_dir=out_dir,
+            config_source=config_source,
+            config_source_path=config_source_path,
+            runtime_config_source=runtime_config_source,
+        )
+    if config_source.get("world") not in (None, "world_graph"):
+        parser.error(f"unknown world {config_source.get('world')!r}. Use 'game_world' or leave it out")
+
     out_dir.mkdir(parents=True, exist_ok=True)
     trace_path = out_dir / "trace.jsonl"
     report_path = out_dir / "report.md"
@@ -1722,6 +1738,118 @@ def main(argv: list[str] | None = None) -> int:
         if result.get("html_preview_url"):
             print(f"[html-preview] {result['html_preview_url']}", flush=True)
     return 1 if summary["outcome"] in _UNUSABLE_OUTCOMES else 0
+
+
+_GAME_WORLD = "game_world"
+
+
+def _run_game_world(
+    *,
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    argv: list[str],
+    out_dir: Path,
+    config_source: Mapping[str, Any],
+    config_source_path: Path | None,
+    runtime_config_source: Mapping[str, str],
+) -> int:
+    from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
+    from ai_rpg_world.experiment.infrastructure.game_world_run import prepare_game_world_play, run_summary
+    from ai_rpg_world.game_world.domain.exception.condition_exception import NotDeclaredInThisWorldException
+    from ai_rpg_world.game_world.domain.exception.world_design_exception import WorldDesignFlawsException
+
+    # 新しい世界の trace はまだ古い viewer で読めないので HTML を作らない。snapshot もまだ無い
+    if args.snapshot_save_dir is not None or args.snapshot_load_dir is not None or config_source.get("snapshot_save"):
+        parser.error("the game world cannot save or load snapshots yet")
+    if args.publish_gist:
+        parser.error("the game world cannot publish a gist yet")
+    if args.max_world_ticks < 1:
+        parser.error(f"max_world_ticks must be >= 1 for the game world, got {args.max_world_ticks}")
+    try:
+        settings = GameWorldPlaySettings.from_runtime_config(runtime_config_source)
+    except ValueError as error:
+        parser.error(str(error))
+    scenario_hash = _sha256_file(args.scenario)
+    try:
+        play = prepare_game_world_play(
+            scenario_path=args.scenario,
+            scenario_hash=scenario_hash,
+            settings=settings,
+            round_limit=args.max_world_ticks,
+        )
+    except NotDeclaredInThisWorldException:
+        parser.error(f"{args.scenario} declares no day and night. The game world needs time.day_night (D2222)")
+    except WorldDesignFlawsException as flaws:
+        parser.error(f"{args.scenario} has design flaws: {flaws}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    trace_path = out_dir / "trace.jsonl"
+    report_path = out_dir / "report.md"
+    manifest_path, manifest_sha256 = _write_experiment_manifest(
+        out_dir=out_dir,
+        argv=argv,
+        scenario_path=args.scenario,
+        trace_path=trace_path,
+        report_path=report_path,
+        html_path=out_dir / "trace.html",
+        config_source=config_source,
+        config_source_path=config_source_path,
+        runtime_config_source=runtime_config_source,
+        resolved_config=settings,
+        max_world_ticks=args.max_world_ticks,
+        snapshot_save_dir=None,
+        snapshot_load_dir=None,
+        no_html=True,
+        no_progress_jsonl=True,
+        world=_GAME_WORLD,
+    )
+    print(f"[run] world=game_world scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}", flush=True)
+    print(f"[out] {out_dir}", flush=True)
+    started = time.monotonic()
+    with JsonlTraceRecorder(trace_path) as rec:
+        rec.record(
+            TraceEventKind.RUN_START,
+            world=_GAME_WORLD,
+            scenario=args.scenario.name,
+            scenario_sha256=scenario_hash,
+            max_world_ticks=args.max_world_ticks,
+            experiment_profile=config_source.get("profile"),
+            experiment_manifest_path=str(manifest_path),
+            experiment_manifest_sha256=manifest_sha256,
+            **settings.to_trace_dict(),
+        )
+        try:
+            summary = run_summary(play.play())
+        except BaseException as error:
+            # 途中で落ちた run も、run_end が無いと終わったのか書きかけなのか見分けられない
+            rec.record(TraceEventKind.RUN_END, world=_GAME_WORLD, outcome="ERROR", error=repr(error))
+            raise
+        summary["elapsed_sec"] = time.monotonic() - started
+        rec.record(TraceEventKind.RUN_END, **summary)
+    report_path.write_text(_game_world_report(args.scenario, summary), encoding="utf-8")
+    (out_dir / args.scenario.name).write_bytes(args.scenario.read_bytes())
+    print(f"[report] {report_path}", flush=True)
+    print(f"[trace] {trace_path}", flush=True)
+    print(f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']}", flush=True)
+    # 選び続けて失敗して止まった run は、成果物は残すが比べる材料にならない
+    return 1 if summary["outcome"] == "CHOOSING_KEPT_FAILING" else 0
+
+
+def _game_world_report(scenario_path: Path, summary: Mapping[str, Any]) -> str:
+    failures = summary["memory_writing_failures"]
+    lines = [
+        f"# {scenario_path.stem} run (game_world)",
+        "",
+        f"- outcome: {summary['outcome']}",
+        f"- last_tick: {summary['last_tick']}",
+        f"- finished turns: {summary['finished_turns']}",
+        f"- elapsed: {_format_duration(summary['elapsed_sec'])}",
+        f"- discarded choices: {summary['discarded_choices']}",
+        f"- memory writing failures: {failures if failures else 'none'}",
+    ]
+    if summary["stop_reasons"]:
+        lines += ["", "## stop reasons", "", *(f"- {reason}" for reason in summary["stop_reasons"])]
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
