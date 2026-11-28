@@ -50,6 +50,7 @@ def run_summary(result: GameWorldPlayResult) -> dict[str, Any]:
         "stop_reasons": reasons,
         "last_tick": result.last_tick.value,
         "finished_turns": result.finished_turns,
+        "failed_choices": list(result.failed_choices),
         "discarded_choices": discarded,
         "memory_writing_failures": dict(sorted(result.writing_failures.items())),
     }

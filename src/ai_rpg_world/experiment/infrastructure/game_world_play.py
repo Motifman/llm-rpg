@@ -59,7 +59,11 @@ from ai_rpg_world.game_world.domain.value_object import WorldId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import LoadedScenario
 from ai_rpg_world.game_world.infrastructure.world.seedable_random_source import SeedableRandomSource
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
-from ai_rpg_world.play_session.application.beings_taking_turns import BeingsTakingTurnsAtOnce, BeingTurnSteps
+from ai_rpg_world.play_session.application.beings_taking_turns import (
+    BeingsTakingTurnsAtOnce,
+    BeingsTakingTurnsOneByOne,
+    BeingTurnSteps,
+)
 from ai_rpg_world.play_session.application.end_play_session import EndPlaySession, EndPlaySessionCommand
 from ai_rpg_world.play_session.application.hand_observation_to_being import HandObservationToBeing
 from ai_rpg_world.play_session.application.handlers.pass_observation_to_being_handler import (
@@ -68,6 +72,7 @@ from ai_rpg_world.play_session.application.handlers.pass_observation_to_being_ha
 from ai_rpg_world.play_session.application.play_rounds import PlayRounds, PlayRoundsCommand, PlayStopped
 from ai_rpg_world.play_session.application.start_play_session import StartPlaySession, StartPlaySessionCommand
 from ai_rpg_world.play_session.domain.turn_rounds import (
+    ChoiceFailed,
     ObservationPassedOnEvent,
     RoundCount,
     TurnFinishedEvent,
@@ -78,6 +83,7 @@ from ai_rpg_world.play_session.infrastructure.in_memory_turn_rounds_repository i
 from ai_rpg_world.play_session.infrastructure.roles_from_scenario import casting_by_person_name, roles_from_scenario
 
 _INNER_THOUGHT = "inner_thought"
+_FAILED_CHOICES_KEPT = 20
 _EPISODE_RECALL = "episode_recall"
 _EPISODE_INDEX_REVISION = "episode_revise_index"
 
@@ -96,6 +102,7 @@ class GameWorldPlayResult:
     stopped: PlayStopped
     last_tick: WorldTick
     finished_turns: int
+    failed_choices: tuple[str, ...]
     writing_failures: dict[str, int]
 
 
@@ -124,6 +131,7 @@ class GameWorldPlay:
         settings: GameWorldPlaySettings,
         writers: GameWorldWriters,
         round_limit: int,
+        turns_at_once: bool = True,
     ) -> None:
         design = scenario.design
         # 時刻の札を作る部品は昼夜を前提にするので、昼夜を宣言しない世界は組み立てる前に断る (D2222)
@@ -164,6 +172,7 @@ class GameWorldPlay:
 
         self.casts = casts = InMemoryCastRepository(handoff=_discard)
         self._finished_turns = 0
+        self._failed_choices: list[str] = []
         self._turn_round_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_failed_handing_off)
         self._turn_round_dispatcher.register_after_commit(
             ObservationPassedOnEvent,
@@ -241,7 +250,10 @@ class GameWorldPlay:
         self._play_rounds = PlayRounds(
             casts=casts,
             turn_rounds=turn_rounds,
-            turn_takers=BeingsTakingTurnsAtOnce(steps, turn_rounds),
+            # 同じシードで同じ並びを再現したいとき (fuzz) は、返事の順にスレッドの都合が入らないよう 1 人ずつ頼む
+            turn_takers=BeingsTakingTurnsAtOnce(steps, turn_rounds)
+            if turns_at_once
+            else BeingsTakingTurnsOneByOne(steps),
             check_readiness=CheckReadinessToAct(scope),
             world_has_ended=WorldHasEnded(scope),
             accept_time_passage=AcceptWorldTimePassage(
@@ -274,11 +286,21 @@ class GameWorldPlay:
             stopped=stopped,
             last_tick=last_tick,
             finished_turns=self._finished_turns,
+            failed_choices=tuple(self._failed_choices),
             writing_failures=self.memory_writing.failures(),
         )
 
+    def now(self) -> WorldTick:
+        return self._scope.run(lambda session: session.facts().now())
+
     def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
-        self._finished_turns += sum(1 for event in events if isinstance(event, TurnFinishedEvent))
+        for event in events:
+            if not isinstance(event, TurnFinishedEvent):
+                continue
+            self._finished_turns += 1
+            # 選べなかった理由は、続けば遊びの進行が止めるので、run のあいだに際限なくは増えない
+            if isinstance(event.outcome, ChoiceFailed) and len(self._failed_choices) < _FAILED_CHOICES_KEPT:
+                self._failed_choices.append(event.outcome.reason)
         self._turn_round_dispatcher.handoff(events)
 
 
