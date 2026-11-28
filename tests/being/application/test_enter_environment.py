@@ -4,7 +4,7 @@ import pytest
 
 from ai_rpg_world.being.application.enter_environment import EnterEnvironment, EnterEnvironmentCommand
 from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
-from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
+from ai_rpg_world.being.domain.acquaintance import AcquaintanceRoster, HowKnown
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
 from ai_rpg_world.being.domain.being_id import BeingId
@@ -16,6 +16,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingIntroducedToItselfException,
     BeingNotFoundException,
 )
+from tests.event_handoff_helpers import discard_events
 
 GEN = BeingId("gen")
 MINE = "廃坑の山村"
@@ -24,7 +25,7 @@ MINE = "廃坑の山村"
 class _Parts:
     def __init__(self) -> None:
         self.beings = InMemoryBeingRepository()
-        self.acquaintances = InMemoryAcquaintanceRepository()
+        self.acquaintances = InMemoryAcquaintanceRepository(handoff=discard_events)
         self.clock = InMemoryMemoryTurnClock()
         self.enter = EnterEnvironment(self.beings, self.acquaintances, self.clock)
 
@@ -64,7 +65,7 @@ class TestEnterEnvironment:
             )
         )
 
-        [sayo] = parts.acquaintances.list_by_being(GEN)
+        [sayo] = parts.acquaintances.get(GEN).acquaintances
         assert (sayo.environment_name, sayo.name, sayo.how_known, sayo.known_since_turn) == (
             MINE,
             "サヨ",
@@ -88,7 +89,7 @@ class TestEnterEnvironment:
 
         entered = parts.beings.get(GEN)
         assert entered.attachment is None
-        assert parts.acquaintances.list_by_being(GEN) == ()
+        assert parts.acquaintances.get(GEN).acquaintances == ()
 
     def test_unprepared_being_is_refused(self) -> None:
         """用意していない Being を入れようとすると BeingNotFoundException を投げる。"""
@@ -120,7 +121,7 @@ class TestEnterEnvironment:
         assert left.attachment is None
         entered = parts.beings.get(GEN)
         assert entered.attachment == BeingAttachment(environment_id="mine#1", environment_name=MINE)
-        assert [a.name for a in parts.acquaintances.list_by_being(GEN)] == ["サヨ"]
+        assert [a.name for a in parts.acquaintances.get(GEN).acquaintances] == ["サヨ"]
 
 
 class _FailsOnce(InMemoryAcquaintanceRepository):
@@ -129,12 +130,11 @@ class _FailsOnce(InMemoryAcquaintanceRepository):
         self._store = store
         self._failed = False
 
-    def record_introduction(
-        self, being_id: BeingId, *, environment_name: str, name: str, turn: int, relation_note: str | None
-    ) -> Acquaintance:
+    def get(self, being_id: BeingId) -> AcquaintanceRoster:
+        return self._store.get(being_id)
+
+    def save(self, roster: AcquaintanceRoster) -> None:
         if not self._failed:
             self._failed = True
             raise RuntimeError("acquaintance store is unavailable")
-        return self._store.record_introduction(
-            being_id, environment_name=environment_name, name=name, turn=turn, relation_note=relation_note
-        )
+        self._store.save(roster)

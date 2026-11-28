@@ -14,6 +14,7 @@ end-to-end の経路 (= 実 PlayerCurrentStateDto → ui_context_builder → 注
 from __future__ import annotations
 
 import pytest
+from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
@@ -44,7 +45,7 @@ _SPOT_NAMES = {100: "forest_clearing", 200: "summit"}
 
 def _acquaintances() -> PlayerAcquaintances:
     return PlayerAcquaintances(
-        store=InMemoryAcquaintanceRepository(),
+        store=InMemoryAcquaintanceRepository(handoff=discard_events),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
         turn_reader=InMemoryMemoryTurnClock(),
         environment_name="森",
@@ -215,7 +216,7 @@ class TestPlayerFamiliarityAnnotation:
     def test_first_meeting_note_survives_being_shown_by_appearance(self) -> None:
         """名前を知らずに会った相手は、一覧で見た目で書かれても、番号で引くので (初めて会った) が付く (#1581)。"""
         acquaintances = PlayerAcquaintances(
-            store=InMemoryAcquaintanceRepository(),
+            store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
             turn_reader=InMemoryMemoryTurnClock(),
             environment_name="森",

@@ -1,145 +1,109 @@
 from __future__ import annotations
 
-from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
+import pytest
+
+from ai_rpg_world.being.domain.acquaintance import AcquaintanceMetEvent, AcquaintanceRoster
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
+from ai_rpg_world.eventing import DomainEvent
+from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being_ada")
 KAI = BeingId("being_kai")
 
 
+def _roster(being_id: BeingId = ADA, name: str = "ノア") -> AcquaintanceRoster:
+    roster = AcquaintanceRoster.empty(being_id)
+    roster.meet(environment_name="島", name=name, turn=1)
+    return roster
+
+
+def _names(roster: AcquaintanceRoster) -> list[str]:
+    return [a.name for a in roster.acquaintances]
+
+
 class TestInMemoryAcquaintanceRepository:
-    """InMemoryAcquaintanceRepository が、Being ごとに環境の名前と相手の名前の組で知り合いを持つことを保証する。"""
+    """InMemoryAcquaintanceRepository が、Being ごとに知り合いの名簿を 1 つ持ち、丸ごと置き換えることを保証する。"""
 
-    def test_first_meeting_creates_and_second_meeting_updates(self) -> None:
-        """同じ相手と 2 回会うと、1 件の記録の回数が 2 になり、最後に会ったターンが進む。"""
-        repo = InMemoryAcquaintanceRepository()
+    def test_a_being_without_acquaintances_gets_an_empty_roster(self) -> None:
+        """まだ何も保存していない Being には、その Being の空の名簿を返す。"""
+        repository = InMemoryAcquaintanceRepository(handoff=discard_events)
 
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=4)
+        roster = repository.get(ADA)
 
-        assert repo.list_by_being(ADA) == (
-            Acquaintance(
-                environment_name="島",
-                name="ノア",
-                how_known=HowKnown.MET,
-                known_since_turn=1,
-                first_met_turn=1,
-                last_met_turn=4,
-                met_count=2,
-                name_learned_turn=1,
-            ),
-        )
+        assert (roster.being_id, roster.acquaintances) == (ADA, ())
 
-    def test_same_name_in_another_environment_is_another_person(self) -> None:
-        """同じ名前でも環境の名前が違えば別の記録になり、find はそれぞれを返す。"""
-        repo = InMemoryAcquaintanceRepository()
+    def test_saved_roster_comes_back_only_for_its_being(self) -> None:
+        """保存した名簿は持ち主の Being にだけ返り、別の Being は空のまま。"""
+        repository = InMemoryAcquaintanceRepository(handoff=discard_events)
 
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
-        repo.record_meeting(ADA, environment_name="山村", name="ノア", turn=9)
+        repository.save(_roster())
 
-        island = repo.find(ADA, environment_name="島", name="ノア")
-        village = repo.find(ADA, environment_name="山村", name="ノア")
-        assert island is not None and island.first_met_turn == 1
-        assert village is not None and village.first_met_turn == 9
+        assert (_names(repository.get(ADA)), repository.get(KAI).acquaintances) == (["ノア"], ())
 
-    def test_other_beings_records_do_not_mix(self) -> None:
-        """ある Being の会った記録は、別の Being の find や一覧に出ない。"""
-        repo = InMemoryAcquaintanceRepository()
+    def test_replace_all_with_an_empty_roster_leaves_no_acquaintance(self) -> None:
+        """持ち越しから空の名簿で戻すと、前に保存した記録は残らず、別の Being の記録には触れない。"""
+        repository = InMemoryAcquaintanceRepository(handoff=discard_events)
+        repository.save(_roster())
+        repository.save(_roster(KAI, "リオ"))
 
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
+        repository.replace_all_by_being(AcquaintanceRoster.empty(ADA))
 
-        assert repo.find(KAI, environment_name="島", name="ノア") is None
-        assert repo.list_by_being(KAI) == ()
+        assert (repository.get(ADA).acquaintances, _names(repository.get(KAI))) == ((), ["リオ"])
 
-    def test_replace_all_by_being_overwrites_only_that_being(self) -> None:
-        """replace_all_by_being はその Being の記録だけを渡した記録で置き換え、他の Being には触れない。"""
-        repo = InMemoryAcquaintanceRepository()
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
-        repo.record_meeting(KAI, environment_name="島", name="リオ", turn=2)
-        restored = Acquaintance(
-            environment_name="島",
-            name="カイ",
-            how_known=HowKnown.MET,
-            known_since_turn=0,
-            first_met_turn=0,
-            last_met_turn=5,
-            met_count=3,
-            name_learned_turn=0,
-        )
+    def test_replace_all_puts_the_given_roster(self) -> None:
+        """持ち越しから戻すと、渡した名簿がそのまま入る。"""
+        repository = InMemoryAcquaintanceRepository(handoff=discard_events)
 
-        repo.replace_all_by_being(ADA, [restored])
+        repository.replace_all_by_being(_roster())
 
-        assert repo.list_by_being(ADA) == (restored,)
-        assert repo.find(KAI, environment_name="島", name="リオ") is not None
-
-    def test_introduction_is_recorded_once_and_does_not_overwrite(self) -> None:
-        """紹介は知らない相手にだけ記録を作り、すでに会って知っている相手や紹介済みの相手の記録は変えない。"""
-        repo = InMemoryAcquaintanceRepository()
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
-
-        repo.record_introduction(ADA, environment_name="島", name="ノア", turn=2, relation_note="仲間")
-        repo.record_introduction(ADA, environment_name="島", name="カイ", turn=2, relation_note="仲間")
-        repo.record_introduction(ADA, environment_name="島", name="カイ", turn=3, relation_note=None)
-
-        noa = repo.find(ADA, environment_name="島", name="ノア")
-        kai = repo.find(ADA, environment_name="島", name="カイ")
-        assert noa is not None and (noa.how_known, noa.relation_note) == (HowKnown.MET, None)
-        assert kai is not None and (kai.how_known, kai.relation_note, kai.known_since_turn) == (
-            HowKnown.INTRODUCED,
-            "仲間",
-            2,
-        )
-
-    def test_meeting_someone_introduced_counts_as_first_meeting(self) -> None:
-        """紹介された相手に会うと、同じ記録の会った回数が 1 になる。"""
-        repo = InMemoryAcquaintanceRepository()
-        repo.record_introduction(ADA, environment_name="島", name="ノア", turn=0, relation_note=None)
-
-        met = repo.record_meeting(ADA, environment_name="島", name="ノア", turn=3)
-
-        assert (met.how_known, met.met_count, met.first_met_turn) == (HowKnown.INTRODUCED, 1, 3)
+        assert _names(repository.get(ADA)) == ["ノア"]
 
 
-class TestRecordingNames:
-    """InMemoryAcquaintanceRepository が、名前を知らずに会った相手と、あとで名前を知ったことを記録することを保証する (#1581)。"""
+class TestTheRepositoryHandsOutCopies:
+    """InMemoryAcquaintanceRepository が、出し入れのたびに写しを渡し、save し忘れた書き換えを保存したように見せないことを保証する。"""
 
-    def test_meeting_without_the_name_then_learning_it(self) -> None:
-        """名前を知らずに会った相手の名前を知ると、同じ記録が名前を知った記録に置き換わる。"""
-        repo = InMemoryAcquaintanceRepository()
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1, knows_name=False)
+    def test_changing_a_roster_without_saving_keeps_the_stored_one(self) -> None:
+        """get した名簿で会っても、save しなければ、次の get は会う前の名簿を返す。"""
+        repository = InMemoryAcquaintanceRepository(handoff=discard_events)
+        repository.save(_roster())
 
-        learned = repo.record_name_learned(ADA, environment_name="島", name="ノア", turn=3)
+        repository.get(ADA).meet(environment_name="島", name="リオ", turn=2)
 
-        assert learned is not None and learned.name_learned_turn == 3
-        assert repo.find(ADA, environment_name="島", name="ノア") == learned
+        assert _names(repository.get(ADA)) == ["ノア"]
 
-    def test_name_of_someone_never_met_is_not_learned(self) -> None:
-        """会ったことの無い相手の名前は、知ったことにせず None を返し、記録も作らない。"""
-        repo = InMemoryAcquaintanceRepository()
+    def test_changing_a_roster_after_saving_keeps_the_stored_one(self) -> None:
+        """save したあとで渡した名簿を書き換えても、保存先は save した時点のまま。"""
+        repository = InMemoryAcquaintanceRepository(handoff=discard_events)
+        roster = _roster()
+        repository.save(roster)
 
-        assert repo.record_name_learned(ADA, environment_name="島", name="ノア", turn=3) is None
-        assert repo.list_by_being(ADA) == ()
+        roster.meet(environment_name="島", name="リオ", turn=2)
 
-    def test_meeting_again_does_not_forget_the_name(self) -> None:
-        """名前を知った相手に、名前を知らない扱いでもう一度会っても、名前は知ったまま。"""
-        repo = InMemoryAcquaintanceRepository()
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1, knows_name=False)
-        repo.record_name_learned(ADA, environment_name="島", name="ノア", turn=2)
+        assert _names(repository.get(ADA)) == ["ノア"]
 
-        again = repo.record_meeting(ADA, environment_name="島", name="ノア", turn=4, knows_name=False)
 
-        assert again.knows_name
+class TestHandingOffEvents:
+    """InMemoryAcquaintanceRepository が、保存した名簿がためたイベントを配り手に渡すことを保証する。"""
 
-    def test_introducing_someone_met_without_the_name_teaches_it(self) -> None:
-        """名前を知らずに会った相手を紹介されると、会った記録は保ったまま名前を知り、関係の注記は付かない。"""
-        repo = InMemoryAcquaintanceRepository()
-        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1, knows_name=False)
+    def test_save_hands_off_pending_events_and_clears_them(self) -> None:
+        """会ったあとの名簿を保存すると、AcquaintanceMetEvent が 1 件配り手に渡り、名簿のイベントは空になる。"""
+        handed: list[DomainEvent] = []
+        repository = InMemoryAcquaintanceRepository(handoff=handed.extend)
+        roster = _roster()
 
-        known = repo.record_introduction(
-            ADA, environment_name="島", name="ノア", turn=3, relation_note="あなたと同じ側"
-        )
+        repository.save(roster)
 
-        assert (known.knows_name, known.name_learned_turn, known.met_count) == (True, 3, 1)
+        assert [type(e) for e in handed] == [AcquaintanceMetEvent]
+        assert roster.get_events() == []
+
+    def test_saving_events_without_a_handoff_is_refused_before_storing(self) -> None:
+        """配り手の無い保存先にイベントのたまった名簿を保存すると止まり、保存先は空のまま。"""
+        repository = InMemoryAcquaintanceRepository()
+
+        with pytest.raises(RuntimeError):
+            repository.save(_roster())
+
+        assert repository.get(ADA).acquaintances == ()

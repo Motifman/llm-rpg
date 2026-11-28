@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.observation.contracts.dtos import (
@@ -29,7 +30,7 @@ def _being(pid: PlayerId) -> BeingId | None:
 
 
 def _make() -> tuple[PlayerAcquaintances, InMemoryAcquaintanceRepository, InMemoryMemoryTurnClock]:
-    store = InMemoryAcquaintanceRepository()
+    store = InMemoryAcquaintanceRepository(handoff=discard_events)
     turns = InMemoryMemoryTurnClock()
     acquaintances = PlayerAcquaintances(
         store=store,
@@ -63,7 +64,7 @@ class TestRecordMeeting:
 
         acquaintances.record_meeting(ADA, "ノア")
 
-        met = store.find(BeingId("being_p1"), environment_name="島", name="ノア")
+        met = store.get(BeingId("being_p1")).find(environment_name="島", name="ノア")
         assert met is not None and met.first_met_turn == 3
 
     def test_player_without_being_records_nothing(self) -> None:
@@ -80,7 +81,7 @@ class TestRecordMeeting:
 
         acquaintances.record_meeting(ADA, "エイダ")
 
-        assert store.list_by_being(BeingId("being_p1")) == ()
+        assert store.get(BeingId("being_p1")).acquaintances == ()
 
 
 class TestOnObservation:
@@ -101,7 +102,7 @@ class TestOnObservation:
 
         acquaintances.on_observation(ADA, _entered(None))
 
-        assert store.list_by_being(BeingId("being_p1")) == ()
+        assert store.get(BeingId("being_p1")).acquaintances == ()
 
     def test_other_observation_types_are_ignored(self) -> None:
         """人が入ってきた観測以外は、actor があっても会った記録に使わない。"""
@@ -114,7 +115,7 @@ class TestOnObservation:
 
         acquaintances.on_observation(ADA, spoke)
 
-        assert store.list_by_being(BeingId("being_p1")) == ()
+        assert store.get(BeingId("being_p1")).acquaintances == ()
 
 
 class TestWhoCanBeMet:
@@ -127,7 +128,7 @@ class TestWhoCanBeMet:
         acquaintances.on_observation(ADA, _entered("不明なプレイヤー"))
         acquaintances.on_observation(ADA, _entered("森の狼"))
 
-        assert store.list_by_being(BeingId("being_p1")) == ()
+        assert store.get(BeingId("being_p1")).acquaintances == ()
 
     def test_actor_surrounded_by_spaces_is_the_same_person(self) -> None:
         """actor の前後に空白があっても、空白を落とした参加者の名前で双方に記録する。"""
@@ -147,7 +148,7 @@ class TestWhoCanBeMet:
             return _being(pid)
 
         acquaintances = PlayerAcquaintances(
-            store=InMemoryAcquaintanceRepository(),
+            store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_id_of=being_id_of,
             turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",
@@ -162,7 +163,7 @@ class TestWhoCanBeMet:
         """同じ名前の参加者が 2 人いると、名前から人を引けないので作れない。"""
         with pytest.raises(ValueError):
             PlayerAcquaintances(
-                store=InMemoryAcquaintanceRepository(),
+                store=InMemoryAcquaintanceRepository(handoff=discard_events),
                 being_id_of=_being,
                 turn_reader=InMemoryMemoryTurnClock(),
                 environment_name="島",
@@ -173,7 +174,7 @@ class TestWhoCanBeMet:
         """環境の名前が空なら作れない。実行中の観測ごとに記録が欠けるのではなく、起動時に止める。"""
         with pytest.raises(ValueError):
             PlayerAcquaintances(
-                store=InMemoryAcquaintanceRepository(),
+                store=InMemoryAcquaintanceRepository(handoff=discard_events),
                 being_id_of=_being,
                 turn_reader=InMemoryMemoryTurnClock(),
                 environment_name=" ",
@@ -253,7 +254,7 @@ class TestIntroductionsAndKnownPeople:
         with pytest.raises(ValueError, match="エイダ"):
             acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア"), Introduction(name="エイダ")))
 
-        assert store.list_by_being(BeingId("being_p1")) == ()
+        assert store.get(BeingId("being_p1")).acquaintances == ()
 
 
 def _entry(*introductions: Introduction) -> EnvironmentEntry:
@@ -324,7 +325,7 @@ class TestViewForRecipient:
             raise RuntimeError("lookup failed")
 
         acquaintances = PlayerAcquaintances(
-            store=InMemoryAcquaintanceRepository(),
+            store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_id_of=broken,
             turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",
@@ -378,7 +379,7 @@ class TestViewForWithheld:
             raise RuntimeError("lookup failed")
 
         acquaintances = PlayerAcquaintances(
-            store=InMemoryAcquaintanceRepository(),
+            store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_id_of=broken,
             turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",
@@ -423,7 +424,7 @@ class TestKnowsPlayer:
             raise RuntimeError("lookup failed")
 
         acquaintances = PlayerAcquaintances(
-            store=InMemoryAcquaintanceRepository(),
+            store=InMemoryAcquaintanceRepository(handoff=discard_events),
             being_id_of=broken,
             turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",

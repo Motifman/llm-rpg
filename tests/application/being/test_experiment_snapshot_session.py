@@ -12,6 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.event_handoff_helpers import discard_events
+from tests.support.acquaintance_roster import meet
 
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
@@ -52,7 +54,7 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
         being_attachment_resolver=resolver,
         player_beings=player_beings,
         being_environment=_ENVIRONMENT,
-        acquaintance_store=InMemoryAcquaintanceRepository(),
+        acquaintance_store=InMemoryAcquaintanceRepository(handoff=discard_events),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
         memory_turn_clock=InMemoryMemoryTurnClock(),
@@ -113,7 +115,7 @@ class TestCaptureAll:
         provisioning.ensure_attached(PlayerId(2))
         being_1 = wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_1 is not None
-        wiring.acquaintance_store.record_meeting(being_1, environment_name="島", name="カイト", turn=1)
+        meet(wiring.acquaintance_store, being_1, environment_name="島", name="カイト", turn=1)
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert report.is_clean
@@ -140,14 +142,14 @@ class TestCaptureAll:
         provisioning.ensure_attached(PlayerId(2))
         being_2 = wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(2))
         assert being_2 is not None
-        original = wiring.acquaintance_store.list_by_being
+        original = wiring.acquaintance_store.get
 
         def _raising(being_id):
             if being_id == being_2:
                 raise RuntimeError("synthetic failure")
             return original(being_id)
 
-        wiring.acquaintance_store.list_by_being = _raising
+        wiring.acquaintance_store.get = _raising
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / "snap")
         report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert len(report.succeeded) == 1
@@ -166,14 +168,14 @@ class TestRestoreAll:
         src_prov.ensure_attached(PlayerId(1))
         being_1 = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_1 is not None
-        src_wiring.acquaintance_store.record_meeting(being_1, environment_name="島", name="カイト", turn=1)
+        meet(src_wiring.acquaintance_store, being_1, environment_name="島", name="カイト", turn=1)
         src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / "snap")
         src_session.capture_all([PlayerId(1)])
         (dst_wiring, _) = _make_wiring_stub()
         dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / "snap")
         report = dst_session.restore_all_from_dir(tmp_path / "snap")
         assert len(report.restored) == 1
-        assert [a.name for a in dst_wiring.acquaintance_store.list_by_being(being_1)] == ["カイト"]
+        assert [a.name for a in dst_wiring.acquaintance_store.get(being_1).acquaintances] == ["カイト"]
 
     def test_report_lists_removed_memory_keys_only_for_beings_that_had_them(self, tmp_path: Path) -> None:
         """古いメモの欄を持つ snapshot だけが、Being ごとの捨てた件数として報告に載る。持たない Being は載らない。"""

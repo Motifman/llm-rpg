@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.event_handoff_helpers import discard_events
+from tests.support.acquaintance_roster import meet
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_snapshot_file_gateway import BeingSnapshotFileGateway
@@ -33,7 +35,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_being_repository import In
 def _make_environment():
     """新規 store 群 + 2 use case + gateway を組んで返す。"""
     repo = InMemoryBeingRepository()
-    acquaintances = InMemoryAcquaintanceRepository()
+    acquaintances = InMemoryAcquaintanceRepository(handoff=discard_events)
     memory_snapshot = BeingMemorySnapshotService(
         acquaintance_store=acquaintances,
         being_episode_store=InMemoryEpisodeRepository(),
@@ -72,7 +74,7 @@ class TestCaptureUseCase:
         env = _make_environment()
         being = _make_being()
         env["repo"].save(being)
-        env["acquaintances"].record_meeting(being.being_id, environment_name="島", name="カイト", turn=1)
+        meet(env["acquaintances"], being.being_id, environment_name="島", name="カイト", turn=1)
         out = tmp_path / "snap.json"
         result = env["capture"].execute(being.being_id, out)
         assert out.exists()
@@ -89,13 +91,13 @@ class TestRestoreUseCase:
         src = _make_environment()
         being = _make_being()
         src["repo"].save(being)
-        src["acquaintances"].record_meeting(being.being_id, environment_name="島", name="カイト", turn=1)
+        meet(src["acquaintances"], being.being_id, environment_name="島", name="カイト", turn=1)
         snap_path = tmp_path / "snap.json"
         src["capture"].execute(being.being_id, snap_path)
         dst = _make_environment()
         result = dst["restore"].execute(snap_path)
         assert result.memory_restored is True
-        assert [a.name for a in dst["acquaintances"].list_by_being(being.being_id)] == ["カイト"]
+        assert [a.name for a in dst["acquaintances"].get(being.being_id).acquaintances] == ["カイト"]
         loaded = dst["repo"].find_by_id(being.being_id)
         assert loaded is not None
         assert loaded.persona.name == "アダ"
@@ -166,7 +168,7 @@ def _capture_old_snapshot(tmp_path: Path, old_keys: dict[str, object]) -> Path:
     env = _make_environment()
     being = _make_being()
     env["repo"].save(being)
-    env["acquaintances"].record_meeting(being.being_id, environment_name="島", name="カイト", turn=3)
+    meet(env["acquaintances"], being.being_id, environment_name="島", name="カイト", turn=3)
     path = tmp_path / "being.json"
     env["capture"].execute(being.being_id, path)
     gateway = BeingSnapshotFileGateway()
@@ -187,7 +189,7 @@ class TestRestoreUseCaseDropsRemovedMemoryKeys:
         result = dst["restore"].execute(path)
 
         assert result.removed_memory_key_counts == {"memo": 3, "pending_predictions": 1, "afterglow_entries": 1}
-        assert [a.name for a in dst["acquaintances"].list_by_being(BeingId("being_w1_p1"))] == ["カイト"]
+        assert [a.name for a in dst["acquaintances"].get(BeingId("being_w1_p1")).acquaintances] == ["カイト"]
 
     def test_snapshot_without_removed_keys_reports_nothing(self, tmp_path: Path) -> None:
         """消した部品の欄を持たない snapshot は、捨てた件数を空で報告する。"""
@@ -222,7 +224,7 @@ class TestRestoreRemovedDeclaration:
         stored = dst["repo"].find_snapshot_by_id(result.being_id)
         assert stored.legacy_declared_memory_kinds == ()
         assert stored.memory_payload_json == payload
-        assert [a.name for a in dst["acquaintances"].list_by_being(result.being_id)] == ["カイト"]
+        assert [a.name for a in dst["acquaintances"].get(result.being_id).acquaintances] == ["カイト"]
 
     def test_current_snapshot_reports_no_removed_declarations(self, tmp_path: Path) -> None:
         """宣言を持たない今のファイルでは、読み捨てた宣言の件数を空で報告する。"""
@@ -260,7 +262,7 @@ class TestRestoreLegacyIdentity:
         stored = dst["repo"].find_snapshot_by_id(BeingId("being_w1_p1"))
         assert stored.persona == scenario_persona
         assert (stored.legacy_identity_name, stored.legacy_identity_first_person) == (None, None)
-        assert [a.name for a in dst["acquaintances"].list_by_being(BeingId("being_w1_p1"))] == ["カイト"]
+        assert [a.name for a in dst["acquaintances"].get(BeingId("being_w1_p1")).acquaintances] == ["カイト"]
 
     def test_legacy_identity_without_a_being_to_take_from_is_rejected(self, tmp_path: Path) -> None:
         """復元先に人柄を引ける Being が無ければ、保存先に書く前に BeingSnapshotIncompleteException で断る。"""

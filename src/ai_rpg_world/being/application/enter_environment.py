@@ -30,14 +30,15 @@ class EnterEnvironment:
         turn = self._turn_reader.current_turn(command.being_id)
         # 入ったことを先に保存すると、紹介の記録で失敗したとき、同じコマンドをやり直しても入り直せず断られる。
         # 紹介の記録は知っている相手を変えないので、やり直しても重ならない
+        roster = self._acquaintances.get(command.being_id)
         for introduction in command.entry.introductions:
-            self._acquaintances.record_introduction(
-                command.being_id,
+            roster.introduce(
                 environment_name=command.entry.environment_name,
                 name=introduction.name,
                 turn=turn,
                 relation_note=introduction.relation_note,
             )
+        self._acquaintances.save(roster)
         self._beings.save(being)
 
 

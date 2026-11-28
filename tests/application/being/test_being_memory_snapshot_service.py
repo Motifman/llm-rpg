@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 from tests.event_handoff_helpers import discard_events
+from tests.support.acquaintance_roster import introduce, learn_name, meet
 
 from ai_rpg_world.application.being._memory_payload_codecs import being_episode_to_dict
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
@@ -56,7 +57,7 @@ _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     """新しい in-memory store 群を構築し、service と store ハンドルを返す。"""
-    acquaintances = InMemoryAcquaintanceRepository()
+    acquaintances = InMemoryAcquaintanceRepository(handoff=discard_events)
     being_episodes = InMemoryEpisodeRepository(handoff=discard_events)
     being_memo = InMemoryMemoBookRepository(handoff=discard_events)
     short_term = InMemoryShortTermMemoryRepository(handoff=discard_events)
@@ -83,7 +84,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
 
 def _populate(stores: dict[str, object], being_id: BeingId) -> None:
     """知り合いに最小サンプルデータを書き込む。"""
-    stores["acquaintances"].record_meeting(being_id, environment_name="島", name="カイト", turn=3)
+    meet(stores["acquaintances"], being_id, environment_name="島", name="カイト", turn=3)
 
 
 class TestCapture:
@@ -178,24 +179,27 @@ class TestRestoreRoundTrip:
         """会った相手の記録は、環境の名前・相手の名前・会ったターン・回数・名前を知ったか (知ったターン) ごと capture → restore で戻る。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId("ada")
-        src_stores["acquaintances"].record_meeting(being, environment_name="島", name="ノア", turn=0)
-        src_stores["acquaintances"].record_meeting(being, environment_name="島", name="ノア", turn=6)
-        src_stores["acquaintances"].record_meeting(being, environment_name="山村", name="リオ", turn=9)
-        src_stores["acquaintances"].record_introduction(
-            being, environment_name="山村", name="カイ", turn=9, relation_note="あなたと同じ側"
+        meet(src_stores["acquaintances"], being, environment_name="島", name="ノア", turn=0)
+        meet(src_stores["acquaintances"], being, environment_name="島", name="ノア", turn=6)
+        meet(src_stores["acquaintances"], being, environment_name="山村", name="リオ", turn=9)
+        introduce(
+            src_stores["acquaintances"],
+            being,
+            environment_name="山村",
+            name="カイ",
+            turn=9,
+            relation_note="あなたと同じ側",
         )
-        src_stores["acquaintances"].record_meeting(
-            being, environment_name="山村", name="ゲン", turn=10, knows_name=False
-        )
-        src_stores["acquaintances"].record_meeting(
-            being, environment_name="山村", name="サヨ", turn=10, knows_name=False
-        )
-        src_stores["acquaintances"].record_name_learned(being, environment_name="山村", name="サヨ", turn=12)
+        meet(src_stores["acquaintances"], being, environment_name="山村", name="ゲン", turn=10, knows_name=False)
+        meet(src_stores["acquaintances"], being, environment_name="山村", name="サヨ", turn=10, knows_name=False)
+        learn_name(src_stores["acquaintances"], being, environment_name="山村", name="サヨ", turn=12)
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
-        dst_stores["acquaintances"].record_meeting(being, environment_name="島", name="カイ", turn=1)
+        meet(dst_stores["acquaintances"], being, environment_name="島", name="カイ", turn=1)
         dst_svc.restore(being, payload_json)
-        assert dst_stores["acquaintances"].list_by_being(being) == src_stores["acquaintances"].list_by_being(being)
+        assert (
+            dst_stores["acquaintances"].get(being).acquaintances == src_stores["acquaintances"].get(being).acquaintances
+        )
 
     def test_malformed_acquaintance_is_rejected_as_format_error(self) -> None:
         """会って知ったのに会った回数が 0 の知り合いが payload にあると、BeingMemoryPayloadFormatError で拒む。"""
@@ -240,7 +244,7 @@ class TestRestoreRoundTrip:
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError):
             dst_svc.restore(being, json.dumps(payload))
-        assert dst_stores["acquaintances"].list_by_being(being) == ()
+        assert dst_stores["acquaintances"].get(being).acquaintances == ()
 
     def test_acquaintance_without_how_known_is_rejected(self) -> None:
         """知り方 (how_known) の無い古い形式の知り合いは、推測で補わず BeingMemoryPayloadFormatError で拒む。互換は保たない (#1436)。"""
@@ -258,7 +262,7 @@ class TestRestoreRoundTrip:
         """名前を知ったか (name_learned_turn) の無い古い形式の知り合いは、知っている側へ補わず BeingMemoryPayloadFormatError で拒む。補うと、名前を知らない相手の名前がプロンプトに出る (#1581)。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId("ada")
-        src_stores["acquaintances"].record_meeting(being, environment_name="島", name="ノア", turn=0)
+        meet(src_stores["acquaintances"], being, environment_name="島", name="ノア", turn=0)
         payload = json.loads(src_svc.capture(being))
         del payload["acquaintances"][0]["name_learned_turn"]
         (dst_svc, _) = _make_service()
@@ -565,12 +569,12 @@ class TestRestoreRoundTrip:
         ada = BeingId("ada")
         ben = BeingId("ben")
         _populate(src_stores, ada)
-        src_stores["acquaintances"].record_meeting(ben, environment_name="島", name="ノア", turn=1)
+        meet(src_stores["acquaintances"], ben, environment_name="島", name="ノア", turn=1)
         payload_ada = src_svc.capture(ada)
         (dst_svc, dst_stores) = _make_service()
-        dst_stores["acquaintances"].record_meeting(ben, environment_name="島", name="リン", turn=2)
+        meet(dst_stores["acquaintances"], ben, environment_name="島", name="リン", turn=2)
         dst_svc.restore(ada, payload_ada)
-        assert [a.name for a in dst_stores["acquaintances"].list_by_being(ben)] == ["リン"]
+        assert [a.name for a in dst_stores["acquaintances"].get(ben).acquaintances] == ["リン"]
 
 
 class TestRestoreValidation:
@@ -666,7 +670,7 @@ class TestConstructor:
         """短期記憶の store に ShortTermMemoryRepository でない値を渡すと TypeError を投げる。"""
         with pytest.raises(TypeError, match="being_short_term_memory_store"):
             BeingMemorySnapshotService(
-                acquaintance_store=InMemoryAcquaintanceRepository(),
+                acquaintance_store=InMemoryAcquaintanceRepository(handoff=discard_events),
                 being_episode_store=InMemoryEpisodeRepository(handoff=discard_events),
                 being_memo_store=InMemoryMemoBookRepository(handoff=discard_events),
                 memory_turn_clock=InMemoryMemoryTurnClock(),
@@ -925,7 +929,7 @@ class TestShortTermMemoryPayload:
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="invalid being short-term memory payload"):
             svc.restore(being, json.dumps(payload))
-        assert tuple(stores["acquaintances"].list_by_being(being)) == ()
+        assert tuple(stores["acquaintances"].get(being).acquaintances) == ()
         assert tuple(stores["being_episodes"].list_by_being(being)) == ()
         assert stores["being_memo"].get(being).memos == ()
         assert stores["short_term"].get(being).is_empty()

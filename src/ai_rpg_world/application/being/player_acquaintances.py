@@ -77,14 +77,15 @@ class PlayerAcquaintances:
         if being_id is None:
             return
         other_id = self._player_id_by_name.get(name)
-        self._store.record_meeting(
-            being_id,
+        roster = self._store.get(being_id)
+        roster.meet(
             environment_name=self._environment_name,
             name=name,
             turn=self._turn_reader.current_turn(being_id),
             # 見た目の説明が無い人は、全員が最初から名前を知っている (読み込み時に確かめている)。
             knows_name=other_id is None or other_id not in self._appearances,
         )
+        self._store.save(roster)
 
     def receive_entry(self, player_id: PlayerId, entry: EnvironmentEntry) -> None:
         """紹介はプロンプトの前提なので、渡せないときは黙って捨てずに止める。"""
@@ -101,21 +102,22 @@ class PlayerAcquaintances:
                 raise ValueError(f"player_id={player_id.value} has no Being to receive introductions")
             return
         turn = self._turn_reader.current_turn(being_id)
+        roster = self._store.get(being_id)
         for introduction in entry.introductions:
-            self._store.record_introduction(
-                being_id,
+            roster.introduce(
                 environment_name=self._environment_name,
                 name=introduction.name,
                 turn=turn,
                 relation_note=introduction.relation_note,
             )
+        self._store.save(roster)
 
     def known_people_text(self, player_id: PlayerId) -> str:
         being_id = self._resolve(player_id)
         if being_id is None:
             return ""
         return render_known_people(
-            self._store.list_by_being(being_id),
+            self._store.get(being_id).acquaintances,
             environment_name=self._environment_name,
         )
 
@@ -123,7 +125,7 @@ class PlayerAcquaintances:
         being_id = self._resolve(player_id)
         if being_id is None:
             return None
-        return self._store.find(being_id, environment_name=self._environment_name, name=name)
+        return self._store.get(being_id).find(environment_name=self._environment_name, name=name)
 
     def find_player(self, viewer: PlayerId, other: PlayerId) -> Acquaintance | None:
         name = self._names_by_player_id.get(other.value)
@@ -220,15 +222,16 @@ class PlayerAcquaintances:
         being_id = self._resolve(recipient)
         if name is None or being_id is None or other.value == recipient.value:
             return
-        before = self._store.find(being_id, environment_name=self._environment_name, name=name)
+        roster = self._store.get(being_id)
+        before = roster.find(environment_name=self._environment_name, name=name)
         if before is None or before.knows_name:
             return
-        self._store.record_name_learned(
-            being_id,
+        roster.learn_name(
             environment_name=self._environment_name,
             name=name,
             turn=self._turn_reader.current_turn(being_id),
         )
+        self._store.save(roster)
         self._trace_name_learned(recipient, name, how)
 
     def _learn_names_from_speech(self, recipient: PlayerId, structured: Mapping[str, Any]) -> None:
