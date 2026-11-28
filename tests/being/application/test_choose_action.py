@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from ai_rpg_world.being.application.choose_action import (
@@ -38,6 +40,7 @@ from ai_rpg_world.being.contract import (
     PersonInText,
     PickOne,
     Scene,
+    TextWithPeople,
 )
 from ai_rpg_world.being.domain.being import Being
 from ai_rpg_world.being.domain.being_attachment import BeingAttachment
@@ -104,7 +107,7 @@ def _choices() -> ActionChoices:
                 label="操作する",
                 outline=(
                     ArgumentOutline(name="target", label="相手", required=True),
-                    ArgumentOutline(name="how", label="操作"),
+                    ArgumentOutline(name="how", label="操作", listed=True),
                 ),
                 takes_details=True,
                 values=(PickOne(name="target", label="相手", candidates=(safe,)),),
@@ -165,6 +168,7 @@ class _FailingToSave(InMemoryShortTermMemoryRepository):
 
 def _choose(
     *replies: ActionChoosingReply,
+    command: ChooseActionCommand | None = None,
     memories: ShortTermMemoryRepository | None = None,
     clock: InMemoryMemoryTurnClock | None = None,
     being_tools: OfferedBeingTools = OfferedBeingTools(inner_thought="inner_thought"),
@@ -201,7 +205,7 @@ def _choose(
         rechoose_name=None if name_choosing is None else RechooseName(name_choosing, min_confidence=0.85),
         writing_in_background=writing_in_background,
     )
-    return choose.execute(_command(being_tools)), completion
+    return choose.execute(command or _command(being_tools)), completion
 
 
 def _chooser(
@@ -267,12 +271,12 @@ class TestChooseAction:
         assert outcome.move.inner_thought == "あの番号を試す"
 
     def test_llm_sees_the_tools_and_the_candidate_table(self) -> None:
-        """LLM には、行動の種類ごとのツールと、場面の後ろに【現在選べる対象引数】を置いたメッセージが渡る。"""
+        """LLM には、行動の種類ごとのツールと、場面の後ろに【選べる操作】を置いたメッセージが渡る。"""
         _, completion = _choose(_reply("interact", {"target": "金庫", "how": "番号を合わせて開ける"}))
 
         [call] = completion.calls
         assert [t["function"]["name"] for t in call.tools] == ["interact", "speak", "pickup_item"]
-        assert "【現在選べる対象引数】" in call.messages[1]["content"]
+        assert "【選べる操作】" in call.messages[1]["content"]
         assert call.messages[0]["role"] == "system" and not call.reasoning_off
 
     def test_llm_reads_the_current_place_before_the_candidate_table(self) -> None:
@@ -281,7 +285,37 @@ class TestChooseAction:
 
         message = completion.calls[0].messages[1]["content"]
         assert "【現在地と周囲】\n現在地: 鉱山会社の事務所 (初めて訪れた)\n  埃をかぶった机と金庫がある。" in message
-        assert message.index("【現在地と周囲】") < message.index("【現在選べる対象引数】")
+        assert message.index("【現在地と周囲】") < message.index("【選べる操作】")
+
+    def test_people_who_look_alike_are_numbered_in_the_scene_as_in_the_listing(self) -> None:
+        """同じ見た目の 2 人は、【現在地と周囲】でも【選べる操作】と同じ「 #1」「 #2」で呼ばれ、場面から書き写した「#2」はその人の印に戻る。"""
+        shadow_a = PersonInText(handle=7, appearance="煤けた上着の男", visible_name=None)
+        shadow_b = PersonInText(handle=9, appearance="煤けた上着の男", visible_name=None)
+        here = Here(
+            place="鉱山会社の事務所",
+            heading="現在地と周囲",
+            text=TextWithPeople(template="  - {a}\n  - {b}", people={"a": shadow_a, "b": shadow_b}),
+        )
+        give = ActionChoice(
+            description="説明。",
+            name="give_item",
+            label="渡す",
+            outline=(ArgumentOutline(name="to", label="渡す相手", required=True),),
+            values=(PickOne(name="to", label="渡す相手", candidates=(Candidate(label=shadow_b),)),),
+        )
+        command = dataclasses.replace(
+            _command(OfferedBeingTools(inner_thought="inner_thought")),
+            scene=Scene(here=here),
+            choices=ActionChoices((give,)),
+        )
+
+        outcome, completion = _choose(
+            _reply("give_item", {"to": "煤けた上着の男 #2", "inner_thought": "渡す"}), command=command
+        )
+
+        assert "  - 煤けた上着の男 #1\n  - 煤けた上着の男 #2" in completion.calls[0].messages[1]["content"]
+        assert isinstance(outcome, ActionChosen)
+        assert dict(outcome.move.arguments) == {"to": {"person": 9}}
 
     def test_first_visit_mark_is_shown_until_the_being_acts_there(self) -> None:
         """着いた場所は、そこで 1 手を選ぶまで (初めて訪れた) が付き、1 手を選んだあとは付かない。ツールを呼ばなかったターンは数えない。"""

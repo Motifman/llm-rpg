@@ -109,11 +109,13 @@ class ReadVerbs:
 
 
 def _argument_kind(node: YamlNode) -> TextArgument | ItemArgument:
-    # 自分で書く値は、何を書くかを【現在選べる対象引数】で案内するので、案内の言葉なしには宣言させない
-    if node.is_mapping():
-        fields = node.fields("text")
-        return node.build(lambda: TextArgument(writes=DisplayName(fields.required("text").text())))
-    return words(node, {"item": ItemArgument()})
+    # 引数に何を書くかは【選べる操作】の操作の後ろで案内するので、案内の言葉なしには宣言させない
+    fields = node.fields("text", "item")
+    if fields.has("item") == fields.has("text"):
+        raise node.unreadable("an argument must be either { text: <words> } or { item: <words> }")
+    if fields.has("item"):
+        return node.build(lambda: ItemArgument(writes=DisplayName(fields.required("item").text())))
+    return node.build(lambda: TextArgument(writes=DisplayName(fields.required("text").text())))
 
 
 class VerbReader:

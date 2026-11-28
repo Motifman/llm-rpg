@@ -19,7 +19,7 @@ _WORLD = WorldId("wording_world")
 _ALICE = PersonId("alice")
 _BOB = PersonId("bob")
 _ROPE = item_spec("rope")
-_LOOT = (ArgumentDeclaration(ArgumentName("loot"), ItemArgument()),)
+_LOOT = (ArgumentDeclaration(ArgumentName("loot"), ItemArgument(writes=DisplayName("品物の名前"))),)
 _LOOT_VALUE = OfferedValue("loot", "loot")
 
 
@@ -46,7 +46,9 @@ class TestChoiceWordingForPerson:
         wording = ChoiceWording.for_person(_ALICE, session.facts(), design)
 
         assert wording.arguments_toward(_LOOT, _BOB) == (
-            OfferedItemPick(_LOOT_VALUE, (OfferedStep(_LOOT_VALUE, DisplayName("rope"), rope),)),
+            OfferedItemPick(
+                _LOOT_VALUE, (OfferedStep(_LOOT_VALUE, DisplayName("rope"), rope),), DisplayName("品物の名前")
+            ),
         )
 
     def test_fainted_person_is_offered_no_items_on_others(self) -> None:
@@ -56,4 +58,4 @@ class TestChoiceWordingForPerson:
 
         wording = ChoiceWording.for_person(_ALICE, session.facts(), design)
 
-        assert wording.arguments_toward(_LOOT, _BOB) == (OfferedItemPick(_LOOT_VALUE, ()),)
+        assert wording.arguments_toward(_LOOT, _BOB) == (OfferedItemPick(_LOOT_VALUE, (), DisplayName("品物の名前")),)

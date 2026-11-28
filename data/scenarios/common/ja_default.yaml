@@ -274,6 +274,7 @@ choice_descriptions:
   duration_minutes: "{minutes} 分ほど"
   duration_turns: "{turns} ターンぶんほど"
   closing: 利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。
+  listing_note: '※ 行き先・人・品物・物は、【現在地と周囲】の "" の中の文字をそのまま引数に書く。'
 
 world_map:
   place: "  {spot} ({lighting}) → {exits}"
