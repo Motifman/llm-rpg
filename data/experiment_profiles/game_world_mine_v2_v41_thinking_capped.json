@@ -1,0 +1,26 @@
+{
+  "profile": "game_world_mine_v2_v41_thinking_capped",
+  "description": "新しい世界 (game_world) の廃坑の山村を実 LLM で回す (#2235)。モデル・provider・思考の強さ・出力の上限・同時に呼ぶ数・記憶 (目次 10 件、一度に 3 件まで呼び出し、メモ帳) は、古い世界の memory_jev_mine_v1_v41_thinking_capped_being_memory とそろえた。新しい世界には Jev の判定 (TYPED_JUDGMENT_*) と手番の居眠り (LLM_IDLE_TIMEOUT_TICKS) が無いので、そこは古い run と条件が違う。provider は使う直前に docs/llm_provider_selection.md の手順で確かめ、結果をここに書き足す。",
+  "world": "game_world",
+  "scenario": "data/scenarios/mine_village_v2.yaml",
+  "max_world_ticks": 40,
+  "snapshot_save": false,
+  "runtime_config": {
+    "LLM_CLIENT": "litellm",
+    "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash",
+    "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
+    "OPENROUTER_PROVIDER": "DeepInfra",
+    "LLM_REASONING_EFFORT": "low",
+    "LLM_MAX_OUTPUT_TOKENS": 4096,
+    "LLM_TURN_PARALLEL_WORKERS": 2,
+    "MEMO_TOOLS_ENABLED": true,
+    "BEING_EPISODE_INDEX_ENABLED": true,
+    "BEING_EPISODE_INDEX_LIMIT": 10,
+    "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
+    "PLAY_WAKE_WAITING_AFTER_ROUNDS": 3,
+    "SCENARIO_RANDOM_SEED": 42,
+    "ASYNC_EVENT_WORKERS": 2,
+    "ASYNC_EVENT_MAX_PENDING": 100,
+    "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS": 60
+  }
+}
