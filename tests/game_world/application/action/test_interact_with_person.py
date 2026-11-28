@@ -19,6 +19,7 @@ from tests.game_world.application.action.world_for_interaction_tests import (
     TAKE_KEY_IN_THE_DARK,
     WorldForInteractions,
 )
+from tests.game_world.support.facts_not_read import FACTS_NOT_READ
 
 _FULL_HP = 100
 
@@ -89,7 +90,7 @@ class TestInteractWithSomeoneInTheDark:
         world.tap(ALICE, SomeoneInTheDark())
         acted = [event for event in world.events_received if isinstance(event, PersonActedEvent)]
 
-        stimuli = StimulusTranslator().stimuli_of(acted[0], world.design)
+        stimuli = StimulusTranslator().stimuli_of(acted[0], world.design, FACTS_NOT_READ)
 
         sights = [stimulus for stimulus in stimuli if isinstance(stimulus, SightStimulus)]
         assert [sight.involved for sight in sights] == [(ALICE, BOB)]

@@ -18,8 +18,6 @@ from ai_rpg_world.being.application.receive_action_result import ReceiveActionRe
 from ai_rpg_world.being.application.write_episodes_on_leaving import WriteEpisodesOnLeaving
 from ai_rpg_world.being.application.writing_circumstances import CircumstancesOfBeings
 from ai_rpg_world.being.contract import OfferedBeingTools
-from ai_rpg_world.being.domain.being import Being
-from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.working_memory import Closing
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_being_repository import InMemoryBeingRepository
@@ -175,7 +173,9 @@ class MineVillageSession:
             PerceptionReportsReceived(),
         )
         if delivers_world_events:
-            distributor.register_receiver(DeliverPerceptionOfCommittedEvents(scenario.design, self.deliver_perception))
+            distributor.register_receiver(
+                DeliverPerceptionOfCommittedEvents(scope, scenario.design, self.deliver_perception)
+            )
         self.episodes = InMemoryEpisodeRepository(handoff=discard_events)
         self.memo_books = InMemoryMemoBookRepository(handoff=discard_events)
         self.visited_places = InMemoryVisitedPlacesRepository()

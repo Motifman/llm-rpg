@@ -5,7 +5,6 @@ from typing import final
 
 from ai_rpg_world.being.contract import ObservedTime
 from ai_rpg_world.game_world.application.command_scope import CommandScope
-from ai_rpg_world.game_world.application.observation_exit import observed_time_of
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import ClockWording, DayNightDeclaration
 
 
@@ -24,4 +23,4 @@ class TellCurrentTime:
 
     def __call__(self, command: TellCurrentTimeCommand) -> ObservedTime:
         now = self._scope.run(lambda session: session.clock().now())
-        return observed_time_of(self._day_night.day_and_clock_time_at(now), self._clock)
+        return self._clock.observed_time_at(now, self._day_night)

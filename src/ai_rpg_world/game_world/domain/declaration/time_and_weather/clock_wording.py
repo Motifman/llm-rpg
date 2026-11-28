@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import final
+from typing import TYPE_CHECKING, final
 
+from ai_rpg_world.being.contract import ObservedTime
 from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_and_clock_time import DayAndClockTime
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
+
+if TYPE_CHECKING:
+    from ai_rpg_world.game_world.domain.declaration.time_and_weather.day_night_declaration import DayNightDeclaration
+    from ai_rpg_world.game_world.domain.value_object import WorldTick
 
 
 @final
@@ -30,3 +35,6 @@ class ClockWording:
     def display(self, time: DayAndClockTime) -> str:
         late_night = self.late_night if time.hour < self.late_night_before_hour else ""
         return f"{self.day.format(day=time.day)} {late_night}{time.hour}:{time.minute:02d}"
+
+    def observed_time_at(self, now: WorldTick, day_night: DayNightDeclaration) -> ObservedTime:
+        return ObservedTime(display=self.display(day_night.day_and_clock_time_at(now)))

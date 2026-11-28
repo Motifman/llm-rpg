@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
-from typing import TypeVar
+from typing import TypeVar, final
 
 import pytest
 
+from ai_rpg_world.being.contract import Observation, TextWithPeople
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.application.command_scope import CommandScope
 from ai_rpg_world.game_world.application.committed_events_distributor import CommittedEventsDistributor
-from ai_rpg_world.game_world.application.deliver_perception import DeliverPerception, DeliverPerceptionCommand
+from ai_rpg_world.game_world.application.deliver_perception import DeliverPerception
+from ai_rpg_world.game_world.application.deliver_perception_of_committed_events import (
+    DeliverPerceptionOfCommittedEvents,
+)
 from ai_rpg_world.game_world.application.observation_exit import ObservationExit
 from ai_rpg_world.game_world.application.open_world import OpenWorld, OpenWorldCommand
 from ai_rpg_world.game_world.application.pass_world_time import PassWorldTime, PassWorldTimeCommand
@@ -21,7 +25,6 @@ from ai_rpg_world.game_world.application.person.handlers.place_departed_person_h
     PlaceDepartedPersonHandler,
 )
 from ai_rpg_world.game_world.application.person.place_departed_person import PlaceDepartedPerson
-from ai_rpg_world.game_world.application.stimulus_translator import StimulusTranslator
 from ai_rpg_world.game_world.application.world_store import WorldSession
 from ai_rpg_world.game_world.domain.declaration.character import CharacterDeclaration
 from ai_rpg_world.game_world.domain.declaration.no_announcement import NoAnnouncement
@@ -50,7 +53,6 @@ from ai_rpg_world.game_world.domain.objects_and_items import ItemGivenUpEvent, I
 from ai_rpg_world.game_world.domain.objects_and_items.item_instance_id import ItemInstanceId
 from ai_rpg_world.game_world.domain.objects_and_items.where_item_was import CarriedBy, LyingAt
 from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
-from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
 from ai_rpg_world.game_world.domain.person.life_state import Alive, Down, LifeState, WorldHappening
 from ai_rpg_world.game_world.domain.person.person_outcomes import DeclaredOutcome
 from ai_rpg_world.game_world.domain.person.person_vitals_events import (
@@ -82,7 +84,6 @@ from ai_rpg_world.game_world.domain.whereabouts import (
     Route,
     TravelBlockedEvent,
 )
-from ai_rpg_world.game_world.domain.world_progress.world_clock import TimeOfDayChangedEvent
 from ai_rpg_world.game_world.infrastructure.world.sqlite_world_store import SqliteWorldStore
 from tests.game_world.domain.whereabouts._builders import CLOSED, door
 from tests.game_world.support.perception_reports import PerceptionReportsReceived
@@ -90,7 +91,6 @@ from tests.game_world.support.world_design_for_tests import (
     character,
     clock_wording,
     compose_world,
-    half_hour_ticks_from_midnight,
     item_spec,
     nouns,
     passage,
@@ -535,40 +535,42 @@ _AKI = PersonId("aki")
 
 
 class TestPassWorldTimeDayPhase:
-    """PassWorldTime が、時間帯の変わり目に、その時点で起きている相手を選んで TimeOfDayChangedEvent に載せることを保証する。"""
+    """PassWorldTime で時間帯が変わると、その tick を進め終えた世界で起きている人にだけ、時間帯の知らせが届くことを保証する。"""
 
-    def _dawn_with_aki_fainted(self) -> _World:
+    def _dawn(self, world: _World) -> tuple[_ObservationsReceived, PerceptionReportsReceived]:
+        received = _ObservationsReceived()
+        reports = PerceptionReportsReceived()
+        deliver = DeliverPerception(
+            world.scope, ObservationExit(_WORLD, _DAWN_AT_TICK_1, clock_wording(), received), reports
+        )
+        world.distributor.register_receiver(DeliverPerceptionOfCommittedEvents(world.scope, world.design, deliver))
+        world.pass_ticks(1)
+        return received, reports
+
+    def test_morning_reaches_only_the_person_awake(self) -> None:
+        """朝に入ると、広場で起きているハルに「空が白み、朝になった。」が届き、同じ広場で気を失っているアキには届かない。"""
         world = _World(characters=(character("haru", "plaza"), character("aki", "plaza")), day_night=_DAWN_AT_TICK_1)
         world.scope.run(
             lambda session: session.aggregates().vitals(_AKI).take_damage(Damage(999), WorldTick(0), WorldHappening())
         )
-        world.pass_ticks(1)
-        return world
 
-    def test_fainted_person_is_left_out_of_the_morning_audience(self) -> None:
-        """朝に入ると、広場で起きているハルだけが TimeOfDayChangedEvent の相手に載り、同じ広場で気を失っているアキは載らない。"""
-        world = self._dawn_with_aki_fainted()
+        received, _ = self._dawn(world)
 
-        [entered] = world.events_of(TimeOfDayChangedEvent)
-        assert (entered.after, entered.audience) == (DayPhaseName("morning"), frozenset({_HARU}))
+        assert received.people_told("空が白み、朝になった。") == [_HARU]
 
     def test_fainted_person_does_not_keep_the_morning_for_later(self) -> None:
-        """朝の知らせを届けても、気を失っているアキには、起きてから知る知らせとしてたまらない。"""
-        world = self._dawn_with_aki_fainted()
-        [entered] = world.events_of(TimeOfDayChangedEvent)
-        stimuli = StimulusTranslator().stimuli_of(entered, world.design)
+        """気を失っているアキには、朝の知らせが起きてから知る知らせとしてたまらない。"""
+        world = _World(characters=(character("haru", "plaza"), character("aki", "plaza")), day_night=_DAWN_AT_TICK_1)
+        world.scope.run(
+            lambda session: session.aggregates().vitals(_AKI).take_damage(Damage(999), WorldTick(0), WorldHappening())
+        )
 
-        DeliverPerception(
-            world.scope,
-            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), _NoOneListening()),
-            PerceptionReportsReceived(),
-        )(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli))
+        self._dawn(world)
 
-        assert stimuli
         assert world.read(lambda session: session.facts().missed_notices(_AKI).notices()) == ()
 
-    def test_person_fainting_in_the_tick_of_dawn_does_not_keep_the_morning(self) -> None:
-        """朝に入る tick に飢えで倒れたハルは、相手を選んだ時点では起きていて相手に載るが、朝の知らせをためない。"""
+    def test_person_fainting_in_the_tick_of_dawn_is_not_an_addressee_of_the_morning(self) -> None:
+        """朝に入る tick に飢えで倒れたハルは、tick を進め終えた時点で倒れているので、朝の知らせの相手に入らず、届かず、起きてから知る知らせにもたまらない。"""
         base = world_rules_for_tests()
         starving = replace(
             base,
@@ -577,21 +579,31 @@ class TestPassWorldTimeDayPhase:
             ),
         )
         world = _World(characters=(character("haru", "plaza"),), rules=starving, day_night=_DAWN_AT_TICK_1)
-        world.pass_ticks(1)
-        [entered] = world.events_of(TimeOfDayChangedEvent)
-        stimuli = StimulusTranslator().stimuli_of(entered, world.design)
 
-        DeliverPerception(
-            world.scope,
-            ObservationExit(_WORLD, half_hour_ticks_from_midnight(), clock_wording(), _NoOneListening()),
-            PerceptionReportsReceived(),
-        )(DeliverPerceptionCommand(cause=TimePassed(), from_actions=(), from_states=stimuli))
+        received, reports = self._dawn(world)
 
-        assert entered.audience == frozenset({_HARU})
         assert world.read(lambda session: session.facts().vitals(_HARU).is_down())
+        assert [
+            result.stimulus.addressed_to
+            for report in reports.reports
+            for result in report.stimuli
+            if result.stimulus.text == "空が白み、朝になった。"
+        ] == [frozenset()]
+        assert received.people_told("空が白み、朝になった。") == []
         assert world.read(lambda session: session.facts().missed_notices(_HARU).notices()) == ()
 
 
-class _NoOneListening:
-    def receive(self, person: PersonId, observation: object) -> None:
-        pass
+@final
+class _ObservationsReceived:
+    def __init__(self) -> None:
+        self._received: list[tuple[PersonId, Observation]] = []
+
+    def receive(self, person: PersonId, observation: Observation) -> None:
+        self._received.append((person, observation))
+
+    def people_told(self, template: str) -> list[PersonId]:
+        return [
+            person
+            for person, observation in self._received
+            if isinstance(observation.body, TextWithPeople) and observation.body.template == template
+        ]

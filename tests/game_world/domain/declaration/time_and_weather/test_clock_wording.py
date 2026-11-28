@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.being.contract import ObservedTime
 from ai_rpg_world.game_world.domain.declaration.time_and_weather import ClockWording, DayAndClockTime
 from ai_rpg_world.game_world.domain.exception.game_world_exception import ValueOutOfRangeException
+from ai_rpg_world.game_world.domain.value_object import WorldTick
+from tests.game_world.support.world_design_for_tests import half_hour_ticks_from_midnight
 
 _CLOCK = ClockWording(day="Day {day}", late_night="深夜 ", late_night_before_hour=6)
 
@@ -36,3 +39,19 @@ class TestClockWording:
         clock = ClockWording(day="Day {day:02d}", late_night="深夜 ", late_night_before_hour=6)
 
         assert clock.display(DayAndClockTime(day=3, hour=7, minute=0)) == "Day 03 7:00"
+
+
+class TestClockWordingObservedTimeAt:
+    """ClockWording.observed_time_at が、世界の時刻を昼夜の宣言で何日目と時:分にして、観測の時刻として書くことを保証する。"""
+
+    def test_world_tick_is_written_as_the_day_and_the_clock(self) -> None:
+        """1 日 48 tick で真夜中から始まる世界の tick 61 は、2 日目の 6:30 と書く。"""
+        observed = _CLOCK.observed_time_at(WorldTick(61), half_hour_ticks_from_midnight())
+
+        assert observed == ObservedTime(display="Day 2 6:30")
+
+    def test_late_night_tick_is_marked(self) -> None:
+        """tick 3 は 1 日目の深夜 1:30 と書く。"""
+        observed = _CLOCK.observed_time_at(WorldTick(3), half_hour_ticks_from_midnight())
+
+        assert observed == ObservedTime(display="Day 1 深夜 1:30")

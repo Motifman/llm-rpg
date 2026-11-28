@@ -15,6 +15,7 @@ from ai_rpg_world.game_world.domain.people import TextWithUnassignedPeople
 from ai_rpg_world.game_world.domain.perception.announcement_stimulus import AnnouncementStimulus
 from ai_rpg_world.game_world.domain.value_object import DisplayName, ItemSpecId, PersonId, WorldTick
 from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
+from tests.game_world.support.facts_not_read import FACTS_NOT_READ
 from tests.game_world.support.world_design_for_tests import belongings_texts
 
 _GEN = PersonId("gen")
@@ -69,7 +70,7 @@ class TestTranslatingBelongings:
             at=WorldTick(3),
         )
 
-        [told] = StimulusTranslator().stimuli_of(event, mine_village)
+        [told] = StimulusTranslator().stimuli_of(event, mine_village, FACTS_NOT_READ)
 
         assert isinstance(told, AnnouncementStimulus)
         assert (told.audience, told.text.template.template, told.at) == (
@@ -93,7 +94,7 @@ class TestTranslatingBelongings:
             at=WorldTick(16),
         )
 
-        stimuli = StimulusTranslator().stimuli_of(event, mine_village)
+        stimuli = StimulusTranslator().stimuli_of(event, mine_village, FACTS_NOT_READ)
 
         assert tuple(s.text.template.template for s in stimuli if isinstance(s, AnnouncementStimulus)) == told
         assert len(stimuli) == len(told)

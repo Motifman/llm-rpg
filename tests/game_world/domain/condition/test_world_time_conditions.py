@@ -85,7 +85,7 @@ _DAY_NIGHT = DayNightDeclaration(
 
 def _advanced(a_world: WorldSession, ticks: int) -> WorldSession:
     for _ in range(ticks):
-        a_world.clock().advance(a_world.facts().day_night(), a_world.facts())
+        a_world.clock().advance(a_world.facts().day_night())
     return a_world
 
 
