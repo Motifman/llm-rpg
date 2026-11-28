@@ -158,6 +158,31 @@ class TestRewriteLegacyActionResults:
         assert (memory.recent_from, memory.awaiting) == (1, None)
         assert counts == {"being_short_term_memory.own_action_result": 1}
 
+    def test_attempt_without_a_result_only_is_rewritten_without_counting(self) -> None:
+        """結果の来ていない試みだけを持つ古い記憶も、今の形に書き換えて読める。失うものが無いので件数は空になる。"""
+        memory, counts = _rewritten(_payload(_memory([_attempt("call-1", None)])))
+
+        [attempt] = memory.experiences
+        assert isinstance(attempt, Attempt) and not attempt.is_answered()
+        assert counts == {}
+
+    def test_events_with_only_perceptions_are_rewritten_without_counting(self) -> None:
+        """観測だけの events の形も、出来事の形に書き換えて読める。件数は空になる。"""
+        seen = _observation("鐘が鳴った", {"kind": "seen_or_heard"}, subject_is_self=False)
+
+        memory, counts = _rewritten(
+            _payload({"events": [{"turn": 1, "observation": seen, "move": None}], "backstories": []})
+        )
+
+        assert [type(e) for e in memory.experiences] == [Perception]
+        assert counts == {}
+
+    def test_empty_events_are_rewritten_into_empty_experiences(self) -> None:
+        """空の events の形は、出来事の無い記憶として読める。"""
+        memory, counts = _rewritten(_payload({"events": [], "backstories": []}))
+
+        assert (memory.experiences, counts) == ((), {})
+
     def test_payload_in_the_current_form_is_left_as_it_is(self) -> None:
         """今の形の payload は、文字列を変えずに返し、件数は空になる。"""
         current = _payload(_memory([{"kind": "attempt", "turn": 1, "move": _move("call-1"), "response": None}]))

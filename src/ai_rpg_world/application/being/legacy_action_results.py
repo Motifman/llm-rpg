@@ -1,9 +1,4 @@
-"""行動の「結果」を持っていたころ (#2345 より前) の短期記憶を、今の形 (行動の返事と、本人が知った観測) に書き換える。
-
-要約のある結果は、行動の返事と、同じターンの ``own_action`` の観測に分ける。要約の無い結果は古い世界が組み終えた行
-として読む。あとから届く自分の行動の結果 (``own_action_completed``) は、要約とツールの名前を捨てて ``own_action`` の
-観測にする。書き換えた件数を返し、snapshot_load に残す。
-"""
+"""行動の「結果」を持っていたころ (#2345 より前) の短期記憶を、今の形 (行動の返事と、本人が知った観測) に書き換える。"""
 
 from __future__ import annotations
 
@@ -23,10 +18,12 @@ def rewrite_legacy_action_results(payload_json: str) -> tuple[str, dict[str, int
     if not isinstance(payload, dict) or not isinstance(payload.get(_PAYLOAD_KEY), list):
         return payload_json, {}
     counts: dict[str, int] = {}
-    payload[_PAYLOAD_KEY] = [_rewrite_memory(memory, counts) for memory in payload[_PAYLOAD_KEY]]
-    if not counts:
+    memories = payload[_PAYLOAD_KEY]
+    rewritten = [_rewrite_memory(memory, counts) for memory in memories]
+    if rewritten == memories:
         return payload_json, {}
-    return json.dumps(payload, ensure_ascii=False), counts
+    # 返事の無い試みや観測だけの古い形は、形を変えるだけで失うものが無いので数えない
+    return json.dumps({**payload, _PAYLOAD_KEY: rewritten}, ensure_ascii=False), counts
 
 
 def _rewrite_memory(memory: Any, counts: dict[str, int]) -> Any:
@@ -46,7 +43,6 @@ def _rewrite_memory(memory: Any, counts: dict[str, int]) -> Any:
 
 
 def _from_event(event: Any) -> Any:
-    """短期記憶を集約に作り直す前の形 (観測と、自分の行動の結果なら 1 手) を、出来事の形にする (design_decisions D1824-9)。"""
     if event.get("move") is None:
         return {"kind": "perception", "turn": event["turn"], "observation": event["observation"]}
     return {
