@@ -78,3 +78,41 @@ class TestChooseRandomCall:
         calls = [choose_random_call(random.Random(seed), _TABLE, tools) for seed in range(20)]
 
         assert calls == [None] * 20
+
+
+class TestQuotedCandidates:
+    """CandidateTable.read が、候補表が JSON の文字列で書いた候補を書き戻して読むことを保証する。"""
+
+    def test_candidate_with_a_double_quote_is_read_back_unescaped(self) -> None:
+        """「"錆びた" 鍵」が \\" で書かれていても、元の「"錆びた" 鍵」として読み、親の候補としても引ける。"""
+        text = (
+            "【現在選べる対象引数】\n"
+            '- interact.target:\n    いまできる:\n      "\\"錆びた\\" 鍵"\n'
+            '- interact.how ("\\"錆びた\\" 鍵"):\n    いまできる:\n      "回す"\n'
+        )
+
+        table = CandidateTable.read(text)
+
+        row = table.row("interact", "target", [])
+        assert row is not None and row.available == ['"錆びた" 鍵']
+        how = table.row("interact", "how", ['"錆びた" 鍵'])
+        assert how is not None and how.available == ["回す"]
+        assert table.unreadable_lines == ()
+
+
+class TestNestedDetails:
+    """choose_random_call が、details の値の下に続く details の引数も、親を選んだあとに選ぶことを保証する。"""
+
+    def test_detail_under_a_picked_detail_is_chosen(self) -> None:
+        """details.lever で「左」を選ぶと、その下の details.force も選ぶ。"""
+        text = (
+            "【現在選べる対象引数】\n"
+            '- interact.target:\n    いまできる:\n      "操作盤"\n'
+            '- interact.details.lever ("操作盤"):\n    いまできる:\n      "左"\n'
+            '- interact.details.force ("左"):\n    いまできる:\n      "強く"\n'
+        )
+        tools = [_tool("interact", "target", required=("target",), details=True)]
+
+        call = choose_random_call(random.Random(0), text, tools)
+
+        assert call is not None and call["arguments"]["details"] == {"lever": "左", "force": "強く"}

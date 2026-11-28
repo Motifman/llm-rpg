@@ -616,7 +616,6 @@ def _profile_world(profile_path: Path) -> str | None:
 
 
 def game_world_identifiers(scenario_path: Path) -> frozenset[str]:
-    """新しい世界のシナリオの英字の識別子。名詞の宣言と、品物・出来事などの欄の鍵から集める。"""
     import yaml
 
     from ai_rpg_world.game_world.infrastructure.scenario.scenario_loader import load_scenario
@@ -646,7 +645,6 @@ def run_random_agents_in_game_world(
     profile_path: Path,
     known_holes: Sequence[KnownHole] = KNOWN_HOLES,
 ) -> FuzzResult:
-    """新しい世界 (game_world) で、全員でたらめに行動させて ``max_world_ticks`` 巡り回す (#2234)。"""
     from ai_rpg_world.being.application.choose_action import ActionChoosingReply
     from ai_rpg_world.being.infrastructure.scripted_backstory_writer import ScriptedBackstoryWriter
     from ai_rpg_world.being.infrastructure.scripted_episode_writer import ScriptedEpisodeWriter
@@ -659,6 +657,7 @@ def run_random_agents_in_game_world(
     result = FuzzResult(scenario=scenario_path.stem, seed=seed, max_world_ticks=max_world_ticks)
     identifiers = game_world_identifiers(scenario_path)
     seen_leaks: set[str] = set()
+    seen_unreadable: set[str] = set()
     profile = json.loads(profile_path.read_text(encoding="utf-8"))
     values = {
         **profile.get("runtime_config", {}),
@@ -684,7 +683,9 @@ def run_random_agents_in_game_world(
                         seen_leaks.add(line)
                         result.findings.append(FuzzFinding("leak", tick, line[:200]))
             for line in CandidateTable.read(messages[-1]["content"]).unreadable_lines:
-                result.findings.append(FuzzFinding("unreadable_candidates", tick, line[:200]))
+                if line not in seen_unreadable:
+                    seen_unreadable.add(line)
+                    result.findings.append(FuzzFinding("unreadable_candidates", tick, line[:200]))
             reply = super().choose_action(messages, tools, reasoning_off=reasoning_off)
             if reply.tool_call is not None:
                 result.actions.append(FuzzAction(tick, 0, reply.tool_call.tool_name, dict(reply.tool_call.arguments)))
@@ -694,23 +695,24 @@ def run_random_agents_in_game_world(
     root = logging.getLogger()
     root.addHandler(errors)
     try:
-        play = GameWorldPlay(
-            scenario_path=scenario_path,
-            scenario=load_scenario(scenario_path),
-            scenario_hash=scenario_path.stem,
-            settings=settings,
-            writers=GameWorldWriters(
-                action_choosing=_Watched(seed),
-                episode_writer=ScriptedEpisodeWriter(),
-                backstory_writer=ScriptedBackstoryWriter(),
-            ),
-            round_limit=max_world_ticks,
-            closing=CLOSING,
-            turns_at_once=False,
-        )
-        holder["play"] = play
         try:
+            play = GameWorldPlay(
+                scenario_path=scenario_path,
+                scenario=load_scenario(scenario_path),
+                scenario_hash=scenario_path.stem,
+                settings=settings,
+                writers=GameWorldWriters(
+                    action_choosing=_Watched(seed),
+                    episode_writer=ScriptedEpisodeWriter(),
+                    backstory_writer=ScriptedBackstoryWriter(),
+                ),
+                round_limit=max_world_ticks,
+                closing=CLOSING,
+                turns_at_once=False,
+            )
+            holder["play"] = play
             played = play.play()
+        # 1 つのシードで落ちても、残りのシードとまとめの行は出す
         except Exception as exc:
             result.findings.append(FuzzFinding("exception", now(), _describe_exception(exc)))
         else:
