@@ -210,3 +210,21 @@ class TestGameWorldTraceOfTheRun:
         assert len(finished) == 12
         assert sorted(f["order"] for f in finished if f["round"] == 1) == [1, 2, 3, 4]
         assert "game_world.observation_passed_on" in kinds
+
+    def test_world_events_and_perception_are_in_the_trace(self, tmp_path: Path) -> None:
+        """smoke で 3 巡り回すと、時間を進めた世界の出来事が 3 件出て、話した声の知らせは話した本人に「自分の行為」で届かなかったと残る。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out)])
+
+        events = [json.loads(line) for line in (out / "trace.jsonl").read_text().splitlines()]
+        world = [e["payload"]["event_type"] for e in events if e["kind"] == "game_world.world_event"]
+        assert world.count("WorldTickAdvancedEvent") == 3
+        missed = [
+            m["reason"]
+            for e in events
+            if e["kind"] == "game_world.perception_delivered"
+            for s in e["payload"]["stimuli"]
+            for m in s["missed_by"]
+        ]
+        assert "own_act" in missed

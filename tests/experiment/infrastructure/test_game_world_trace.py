@@ -6,7 +6,16 @@ from ai_rpg_world.being.application.choose_action import ActionChoosingReply, Ll
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.experiment.infrastructure.game_world_trace import GameWorldTrace, GameWorldTraceKind
-from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
+from ai_rpg_world.game_world.domain.people.people_register import PersonNamedEvent
+from ai_rpg_world.game_world.domain.perception.delivery_rank import Sense
+from ai_rpg_world.game_world.domain.perception.not_perceived_reason import NotPerceivedReason
+from ai_rpg_world.game_world.domain.perception.perception_cause import TimePassed
+from ai_rpg_world.game_world.domain.perception.perception_delivery_report import (
+    PerceptionDeliveryReport,
+    StimulusDeliveryResult,
+    StimulusDescription,
+)
+from ai_rpg_world.game_world.domain.value_object import DisplayName, PersonId, SpotId, WorldId, WorldTick
 from ai_rpg_world.play_session.application.play_rounds import DiscardedChoice
 from ai_rpg_world.play_session.domain.turn_rounds import (
     ChoiceFailed,
@@ -134,3 +143,52 @@ class TestDiscardedChoicesInTheTrace:
 
         [(_, _, payload)] = kept.records
         assert (payload["started_thinking"], payload["tool"]) == (False, None)
+
+
+class TestWorldSideInTheTrace:
+    """GameWorldTrace が、知らせの届いた記録と世界の出来事を、人の名前と理由つきで 1 件ずつ写すことを保証する。"""
+
+    def test_door_breaking_keeps_who_perceived_and_who_missed_it_and_why(self) -> None:
+        """南の横坑口で扉が壊れた知らせは、届いたゲンと、届かなかったサヨと理由 (too_dark) を 1 件の行に残す。"""
+        trace, kept = _trace()
+        stimulus = StimulusDescription(
+            sense=Sense.SIGHT, text="扉が壊れた", where=SpotId("south_adit_mouth"), addressed_to=frozenset()
+        )
+        report = PerceptionDeliveryReport(
+            cause=TimePassed(),
+            at=WorldTick(12),
+            stimuli=(
+                StimulusDeliveryResult(
+                    stimulus=stimulus,
+                    perceived_by=(_GEN,),
+                    kept_for=(),
+                    missed_by={_SAYO: NotPerceivedReason.TOO_DARK},
+                ),
+            ),
+        )
+
+        trace.record_perception_report(report)
+
+        [(kind, tick, payload)] = kept.records
+        assert (kind, tick, payload["cause"]["type"]) == (GameWorldTraceKind.PERCEPTION_DELIVERED, 12, "TimePassed")
+        [delivered] = payload["stimuli"]
+        assert delivered["perceived_by"] == [{"person_id": "gen", "name": "ゲン"}]
+        assert delivered["missed_by"] == [{"person_id": "sayo", "name": "サヨ", "reason": "too_dark"}]
+        assert (delivered["sense"], delivered["where"]) == ("sight", "south_adit_mouth")
+
+    def test_world_event_keeps_its_type_and_named_values(self) -> None:
+        """世界の出来事は、型の名前と、人を名前つきにした値で残り、イベントの通し番号は残さない。"""
+        trace, kept = _trace()
+
+        trace.record_world_events(
+            [PersonNamedEvent(**new_event_stamp(), world=_WORLD, person=_GEN, name=DisplayName("ゲン"))]
+        )
+
+        [(kind, _, payload)] = kept.records
+        assert kind == GameWorldTraceKind.WORLD_EVENT
+        assert payload == {
+            "event_type": "PersonNamedEvent",
+            "world": "mine_village_v2#1",
+            "person": {"person_id": "gen", "name": "ゲン"},
+            "name": "ゲン",
+        }

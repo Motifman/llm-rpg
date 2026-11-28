@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import final
@@ -113,13 +113,21 @@ class GameWorldPlayResult:
     writing_failures: dict[str, int]
 
 
-class _PerceptionReportsCounted:
-    # 書き出しは #2233 で足す。run のあいだ全部ためると、長い run でメモリが増え続ける
-    def __init__(self) -> None:
-        self.count = 0
+class _PerceptionReportsWritten:
+    # run のあいだ全部ためると、長い run でメモリが増え続けるので、受け取ったらすぐ書いて手放す
+    def __init__(self, write: Callable[[PerceptionDeliveryReport], None]) -> None:
+        self._write = write
 
     def receive(self, report: PerceptionDeliveryReport) -> None:
-        self.count += 1
+        self._write(report)
+
+
+class _WorldEventsWritten:
+    def __init__(self, write: Callable[[Sequence[DomainEvent]], None]) -> None:
+        self._write = write
+
+    def receive(self, events: tuple[DomainEvent, ...]) -> None:
+        self._write(events)
 
 
 def _failed_handing_off(*_: object) -> None:
@@ -191,12 +199,14 @@ class GameWorldPlay:
         )
         self.turn_rounds = turn_rounds = InMemoryTurnRoundsRepository(handoff=self._hand_off_turn_round_events)
 
-        self.perception_reports = _PerceptionReportsCounted()
+        self.perception_reports = _PerceptionReportsWritten(lambda report: self._trace.record_perception_report(report))
         deliver_perception = DeliverPerception(
             scope,
             ObservationExit(world, day_night, design.clock_wording, HandObservationToBeing(world, turn_rounds)),
             self.perception_reports,
         )
+        # 書く口を先に置く。知らせを配る口が先だと、世界の出来事より先に、それが届いた記録が並ぶ
+        distributor.register_receiver(_WorldEventsWritten(lambda events: self._trace.record_world_events(events)))
         distributor.register_receiver(DeliverPerceptionOfCommittedEvents(design, deliver_perception))
 
         self._start = StartPlaySession(
