@@ -70,6 +70,7 @@ class BeingTurnSteps:
         describe_result: DescribeActionResult,
         receive_result: ReceiveActionResult,
         end_being_turn: EndBeingTurn,
+        turn_rounds: TurnRoundsRepository,
     ) -> None:
         self.world = world
         self._casts = casts
@@ -84,6 +85,7 @@ class BeingTurnSteps:
         self._describe_result = describe_result
         self._receive_result = receive_result
         self._end_being_turn = end_being_turn
+        self._turn_rounds = turn_rounds
 
     def being_of(self, person: PersonId) -> BeingId:
         return self._casts.get(self.world).being_of(person)
@@ -111,6 +113,16 @@ class BeingTurnSteps:
         result = self._describe_result(DescribeActionResultCommand(reply=reply, call_id=chosen.move.call_id))
         self._receive_result.execute(ReceiveActionResultCommand(being_id=self.being_of(person), result=result))
         return Waited() if reply.was_waiting() else Acted()
+
+    def begin_choosing(self, people: Sequence[PersonId]) -> None:
+        rounds = self._turn_rounds.get(self.world)
+        rounds.begin_choosing(people)
+        self._turn_rounds.save(rounds)
+
+    def finish_choosing(self, person: PersonId) -> None:
+        rounds = self._turn_rounds.get(self.world)
+        rounds.finish_choosing(person)
+        self._turn_rounds.save(rounds)
 
     def end_turn(self, person: PersonId) -> None:
         self._end_being_turn.execute(EndBeingTurnCommand(self.being_of(person)))
@@ -146,40 +158,33 @@ class _TurnsOneByOne:
 
     def _take_turn(self, person: PersonId) -> TurnOutcome:
         command = self._steps.command_for(person)
+        self._steps.begin_choosing((person,))
         try:
             chosen = self._steps.choose_action.execute(command)
         # LLM の呼び出しの失敗は provider ごとに型が違うので、型で絞らずに ChooseAction ごと囲み、呼び出しが落ちたターンとして数える
         except Exception as error:
             return _failed(error)
+        finally:
+            self._steps.finish_choosing(person)
         return self._steps.carry_out(person, chosen)
 
 
 @final
 class BeingsTakingTurnsAtOnce:
-    def __init__(
-        self, steps: BeingTurnSteps, turn_rounds: TurnRoundsRepository, *, max_thinking: int | None = None
-    ) -> None:
+    def __init__(self, steps: BeingTurnSteps, *, max_thinking: int | None = None) -> None:
         if max_thinking is not None and max_thinking < 1:
             raise ValueError(f"max_thinking must be >= 1, got {max_thinking}")
         self._steps = steps
-        self._turn_rounds = turn_rounds
         self._max_thinking = max_thinking
 
     def take_turns(self, people: Sequence[PersonId]) -> TurnsInProgress:
-        return _TurnsAtOnce(self._steps, self._turn_rounds, people, self._max_thinking)
+        return _TurnsAtOnce(self._steps, people, self._max_thinking)
 
 
 @final
 class _TurnsAtOnce:
-    def __init__(
-        self,
-        steps: BeingTurnSteps,
-        turn_rounds: TurnRoundsRepository,
-        people: Sequence[PersonId],
-        max_thinking: int | None,
-    ) -> None:
+    def __init__(self, steps: BeingTurnSteps, people: Sequence[PersonId], max_thinking: int | None) -> None:
         self._steps = steps
-        self._turn_rounds = turn_rounds
         self._people = tuple(people)
         self._max_thinking = max_thinking
         self._executor: ThreadPoolExecutor | None = None
@@ -197,9 +202,7 @@ class _TurnsAtOnce:
             except Exception as error:
                 failed_to_prompt.append((person, _failed(error)))
         if prompts:
-            rounds = self._turn_rounds.get(self._steps.world)
-            rounds.begin_choosing(tuple(person for person, _ in prompts))
-            self._turn_rounds.save(rounds)
+            self._steps.begin_choosing(tuple(person for person, _ in prompts))
             self._executor = ThreadPoolExecutor(
                 max_workers=min(len(prompts), self._max_thinking or len(prompts)), thread_name_prefix="being_thinking"
             )
@@ -213,9 +216,7 @@ class _TurnsAtOnce:
         try:
             for future in as_completed(tuple(self._thinking)):
                 person = self._thinking.pop(future)
-                rounds = self._turn_rounds.get(self._steps.world)
-                rounds.finish_choosing(person)
-                self._turn_rounds.save(rounds)
+                self._steps.finish_choosing(person)
                 yield self._finished(person, self._settled(person, future))
         finally:
             self._executor.shutdown(wait=False)

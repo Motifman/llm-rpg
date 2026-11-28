@@ -204,7 +204,7 @@ class MineVillageSession:
         return BeingsTakingTurnsOneByOne(self.turn_steps(completion))
 
     def beings_taking_turns_at_once(self, completion: ActionChoosingCompletion) -> BeingsTakingTurnsAtOnce:
-        return BeingsTakingTurnsAtOnce(self.turn_steps(completion), self.turn_rounds)
+        return BeingsTakingTurnsAtOnce(self.turn_steps(completion))
 
     def turn_steps(self, completion: ActionChoosingCompletion) -> BeingTurnSteps:
         design = _scenario().design
@@ -248,6 +248,7 @@ class MineVillageSession:
             describe_result=DescribeActionResult(self.scope, design, day_night),
             receive_result=ReceiveActionResult(self.short_term_memories, self.clock),
             end_being_turn=EndBeingTurn(self.short_term_memories, self.clock),
+            turn_rounds=self.turn_rounds,
         )
 
     def play_rounds(self, turn_takers: TurnTakers, *, world_has_ended: WorldHasEnded | None = None) -> PlayRounds:
