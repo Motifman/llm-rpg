@@ -243,3 +243,18 @@ class TestGameWorldTraceOfTheRun:
         calls = [json.loads(line) for line in (out / "prompt_dataset" / "calls.jsonl").read_text().splitlines()]
         assert len(choice_ids) == 4
         assert sorted(c["llm_call_id"] for c in calls) == sorted(choice_ids)
+
+    def test_being_events_are_in_the_trace_with_whose_they_are(self, tmp_path: Path) -> None:
+        """smoke で 20 巡り回すと、短期記憶の範囲が埋まったイベントが、誰の記憶かの名前つきで出る。"""
+        out = tmp_path / "run"
+
+        main(["--profile", "smoke_stub_game_world", "--out", str(out), "--max-world-ticks", "20"])
+
+        events = [json.loads(line) for line in (out / "trace.jsonl").read_text().splitlines()]
+        filled = [
+            e["payload"]
+            for e in events
+            if e["kind"] == "game_world.being_event" and e["payload"]["event_type"] == "ShortTermMemoryRangeFilledEvent"
+        ]
+        assert filled
+        assert {p["person"]["name"] for p in filled} <= {"ハル", "ミオ", "ゲン", "サヨ"}

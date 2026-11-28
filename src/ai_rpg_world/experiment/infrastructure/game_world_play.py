@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import final
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCall
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import PromptDatasetCaptureSink
 from ai_rpg_world.being.application.choose_action import ActionChoosingCompletion, ChooseAction
 from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
@@ -104,6 +105,21 @@ class GameWorldWriters:
     action_choosing: ActionChoosingCompletion
     episode_writer: EpisodeWriter
     backstory_writer: BackstoryWriter
+    aux_calls: AuxCallsForwarded | None = None
+
+
+@final
+class AuxCallsForwarded:
+    """LLM のクライアントは組み立てのときに補助の呼び出しの受け口を受け取るので、書く先は遊びを始めるときに渡す。"""
+
+    def __init__(self) -> None:
+        self._forward: Callable[[AuxLlmCall], None] = lambda call: None
+
+    def forward_to(self, forward: Callable[[AuxLlmCall], None]) -> None:
+        self._forward = forward
+
+    def record(self, call: AuxLlmCall) -> None:
+        self._forward(call)
 
 
 @final
@@ -153,6 +169,7 @@ class GameWorldPlay:
         turns_at_once: bool = True,
     ) -> None:
         design = scenario.design
+        self._writers = writers
         # 時刻の札を作る部品は昼夜を前提にするので、昼夜を宣言しない世界は組み立てる前に断る (D2222)
         day_night = design.day_night_declaration()
         self.world = world = WorldId(f"{scenario_path.stem}#1")
@@ -176,9 +193,9 @@ class GameWorldPlay:
             workers=settings.writing_workers,
             max_pending=settings.writing_max_pending,
         )
-        short_term_memories = InMemoryShortTermMemoryRepository(handoff=self.memory_writing.handoff)
-        episodes = InMemoryEpisodeRepository(handoff=_discard)
-        memo_books = InMemoryMemoBookRepository(handoff=_discard)
+        short_term_memories = InMemoryShortTermMemoryRepository(handoff=self._hand_off_short_term_memory_events)
+        episodes = InMemoryEpisodeRepository(handoff=self._hand_off_being_events)
+        memo_books = InMemoryMemoBookRepository(handoff=self._hand_off_being_events)
         visited_places = InMemoryVisitedPlacesRepository()
         circumstances = CircumstancesOfBeings(beings)
         self.memory_writing.write_with(
@@ -311,6 +328,8 @@ class GameWorldPlay:
         names = {role.person: role.being_name for role in self._start_command.roles}
         self._prompts = prompts
         self._run_id = run_id
+        if self._writers.aux_calls is not None:
+            self._writers.aux_calls.forward_to(lambda call: self._trace.record_aux_call(call))
         self._trace = GameWorldTrace(log or NoTrace(), names=names, now=lambda: self.now().value)
         try:
             self._start(self._start_command)
@@ -342,6 +361,13 @@ class GameWorldPlay:
 
     def now(self) -> WorldTick:
         return self._scope.run(lambda session: session.facts().now())
+
+    def _hand_off_short_term_memory_events(self, events: Sequence[DomainEvent]) -> None:
+        self.memory_writing.handoff(events)
+        self._hand_off_being_events(events)
+
+    def _hand_off_being_events(self, events: Sequence[DomainEvent]) -> None:
+        self._trace.record_being_events(events, self._person_of)
 
     def _hand_off_turn_round_events(self, events: Sequence[TurnRoundsEvent]) -> None:
         for event in events:

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCall, AuxLlmComponent
 from ai_rpg_world.being.application.choose_action import ActionChoosingReply, LlmExchange, ToolCallReply
 from ai_rpg_world.being.contract import UNKNOWN, Observation, ObservedTime, SeenOrHeard
+from ai_rpg_world.being.domain.being_id import BeingId
+from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRangeFilledEvent
 from ai_rpg_world.eventing import new_event_stamp
 from ai_rpg_world.experiment.infrastructure.game_world_trace import GameWorldTrace, GameWorldTraceKind
 from ai_rpg_world.game_world.domain.people.people_register import PersonNamedEvent
@@ -221,3 +224,35 @@ class TestFailingToWriteTheTrace:
         )
 
         assert trace.failures == 1
+
+
+class TestBeingSideInTheTrace:
+    """GameWorldTrace が、Being の集約のイベントを誰のものかが分かる形で、書き起こしの呼び出しを費用つきで写すことを保証する。"""
+
+    def test_range_filled_keeps_whose_memory_and_counts_instead_of_bodies(self) -> None:
+        """ゲンの短期記憶の範囲が埋まったイベントは、ゲンの名前と、出来事といきさつを本文ではなく件数で残す。"""
+        trace, kept = _trace()
+        event = ShortTermMemoryRangeFilledEvent(
+            **new_event_stamp(), being_id=BeingId("gen"), turn=20, until_turn=10, experiences=(), backstories=()
+        )
+
+        trace.record_being_events([event], person_of=lambda being_id: PersonId(being_id.value))
+
+        [(kind, _, payload)] = kept.records
+        assert kind == GameWorldTraceKind.BEING_EVENT
+        assert payload["person"] == {"person_id": "gen", "name": "ゲン"}
+        assert payload["fields"] == {"turn": 20, "until_turn": 10, "experiences": 0, "backstories": 0}
+
+    def test_aux_call_keeps_its_component_and_cost(self) -> None:
+        """エピソードの書き起こしの呼び出しは、部品の名前と費用と時間を残し、tick は入れない。"""
+        trace, kept = _trace()
+        call = AuxLlmCall(
+            component=AuxLlmComponent.EPISODE_WRITING, model="m", wall_latency_ms=1200, success=True, cost_usd=0.001
+        )
+
+        trace.record_aux_call(call)
+
+        [(kind, tick, payload)] = kept.records
+        assert (kind, tick) == (GameWorldTraceKind.AUX_LLM_CALL, None)
+        assert payload["call"]["component"] == "episode_writing"
+        assert (payload["call"]["wall_latency_ms"], payload["call"]["cost_usd"]) == (1200, 0.001)

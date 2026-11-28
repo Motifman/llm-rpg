@@ -8,8 +8,10 @@ from typing import Any, Protocol, final
 
 from typing_extensions import assert_never
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCall
 from ai_rpg_world.being.application.names_for_people import text_naming_people
 from ai_rpg_world.being.contract import UNKNOWN, Observation
+from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.eventing import DomainEvent
 from ai_rpg_world.game_world.domain.perception.perception_delivery_report import PerceptionDeliveryReport
 from ai_rpg_world.game_world.domain.value_object import PersonId
@@ -38,6 +40,8 @@ class GameWorldTraceKind:
     WORLD_EVENT = "game_world.world_event"
     CHOICE = "game_world.choice"
     ACTION_RESULT = "game_world.action_result"
+    BEING_EVENT = "game_world.being_event"
+    AUX_LLM_CALL = "game_world.aux_llm_call"
 
 
 class TraceLog(Protocol):
@@ -107,6 +111,31 @@ class GameWorldTrace:
 
     def record_being_turn(self, kind: str, person: PersonId, **payload: Any) -> None:
         self._guarded(lambda: self._log.record(kind, tick=self._now(), person=self._person(person), **payload))
+
+    def record_being_events(self, events: Sequence[DomainEvent], person_of: Callable[[BeingId], PersonId]) -> None:
+        self._guarded(lambda: self._record_being_events(events, person_of))
+
+    def record_aux_call(self, call: AuxLlmCall) -> None:
+        # 書き起こしは裏のスレッドで呼ぶ。裏のスレッドから世界の保存先に触れないので、tick は入れない
+        self._guarded(lambda: self._log.record(GameWorldTraceKind.AUX_LLM_CALL, call=self._jsonable_fields(call)))
+
+    def _record_being_events(self, events: Sequence[DomainEvent], person_of: Callable[[BeingId], PersonId]) -> None:
+        tick = self._now()
+        for event in events:
+            fields = self._jsonable_fields(event)
+            being_id = getattr(event, "being_id", None)
+            self._log.record(
+                GameWorldTraceKind.BEING_EVENT,
+                tick=tick,
+                event_type=type(event).__name__,
+                person=None if not isinstance(being_id, BeingId) else self._person(person_of(being_id)),
+                fields={
+                    # 短期記憶の出来事といきさつは本文ごと並ぶので、件数だけにする
+                    k: (len(v) if k in _COUNTED_ONLY and isinstance(v, list) else v)
+                    for k, v in fields.items()
+                    if k not in _EVENT_STAMP and k != "being_id"
+                },
+            )
 
     def now(self) -> int:
         return self._now()
@@ -213,6 +242,7 @@ class GameWorldTrace:
 
 _EVENT_STAMP = frozenset({"event_id", "occurred_at", "sequence"})
 _MAX_DEPTH = 4
+_COUNTED_ONLY = frozenset({"experiences", "backstories"})
 _logger = logging.getLogger(__name__)
 
 
