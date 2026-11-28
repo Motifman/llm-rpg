@@ -53,7 +53,28 @@ class ChoiceFailed:
     reason: str
 
 
-TurnOutcome = Union[Acted, Waited, ChoiceFailed]
+@final
+@dataclass(frozen=True)
+class ChoseNoAction:
+    pass
+
+
+TurnOutcome = Union[Acted, Waited, ChoiceFailed, ChoseNoAction]
+
+
+@final
+@dataclass(frozen=True)
+class RoundLimitReached:
+    pass
+
+
+@final
+@dataclass(frozen=True)
+class ChoosingKeptFailing:
+    reasons: tuple[str, ...]
+
+
+ReasonToStop = Union[RoundLimitReached, ChoosingKeptFailing]
 
 # 同じ人がこの回数続けて選べなかったら、待つ人と同じ扱いにする (D1595、D2232 の 7 節)
 _FAILURES_BEFORE_WAITING = 3
@@ -65,6 +86,7 @@ _ROUNDS_TO_GIVE_UP = 2
 
 class TurnSkipReason(Enum):
     WAITING = "waiting"
+    WAITING_AFTER_CHOICES_KEPT_FAILING = "waiting_after_choices_kept_failing"
     IN_THE_MIDDLE_OF_ACTION_AND_NOT_ADDRESSED = "in_the_middle_of_action_and_not_addressed"
     UNABLE_TO_ACT = "unable_to_act"
 
@@ -124,7 +146,7 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         self._finished: list[PersonId] = []
         self._choosing: set[PersonId] = set()
         self._held_for: dict[PersonId, list[Observation]] = {}
-        self._waiting_since: dict[PersonId, int] = {}
+        self._waiting_since: dict[PersonId, tuple[int, TurnSkipReason]] = {}
         self._addressed: set[PersonId] = set()
         self._failures_by_person: dict[PersonId, int] = {}
         self._failures_in_a_row: list[str] = []
@@ -185,9 +207,9 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         self._addressed.discard(person)
         match outcome:
             case Waited():
-                self._waiting_since[person] = self._current_round
+                self._waiting_since[person] = (self._current_round, TurnSkipReason.WAITING)
                 self._count_choice_made(person)
-            case Acted():
+            case Acted() | ChoseNoAction():
                 self._count_choice_made(person)
             case ChoiceFailed():
                 self._count_choice_failed(person, outcome.reason)
@@ -218,14 +240,13 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
         self._due = None
         self.add_event(RoundClosedEvent(**new_event_stamp(), world=self._world, round=closed))
 
-    def has_given_up_choosing(self) -> bool:
-        return bool(self._gave_up_on)
-
-    def failures_given_up_on(self) -> tuple[str, ...]:
-        return self._gave_up_on
-
-    def has_reached_round_limit(self) -> bool:
-        return self._closed_rounds >= self._round_limit.value
+    def reason_to_stop(self) -> ReasonToStop | None:
+        # 上限は正常な終わりなので、重なったときに上限で覆うと、壊れた run が正常に終わったように記録される
+        if self._gave_up_on:
+            return ChoosingKeptFailing(self._gave_up_on)
+        if self._closed_rounds >= self._round_limit.value:
+            return RoundLimitReached()
+        return None
 
     @property
     def _current_round(self) -> int:
@@ -253,7 +274,7 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
     def _count_choice_failed(self, person: PersonId, reason: str) -> None:
         failures = self._failures_by_person.get(person, 0) + 1
         if failures >= _FAILURES_BEFORE_WAITING:
-            self._waiting_since[person] = self._current_round
+            self._waiting_since[person] = (self._current_round, TurnSkipReason.WAITING_AFTER_CHOICES_KEPT_FAILING)
             failures = 0
         self._failures_by_person[person] = failures
         self._failures_in_a_row.append(reason)
@@ -265,14 +286,15 @@ class TurnRounds(AggregateRoot[TurnRoundsEvent]):
             self._gave_up_on = tuple(self._failures_in_a_row)
 
     def _wake_those_waited_long_enough(self) -> None:
-        for person, since in tuple(self._waiting_since.items()):
+        for person, (since, _) in tuple(self._waiting_since.items()):
             if self._current_round - since > self._wake_waiting_after.value:
                 del self._waiting_since[person]
 
     def _skip_reason(self, person: PersonId, readiness: ReadinessToAct) -> TurnSkipReason | None:
         match readiness:
             case FreeToAct():
-                return TurnSkipReason.WAITING if person in self._waiting_since else None
+                waiting = self._waiting_since.get(person)
+                return None if waiting is None else waiting[1]
             case InTheMiddleOfAction():
                 # 行っているあいだは話すことしかできないので、自分に向けたものがあったときだけ回す。
                 # 目立つ出来事で回すと、話す気の無い人に頼んで、断られる行動を選ばせる

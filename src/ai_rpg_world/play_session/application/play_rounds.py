@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Protocol, Union, final
+from typing import Protocol, final
 
 from ai_rpg_world.being.application.choose_action import LlmExchange
 from ai_rpg_world.game_world.application.accept_world_time_passage import (
@@ -17,7 +17,7 @@ from ai_rpg_world.game_world.application.check_readiness_to_act import (
 from ai_rpg_world.game_world.application.world_has_ended import WorldHasEnded, WorldHasEndedCommand
 from ai_rpg_world.game_world.domain.value_object import PersonId, WorldId
 from ai_rpg_world.play_session.domain.cast import CastRepository
-from ai_rpg_world.play_session.domain.turn_rounds import TurnOutcome, TurnRoundsRepository
+from ai_rpg_world.play_session.domain.turn_rounds import ReasonToStop, TurnOutcome, TurnRoundsRepository
 
 _logger = logging.getLogger(__name__)
 
@@ -53,23 +53,14 @@ class TurnTakers(Protocol):
 @final
 @dataclass(frozen=True)
 class WorldEnded:
-    discarded: tuple[DiscardedChoice, ...] = ()
-
-
-@final
-@dataclass(frozen=True)
-class RoundLimitReached:
     pass
 
 
 @final
 @dataclass(frozen=True)
-class ChoosingKeptFailing:
-    reasons: tuple[str, ...]
+class PlayStopped:
+    reason: WorldEnded | ReasonToStop
     discarded: tuple[DiscardedChoice, ...] = ()
-
-
-PlayStopped = Union[WorldEnded, RoundLimitReached, ChoosingKeptFailing]
 
 
 @final
@@ -101,12 +92,10 @@ class PlayRounds:
         people = self._casts.get(command.world).people()
         while True:
             if self._world_has_ended(WorldHasEndedCommand()):
-                return WorldEnded()
-            rounds = self._turn_rounds.get(command.world)
-            if rounds.has_given_up_choosing():
-                return ChoosingKeptFailing(rounds.failures_given_up_on())
-            if rounds.has_reached_round_limit():
-                return RoundLimitReached()
+                return PlayStopped(WorldEnded())
+            reason = self._turn_rounds.get(command.world).reason_to_stop()
+            if reason is not None:
+                return PlayStopped(reason)
             stopped = self._play_one_round(command.world, people)
             if stopped is not None:
                 return stopped
@@ -122,10 +111,11 @@ class PlayRounds:
                 rounds = self._turn_rounds.get(world)
                 rounds.finish_turn(finished.person, finished.outcome)
                 self._turn_rounds.save(rounds)
-                if rounds.has_given_up_choosing():
-                    return ChoosingKeptFailing(rounds.failures_given_up_on(), turns.let_go())
+                reason = rounds.reason_to_stop()
+                if reason is not None:
+                    return PlayStopped(reason, turns.let_go())
                 if self._world_has_ended(WorldHasEndedCommand()):
-                    return WorldEnded(turns.let_go())
+                    return PlayStopped(WorldEnded(), turns.let_go())
         except BaseException:
             # 手放すときの失敗で、止まった本当の理由を上書きしない
             try:
