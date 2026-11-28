@@ -124,7 +124,6 @@ class GameWorldPlay:
         settings: GameWorldPlaySettings,
         writers: GameWorldWriters,
         round_limit: int,
-        closing: Closing,
     ) -> None:
         design = scenario.design
         # 時刻の札を作る部品は昼夜を前提にするので、昼夜を宣言しない世界は組み立てる前に断る (D2222)
@@ -210,7 +209,7 @@ class GameWorldPlay:
                 episode_index_revision=_EPISODE_INDEX_REVISION if index_shown else None,
                 episode_index_shown=index_shown,
             ),
-            closing=closing,
+            closing=Closing(instruction=design.choice_descriptions.closing),
             describe_scene=DescribeScene(scope, design),
             mark_body_as_shown=MarkBodyAsShown(scope),
             offer_choices=OfferActionChoices(scope, design),
