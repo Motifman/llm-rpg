@@ -6,32 +6,30 @@ import pytest
 
 from ai_rpg_world.being.application.memo_arguments import (
     REJECTED_FROM_NOT_NEEDED,
+    REJECTED_LIMIT_REACHED,
+    REJECTED_MISSING_EPISODE_FROM,
     REJECTED_MISSING_FROM,
     REJECTED_MISSING_ID,
     REJECTED_MISSING_PROVENANCE,
     REJECTED_MISSING_TEXT,
+    REJECTED_NO_SUCH_MEMO,
     REJECTED_NOT_A_LIST,
     REJECTED_NOT_AN_OBJECT,
-    REJECTED_TEXT_TOO_LONG,
     REJECTED_UNKNOWN_DO,
+    REJECTED_UNKNOWN_EPISODE,
     REJECTED_UNKNOWN_KIND,
     ReadMemoOperations,
     feedback_text,
     read_memo_operations,
     rejection_text,
 )
-from ai_rpg_world.being.application.memo_writing import (
-    REJECTED_LIMIT_REACHED,
-    REJECTED_NO_SUCH_MEMO,
-    REJECTED_PROVENANCE_OUTSIDE_FACT,
-    AddMemo,
-    EditMemo,
-    RemoveMemo,
-)
 from ai_rpg_world.being.domain.memo_book import (
+    MemoAddition,
     MemoCertainty,
     MemoKind,
     MemoProvenance,
+    MemoRemoval,
+    MemoRevision,
     MemoSource,
 )
 
@@ -71,11 +69,11 @@ class TestReadingMemoOperations:
             {"do": "remove", "id": "m_91c0de"},
         )
 
-        assert read.operations == (
-            (0, AddMemo(MemoKind.TODO, "事務所で鍵を取る", None)),
-            (1, EditMemo("m_3f2a7b", "鍵を二つ取る", None)),
-            (2, RemoveMemo("m_91c0de")),
-        )
+        assert [(r.index, r.do, r.operation) for r in read.operations] == [
+            (0, "add", MemoAddition(MemoKind.TODO, "事務所で鍵を取る", None)),
+            (1, "edit", MemoRevision("m_3f2a7b", "鍵を二つ取る", None)),
+            (2, "remove", MemoRemoval("m_91c0de")),
+        ]
 
     def test_heard_fact_keeps_who(self) -> None:
         """人から聞いた分かったことは、出どころ・確かさ・誰からを持つ。"""
@@ -90,13 +88,15 @@ class TestReadingMemoOperations:
             }
         )
 
-        assert read.operations == ((0, AddMemo(MemoKind.FACT, "弁は目盛りが関係する", HEARD_GUESS)),)
+        assert [r.operation for r in read.operations] == [
+            MemoAddition(MemoKind.FACT, "弁は目盛りが関係する", HEARD_GUESS)
+        ]
 
     def test_a_broken_operation_does_not_stop_the_others(self) -> None:
         """崩れた操作があっても、その前後の操作は読む。"""
         read = _read({"do": "add", "kind": "todo", "text": "鍵"}, "壊れた", {"do": "remove", "id": "m_3f2a7b"})
 
-        assert [i for i, _ in read.operations] == [0, 2]
+        assert [r.index for r in read.operations] == [0, 2]
         assert [(r.index, r.reason, r.raw) for r in read.rejected] == [(1, REJECTED_NOT_AN_OBJECT, "壊れた")]
 
     @pytest.mark.parametrize(
@@ -105,10 +105,8 @@ class TestReadingMemoOperations:
             ({"do": "write", "kind": "todo", "text": "鍵"}, REJECTED_UNKNOWN_DO),
             ({"do": "add", "kind": "plan", "text": "鍵"}, REJECTED_UNKNOWN_KIND),
             ({"do": "add", "kind": "todo", "text": "  "}, REJECTED_MISSING_TEXT),
-            ({"do": "add", "kind": "todo", "text": "あ" * 61}, REJECTED_TEXT_TOO_LONG),
             ({"do": "edit", "text": "鍵"}, REJECTED_MISSING_ID),
             ({"do": "remove"}, REJECTED_MISSING_ID),
-            ({"do": "add", "kind": "fact", "text": "鍵"}, REJECTED_MISSING_PROVENANCE),
             ({"do": "add", "kind": "fact", "text": "鍵", "source": "self"}, REJECTED_MISSING_PROVENANCE),
             (
                 {"do": "add", "kind": "fact", "text": "鍵", "source": "heard", "certainty": "sure"},
@@ -117,10 +115,6 @@ class TestReadingMemoOperations:
             (
                 {"do": "add", "kind": "fact", "text": "鍵", "source": "self", "certainty": "sure", "from": "門番"},
                 REJECTED_FROM_NOT_NEEDED,
-            ),
-            (
-                {"do": "add", "kind": "todo", "text": "鍵", "source": "self", "certainty": "sure"},
-                REJECTED_PROVENANCE_OUTSIDE_FACT,
             ),
             (
                 {
@@ -138,14 +132,11 @@ class TestReadingMemoOperations:
             "unknown_do",
             "unknown_kind",
             "blank_text",
-            "text_61_chars",
             "edit_without_id",
             "remove_without_id",
-            "fact_without_provenance",
             "fact_without_certainty",
             "heard_without_from",
             "self_with_from",
-            "todo_with_provenance",
             "episode_source_not_offered",
         ],
     )
@@ -183,11 +174,40 @@ class TestReadingMemoOperations:
             episode=True,
         )
 
-        ((_, operation),) = read.operations
-        assert isinstance(operation, AddMemo)
-        assert operation.provenance == MemoProvenance(
-            source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33"
+        assert [r.operation for r in read.operations] == [
+            MemoAddition(
+                MemoKind.FACT,
+                "籠は 3 人まで",
+                MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from="ep_a07c33"),
+            )
+        ]
+
+    def test_episode_source_without_from_asks_for_the_episode_handle(self) -> None:
+        """エピソードから分かったことに from が無ければ、人から聞いたときとは別の理由で外し、文はエピソードの呼び名を求める。"""
+        item = {"do": "add", "kind": "fact", "text": "籠は 3 人まで", "source": "episode", "certainty": "sure"}
+
+        read = _read(item, episode=True)
+
+        assert [(r.reason, r.raw) for r in read.rejected] == [(REJECTED_MISSING_EPISODE_FROM, item)]
+        assert rejection_text(REJECTED_MISSING_EPISODE_FROM) == (
+            "エピソードから分かったこと (episode) には、from にエピソードの呼び名 (ep_ で始まる) を書いてください。"
         )
+
+    def test_episode_source_not_shaped_as_a_handle_is_an_unknown_episode(self) -> None:
+        """エピソードから分かったことの from が ep_ で始まらなければ、呼び名を添えずに知らないエピソードとして外す。"""
+        item = {
+            "do": "add",
+            "kind": "fact",
+            "text": "籠は 3 人まで",
+            "source": "episode",
+            "certainty": "sure",
+            "from": "ミオ",
+        }
+
+        read = _read(item, episode=True)
+
+        assert [r.reason for r in read.rejected] == [REJECTED_UNKNOWN_EPISODE]
+        assert rejection_text(REJECTED_UNKNOWN_EPISODE) == "そのエピソードはありません。"
 
 
 class TestFeedback:

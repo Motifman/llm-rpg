@@ -7,6 +7,8 @@ DDD の原則に従い、ドメイン固有の意味を持つカスタム例外�
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.common.exception import (
     BusinessRuleException,
     DomainException,
@@ -14,6 +16,9 @@ from ai_rpg_world.domain.common.exception import (
     StateException,
     ValidationException,
 )
+
+if TYPE_CHECKING:
+    from ai_rpg_world.being.domain.memo_book import MemoKind
 
 
 class BeingDomainException(DomainException):
@@ -125,6 +130,58 @@ class MemoValidationException(BeingDomainException, ValidationException):
     error_code = "BEING.MEMO_VALIDATION"
 
 
+class MemoTextTooLongException(MemoValidationException):
+    """メモの文が、長さの上限を超えている。"""
+
+    error_code = "BEING.MEMO_TEXT_TOO_LONG"
+
+
+class MemoProvenanceMissingException(MemoValidationException):
+    """分かったことのメモに、出どころと確かさが無い。"""
+
+    error_code = "BEING.MEMO_PROVENANCE_MISSING"
+
+
+class MemoProvenanceOutsideFactException(MemoValidationException):
+    """分かったこと以外のメモに、出どころと確かさを持たせようとした。"""
+
+    error_code = "BEING.MEMO_PROVENANCE_OUTSIDE_FACT"
+
+
+class MemoHeardSourceFromMissingException(MemoValidationException):
+    """人から聞いたことの出どころに、誰から聞いたかが無い。"""
+
+    error_code = "BEING.MEMO_HEARD_SOURCE_FROM_MISSING"
+
+
+class MemoEpisodeSourceFromMissingException(MemoValidationException):
+    """エピソードから分かったことの出どころに、エピソードの呼び名が無い。"""
+
+    error_code = "BEING.MEMO_EPISODE_SOURCE_FROM_MISSING"
+
+
+class MemoSourceFromNotNeededException(MemoValidationException):
+    """自分で確かめたことの出どころに、誰からかを書いた。"""
+
+    error_code = "BEING.MEMO_SOURCE_FROM_NOT_NEEDED"
+
+
+class MemoSourceNotEpisodeHandleException(MemoValidationException):
+    """エピソードから分かったことの出どころが、エピソードの呼び名の形をしていない。"""
+
+    error_code = "BEING.MEMO_SOURCE_NOT_EPISODE_HANDLE"
+
+
+class MemoSourceEpisodeUnknownException(MemoValidationException):
+    """エピソードから分かったことの出どころが、本人の知っているエピソードの呼び名に無い。"""
+
+    error_code = "BEING.MEMO_SOURCE_EPISODE_UNKNOWN"
+
+    def __init__(self, handle: str, message: str | None = None) -> None:
+        self.handle = handle
+        super().__init__(message or f"no episode {handle!r}")
+
+
 class VisitedPlacesValidationException(BeingDomainException, ValidationException):
     """訪れた場所の記録が決まり (空でない名前、同じ場所を重ねない) を満たさない。"""
 
@@ -136,11 +193,19 @@ class MemoLimitReachedException(BeingDomainException, BusinessRuleException):
 
     error_code = "BEING.MEMO_LIMIT_REACHED"
 
+    def __init__(self, kind: MemoKind, message: str | None = None) -> None:
+        self.kind = kind
+        super().__init__(message or f"{kind.value} memos are at the limit")
+
 
 class MemoNotFoundException(BeingDomainException, NotFoundException):
     """書き換えや消す対象の呼び名が、メモ帳に無い。"""
 
     error_code = "BEING.MEMO_NOT_FOUND"
+
+    def __init__(self, handle: str, message: str | None = None) -> None:
+        self.handle = handle
+        super().__init__(message or f"no memo {handle!r}")
 
 
 class ShortTermMemoryValidationException(BeingDomainException, ValidationException):
@@ -180,8 +245,16 @@ __all__ = [
     "EpisodeNotFoundException",
     "EpisodeValidationException",
     "EpisodeWritingResponseException",
+    "MemoEpisodeSourceFromMissingException",
+    "MemoHeardSourceFromMissingException",
     "MemoLimitReachedException",
     "MemoNotFoundException",
+    "MemoProvenanceMissingException",
+    "MemoProvenanceOutsideFactException",
+    "MemoSourceEpisodeUnknownException",
+    "MemoSourceFromNotNeededException",
+    "MemoSourceNotEpisodeHandleException",
+    "MemoTextTooLongException",
     "MemoValidationException",
     "VisitedPlacesValidationException",
     "PersonaValidationException",
