@@ -188,7 +188,36 @@ class TestWorldSideInTheTrace:
         assert kind == GameWorldTraceKind.WORLD_EVENT
         assert payload == {
             "event_type": "PersonNamedEvent",
-            "world": "mine_village_v2#1",
-            "person": {"person_id": "gen", "name": "ゲン"},
-            "name": "ゲン",
+            "fields": {"world": "mine_village_v2#1", "person": {"person_id": "gen", "name": "ゲン"}, "name": "ゲン"},
         }
+
+    def test_mapping_keyed_by_person_uses_the_person_id(self) -> None:
+        """人を鍵にした対応表は、鍵を人の id で書き、値の中の人は名前つきで書く。"""
+        trace, _ = _trace()
+
+        assert trace.jsonable({_GEN: _SAYO}) == {"gen": {"person_id": "sayo", "name": "サヨ"}}
+
+    def test_deeply_nested_values_are_cut_to_their_type_name(self) -> None:
+        """5 段より深い入れ子は、中身を写さず型の名前だけを書く。"""
+        trace, _ = _trace()
+
+        assert trace.jsonable([[[[[["深い"]]]]]]) == [[[[["list"]]]]]
+
+
+class _Broken:
+    def record(self, kind: str, *, tick: int | None = None, player_id: int | None = None, **payload: Any) -> None:
+        raise OSError("disk is full")
+
+
+class TestFailingToWriteTheTrace:
+    """GameWorldTrace が、書けなかった記録で例外を上に出さず、書けなかった数を数えることを保証する。"""
+
+    def test_failure_to_write_is_counted_and_not_raised(self) -> None:
+        """書き手が OSError を投げても、記録は例外を出さず、書けなかった数が 1 増える。"""
+        trace = GameWorldTrace(_Broken(), names={}, now=lambda: 0)
+
+        trace.record_world_events(
+            [PersonNamedEvent(**new_event_stamp(), world=_WORLD, person=_GEN, name=DisplayName("ゲン"))]
+        )
+
+        assert trace.failures == 1
