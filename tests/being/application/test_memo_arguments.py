@@ -160,6 +160,24 @@ class TestReadingMemoOperations:
 
         assert [(r.reason, r.raw) for r in read.rejected] == [(REJECTED_MISSING_PROVENANCE, item)]
 
+    @pytest.mark.parametrize("source_from", [123, ["門番"], False], ids=["number", "list", "false"])
+    def test_self_with_a_from_that_is_not_text_is_rejected(self, source_from: Any) -> None:
+        """自分で確かめたことの from に文字列でない値が書かれていても、書かれているとみなして from を書かないよう外す。"""
+        item = {"do": "add", "kind": "fact", "text": "鍵", "source": "self", "certainty": "sure", "from": source_from}
+
+        read = _read(item)
+
+        assert [(r.reason, r.raw) for r in read.rejected] == [(REJECTED_FROM_NOT_NEEDED, item)]
+
+    @pytest.mark.parametrize("source_from", [123, ["門番"]], ids=["number", "list"])
+    def test_heard_with_a_from_that_is_not_text_is_rejected(self, source_from: Any) -> None:
+        """人から聞いたことの from が文字列でなければ、誰から聞いたかが無いとして外す。"""
+        item = {"do": "add", "kind": "fact", "text": "鍵", "source": "heard", "certainty": "sure", "from": source_from}
+
+        read = _read(item)
+
+        assert [r.reason for r in read.rejected] == [REJECTED_MISSING_FROM]
+
     def test_episode_source_is_read_when_offered(self) -> None:
         """出どころの選択肢にエピソードを出す設定では、エピソードの呼び名を出どころとして読む。"""
         read = _read(

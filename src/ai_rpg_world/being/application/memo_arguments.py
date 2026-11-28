@@ -128,6 +128,10 @@ def _given(value: Any) -> bool:
     return value is not None and not (isinstance(value, str) and not value.strip())
 
 
+def _stripped(value: Any) -> Any:
+    return value.strip() if isinstance(value, str) else value
+
+
 def _read_text(item: Mapping[str, Any]) -> str | None:
     text = item.get("text")
     if not isinstance(text, str) or not text.strip():
@@ -165,7 +169,7 @@ def _read_provenance(item: Mapping[str, Any], *, episode_source_offered: bool) -
         return MemoProvenance(
             source=MemoSource(source_raw),
             certainty=MemoCertainty(certainty_raw),
-            source_from=source_from.strip() if isinstance(source_from, str) and _given(source_from) else None,
+            source_from=_stripped(source_from) if _given(source_from) else None,
         )
     except MemoValidationException as refusal:
         return refusal_reason(refusal)
