@@ -621,6 +621,17 @@ class TestRecallingEpisodes:
         assert isinstance(attempt, Attempt) and attempt.result is not None
         assert attempt.result.action_summary == f'episode_recall({{"handles": ["{handle}"]}}) を実行しました。'
 
+    def test_recall_wins_when_both_memory_tools_share_a_name(self) -> None:
+        """思い出すツールと目次を直すツールに同じ名前が出ていると、思い出すとして扱う。"""
+        episodes, handle = _episodes_with_the_safe_story()
+        same_name = OfferedBeingTools(
+            inner_thought="inner_thought", episode_recall="memory", episode_index_revision="memory"
+        )
+
+        outcome, _ = _choose(_reply("memory", {"handles": [handle]}), being_tools=same_name, episodes=episodes)
+
+        assert isinstance(outcome, TurnSpentRecalling)
+
     def test_recalling_counts_the_recall_at_the_new_turn(self) -> None:
         """思い出すと、そのエピソードの思い出した回数が 1 増え、記憶のターンが 1 進む。"""
         episodes, handle = _episodes_with_the_safe_story()

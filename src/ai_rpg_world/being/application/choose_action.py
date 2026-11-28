@@ -249,9 +249,10 @@ class ChooseAction:
             command=command,
             exchange=exchange,
         )
+        # 2 つに同じ名前を出されたら、前の実装と同じく思い出す方を採る。辞書は後に書いた方が残る。
         routes: dict[str | None, Callable[[_Turn], ChoiceOutcome]] = {
-            command.being_tools.episode_recall: self._recall,
             command.being_tools.episode_index_revision: self._revise,
+            command.being_tools.episode_recall: self._recall,
         }
         route = routes.get(call.tool_name)
         if route is not None:
@@ -367,8 +368,6 @@ ChoiceOutcome = ActionChosen | TurnSpentRecalling | TurnSpentRevisingIndex | Act
 
 @dataclass(frozen=True, kw_only=True)
 class _Turn:
-    """選んだツールを受けて残す 1 手。``number`` はこの 1 手の記憶のターン。"""
-
     being_id: BeingId
     number: int
     call_id: str

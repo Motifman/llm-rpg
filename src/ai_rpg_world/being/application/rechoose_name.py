@@ -77,8 +77,6 @@ class NameRechoice:
 
 @dataclass(frozen=True)
 class NamesMatched:
-    """``arguments`` は候補の名前に合わせた引数。``rechoices`` は選び直しを問うた順の結果。"""
-
     arguments: Mapping[str, object]
     rechoices: tuple[NameRechoice, ...]
 
@@ -98,7 +96,6 @@ class RechooseName:
         arguments: Mapping[str, object],
         inner_thought: str | None,
     ) -> NamesMatched:
-        """候補に当たらない名前だけを選び直す。"""
         rechoices: list[NameRechoice] = []
 
         def rechoose(written: str, label: str, candidates: Mapping[str, str | None], parent: str | None) -> str | None:

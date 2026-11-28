@@ -54,7 +54,6 @@ _SHORT_REASONS = {
 
 
 def unwritten_memo_lines(unwritten: Iterable[UnwrittenMemo]) -> tuple[str, ...]:
-    """書かれていた順に並べる。引数ごと崩れていたときの行は先頭に置く。"""
     return tuple(
         unwritten_memo_line(
             WHOLE_MEMO if u.index is None else attempted_raw_operation(u.raw), short_reason(u.reason, kind=u.kind)
