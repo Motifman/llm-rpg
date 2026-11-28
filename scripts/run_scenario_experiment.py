@@ -1756,6 +1756,7 @@ def _run_game_world(
     from ai_rpg_world.application.llm.services.prompt_dataset_capture import PromptDatasetCaptureSink
     from ai_rpg_world.experiment.infrastructure.game_world_play_settings import GameWorldPlaySettings
     from ai_rpg_world.experiment.infrastructure.game_world_run import (
+        WORLD_SQLITE,
         aux_call_payload,
         prepare_game_world_play,
         run_summary,
@@ -1777,6 +1778,9 @@ def _run_game_world(
         parser.error("the game world cannot publish a gist yet")
     if args.max_world_ticks < 1:
         parser.error(f"max_world_ticks must be >= 1 for the game world, got {args.max_world_ticks}")
+    # 終わりの世界は OUT のファイルに残す。前の run の世界が残っていると、どちらの終わりか分からなくなる
+    if (out_dir / WORLD_SQLITE).exists():
+        parser.error(f"{out_dir / WORLD_SQLITE} already exists. Use a new OUT for each game world run")
     try:
         settings = GameWorldPlaySettings.from_runtime_config(runtime_config_source)
     except ValueError as error:
@@ -1788,6 +1792,7 @@ def _run_game_world(
             scenario_hash=scenario_hash,
             settings=settings,
             round_limit=args.max_world_ticks,
+            out_dir=out_dir,
         )
     except NotDeclaredInThisWorldException:
         parser.error(f"{args.scenario} declares no day and night. The game world needs time.day_night (D2222)")
@@ -1877,6 +1882,7 @@ def _game_world_report(scenario_path: Path, summary: Mapping[str, Any]) -> str:
         f"- last_tick: {summary['last_tick']}",
         f"- finished turns: {summary['finished_turns']}",
         f"- LLM calls written to prompt_dataset: {summary['llm_calls_recorded']} (not written: {summary['llm_calls_not_recorded']})",
+        f"- end state: world.sqlite, {len(summary['being_memory_files'])} being memory files (not written: {summary['being_memory_files_not_written']})",
         f"- elapsed: {_format_duration(summary['elapsed_sec'])}",
         f"- discarded choices: {summary['discarded_choices']}",
         f"- memory writing failures: {failures if failures else 'none'}",
