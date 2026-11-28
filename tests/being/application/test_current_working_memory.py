@@ -33,6 +33,7 @@ from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository im
     InMemoryShortTermMemoryRepository,
 )
 from ai_rpg_world.being.infrastructure.in_memory_visited_places_repository import InMemoryVisitedPlacesRepository
+from ai_rpg_world.domain.being.exception.being_exceptions import BeingNotAttachedException
 from tests.event_handoff_helpers import discard_events
 from tests.support.acquaintance_roster import introduce
 
@@ -179,11 +180,18 @@ class TestGathering:
         assert "メモ" not in headings
 
     def test_being_outside_any_environment_raises(self, stores: dict[str, object]) -> None:
-        """どの環境にも入っていない Being の作業記憶は組めず、LookupError を投げる。"""
+        """どの環境にも入っていない Being の作業記憶は組めず、BeingNotAttachedException を投げる。"""
         stores["beings"] = _Beings(Being(being_id=HAL, persona=Persona(name="ハル")))
 
-        with pytest.raises(LookupError):
+        with pytest.raises(BeingNotAttachedException):
             _of(stores)
+
+    def test_persona_of_a_being_outside_any_environment_raises(self, stores: dict[str, object]) -> None:
+        """どの環境にも入っていない Being の【ペルソナ】は、この環境で知っていることを決められないので組まず、BeingNotAttachedException を投げる。"""
+        stores["beings"] = _Beings(Being(being_id=HAL, persona=Persona(name="ハル")))
+
+        with pytest.raises(BeingNotAttachedException):
+            CurrentWorkingMemory(episode_index_limit=5, **stores).persona(HAL)  # type: ignore[arg-type]
 
 
 class TestAcrossTurns:

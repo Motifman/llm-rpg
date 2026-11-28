@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from ai_rpg_world.being.application.current_working_memory import BeingLookup
 from ai_rpg_world.being.application.handlers.write_episodes_handler import EpisodeWritingCircumstances
-from ai_rpg_world.being.application.persona_text import persona_text
+from ai_rpg_world.being.application.persona_text import persona_text_of
 from ai_rpg_world.being.domain.being_id import BeingId
 from ai_rpg_world.being.domain.persona import Persona
 
@@ -24,11 +24,8 @@ class CircumstancesOfBeings:
 
     def circumstances_of(self, being_id: BeingId) -> EpisodeWritingCircumstances:
         being = self._beings.get(being_id)
-        if being.attachment is None:
-            raise LookupError(f"Being {being_id.value} is not in any environment")
         return EpisodeWritingCircumstances(
-            persona_text=persona_text(being.persona, being.attachment.known_facts),
-            environment_name=being.attachment.environment_name,
+            persona_text=persona_text_of(being), environment_name=being.current_environment_name()
         )
 
 

@@ -228,3 +228,36 @@ class TestBeingEnter:
             )
 
         assert being.attachment is None
+
+
+class TestWhereTheBeingIs:
+    """Being に、いま入っている環境の名前とその環境で知っていることを問えることを保証する。"""
+
+    def test_attached_being_answers_its_environment_name_and_known_facts(self) -> None:
+        """廃坑の山村に入っている Being は、環境の名前「廃坑の山村」と、そこで知っていること「坑道は暗い。」を答える。"""
+        being = Being(
+            BeingId("gen"),
+            Persona(name="ゲン"),
+            BeingAttachment(environment_id="mine#1", environment_name="廃坑の山村", known_facts="坑道は暗い。"),
+        )
+
+        assert (being.current_environment_name(), being.known_facts_here()) == ("廃坑の山村", "坑道は暗い。")
+
+    def test_attached_being_without_known_facts_answers_none(self) -> None:
+        """知っていることの無い環境に入っている Being は、知っていることに None を答える。"""
+        being = Being(
+            BeingId("gen"),
+            Persona(name="ゲン"),
+            BeingAttachment(environment_id="mine#1", environment_name="廃坑の山村"),
+        )
+
+        assert being.known_facts_here() is None
+
+    def test_being_outside_any_environment_refuses_both_questions(self) -> None:
+        """どの環境にも入っていない Being に環境の名前や知っていることを問うと、BeingNotAttachedException を投げる。"""
+        being = Being(BeingId("gen"), Persona(name="ゲン"))
+
+        with pytest.raises(BeingNotAttachedException):
+            being.current_environment_name()
+        with pytest.raises(BeingNotAttachedException):
+            being.known_facts_here()

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from ai_rpg_world.being.application.action_tools import ActionTools
 from ai_rpg_world.being.application.closest_tool_name import unsupported_tool_failure
-from ai_rpg_world.being.application.current_working_memory import CurrentWorkingMemory
+from ai_rpg_world.being.application.current_working_memory import BeingLookup, CurrentWorkingMemory
 from ai_rpg_world.being.application.episode_index_revision_tool import (
     EpisodeIndexRevisionOutcome,
     index_revision_call_text,
@@ -153,6 +153,7 @@ class ChooseAction:
     def __init__(
         self,
         *,
+        beings: BeingLookup,
         working_memory: CurrentWorkingMemory,
         completion: ActionChoosingCompletion,
         short_term_memories: ShortTermMemoryRepository,
@@ -166,6 +167,7 @@ class ChooseAction:
     ) -> None:
         self._recall_episodes = RecallEpisodes(episodes=episodes, recall_limit=recall_limit)
         self._revise_episode_index = ReviseEpisodeIndex(episodes=episodes)
+        self._beings = beings
         self._working_memory = working_memory
         self._completion = completion
         self._short_term_memories = short_term_memories
@@ -233,7 +235,7 @@ class ChooseAction:
             self._remember_visited_place.execute(
                 RememberVisitedPlaceCommand(
                     being_id=command.being_id,
-                    environment_name=self._working_memory.environment_name(command.being_id),
+                    environment_name=self._beings.get(command.being_id).current_environment_name(),
                     place=command.scene.here.place,
                 )
             )
@@ -347,7 +349,7 @@ class ChooseAction:
                 memo=turn.call.arguments[memo],
                 episode_source_offered=turn.command.being_tools.episode_index_shown,
                 turn=turn.number,
-                environment_name=self._working_memory.environment_name(turn.being_id),
+                environment_name=self._beings.get(turn.being_id).current_environment_name(),
             )
         )
         return unwritten_memo_lines(written.unwritten)

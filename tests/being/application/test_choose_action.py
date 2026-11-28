@@ -193,6 +193,7 @@ def _choose(
         episode_index_limit=5,
     )
     choose = ChooseAction(
+        beings=_Beings(),
         working_memory=working_memory,
         completion=completion,
         short_term_memories=short_term_memories,
@@ -214,6 +215,7 @@ def _chooser(
     memo_books = InMemoryMemoBookRepository(handoff=discard_events)
     visited_places = InMemoryVisitedPlacesRepository()
     return ChooseAction(
+        beings=_Beings(),
         working_memory=CurrentWorkingMemory(
             beings=_Beings(),
             short_term_memories=memories,

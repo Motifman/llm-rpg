@@ -226,6 +226,7 @@ class MineVillageSession:
             offer_choices=OfferActionChoices(self.scope, design),
             tell_time=TellCurrentTime(self.scope, day_night, _scenario().design.clock_wording),
             choose_action=ChooseAction(
+                beings=self.beings,
                 working_memory=CurrentWorkingMemory(
                     beings=self.beings,
                     short_term_memories=self.short_term_memories,
